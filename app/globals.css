@@ -1,0 +1,141 @@
+@import "tailwindcss";
+
+/* Class-based dark mode (toggled on <html>) */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ---------- Light: clean slate canvas, white floating cards ---------- */
+:root {
+  --bg: #f8fafc;
+  --card: rgba(255, 255, 255, 0.85);
+  --card-solid: #ffffff;
+  --raised: #f1f5f9;
+  --line: rgba(15, 23, 42, 0.07);
+  --line-strong: rgba(15, 23, 42, 0.12);
+  --fg: #0f172a;
+  --muted: #64748b;
+  --accent: #7c3aed;
+  --accent-fg: #ffffff;
+  --accent-soft: rgba(124, 58, 237, 0.09);
+  --pos: #059669;
+  --pos-soft: rgba(5, 150, 105, 0.1);
+  --neg: #e11d48;
+  --neg-soft: rgba(225, 29, 72, 0.09);
+  --warn: #d97706;
+  --warn-soft: rgba(217, 119, 6, 0.12);
+  color-scheme: light;
+}
+
+/* ---------- Dark: deep charcoal with violet glow ---------- */
+.dark {
+  --bg: #0b0e14;
+  --card: rgba(23, 27, 40, 0.7);
+  --card-solid: #171b28;
+  --raised: #1e2333;
+  --line: rgba(167, 139, 250, 0.12);
+  --line-strong: rgba(167, 139, 250, 0.22);
+  --fg: #eef0f6;
+  --muted: #8d94a8;
+  --accent: #a78bfa;
+  --accent-fg: #120a24;
+  --accent-soft: rgba(167, 139, 250, 0.13);
+  --pos: #34d399;
+  --pos-soft: rgba(52, 211, 153, 0.12);
+  --neg: #fb7185;
+  --neg-soft: rgba(251, 113, 133, 0.12);
+  --warn: #fbbf24;
+  --warn-soft: rgba(251, 191, 36, 0.13);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-card: var(--card);
+  --color-solid: var(--card-solid);
+  --color-raised: var(--raised);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-accent-soft: var(--accent-soft);
+  --color-pos: var(--pos);
+  --color-pos-soft: var(--pos-soft);
+  --color-neg: var(--neg);
+  --color-neg-soft: var(--neg-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-jakarta), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* High-contrast tabular figures for all money */
+.num {
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1, "cv11" 1;
+  letter-spacing: -0.02em;
+}
+
+/* Smooth light/dark switch (class applied briefly by the toggle) */
+html.theme-fade *,
+html.theme-fade *::before,
+html.theme-fade *::after {
+  transition: background-color 0.4s ease, color 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease !important;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+/* ---------- Animations ---------- */
+@keyframes jct-menu-in {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes jct-fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes jct-card-in {
+  from { opacity: 0; transform: translateY(-10px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+/* Neon-green heartbeat when the drawer balances perfectly */
+@keyframes jct-neon {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(57, 255, 130, 0.65), 0 0 18px 2px rgba(57, 255, 130, 0.5); }
+  50% { box-shadow: 0 0 0 14px rgba(57, 255, 130, 0), 0 0 30px 6px rgba(57, 255, 130, 0.75); }
+}
+@keyframes jct-ping-soft {
+  0% { transform: scale(1); opacity: 0.7; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+.anim-menu[data-state="open"] { animation: jct-menu-in 0.15s ease-out; }
+.anim-up { animation: jct-fade-up 0.4s ease-out both; }
+.anim-card { animation: jct-card-in 0.45s cubic-bezier(0.2, 0.9, 0.3, 1) both; }
+.neon-pulse { animation: jct-neon 1.8s ease-in-out infinite; }
+.ping-soft { animation: jct-ping-soft 1.6s ease-out infinite; }
+
+/* Receipt with a scalloped (perforated) bottom edge */
+.receipt-edge {
+  -webkit-mask: radial-gradient(circle at 10px 100%, transparent 6px, #000 6.5px) 0 0 / 20px 100% repeat-x;
+  mask: radial-gradient(circle at 10px 100%, transparent 6px, #000 6.5px) 0 0 / 20px 100% repeat-x;
+}
+
+/* Hide native number spinners for cleaner inputs */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] { -moz-appearance: textfield; }
+
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
