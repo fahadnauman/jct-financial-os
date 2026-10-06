@@ -1,0 +1,39 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model DailyRegister {
+  id          String   @id @default(cuid())
+  date        DateTime @default(now())
+  branch      String   // "Jubail Main", "Dammam", "Sigma"
+  cashIn      Float    @default(0)
+  cashOut     Float    @default(0)
+  closingCash Float    @default(0)
+  notes       String?
+  createdAt   DateTime @default(now())
+}
+
+model CreditCustomer {
+  id          String   @id @default(cuid())
+  name        String
+  phone       String?
+  totalDue    Float    @default(0)
+  status      String   @default("CURRENT") // CURRENT, OVERDUE, HIGH_RISK
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+}
+
+model SupplierBill {
+  id          String   @id @default(cuid())
+  supplier    String   // "Jotun KSA", "Hempel", "Sigma"
+  invoiceNo   String
+  amount      Float
+  dueDate     DateTime
+  isPaid      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+}

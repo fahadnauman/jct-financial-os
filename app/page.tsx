@@ -24,17 +24,19 @@ interface Txn {
   flow: "in" | "out";
   kind: Kind;
   amount: number;
+  originalAmount?: number;
+  serialNo?: string;
   title: string;
   time: string;
 }
 
 const SEED_TXNS: Txn[] = [
-  { id: "1", flow: "in", kind: "cash_sale", amount: 1150, title: "Walk-in · Jotun Fenomastic", time: "08:42" },
-  { id: "2", flow: "in", kind: "cash_sale", amount: 6325, title: "Contractor · Bulk Paint", time: "10:20" },
-  { id: "3", flow: "in", kind: "credit_received", amount: 8500, title: "Al Noor Contracting", time: "09:30" },
-  { id: "4", flow: "out", kind: "jotun", amount: 12400, title: "Jotun Arabia Restock", time: "10:00" },
-  { id: "5", flow: "out", kind: "hempel", amount: 7850, title: "Hempel Marine Coatings", time: "10:45" },
-  { id: "6", flow: "out", kind: "salaries", amount: 4500, title: "Staff advances", time: "12:00" },
+  { id: "1", flow: "in", kind: "cash_sale", amount: 1150, serialNo: "INV-2026-8491", title: "Walk-in · Jotun Fenomastic", time: "08:42" },
+  { id: "2", flow: "in", kind: "cash_sale", amount: 6325, serialNo: "INV-2026-8492", title: "Contractor · Bulk Paint", time: "10:20" },
+  { id: "3", flow: "in", kind: "credit_received", amount: 8500, serialNo: "ERP-JBL-0934", title: "Al Noor Contracting", time: "09:30" },
+  { id: "4", flow: "out", kind: "jotun", amount: 12400, serialNo: "ERP-JBL-0935", title: "Jotun Arabia Restock", time: "10:00" },
+  { id: "5", flow: "out", kind: "hempel", amount: 7850, serialNo: "ERP-JBL-0936", title: "Hempel Marine Coatings", time: "10:45" },
+  { id: "6", flow: "out", kind: "salaries", amount: 4500, serialNo: "HR-2026-004", title: "Staff advances", time: "12:00" },
 ];
 
 const CONTRACTORS = [
@@ -181,10 +183,12 @@ function Sidebar({ tab, setTab }: { tab: TabId; setTab: (t: TabId) => void }) {
   );
 }
 
-function Column({ title, type, txns, onAdd }: { title: string; type: "in" | "out"; txns: Txn[]; onAdd: (t: Omit<Txn, "id" | "time">) => void }) {
+function Column({ title, type, txns, onAdd, onEdit }: { title: string; type: "in" | "out"; txns: Txn[]; onAdd: (t: Omit<Txn, "id" | "time" | "serialNo">) => void; onEdit: (id: string, newAmt: number) => void }) {
   const [amt, setAmt] = useState("");
   const [kind, setKind] = useState<Kind>(type === "in" ? "cash_sale" : "jotun");
   const [note, setNote] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editAmt, setEditAmt] = useState("");
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
@@ -193,6 +197,14 @@ function Column({ title, type, txns, onAdd }: { title: string; type: "in" | "out
     onAdd({ amount: val, kind, flow: type, title: note || (type === "in" ? "Walk-in Sale" : "Standard Expense") });
     setAmt("");
     setNote("");
+  };
+
+  const handleSaveEdit = (id: string) => {
+    const val = parseFloat(editAmt);
+    if (!Number.isNaN(val) && val > 0) {
+      onEdit(id, val);
+    }
+    setEditingId(null);
   };
 
   const options: {v: Kind; l: string}[] = type === "in" 
@@ -224,16 +236,51 @@ function Column({ title, type, txns, onAdd }: { title: string; type: "in" | "out
       
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {txns.map(t => (
-          <div key={t.id} className="flex items-center justify-between p-3.5 bg-white rounded-xl ring-1 ring-slate-100 shadow-sm hover:shadow-md transition-shadow dark:bg-[#171b28] dark:ring-white/5">
-            <div className="flex flex-col gap-1.5 min-w-0 pr-4">
-              <div className="flex items-center gap-2.5">
-                <Pill kind={t.kind} />
-                <span className="text-[11px] text-slate-400 font-bold tracking-wider">{t.time}</span>
+          <div key={t.id} className="flex flex-col p-3.5 bg-white rounded-xl ring-1 ring-slate-100 shadow-sm hover:shadow-md transition-shadow dark:bg-[#171b28] dark:ring-white/5 gap-2">
+            <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-1.5 min-w-0 pr-4">
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <Pill kind={t.kind} />
+                  <span className="text-[11px] text-slate-400 font-bold tracking-wider">{t.time}</span>
+                  {t.serialNo && (
+                    <span className="text-[10px] text-slate-500 font-mono tracking-tight bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 px-1.5 py-0.5 rounded">
+                      {t.serialNo}
+                    </span>
+                  )}
+                </div>
+                <span className="text-sm font-semibold text-slate-700 dark:text-slate-300 truncate">{t.title}</span>
+                {t.originalAmount !== undefined && (
+                  <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 px-1.5 py-0.5 rounded w-fit inline-flex mt-0.5">
+                    Edited (Orig: SAR {fmt(t.originalAmount)})
+                  </span>
+                )}
               </div>
-              <span className="text-sm font-semibold text-slate-700 dark:text-slate-300 truncate">{t.title}</span>
-            </div>
-            <div className={`font-display font-extrabold text-lg whitespace-nowrap ${type === 'in' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-800 dark:text-slate-200'}`}>
-              {type === 'in' ? '+' : '-'}{fmt(t.amount)}
+              <div className="flex flex-col items-end shrink-0 gap-1">
+                {editingId === t.id ? (
+                  <div className="flex items-center gap-2">
+                    <input 
+                      type="number" step="0.01" value={editAmt} onChange={e => setEditAmt(e.target.value)} 
+                      className="w-24 px-2 py-1 text-right bg-slate-50 rounded ring-1 ring-slate-200 outline-none focus:ring-2 focus:ring-purple-500 font-bold text-sm dark:bg-[#171b28] dark:ring-white/20" 
+                      autoFocus
+                    />
+                    <button onClick={() => handleSaveEdit(t.id)} className="text-emerald-500 hover:text-emerald-600 bg-emerald-50 dark:bg-emerald-500/10 p-1 rounded"><Check size={16} /></button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <div className={`font-display font-extrabold text-lg whitespace-nowrap flex flex-col items-end ${type === 'in' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-800 dark:text-slate-200'}`}>
+                      <span>{type === 'in' ? '+' : '-'}{fmt(t.amount)} {t.kind === "cash_sale" && <span className="text-[10px] font-bold text-slate-400 ml-0.5">(Incl. VAT)</span>}</span>
+                    </div>
+                    <button onClick={() => { setEditingId(t.id); setEditAmt(t.amount.toString()); }} className="text-slate-400 hover:text-purple-500 transition-colors p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-white/10">
+                      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                    </button>
+                  </div>
+                )}
+                {t.kind === "cash_sale" && editingId !== t.id && (
+                  <div className="text-[10px] font-bold text-slate-500 bg-slate-50 dark:bg-white/5 px-2 py-1 rounded-md mt-0.5 whitespace-nowrap border border-slate-100 dark:border-white/5">
+                    SAR {fmt(t.amount / 1.15)} <span className="font-medium text-slate-400">(Excl. 15% VAT: SAR {fmt(t.amount - (t.amount / 1.15))})</span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         ))}
@@ -1327,8 +1374,17 @@ export default function Page() {
     else document.documentElement.classList.remove("dark");
   }, [dark]);
 
-  const handleAddTxn = (t: Omit<Txn, "id" | "time">) => {
-    setTxns([{ id: `t-${Date.now()}`, time: nowHHMM(), ...t }, ...txns]);
+  const handleAddTxn = (t: Omit<Txn, "id" | "time" | "serialNo">) => {
+    const isSale = t.kind === "cash_sale";
+    const ref = isSale ? `INV-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}` : `ERP-JBL-${Math.floor(1000 + Math.random() * 9000)}`;
+    setTxns([{ id: `t-${Date.now()}`, time: nowHHMM(), serialNo: ref, ...t }, ...txns]);
+  };
+
+  const handleEditTxn = (id: string, newAmount: number) => {
+    setTxns(txns.map(t => {
+      if (t.id !== id) return t;
+      return { ...t, originalAmount: t.originalAmount || t.amount, amount: newAmount };
+    }));
   };
 
   const detailedIn = r2(txns.filter(t => t.flow === "in").reduce((a, b) => a + b.amount, 0) + 4500);
@@ -1415,8 +1471,8 @@ export default function Page() {
                </div>
             ) : mode === "detailed" ? (
                <div className="flex flex-col lg:flex-row gap-6 p-6 h-full overflow-hidden">
-                  <Column title="Money In" type="in" txns={txns.filter(t => t.flow === 'in')} onAdd={handleAddTxn} />
-                  <Column title="Money Out" type="out" txns={txns.filter(t => t.flow === 'out')} onAdd={handleAddTxn} />
+                  <Column title="Money In" type="in" txns={txns.filter(t => t.flow === 'in')} onAdd={handleAddTxn} onEdit={handleEditTxn} />
+                  <Column title="Money Out" type="out" txns={txns.filter(t => t.flow === 'out')} onAdd={handleAddTxn} onEdit={handleEditTxn} />
                </div>
             ) : (
                <div className="h-full overflow-y-auto p-6 w-full">
