@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 export async function POST(req: Request) {
   try {
     const payload = await req.json();
-    const apiKey = "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";
+    const apiKey = process.env.GROQ_API_KEY || "";
 
     const systemPrompt = `You are a strict financial auditor for a wholesale paint business (Jubail Corp). Analyze this JSON ledger payload (inflows, outflows, totals) and return ONLY a valid JSON object with EXACTLY this structure:
     {
@@ -35,7 +35,7 @@ export async function POST(req: Request) {
         const result = JSON.parse(rawText);
         result.source = "Groq Live AI (openai/gpt-oss-20b)";
         return NextResponse.json(result);
-      } catch (parseError) {
+      } catch {
         console.error("JSON Parse Error from Groq response:", rawText);
       }
     } else {
@@ -57,7 +57,7 @@ export async function POST(req: Request) {
       advice: "Recommended action: Follow up immediately on overdue Dammam receivables and run a spot check on primer inventory levels."
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Internal Route Error:", error);
     return NextResponse.json({
       source: "Local Safety Fallback (Internal Exception)",

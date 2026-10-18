@@ -1,21 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as Dropdown from "@radix-ui/react-dropdown-menu";
 import {
   Activity, Building2, CalendarDays, Check, ChevronDown, 
-  DollarSign, HandCoins, Landmark, Lock, LockOpen, Moon, 
-  Package, Sparkles, Store, Sun, TrendingDown, TrendingUp, 
+  CreditCard, FileSpreadsheet, Landmark, Lock, LockOpen, Moon, 
+  Package, Sparkles, Store, Sun, TrendingUp, 
   Wallet, Search, Plus, Target, AlertTriangle, Mail, Bell,
-  FileDown, UploadCloud, Flame, Zap, ArrowRight, MessageSquare, Database, RefreshCw, BarChart2, Eye, ArrowRightLeft
+  FileDown, UploadCloud, Zap, ArrowLeft, ArrowRight, MessageSquare, Database, RefreshCw, BarChart2, Eye, ArrowRightLeft, Trash2, Receipt
 } from "lucide-react";
 
 /* ════════════════════════════════════════════════════════════════════════
    TYPES & CONSTANTS
    ════════════════════════════════════════════════════════════════════════ */
 
-type ViewMode = "detailed" | "quick";
-type BranchId = "jubail" | "dammam";
 type TabId = "register" | "radar" | "suppliers" | "pulse" | "consolidation" | "ai";
 type Kind = "cash_sale" | "credit_received" | "bank_in" | "jotun" | "hempel" | "sigma" | "other" | "salaries" | "tax" | "misc_expense";
 
@@ -80,31 +78,6 @@ const nowHHMM = () => {
 /* ════════════════════════════════════════════════════════════════════════
    COMPONENTS
    ════════════════════════════════════════════════════════════════════════ */
-
-function Pill({ kind }: { kind: Kind }) {
-  const map: Record<Kind, string> = {
-    cash_sale: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300",
-    credit_received: "bg-teal-100 text-teal-700 dark:bg-teal-500/20 dark:text-teal-300",
-    bank_in: "bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300",
-    jotun: "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300",
-    hempel: "bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-300",
-    sigma: "bg-fuchsia-100 text-fuchsia-700 dark:bg-fuchsia-500/20 dark:text-fuchsia-300",
-    other: "bg-slate-100 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300",
-    salaries: "bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300",
-    tax: "bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-300",
-    misc_expense: "bg-stone-100 text-stone-700 dark:bg-stone-500/20 dark:text-stone-300",
-  };
-  const labelMap: Record<Kind, string> = {
-    cash_sale: "Cash Sale", credit_received: "Credit In", bank_in: "Bank In",
-    jotun: "Jotun", hempel: "Hempel", sigma: "Sigma", other: "Other Paint",
-    salaries: "Salaries", tax: "Tax", misc_expense: "Expense"
-  };
-  return (
-    <span className={`px-2.5 py-1 rounded-md text-[10px] font-extrabold tracking-wide uppercase ${map[kind]}`}>
-      {labelMap[kind]}
-    </span>
-  );
-}
 
 function ThemeToggle({ dark, onToggle }: { dark: boolean; onToggle: () => void }) {
   return (
@@ -183,137 +156,791 @@ function Sidebar({ tab, setTab }: { tab: TabId; setTab: (t: TabId) => void }) {
   );
 }
 
-function Column({ title, type, txns, onAdd, onEdit }: { title: string; type: "in" | "out"; txns: Txn[]; onAdd: (t: Omit<Txn, "id" | "time" | "serialNo">) => void; onEdit: (id: string, newAmt: number) => void }) {
-  const [amt, setAmt] = useState("");
-  const [kind, setKind] = useState<Kind>(type === "in" ? "cash_sale" : "jotun");
-  const [note, setNote] = useState("");
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editAmt, setEditAmt] = useState("");
+/* ════════════════════════════════════════════════════════════════════════
+   ANTIGRAVITY CRYSTAL CANVAS (MOUSE-TRACKING PHYSICS)
+   ════════════════════════════════════════════════════════════════════════ */
 
-  const handleAdd = (e: React.FormEvent) => {
-    e.preventDefault();
-    const val = parseFloat(amt);
-    if (Number.isNaN(val) || val <= 0) return;
-    onAdd({ amount: val, kind, flow: type, title: note || (type === "in" ? "Walk-in Sale" : "Standard Expense") });
-    setAmt("");
-    setNote("");
-  };
+interface CrystalParticle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  baseVx: number;
+  baseVy: number;
+  size: number;
+  color: string;
+  alpha: number;
+  angle: number;
+  spin: number;
+  shape: "diamond" | "hex" | "spark";
+}
 
-  const handleSaveEdit = (id: string) => {
-    const val = parseFloat(editAmt);
-    if (!Number.isNaN(val) && val > 0) {
-      onEdit(id, val);
-    }
-    setEditingId(null);
-  };
+function CrystalCanvas() {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  const options: {v: Kind; l: string}[] = type === "in" 
-    ? [{v: "cash_sale", l: "Cash Sale"}, {v: "credit_received", l: "Credit In"}, {v: "bank_in", l: "Bank In"}]
-    : [{v: "jotun", l: "Jotun"}, {v: "hempel", l: "Hempel"}, {v: "sigma", l: "Sigma"}, {v: "other", l: "Other Paint"}, {v: "salaries", l: "Salaries"}, {v: "tax", l: "Tax"}, {v: "misc_expense", l: "Expense"}];
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
 
-  const total = r2(txns.reduce((a, b) => a + b.amount, 0));
+    let animationFrameId: number;
+    let width = (canvas.width = canvas.parentElement?.clientWidth || window.innerWidth);
+    let height = (canvas.height = canvas.parentElement?.clientHeight || window.innerHeight);
+
+    const handleResize = () => {
+      if (!canvas) return;
+      width = canvas.width = canvas.parentElement?.clientWidth || window.innerWidth;
+      height = canvas.height = canvas.parentElement?.clientHeight || window.innerHeight;
+    };
+    window.addEventListener("resize", handleResize);
+
+    const mouse = { x: -9999, y: -9999, active: false };
+    const handleMouseMove = (e: MouseEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      mouse.x = e.clientX - rect.left;
+      mouse.y = e.clientY - rect.top;
+      mouse.active =
+        mouse.x >= 0 && mouse.x <= width && mouse.y >= 0 && mouse.y <= height;
+    };
+    const handleMouseLeave = () => {
+      mouse.active = false;
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseleave", handleMouseLeave);
+
+    const palette = ["#f59e0b", "#a855f7", "#ffffff", "#fbbf24", "#c084fc"];
+    const shapes: ("diamond" | "hex" | "spark")[] = ["diamond", "hex", "spark"];
+    const count = 72;
+
+    const particles: CrystalParticle[] = Array.from({ length: count }, () => {
+      const baseVx = (Math.random() - 0.5) * 0.45;
+      const baseVy = (Math.random() - 0.5) * 0.45;
+      return {
+        x: Math.random() * width,
+        y: Math.random() * height,
+        vx: baseVx,
+        vy: baseVy,
+        baseVx,
+        baseVy,
+        size: 2.2 + Math.random() * 4.2,
+        color: palette[Math.floor(Math.random() * palette.length)],
+        alpha: 0.25 + Math.random() * 0.55,
+        angle: Math.random() * Math.PI * 2,
+        spin: (Math.random() - 0.5) * 0.02,
+        shape: shapes[Math.floor(Math.random() * shapes.length)],
+      };
+    });
+
+    const render = () => {
+      ctx.clearRect(0, 0, width, height);
+
+      // Optional ambient cursor halo
+      if (mouse.active) {
+        const grad = ctx.createRadialGradient(
+          mouse.x,
+          mouse.y,
+          5,
+          mouse.x,
+          mouse.y,
+          220
+        );
+        grad.addColorStop(0, "rgba(245, 158, 11, 0.08)");
+        grad.addColorStop(0.5, "rgba(168, 85, 247, 0.05)");
+        grad.addColorStop(1, "rgba(12, 7, 20, 0)");
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(mouse.x, mouse.y, 220, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      for (let i = 0; i < particles.length; i++) {
+        const p = particles[i];
+
+        if (mouse.active) {
+          const dx = mouse.x - p.x;
+          const dy = mouse.y - p.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const maxRadius = 260;
+
+          if (dist < maxRadius && dist > 1) {
+            const force = (1 - dist / maxRadius) * 0.055;
+            // Gentle orbital tangential + radial attraction (Antigravity feel)
+            const nx = dx / dist;
+            const ny = dy / dist;
+            const tx = -ny;
+            const ty = nx;
+
+            // Pull gently toward a soft orbit ring (~45px from cursor)
+            const radialFactor = dist > 48 ? 1 : -0.6;
+            p.vx += (nx * radialFactor * 0.65 + tx * 0.55) * force;
+            p.vy += (ny * radialFactor * 0.65 + ty * 0.55) * force;
+
+            // Subtle constellation filament to cursor when very close
+            if (dist < 130) {
+              ctx.save();
+              ctx.strokeStyle = p.color;
+              ctx.globalAlpha = (1 - dist / 130) * 0.16;
+              ctx.lineWidth = 0.7;
+              ctx.beginPath();
+              ctx.moveTo(p.x, p.y);
+              ctx.lineTo(mouse.x, mouse.y);
+              ctx.stroke();
+              ctx.restore();
+            }
+          }
+        }
+
+        // Smooth damping & spring relaxation toward base drift
+        p.vx = p.vx * 0.96 + p.baseVx * 0.04;
+        p.vy = p.vy * 0.96 + p.baseVy * 0.04;
+
+        p.x += p.vx;
+        p.y += p.vy;
+        p.angle += p.spin;
+
+        // Wrap around edges seamlessly
+        if (p.x < -20) p.x = width + 20;
+        if (p.x > width + 20) p.x = -20;
+        if (p.y < -20) p.y = height + 20;
+        if (p.y > height + 20) p.y = -20;
+
+        // Draw geometric crystal particle
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.angle);
+        ctx.globalAlpha = p.alpha;
+        ctx.fillStyle = p.color;
+        ctx.strokeStyle = p.color;
+
+        if (p.shape === "diamond") {
+          ctx.beginPath();
+          ctx.moveTo(0, -p.size * 1.3);
+          ctx.lineTo(p.size * 0.9, 0);
+          ctx.lineTo(0, p.size * 1.3);
+          ctx.lineTo(-p.size * 0.9, 0);
+          ctx.closePath();
+          ctx.fill();
+        } else if (p.shape === "hex") {
+          ctx.beginPath();
+          for (let s = 0; s < 6; s++) {
+            const a = (Math.PI / 3) * s;
+            const hx = Math.cos(a) * p.size;
+            const hy = Math.sin(a) * p.size;
+            if (s === 0) ctx.moveTo(hx, hy);
+            else ctx.lineTo(hx, hy);
+          }
+          ctx.closePath();
+          ctx.lineWidth = 1.1;
+          ctx.stroke();
+        } else {
+          ctx.beginPath();
+          ctx.arc(0, 0, p.size * 0.55, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        ctx.restore();
+      }
+
+      animationFrameId = requestAnimationFrame(render);
+    };
+
+    animationFrameId = requestAnimationFrame(render);
+
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseleave", handleMouseLeave);
+    };
+  }, []);
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden bg-white rounded-2xl shadow-sm ring-1 ring-slate-900/5 dark:bg-[#121620] dark:ring-white/10">
-      <div className="p-4 border-b border-slate-100 dark:border-white/5 shrink-0 space-y-4">
-        <h2 className="font-bold text-lg flex items-center gap-2">
-          {type === 'in' ? <TrendingUp className="text-emerald-500" /> : <TrendingDown className="text-rose-500" />}
-          {title}
-          <span className="ml-auto text-xs font-bold text-slate-400 bg-slate-100 dark:bg-white/5 px-2 py-1 rounded-md">{txns.length}</span>
-        </h2>
-        
-        <form onSubmit={handleAdd} className="flex flex-wrap items-center gap-2 bg-slate-50 p-2.5 rounded-xl ring-1 ring-slate-200 dark:bg-white/5 dark:ring-white/10">
-          <input type="number" step="0.01" value={amt} onChange={e => setAmt(e.target.value)} placeholder="0.00" className="w-24 px-3 py-2 bg-white rounded-lg ring-1 ring-slate-200 outline-none focus:ring-2 focus:ring-purple-500 font-bold dark:bg-[#171b28] dark:ring-white/20" />
-          <select value={kind} onChange={e => setKind(e.target.value as Kind)} className="px-3 py-2 bg-white rounded-lg ring-1 ring-slate-200 outline-none focus:ring-2 focus:ring-purple-500 font-bold text-sm dark:bg-[#171b28] dark:ring-white/20">
-            {options.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
-          </select>
-          <input type="text" value={note} onChange={e => setNote(e.target.value)} placeholder="Note..." className="flex-1 min-w-[100px] px-3 py-2 bg-white rounded-lg ring-1 ring-slate-200 outline-none focus:ring-2 focus:ring-purple-500 text-sm font-medium dark:bg-[#171b28] dark:ring-white/20" />
-          <button type="submit" className="flex items-center gap-1 px-3 py-2 bg-purple-600 text-white rounded-lg font-bold hover:bg-purple-700 transition text-sm shrink-0">
-            <Plus size={16} /> Add
-          </button>
-        </form>
-      </div>
-      
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {txns.map(t => (
-          <div key={t.id} className="flex flex-col p-3.5 bg-white rounded-xl ring-1 ring-slate-100 shadow-sm hover:shadow-md transition-shadow dark:bg-[#171b28] dark:ring-white/5 gap-2">
-            <div className="flex items-center justify-between">
-              <div className="flex flex-col gap-1.5 min-w-0 pr-4">
-                <div className="flex items-center gap-2.5 flex-wrap">
-                  <Pill kind={t.kind} />
-                  <span className="text-[11px] text-slate-400 font-bold tracking-wider">{t.time}</span>
-                  {t.serialNo && (
-                    <span className="text-[10px] text-slate-500 font-mono tracking-tight bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 px-1.5 py-0.5 rounded">
-                      {t.serialNo}
-                    </span>
-                  )}
-                </div>
-                <span className="text-sm font-semibold text-slate-700 dark:text-slate-300 truncate">{t.title}</span>
-                {t.originalAmount !== undefined && (
-                  <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 px-1.5 py-0.5 rounded w-fit inline-flex mt-0.5">
-                    Edited (Orig: SAR {fmt(t.originalAmount)})
-                  </span>
-                )}
-              </div>
-              <div className="flex flex-col items-end shrink-0 gap-1">
-                {editingId === t.id ? (
-                  <div className="flex items-center gap-2">
-                    <input 
-                      type="number" step="0.01" value={editAmt} onChange={e => setEditAmt(e.target.value)} 
-                      className="w-24 px-2 py-1 text-right bg-slate-50 rounded ring-1 ring-slate-200 outline-none focus:ring-2 focus:ring-purple-500 font-bold text-sm dark:bg-[#171b28] dark:ring-white/20" 
-                      autoFocus
-                    />
-                    <button onClick={() => handleSaveEdit(t.id)} className="text-emerald-500 hover:text-emerald-600 bg-emerald-50 dark:bg-emerald-500/10 p-1 rounded"><Check size={16} /></button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <div className={`font-display font-extrabold text-lg whitespace-nowrap flex flex-col items-end ${type === 'in' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-800 dark:text-slate-200'}`}>
-                      <span>{type === 'in' ? '+' : '-'}{fmt(t.amount)} {t.kind === "cash_sale" && <span className="text-[10px] font-bold text-slate-400 ml-0.5">(Incl. VAT)</span>}</span>
-                    </div>
-                    <button onClick={() => { setEditingId(t.id); setEditAmt(t.amount.toString()); }} className="text-slate-400 hover:text-purple-500 transition-colors p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-white/10">
-                      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
-                    </button>
-                  </div>
-                )}
-                {t.kind === "cash_sale" && editingId !== t.id && (
-                  <div className="text-[10px] font-bold text-slate-500 bg-slate-50 dark:bg-white/5 px-2 py-1 rounded-md mt-0.5 whitespace-nowrap border border-slate-100 dark:border-white/5">
-                    SAR {fmt(t.amount / 1.15)} <span className="font-medium text-slate-400">(Excl. 15% VAT: SAR {fmt(t.amount - (t.amount / 1.15))})</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        ))}
-        {txns.length === 0 && (
-          <div className="flex items-center justify-center h-full text-sm font-bold text-slate-400">No entries yet.</div>
-        )}
-      </div>
-
-      <div className="p-4 border-t border-slate-100 dark:border-white/5 shrink-0 bg-slate-50 dark:bg-white/[0.02]">
-        <div className="flex justify-between items-center">
-          <span className="font-bold text-sm uppercase tracking-wider text-slate-500">Total {title}</span>
-          <span className={`font-display text-2xl font-extrabold ${type === 'in' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-800 dark:text-white'}`}>{fmt(total)}</span>
-        </div>
-      </div>
-    </div>
+    <canvas
+      ref={canvasRef}
+      className="pointer-events-none absolute inset-0 h-full w-full z-0"
+    />
   );
 }
 
-function QuickInput({ label, pill, value, onChange }: { label: string; pill?: Kind; value: string; onChange: (v: string) => void }) {
+/* ════════════════════════════════════════════════════════════════════════
+   JCT FLAGSHIP DAILY HUB (MODULE 1 REDESIGN — STEP 1)
+   ════════════════════════════════════════════════════════════════════════ */
+
+type TrackingMode = "hub" | "wizard" | "datasheet";
+type PreLoggedEntryType = "EXPENSE" | "CREDIT_RECD" | "LOAN_IN" | "OTHER_IN";
+
+interface PreLoggedBankInvoice {
+  invoiceNo: string;
+  amount?: number;
+  time: string;
+}
+
+interface PreLoggedEntry {
+  id: string;
+  type: PreLoggedEntryType;
+  title: string;
+  amount: number;
+  time: string;
+}
+
+interface CompletedDaySummary {
+  date: string;
+  branch: string;
+  totalCashSales: number;
+  totalBankSwipe: number;
+  totalExpenses: number;
+  closingBalance: number;
+  status: "LOCKED" | "AUDITED";
+}
+
+function DailyRegisterView() {
+  // 3. State Architecture Preparation
+  const [trackingMode, setTrackingMode] = useState<TrackingMode>("hub");
+
+  const [preLoggedBankInvoices, setPreLoggedBankInvoices] = useState<PreLoggedBankInvoice[]>([
+    { invoiceNo: "30063", amount: 1450, time: "09:18" },
+    { invoiceNo: "30068", amount: 3820, time: "11:42" },
+    { invoiceNo: "30074", amount: 960, time: "14:05" },
+  ]);
+
+  const [preLoggedEntries, setPreLoggedEntries] = useState<PreLoggedEntry[]>([
+    { id: "ple-1", type: "EXPENSE", title: "Food", amount: 24, time: "12:30" },
+    { id: "ple-2", type: "EXPENSE", title: "Wash", amount: 150, time: "13:45" },
+    { id: "ple-3", type: "CREDIT_RECD", title: "Chicago Credit Recd", amount: 12428, time: "15:10" },
+  ]);
+
+  const [completedDaysLog] = useState<CompletedDaySummary[]>([
+    {
+      date: "11-09-2026",
+      branch: "Jubail - Main Branch",
+      totalCashSales: 28450,
+      totalBankSwipe: 13530,
+      totalExpenses: 4120,
+      closingBalance: 42360,
+      status: "AUDITED",
+    },
+    {
+      date: "10-09-2026",
+      branch: "Jubail - Main Branch",
+      totalCashSales: 31900,
+      totalBankSwipe: 9840,
+      totalExpenses: 2890,
+      closingBalance: 43350,
+      status: "LOCKED",
+    },
+  ]);
+
+  // Widget A Local Form State
+  const [bankInvoiceInput, setBankInvoiceInput] = useState("");
+  const [bankAmountInput, setBankAmountInput] = useState("");
+
+  // Widget B Local Form State
+  const [entryType, setEntryType] = useState<PreLoggedEntryType>("EXPENSE");
+  const [entryTitle, setEntryTitle] = useState("");
+  const [entryAmount, setEntryAmount] = useState("");
+
+  const handleLogBankInvoice = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleaned = bankInvoiceInput.trim().replace(/^#/, "");
+    if (!cleaned) return;
+    const parsedAmt = parseFloat(bankAmountInput);
+    const newItem: PreLoggedBankInvoice = {
+      invoiceNo: cleaned,
+      amount: !Number.isNaN(parsedAmt) && parsedAmt > 0 ? parsedAmt : undefined,
+      time: nowHHMM(),
+    };
+    setPreLoggedBankInvoices((prev) => [newItem, ...prev]);
+    setBankInvoiceInput("");
+    setBankAmountInput("");
+  };
+
+  const handleRemoveBankInvoice = (invoiceNo: string) => {
+    setPreLoggedBankInvoices((prev) => prev.filter((item) => item.invoiceNo !== invoiceNo));
+  };
+
+  const handleQuickRecord = (e: React.FormEvent) => {
+    e.preventDefault();
+    const val = parseFloat(entryAmount);
+    if (!entryTitle.trim() || Number.isNaN(val) || val <= 0) return;
+    const newEntry: PreLoggedEntry = {
+      id: `ple-${Date.now()}`,
+      type: entryType,
+      title: entryTitle.trim(),
+      amount: val,
+      time: nowHHMM(),
+    };
+    setPreLoggedEntries((prev) => [newEntry, ...prev]);
+    setEntryTitle("");
+    setEntryAmount("");
+  };
+
+  const handleRemoveEntry = (id: string) => {
+    setPreLoggedEntries((prev) => prev.filter((item) => item.id !== id));
+  };
+
+  const entryTypeMeta: Record<
+    PreLoggedEntryType,
+    { label: string; shortBadge: string; badgeClass: string; isOutflow: boolean }
+  > = {
+    EXPENSE: {
+      label: "Expense (Out)",
+      shortBadge: "EXPENSE · OUT",
+      badgeClass: "bg-rose-500/20 text-rose-300 border-rose-500/30",
+      isOutflow: true,
+    },
+    CREDIT_RECD: {
+      label: "Credit Sale Amt Recd (In)",
+      shortBadge: "CREDIT RECD · IN",
+      badgeClass: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
+      isOutflow: false,
+    },
+    LOAN_IN: {
+      label: "Loan In",
+      shortBadge: "LOAN · IN",
+      badgeClass: "bg-amber-500/20 text-amber-300 border-amber-500/30",
+      isOutflow: false,
+    },
+    OTHER_IN: {
+      label: "Other Amt Recd",
+      shortBadge: "OTHER · IN",
+      badgeClass: "bg-purple-500/20 text-purple-300 border-purple-500/30",
+      isOutflow: false,
+    },
+  };
+
+  const totalPreLoggedExpenses = r2(
+    preLoggedEntries
+      .filter((e) => e.type === "EXPENSE")
+      .reduce((acc, item) => acc + item.amount, 0)
+  );
+  const totalPreLoggedInflows = r2(
+    preLoggedEntries
+      .filter((e) => e.type !== "EXPENSE")
+      .reduce((acc, item) => acc + item.amount, 0)
+  );
+
   return (
-    <div className="flex items-center justify-between gap-4 mb-5">
-      <div className="flex flex-col gap-1.5">
-         <span className="font-bold text-slate-700 dark:text-slate-300 text-sm">{label}</span>
-         {pill && <div><Pill kind={pill} /></div>}
-      </div>
-      <div className="relative shrink-0">
-         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">SAR</span>
-         <input 
-           type="number" step="0.01"
-           value={value} onChange={e => onChange(e.target.value)}
-           className="w-36 lg:w-40 pl-12 pr-4 py-2.5 bg-slate-50 rounded-xl ring-1 ring-slate-200 outline-none focus:ring-2 focus:ring-purple-500 font-display font-bold text-right dark:bg-[#171b28] dark:ring-white/20 dark:text-white transition-shadow"
-           placeholder="0.00"
-         />
+    <div className="relative flex-1 h-full w-full overflow-y-auto bg-gradient-to-br from-[#0c0714] via-[#1a0f2e] to-[#25161b] text-white select-none">
+      {/* Interactive Antigravity Crystal Particle Canvas */}
+      <CrystalCanvas />
+
+      {/* Subtle Ambient Cosmic Glows */}
+      <div className="pointer-events-none absolute -top-28 left-1/4 h-96 w-96 rounded-full bg-purple-600/15 blur-[130px]" />
+      <div className="pointer-events-none absolute bottom-0 right-1/4 h-96 w-96 rounded-full bg-amber-500/10 blur-[140px]" />
+
+      {/* Main Content Container */}
+      <div className="relative z-10 mx-auto flex min-h-full max-w-7xl flex-col justify-between p-6 lg:p-8 gap-6">
+        {trackingMode !== "hub" ? (
+          /* Placeholder View for 'wizard' or 'datasheet' before Step 2 */
+          <div className="flex flex-1 flex-col gap-6">
+            <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/15 bg-white/[0.04] p-5 backdrop-blur-2xl shadow-2xl">
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => setTrackingMode("hub")}
+                  className="flex items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/20 hover:border-amber-400/40"
+                >
+                  <ArrowLeft size={16} />
+                  ← Back to Daily Hub
+                </button>
+                <div className="h-6 w-px bg-white/15" />
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/20 border border-amber-400/30 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-widest text-amber-300">
+                      {trackingMode === "wizard" ? "Guided Reconciliation Mode" : "Classic Sheet Mode"}
+                    </span>
+                  </div>
+                  <h2 className="mt-1 font-display text-xl font-bold tracking-tight text-white">
+                    {trackingMode === "wizard"
+                      ? "Nauman Labs Guided End-of-Day Tracking Wizard"
+                      : "Jubail Corp. Classic Daily Data Sheet"}
+                  </h2>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="rounded-xl border border-white/10 bg-black/30 px-3.5 py-2 text-right">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-white/50">
+                    Pre-Logged Bank Invoices
+                  </p>
+                  <p className="font-display text-sm font-bold text-amber-400">
+                    {preLoggedBankInvoices.length} Queued for Auto-Match
+                  </p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-black/30 px-3.5 py-2 text-right">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-white/50">
+                    Pre-Logged Shift Items
+                  </p>
+                  <p className="font-display text-sm font-bold text-emerald-400">
+                    {preLoggedEntries.length} Ready to Import
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-1 flex-col items-center justify-center rounded-3xl border border-white/15 bg-white/[0.03] p-12 text-center backdrop-blur-xl shadow-2xl">
+              <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400/20 via-purple-500/20 to-indigo-500/20 border border-amber-400/30 text-amber-300 shadow-[0_0_30px_rgba(245,158,11,0.2)]">
+                {trackingMode === "wizard" ? <Sparkles size={30} /> : <FileSpreadsheet size={30} />}
+              </div>
+              <h3 className="font-display text-2xl font-bold tracking-tight text-white">
+                {trackingMode === "wizard"
+                  ? "Guided EOD Wizard Engine Ready for Step 2"
+                  : "Classic Jubail Corp Daily Data Sheet Ready for Step 2"}
+              </h3>
+              <p className="mt-2 max-w-lg text-sm text-white/65 leading-relaxed">
+                Your <span className="font-semibold text-amber-300">{preLoggedBankInvoices.length} pre-logged bank invoices</span> (
+                {preLoggedBankInvoices.map((i) => `#${i.invoiceNo}`).join(", ")}) and{" "}
+                <span className="font-semibold text-purple-300">{preLoggedEntries.length} daytime shift entries</span> are buffered in state and will automatically populate here.
+              </p>
+              <button
+                onClick={() => setTrackingMode("hub")}
+                className="mt-7 flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-purple-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-purple-500/25 transition hover:brightness-110"
+              >
+                <ArrowLeft size={16} />
+                Return to Daily Command Hub
+              </button>
+            </div>
+          </div>
+        ) : (
+          /* THE DAILY COMMAND HUB (MAIN HOME SCREEN) */
+          <div className="flex flex-col gap-6">
+            {/* Top Status & Telemetry Strip */}
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <div className="inline-flex items-center gap-2 rounded-full border border-amber-400/30 bg-amber-500/10 px-3 py-1 text-[11px] font-semibold tracking-wide text-amber-300">
+                  <Sparkles size={12} className="text-amber-400" />
+                  JCT FLAGSHIP DAILY HUB · DAYTIME SCRATCHPAD ACTIVE
+                </div>
+                <h1 className="mt-2 font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
+                  The Daily Command Hub
+                </h1>
+                <p className="text-sm text-white/60 font-medium">
+                  Jot down bank/POS invoice numbers and daytime cash movements as they happen—everything feeds into your evening reconciliation.
+                </p>
+              </div>
+
+              {/* Quick Live Pre-Tracker Summary Badges */}
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 backdrop-blur-md">
+                  <span className="block text-[10px] font-bold uppercase tracking-wider text-white/45">
+                    Bank / POS Invoices
+                  </span>
+                  <span className="font-display text-base font-extrabold text-amber-400">
+                    {preLoggedBankInvoices.length} Logged
+                  </span>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 backdrop-blur-md">
+                  <span className="block text-[10px] font-bold uppercase tracking-wider text-white/45">
+                    Pre-Logged Inflows
+                  </span>
+                  <span className="font-display text-base font-extrabold text-emerald-400">
+                    SAR {fmt(totalPreLoggedInflows)}
+                  </span>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 backdrop-blur-md">
+                  <span className="block text-[10px] font-bold uppercase tracking-wider text-white/45">
+                    Pre-Logged Expenses
+                  </span>
+                  <span className="font-display text-base font-extrabold text-rose-400">
+                    SAR {fmt(totalPreLoggedExpenses)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Widget C: The Flagship "Start Tracking" Hero Box */}
+            <div className="relative overflow-hidden rounded-3xl p-[1.5px] bg-gradient-to-r from-amber-400/70 via-purple-500/70 to-amber-500/70 shadow-[0_0_50px_rgba(168,85,247,0.22)]">
+              <div className="relative overflow-hidden rounded-[22.5px] bg-gradient-to-br from-[#170e29]/95 via-[#130b21]/95 to-[#221319]/95 px-6 py-7 sm:px-9 sm:py-8 backdrop-blur-2xl">
+                {/* Ambient Shimmer Accent */}
+                <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-amber-400/15 blur-3xl" />
+                <div className="pointer-events-none absolute -bottom-20 left-1/3 h-64 w-64 rounded-full bg-purple-500/20 blur-3xl" />
+
+                <div className="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+                  <div className="max-w-2xl space-y-2.5">
+                    <div className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-widest text-amber-300 ring-1 ring-white/15">
+                      <Zap size={12} className="text-amber-400" />
+                      Evening Closing & ERP Auto-Match Engine
+                    </div>
+                    <h2 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
+                      End-of-Day Reconciliation &amp; Tracking
+                    </h2>
+                    <p className="text-sm sm:text-base text-white/70 font-medium leading-relaxed">
+                      Launch the guided Nauman Labs journey or enter data in the classic Jubail Corp Daily Data Sheet.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-3.5 shrink-0">
+                    <button
+                      onClick={() => setTrackingMode("wizard")}
+                      className="group relative flex items-center gap-2.5 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-500 to-purple-600 px-6 py-4 text-sm sm:text-base font-extrabold text-slate-950 shadow-[0_0_30px_rgba(245,158,11,0.4)] transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_0_40px_rgba(245,158,11,0.65)]"
+                    >
+                      <Sparkles size={18} className="text-slate-950 transition-transform group-hover:rotate-12" />
+                      <span>✨ Start Guided Tracking</span>
+                      <ArrowRight size={16} className="text-slate-950/80 transition-transform group-hover:translate-x-0.5" />
+                    </button>
+
+                    <button
+                      onClick={() => setTrackingMode("datasheet")}
+                      className="flex items-center gap-2.5 rounded-2xl border border-white/20 bg-white/10 px-5 py-4 text-sm sm:text-base font-bold text-white backdrop-blur-xl transition-all hover:bg-white/15 hover:border-amber-300/40"
+                    >
+                      <FileSpreadsheet size={18} className="text-amber-300" />
+                      <span>📋 Open Classic Data Sheet</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Two-Column Daytime Pre-Tracking Scratchpad Grid (Widget A & Widget B) */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              {/* Widget A: Daytime Bank / POS Swipe Invoice Logger (5 cols) */}
+              <div className="lg:col-span-5 flex flex-col justify-between rounded-3xl border border-white/12 bg-white/[0.04] p-6 backdrop-blur-2xl shadow-xl">
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/20 border border-amber-400/30 text-amber-300">
+                        <CreditCard size={20} />
+                      </div>
+                      <div>
+                        <h3 className="font-display text-base font-bold tracking-tight text-white">
+                          Daytime Bank / POS Swipe Logger
+                        </h3>
+                        <p className="text-xs text-white/55">
+                          Jot down ERP Invoice # for Bank Transfer or Card Swipe
+                        </p>
+                      </div>
+                    </div>
+                    <span className="rounded-full bg-amber-500/20 border border-amber-400/30 px-2.5 py-0.5 text-[11px] font-bold text-amber-300">
+                      {preLoggedBankInvoices.length} Queued
+                    </span>
+                  </div>
+
+                  {/* Form */}
+                  <form onSubmit={handleLogBankInvoice} className="mt-4 flex flex-col sm:flex-row gap-2.5">
+                    <input
+                      type="text"
+                      value={bankInvoiceInput}
+                      onChange={(e) => setBankInvoiceInput(e.target.value)}
+                      placeholder="Invoice No. (e.g. 30063)"
+                      className="flex-1 rounded-xl border border-white/15 bg-black/35 px-3.5 py-2.5 text-sm font-semibold text-white placeholder:text-white/35 outline-none focus:border-amber-400/70 focus:ring-2 focus:ring-amber-400/20"
+                    />
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={bankAmountInput}
+                      onChange={(e) => setBankAmountInput(e.target.value)}
+                      placeholder="Amount (SAR, opt)"
+                      className="w-full sm:w-36 rounded-xl border border-white/15 bg-black/35 px-3.5 py-2.5 text-sm font-semibold text-white placeholder:text-white/35 outline-none focus:border-amber-400/70 focus:ring-2 focus:ring-amber-400/20"
+                    />
+                    <button
+                      type="submit"
+                      className="flex items-center justify-center gap-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 px-4 py-2.5 text-xs font-extrabold uppercase tracking-wider text-slate-950 transition shrink-0 shadow-md shadow-amber-500/20"
+                    >
+                      <Plus size={15} strokeWidth={2.5} />
+                      Log Bank Invoice
+                    </button>
+                  </form>
+
+                  {/* Live Pill List */}
+                  <div className="mt-5">
+                    <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider text-white/45 mb-2.5">
+                      <span>Pre-Logged Bank / Swipe Invoices</span>
+                      <span>Auto-matches ERP CSV</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto pr-1">
+                      {preLoggedBankInvoices.map((inv) => (
+                        <div
+                          key={inv.invoiceNo}
+                          className="group flex items-center gap-2 rounded-xl border border-amber-400/30 bg-gradient-to-r from-amber-500/15 to-purple-500/10 px-3 py-2 text-xs font-bold text-white shadow-sm transition hover:border-amber-400/60"
+                        >
+                          <Receipt size={13} className="text-amber-400 shrink-0" />
+                          <span className="font-mono text-sm font-extrabold text-amber-300">
+                            #{inv.invoiceNo}
+                          </span>
+                          {inv.amount !== undefined && (
+                            <span className="rounded-md bg-black/40 px-1.5 py-0.5 text-[11px] font-semibold text-white/80">
+                              SAR {fmt(inv.amount)}
+                            </span>
+                          )}
+                          <span className="text-[10px] text-white/40">{inv.time}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveBankInvoice(inv.invoiceNo)}
+                            className="ml-0.5 text-white/35 hover:text-rose-400 transition"
+                            title="Remove invoice"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      ))}
+                      {preLoggedBankInvoices.length === 0 && (
+                        <p className="text-xs text-white/40 italic py-4">
+                          No bank/POS invoices logged yet today.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-5 rounded-2xl border border-white/10 bg-black/25 p-3.5 text-xs text-white/60 flex items-center gap-2.5">
+                  <Sparkles size={15} className="text-amber-400 shrink-0" />
+                  <span>
+                    When the Fujishka ERP CSV is uploaded during <strong className="text-white">Start Tracking</strong>, these invoice numbers are automatically classified as Bank/Swipe!
+                  </span>
+                </div>
+              </div>
+
+              {/* Widget B: Quick Daytime Expense & Cash-In Logger (7 cols) */}
+              <div className="lg:col-span-7 flex flex-col justify-between rounded-3xl border border-white/12 bg-white/[0.04] p-6 backdrop-blur-2xl shadow-xl">
+                <div>
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-500/20 border border-purple-400/30 text-purple-300">
+                        <Landmark size={20} />
+                      </div>
+                      <div>
+                        <h3 className="font-display text-base font-bold tracking-tight text-white">
+                          Quick Daytime Expense &amp; Cash-In Logger
+                        </h3>
+                        <p className="text-xs text-white/55">
+                          Record ad-hoc shift movements using official Jubail Corp sheet categories
+                        </p>
+                      </div>
+                    </div>
+                    <span className="rounded-full bg-purple-500/20 border border-purple-400/30 px-2.5 py-0.5 text-[11px] font-bold text-purple-300">
+                      {preLoggedEntries.length} Recorded Today
+                    </span>
+                  </div>
+
+                  {/* Category Toggle Pills (Exact Jubail Corp Sheet Terminology) */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3.5">
+                    {(
+                      [
+                        { id: "EXPENSE", label: "Expense (Out)" },
+                        { id: "CREDIT_RECD", label: "Credit Sale Amt Recd (In)" },
+                        { id: "LOAN_IN", label: "Loan In" },
+                        { id: "OTHER_IN", label: "Other Amt Recd" },
+                      ] as { id: PreLoggedEntryType; label: string }[]
+                    ).map((tabOption) => {
+                      const active = entryType === tabOption.id;
+                      return (
+                        <button
+                          key={tabOption.id}
+                          type="button"
+                          onClick={() => setEntryType(tabOption.id)}
+                          className={`rounded-xl px-3 py-2 text-xs font-bold transition-all text-center truncate ${
+                            active
+                              ? "bg-gradient-to-r from-purple-500 to-amber-500 text-slate-950 shadow-md shadow-purple-500/20 font-extrabold"
+                              : "border border-white/10 bg-black/30 text-white/70 hover:bg-white/10 hover:text-white"
+                          }`}
+                        >
+                          {tabOption.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Input Row */}
+                  <form onSubmit={handleQuickRecord} className="flex flex-col sm:flex-row gap-2.5">
+                    <input
+                      type="text"
+                      value={entryTitle}
+                      onChange={(e) => setEntryTitle(e.target.value)}
+                      placeholder="Title / Cause (e.g. Food, Cleaner, Wash, Leave Salary, Chivago)"
+                      className="flex-1 rounded-xl border border-white/15 bg-black/35 px-3.5 py-2.5 text-sm font-semibold text-white placeholder:text-white/35 outline-none focus:border-purple-400/70 focus:ring-2 focus:ring-purple-400/20"
+                    />
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={entryAmount}
+                      onChange={(e) => setEntryAmount(e.target.value)}
+                      placeholder="Amount (SAR)"
+                      className="w-full sm:w-36 rounded-xl border border-white/15 bg-black/35 px-3.5 py-2.5 text-sm font-semibold text-white placeholder:text-white/35 outline-none focus:border-purple-400/70 focus:ring-2 focus:ring-purple-400/20"
+                    />
+                    <button
+                      type="submit"
+                      className="flex items-center justify-center gap-1.5 rounded-xl bg-purple-500 hover:bg-purple-400 px-4 py-2.5 text-xs font-extrabold uppercase tracking-wider text-white transition shrink-0 shadow-md shadow-purple-500/25"
+                    >
+                      <Plus size={15} strokeWidth={2.5} />
+                      Quick Record
+                    </button>
+                  </form>
+
+                  {/* Compact Feed of Today's Pre-Logged Items */}
+                  <div className="mt-5">
+                    <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider text-white/45 mb-2.5">
+                      <span>Today&apos;s Pre-Logged Shift Feed</span>
+                      <span>Auto-detected at EOD</span>
+                    </div>
+                    <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                      {preLoggedEntries.map((entry) => {
+                        const meta = entryTypeMeta[entry.type];
+                        return (
+                          <div
+                            key={entry.id}
+                            className="flex items-center justify-between rounded-xl border border-white/10 bg-black/30 px-3.5 py-2.5 text-sm transition hover:border-white/25"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <span
+                                className={`rounded-md border px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider shrink-0 ${meta.badgeClass}`}
+                              >
+                                {meta.shortBadge}
+                              </span>
+                              <span className="font-semibold text-white truncate">
+                                {entry.title}
+                              </span>
+                              <span className="text-[11px] text-white/40 shrink-0">
+                                {entry.time}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-3 shrink-0">
+                              <span
+                                className={`font-display text-sm font-extrabold ${
+                                  meta.isOutflow ? "text-rose-400" : "text-emerald-400"
+                                }`}
+                              >
+                                {meta.isOutflow ? "-" : "+"}
+                                {fmt(entry.amount)} SAR
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveEntry(entry.id)}
+                                className="text-white/35 hover:text-rose-400 transition"
+                                title="Delete entry"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Recent Completed Days Log Strip */}
+                <div className="mt-5 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/10 bg-black/25 px-4 py-2.5 text-xs text-white/60">
+                  <span className="font-semibold text-white/75">
+                    Recent Closed Registers ({completedDaysLog.length}):
+                  </span>
+                  <div className="flex flex-wrap items-center gap-3">
+                    {completedDaysLog.map((d) => (
+                      <span
+                        key={d.date}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-white/80"
+                      >
+                        <Check size={12} className="text-emerald-400" />
+                        {d.date}: <strong className="text-amber-300">SAR {fmt(d.closingBalance)}</strong>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1130,9 +1757,10 @@ function NaumanAiView({ txns }: { txns: Txn[] }) {
         return;
       }
       setAiInsights(data);
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error("Audit failed:", e);
-      setAiInsights({ error: e.message || "Network error.", leaks: [], trends: [], advice: "" });
+      const msg = e instanceof Error ? e.message : "Network error.";
+      setAiInsights({ error: msg, leaks: [], trends: [], advice: "" });
     } finally {
       setIsAnalyzing(false);
     }
@@ -1189,7 +1817,7 @@ function NaumanAiView({ txns }: { txns: Txn[] }) {
             <div className="flex items-center justify-between relative z-10">
                <div>
                  <h3 className="font-display font-extrabold text-2xl flex items-center gap-2 text-slate-900 dark:text-white">
-                    <Activity className="text-purple-500 dark:text-purple-400" /> Today's Business Summary & Blind-Spot Monitor
+                    <Activity className="text-purple-500 dark:text-purple-400" /> Today&apos;s Business Summary &amp; Blind-Spot Monitor
                  </h3>
                  <p className="text-slate-500 dark:text-slate-400 font-semibold text-sm mt-1">Quick daily check on sales, cash spent, and risks.</p>
                </div>
@@ -1205,7 +1833,7 @@ function NaumanAiView({ txns }: { txns: Txn[] }) {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 relative z-10">
                {/* Metric 1: Inflow vs Outflow Velocity */}
                <div className="bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 p-5 rounded-2xl flex flex-col gap-2">
-                 <div className="text-slate-600 dark:text-slate-400 font-bold text-xs uppercase tracking-wider flex items-center gap-1.5"><ArrowRightLeft size={14}/> TODAY'S NET CASH (IN - OUT)</div>
+                 <div className="text-slate-600 dark:text-slate-400 font-bold text-xs uppercase tracking-wider flex items-center gap-1.5"><ArrowRightLeft size={14}/> TODAY&apos;S NET CASH (IN - OUT)</div>
                  <div className={`text-2xl font-black ${totals.in - totals.out >= 0 ? 'text-emerald-500 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400'}`}>
                    {totals.in - totals.out >= 0 ? `+${(totals.in - totals.out).toLocaleString()} SAR` : `${(totals.in - totals.out).toLocaleString()} SAR`}
                  </div>
@@ -1357,50 +1985,13 @@ function NaumanAiView({ txns }: { txns: Txn[] }) {
 
 export default function Page() {
   const [dark, setDark] = useState(false);
-  const [tab, setTab] = useState<TabId>("ai"); // Default to Nauman AI for Module 4
-  const [mode, setMode] = useState<ViewMode>("detailed");
-  
-  const [txns, setTxns] = useState<Txn[]>(SEED_TXNS);
-  const [count, setCount] = useState("");
-  
-  const [q, setQ] = useState<Record<string, string>>({
-    cash_sale: "", credit_received: "", bank_in: "",
-    jotun: "", hempel: "", sigma: "", other: "",
-    salaries: "", tax: "", misc_expense: ""
-  });
+  const [tab, setTab] = useState<TabId>("register"); // Default to JCT Flagship Daily Hub
+  const [txns] = useState<Txn[]>(SEED_TXNS);
 
   useEffect(() => {
     if (dark) document.documentElement.classList.add("dark");
     else document.documentElement.classList.remove("dark");
   }, [dark]);
-
-  const handleAddTxn = (t: Omit<Txn, "id" | "time" | "serialNo">) => {
-    const isSale = t.kind === "cash_sale";
-    const ref = isSale ? `INV-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}` : `ERP-JBL-${Math.floor(1000 + Math.random() * 9000)}`;
-    setTxns([{ id: `t-${Date.now()}`, time: nowHHMM(), serialNo: ref, ...t }, ...txns]);
-  };
-
-  const handleEditTxn = (id: string, newAmount: number) => {
-    setTxns(txns.map(t => {
-      if (t.id !== id) return t;
-      return { ...t, originalAmount: t.originalAmount || t.amount, amount: newAmount };
-    }));
-  };
-
-  const detailedIn = r2(txns.filter(t => t.flow === "in").reduce((a, b) => a + b.amount, 0) + 4500);
-  const detailedOut = r2(txns.filter(t => t.flow === "out").reduce((a, b) => a + b.amount, 0));
-  
-  const quickIn = r2((parseFloat(q.cash_sale) || 0) + (parseFloat(q.credit_received) || 0) + (parseFloat(q.bank_in) || 0) + 4500);
-  const quickOut = r2((parseFloat(q.jotun) || 0) + (parseFloat(q.hempel) || 0) + (parseFloat(q.sigma) || 0) + (parseFloat(q.other) || 0) + (parseFloat(q.salaries) || 0) + (parseFloat(q.tax) || 0) + (parseFloat(q.misc_expense) || 0));
-
-  const totalIn = mode === "detailed" ? detailedIn : quickIn;
-  const totalOut = mode === "detailed" ? detailedOut : quickOut;
-  const expectedCash = r2(totalIn - totalOut);
-
-  const physicalCount = parseFloat(count);
-  const valid = !Number.isNaN(physicalCount);
-  const diffCents = valid ? Math.round(physicalCount * 100) - Math.round(expectedCash * 100) : NaN;
-  const diff = diffCents / 100;
 
   return (
     <div className={`flex h-screen w-full bg-slate-50 text-slate-900 antialiased overflow-hidden dark:bg-[#0B0E14] dark:text-slate-100 ${dark ? "dark" : ""}`}>
@@ -1426,153 +2017,36 @@ export default function Page() {
           </div>
           
           <div className="flex items-center gap-4">
-            {tab === "register" && (
-              <div className="flex p-1 bg-slate-200 rounded-lg ring-1 ring-slate-900/5 dark:bg-white/5 dark:ring-white/10">
-                <button 
-                  onClick={() => setMode("detailed")}
-                  className={`px-4 py-1.5 rounded-md text-sm font-bold transition-all ${mode === 'detailed' ? 'bg-white shadow-sm text-slate-900 dark:bg-[#1f2536] dark:text-white' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
-                >
-                  Detailed Log
-                </button>
-                <button 
-                  onClick={() => setMode("quick")}
-                  className={`px-4 py-1.5 rounded-md text-sm font-bold transition-all ${mode === 'quick' ? 'bg-white shadow-sm text-slate-900 dark:bg-[#1f2536] dark:text-white' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
-                >
-                  Quick Totals
-                </button>
-              </div>
-            )}
             <ThemeToggle dark={dark} onToggle={() => setDark(!dark)} />
           </div>
         </header>
 
         {/* Layout Wrapper */}
         <div className="flex flex-1 overflow-hidden relative">
-          
           {/* Center Canvas */}
           <main className="flex-1 overflow-hidden flex flex-col relative z-10">
-            {tab === "radar" ? (
-               <CreditRadarView />
+            {tab === "register" ? (
+              <DailyRegisterView />
+            ) : tab === "radar" ? (
+              <CreditRadarView />
             ) : tab === "suppliers" ? (
-               <SupplierHubView />
+              <SupplierHubView />
             ) : tab === "ai" ? (
-               <NaumanAiView txns={txns} />
+              <NaumanAiView txns={txns} />
             ) : tab === "consolidation" ? (
-               <BranchConsolidationView />
+              <BranchConsolidationView />
             ) : tab === "pulse" ? (
-               <FinancialPulseView />
-            ) : tab !== "register" ? (
-               <div className="flex h-full flex-col items-center justify-center text-center p-6">
-                 <div className="mb-6 rounded-full bg-slate-200 p-6 dark:bg-white/5">
-                   <Activity size={48} className="text-slate-400 dark:text-slate-500" />
-                 </div>
-                 <h2 className="font-display text-2xl font-extrabold">Module in Development</h2>
-                 <p className="mt-2 text-slate-500 dark:text-slate-400">This section is currently being built.</p>
-               </div>
-            ) : mode === "detailed" ? (
-               <div className="flex flex-col lg:flex-row gap-6 p-6 h-full overflow-hidden">
-                  <Column title="Money In" type="in" txns={txns.filter(t => t.flow === 'in')} onAdd={handleAddTxn} onEdit={handleEditTxn} />
-                  <Column title="Money Out" type="out" txns={txns.filter(t => t.flow === 'out')} onAdd={handleAddTxn} onEdit={handleEditTxn} />
-               </div>
+              <FinancialPulseView />
             ) : (
-               <div className="h-full overflow-y-auto p-6 w-full">
-                 <div className="max-w-4xl mx-auto bg-white rounded-2xl shadow-sm ring-1 ring-slate-900/5 p-6 sm:p-8 dark:bg-[#121620] dark:ring-white/10">
-                    <h2 className="font-display font-extrabold text-2xl mb-8 flex items-center gap-3">
-                       <Search className="text-purple-500" /> Quick Totals Entry
-                    </h2>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-10">
-                       <div>
-                         <h3 className="font-bold text-slate-400 uppercase tracking-wider mb-6 text-xs flex items-center gap-2"><TrendingUp size={16} className="text-emerald-500"/> INFLOWS</h3>
-                         <QuickInput label="Cash Sales" pill="cash_sale" value={q.cash_sale} onChange={v => setQ({...q, cash_sale: v})} />
-                         <QuickInput label="Credit Received" pill="credit_received" value={q.credit_received} onChange={v => setQ({...q, credit_received: v})} />
-                         <QuickInput label="Bank Transfer In" pill="bank_in" value={q.bank_in} onChange={v => setQ({...q, bank_in: v})} />
-                       </div>
-                       
-                       <div>
-                         <h3 className="font-bold text-slate-400 uppercase tracking-wider mb-6 text-xs flex items-center gap-2"><TrendingDown size={16} className="text-rose-500"/> OUTFLOWS</h3>
-                         <QuickInput label="Jotun Purchases" pill="jotun" value={q.jotun} onChange={v => setQ({...q, jotun: v})} />
-                         <QuickInput label="Hempel Purchases" pill="hempel" value={q.hempel} onChange={v => setQ({...q, hempel: v})} />
-                         <QuickInput label="Sigma Purchases" pill="sigma" value={q.sigma} onChange={v => setQ({...q, sigma: v})} />
-                         <QuickInput label="Other Paint" pill="other" value={q.other} onChange={v => setQ({...q, other: v})} />
-                         <QuickInput label="Staff Salaries/Advance" pill="salaries" value={q.salaries} onChange={v => setQ({...q, salaries: v})} />
-                         <QuickInput label="Tax Payments" pill="tax" value={q.tax} onChange={v => setQ({...q, tax: v})} />
-                         <QuickInput label="Misc Shop Expense" pill="misc_expense" value={q.misc_expense} onChange={v => setQ({...q, misc_expense: v})} />
-                       </div>
-                    </div>
-                 </div>
-               </div>
+              <div className="flex h-full flex-col items-center justify-center text-center p-6">
+                <div className="mb-6 rounded-full bg-slate-200 p-6 dark:bg-white/5">
+                  <Activity size={48} className="text-slate-400 dark:text-slate-500" />
+                </div>
+                <h2 className="font-display text-2xl font-extrabold">Module in Development</h2>
+                <p className="mt-2 text-slate-500 dark:text-slate-400">This section is currently being built.</p>
+              </div>
             )}
           </main>
-
-          {/* Right Utility Panel - Drawer Balancer */}
-          {tab === "register" && (
-            <aside className="hidden w-[340px] shrink-0 flex-col border-l border-slate-200 bg-white shadow-[-10px_0_40px_rgba(0,0,0,0.03)] dark:border-white/5 dark:bg-[#0B0E14] xl:flex relative z-30">
-              <div className="flex-1 overflow-y-auto p-6 lg:p-8 space-y-8">
-                
-                <div>
-                  <h3 className="font-display text-xl font-extrabold text-slate-900 dark:text-white mb-2">Drawer Balancer</h3>
-                  <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Zero-error daily closing.</p>
-                </div>
-                
-                {/* Receipt UI */}
-                <div className="relative rounded-2xl bg-slate-50 p-6 ring-1 ring-slate-900/5 dark:bg-white/[0.02] dark:ring-white/10 receipt-edge overflow-hidden">
-                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-purple-500 to-indigo-500"></div>
-                  <div className="space-y-4 font-mono text-[13px] font-medium text-slate-600 dark:text-slate-400">
-                    <div className="flex justify-between items-center">
-                      <span>Opening Float</span>
-                      <span className="text-slate-900 dark:text-white font-bold">4,500.00</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span>Total Inflows</span>
-                      <span className="text-emerald-600 dark:text-emerald-400 font-bold">+{fmt(totalIn - 4500)}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span>Total Outflows</span>
-                      <span className="text-rose-600 dark:text-rose-400 font-bold">-{fmt(totalOut)}</span>
-                    </div>
-                    <div className="border-t border-dashed border-slate-300 dark:border-slate-700 pt-4 mt-2">
-                      <div className="flex justify-between items-center font-bold text-slate-900 dark:text-white text-base">
-                        <span>Expected Cash</span>
-                        <span>{fmt(expectedCash)}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <label className="block text-center text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                    Physical Drawer Count (SAR)
-                  </label>
-                  <input 
-                    type="number"
-                    value={count}
-                    onChange={e => setCount(e.target.value)}
-                    placeholder="0.00"
-                    className="w-full bg-slate-50 dark:bg-white/[0.02] text-center font-display text-4xl font-extrabold py-5 rounded-2xl ring-1 ring-slate-200 dark:ring-white/10 shadow-inner focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-700"
-                  />
-                  
-                  {valid && (
-                    <div className={`flex items-center justify-center gap-2.5 py-3.5 rounded-xl font-bold text-sm transition-colors ${diffCents === 0 ? "bg-emerald-50 text-emerald-600 ring-1 ring-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-400 dark:ring-emerald-500/30" : diff > 0 ? "bg-amber-50 text-amber-600 ring-1 ring-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400 dark:ring-amber-500/30" : "bg-rose-50 text-rose-600 ring-1 ring-rose-500/20 dark:bg-rose-500/10 dark:text-rose-400 dark:ring-rose-500/30"}`}>
-                      {diffCents === 0 && <span className="relative flex h-3 w-3"><span className="neon-pulse absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-500"></span></span>}
-                      {diffCents === 0 ? "0.00 Perfectly Balanced" : diff > 0 ? `Excess: +${fmt(diff)} SAR` : `Short: ${fmt(diff)} SAR`}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="p-6 border-t border-slate-100 dark:border-white/5 bg-slate-50/80 dark:bg-[#121620]/80 backdrop-blur-xl shrink-0">
-                <button 
-                  disabled={!(valid && diffCents === 0)}
-                  className={`w-full flex items-center justify-center gap-2 h-14 rounded-xl font-bold text-base transition-all duration-300 ${valid && diffCents === 0 ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-xl shadow-purple-500/30 hover:shadow-purple-500/50 hover:-translate-y-0.5" : "bg-slate-100 text-slate-400 cursor-not-allowed dark:bg-white/5 dark:text-slate-600"}`}
-                >
-                  {valid && diffCents === 0 ? <Lock size={20} /> : <LockOpen size={20} />}
-                  Lock & Close Day
-                </button>
-              </div>
-            </aside>
-          )}
-
         </div>
       </div>
     </div>
