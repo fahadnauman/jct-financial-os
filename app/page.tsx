@@ -4,10 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import * as Dropdown from "@radix-ui/react-dropdown-menu";
 import {
   Activity, Building2, CalendarDays, Check, ChevronDown, 
-  CreditCard, FileSpreadsheet, Landmark, Lock, LockOpen, Moon, 
+  CreditCard, FileSpreadsheet, Lock, LockOpen, Moon, 
   Package, Sparkles, Store, Sun, TrendingUp, 
-  Wallet, Search, Plus, Target, AlertTriangle, Mail, Bell,
-  FileDown, UploadCloud, Zap, ArrowLeft, ArrowRight, MessageSquare, Database, RefreshCw, BarChart2, Eye, ArrowRightLeft, Trash2, Receipt
+  Wallet, Plus, Target, AlertTriangle, Mail, Bell,
+  UploadCloud, Zap, ArrowLeft, ArrowRight, BarChart2, Eye, ArrowRightLeft, Trash2, Maximize2, Minimize2
 } from "lucide-react";
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -28,6 +28,48 @@ interface Txn {
   time: string;
 }
 
+export interface ContractorHistoryItem {
+  id: string;
+  amount: number;
+  date: string;
+  status: "paid_on_time" | "paid_late";
+}
+
+export interface ContractorAccount {
+  id: string;
+  name: string;
+  outstanding: number;
+  dueDate: string;
+  followUpDate?: string;
+  latestInvoiceNo?: string;
+  latestInvoiceAmount?: number;
+  status: "overdue" | "due_soon" | "on_track";
+  daysLate?: number;
+  riskLevel: "High" | "Medium" | "Low";
+  avgPaymentTime: string;
+  clearedInvoices: number;
+  history: ContractorHistoryItem[];
+  syncedFromRegister?: boolean;
+}
+
+export interface SupplierPayableBrand {
+  id: number;
+  brand: string;
+  amountPaid: number;
+  pendingBills: number;
+  color: string;
+}
+
+export interface SupplierBillItem {
+  id: string;
+  supplierName: string;
+  amount: number;
+  dueDate: string;
+  category: "Credit Purchase" | "Cash Purchase" | "Bank Purchase" | "Return";
+  createdAt: string;
+  source: "Daily Register" | "Supplier Hub";
+}
+
 const SEED_TXNS: Txn[] = [
   { id: "1", flow: "in", kind: "cash_sale", amount: 1150, serialNo: "INV-2026-8491", title: "Walk-in · Jotun Fenomastic", time: "08:42" },
   { id: "2", flow: "in", kind: "cash_sale", amount: 6325, serialNo: "INV-2026-8492", title: "Contractor · Bulk Paint", time: "10:20" },
@@ -37,9 +79,9 @@ const SEED_TXNS: Txn[] = [
   { id: "6", flow: "out", kind: "salaries", amount: 4500, serialNo: "HR-2026-004", title: "Staff advances", time: "12:00" },
 ];
 
-const CONTRACTORS = [
+const INITIAL_CONTRACTORS: ContractorAccount[] = [
   {
-    id: "c1", name: "Al-Futtaim Contractors", outstanding: 124500, dueDate: "2026-08-30", status: "overdue", daysLate: 12,
+    id: "c1", name: "Al-Futtaim Contractors", outstanding: 124500, dueDate: "2026-08-30", followUpDate: "2026-09-18", latestInvoiceNo: "#30051", latestInvoiceAmount: 45000, status: "overdue", daysLate: 12,
     riskLevel: "High", avgPaymentTime: "18 Days Late", clearedInvoices: 14,
     history: [
       { id: "INV-891", amount: 45000, date: "2026-07-15", status: "paid_late" },
@@ -48,7 +90,7 @@ const CONTRACTORS = [
     ]
   },
   {
-    id: "c2", name: "Eastern Paint Bros", outstanding: 45200, dueDate: "2026-09-14", status: "due_soon",
+    id: "c2", name: "Eastern Paint Bros", outstanding: 45200, dueDate: "2026-09-14", followUpDate: "2026-09-14", latestInvoiceNo: "#30058", latestInvoiceAmount: 12000, status: "due_soon",
     riskLevel: "Medium", avgPaymentTime: "2 Days Late", clearedInvoices: 42,
     history: [
       { id: "INV-902", amount: 12000, date: "2026-08-10", status: "paid_on_time" },
@@ -57,7 +99,7 @@ const CONTRACTORS = [
     ]
   },
   {
-    id: "c3", name: "Jubail Coastal Development", outstanding: 8500, dueDate: "2026-10-05", status: "on_track",
+    id: "c3", name: "Jubail Coastal Development", outstanding: 8500, dueDate: "2026-10-05", followUpDate: "2026-10-05", latestInvoiceNo: "#30060", latestInvoiceAmount: 8500, status: "on_track",
     riskLevel: "Low", avgPaymentTime: "On Time", clearedInvoices: 89,
     history: [
       { id: "INV-915", amount: 32000, date: "2026-08-28", status: "paid_on_time" },
@@ -65,6 +107,33 @@ const CONTRACTORS = [
       { id: "INV-870", amount: 26000, date: "2026-07-10", status: "paid_on_time" },
     ]
   }
+];
+
+const INITIAL_SUPPLIER_BRANDS: SupplierPayableBrand[] = [
+  { id: 1, brand: "Jotun", amountPaid: 45000, pendingBills: 12000, color: "blue" },
+  { id: 2, brand: "Hempel", amountPaid: 28000, pendingBills: 5400, color: "purple" },
+  { id: 3, brand: "Sigma", amountPaid: 15500, pendingBills: 0, color: "fuchsia" },
+];
+
+const INITIAL_SUPPLIER_BILLS: SupplierBillItem[] = [
+  {
+    id: "sb-1",
+    supplierName: "Jotun",
+    amount: 12000,
+    dueDate: "2026-09-18",
+    category: "Credit Purchase",
+    createdAt: "10-09-2026",
+    source: "Supplier Hub",
+  },
+  {
+    id: "sb-2",
+    supplierName: "Hempel",
+    amount: 5400,
+    dueDate: "2026-09-22",
+    category: "Credit Purchase",
+    createdAt: "11-09-2026",
+    source: "Supplier Hub",
+  },
 ];
 
 const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
@@ -365,81 +434,843 @@ function CrystalCanvas() {
 }
 
 /* ════════════════════════════════════════════════════════════════════════
-   JCT FLAGSHIP DAILY HUB (MODULE 1 REDESIGN — STEP 1)
+   JCT FLAGSHIP DAILY HUB & WIDESCREEN 5-STEP WORKBENCH
    ════════════════════════════════════════════════════════════════════════ */
 
-type TrackingMode = "hub" | "wizard" | "datasheet";
-type PreLoggedEntryType = "EXPENSE" | "CREDIT_RECD" | "LOAN_IN" | "OTHER_IN";
+export type TrackingMode = "hub" | "wizard" | "datasheet";
+export type PreLoggedEntryType = "EXPENSE" | "CREDIT_RECD" | "CREDIT_SALE" | "LOAN_IN" | "OTHER_IN";
+export type WizardStep = 1 | 2 | 3 | 4 | 5;
+export type InvoicePaymentMode = "CASH" | "BANK_TRANSFER" | "POS_SWIPE" | "OTHER_RECD" | "CREDIT_SALE";
+export type PosTerminalBank = "SAB" | "AL_RAJHI";
 
-interface PreLoggedBankInvoice {
+export const STRICT_EXPENSE_CATEGORIES = [
+  "Food",
+  "Water",
+  "Salary",
+  "Credit Purchase",
+  "Cash Purchase",
+  "Bank Purchase",
+  "Personal Reasons",
+] as const;
+
+export type StrictExpenseCategory = (typeof STRICT_EXPENSE_CATEGORIES)[number];
+
+export const POS_TERMINAL_META: Record<
+  PosTerminalBank,
+  { label: string; shortLabel: string; feeRate: number; feePctLabel: string }
+> = {
+  SAB: {
+    label: "SAB (Saudi Awwal Bank)",
+    shortLabel: "SAB",
+    feeRate: 0.0085,
+    feePctLabel: "0.85%",
+  },
+  AL_RAJHI: {
+    label: "Al Rajhi Bank",
+    shortLabel: "Al Rajhi",
+    feeRate: 0.008,
+    feePctLabel: "0.80%",
+  },
+};
+
+export interface PreLoggedBankInvoice {
   invoiceNo: string;
   amount?: number;
+  paymentMode: "BANK_TRANSFER" | "POS_SWIPE";
+  posTerminal?: PosTerminalBank;
   time: string;
 }
 
-interface PreLoggedEntry {
+export interface PreLoggedEntry {
   id: string;
   type: PreLoggedEntryType;
   title: string;
+  expenseCategory?: StrictExpenseCategory;
+  supplierName?: string;
+  dueDate?: string;
+  customerName?: string;
+  followUpDate?: string;
+  receiptNo?: string;
+  note?: string;
   amount: number;
+  originalAmount?: number;
   time: string;
 }
 
-interface CompletedDaySummary {
+export interface ErpInvoiceItem {
+  invoiceNo: string;
+  customer: string;
+  amount: number;
+  originalAmount?: number;
+  paymentMode: InvoicePaymentMode;
+  posTerminal: PosTerminalBank;
+  otherNote?: string;
+  autoMatched: boolean;
+  time: string;
+}
+
+export interface CompletedDaySummary {
   date: string;
   branch: string;
   totalCashSales: number;
   totalBankSwipe: number;
+  totalPosFees: number;
   totalExpenses: number;
   closingBalance: number;
   status: "LOCKED" | "AUDITED";
 }
 
-function DailyRegisterView() {
-  // 3. State Architecture Preparation
-  const [trackingMode, setTrackingMode] = useState<TrackingMode>("hub");
+export const JUBAIL_ERP_18_SEED: Omit<
+  ErpInvoiceItem,
+  "paymentMode" | "posTerminal" | "autoMatched"
+>[] = [
+  { invoiceNo: "30062", customer: "Walk-in · Jotun Fenomastic Matt", amount: 1840, time: "08:35" },
+  { invoiceNo: "30063", customer: "Al-Noor Contracting · POS Swipe", amount: 1450, time: "09:18" },
+  { invoiceNo: "30064", customer: "Retail · Jotashield Exterior", amount: 2300, time: "09:45" },
+  { invoiceNo: "30065", customer: "Dammam Marine Services · Bank Transfer", amount: 2150, time: "10:12" },
+  { invoiceNo: "30066", customer: "Walk-in · Hempel Hempadur Primer", amount: 1150, time: "10:40" },
+  { invoiceNo: "30067", customer: "Gulf Industrial Coatings", amount: 4600, time: "11:05" },
+  { invoiceNo: "30068", customer: "Jubail Port Logistics · POS Swipe", amount: 3820, time: "11:42" },
+  { invoiceNo: "30069", customer: "Walk-in · Sigma Wood Varnish", amount: 920, time: "12:15" },
+  { invoiceNo: "30070", customer: "Royal Commission Site Contractor", amount: 5750, time: "13:10" },
+  { invoiceNo: "30071", customer: "Walk-in · Hardware Rollers & Brushes", amount: 690, time: "13:35" },
+  { invoiceNo: "30072", customer: "Al-Futtaim Site Batch", amount: 6325, time: "14:00" },
+  { invoiceNo: "30073", customer: "Walk-in · Industrial Thinner 200L", amount: 1725, time: "14:22" },
+  { invoiceNo: "30074", customer: "SAB POS Terminal Customer", amount: 960, time: "14:50" },
+  { invoiceNo: "30075", customer: "Eastern Paint Bros Cash Order", amount: 3450, time: "15:30" },
+  { invoiceNo: "30076", customer: "Walk-in · Jotun Majestic Silk", amount: 1380, time: "16:05" },
+  { invoiceNo: "30077", customer: "Industrial Marine Epoxy Batch", amount: 2990, time: "16:40" },
+  { invoiceNo: "30078", customer: "Walk-in · Putty & Sealers", amount: 1610, time: "17:15" },
+  { invoiceNo: "30079", customer: "Closing Shift Cash Walk-in", amount: 1799, time: "17:50" },
+];
 
-  const [preLoggedBankInvoices, setPreLoggedBankInvoices] = useState<PreLoggedBankInvoice[]>([
-    { invoiceNo: "30063", amount: 1450, time: "09:18" },
-    { invoiceNo: "30068", amount: 3820, time: "11:42" },
-    { invoiceNo: "30074", amount: 960, time: "14:05" },
-  ]);
+export interface DataSheetRow {
+  id: string;
+  invoiceNo: string;
+  amtCashSale: string;
+  creditInvAmt: string;
+  receiptNo: string;
+  creditSaleRecd: string;
+  openBal: string;
+  loanIn: string;
+  otherAmtRecd: string;
+  fromBank: string;
+  creditPurchaseSupplier: string;
+  creditPurchaseAmt: string;
+  cashPurchase: string;
+  creditPurchasePayment: string;
+  crNote: string;
+  expenseLabel: string;
+  expenseAmt: string;
+  toBankLabel: string;
+  toBankAmt: string;
+  toBankChecked: boolean;
+  loanOut: string;
+  excessAmt: string;
+}
 
-  const [preLoggedEntries, setPreLoggedEntries] = useState<PreLoggedEntry[]>([
-    { id: "ple-1", type: "EXPENSE", title: "Food", amount: 24, time: "12:30" },
-    { id: "ple-2", type: "EXPENSE", title: "Wash", amount: 150, time: "13:45" },
-    { id: "ple-3", type: "CREDIT_RECD", title: "Chicago Credit Recd", amount: 12428, time: "15:10" },
-  ]);
+export const INITIAL_DATASHEET_ROWS: DataSheetRow[] = [
+  {
+    id: "ds-1",
+    invoiceNo: "30062",
+    amtCashSale: "1840",
+    creditInvAmt: "",
+    receiptNo: "Chicago",
+    creditSaleRecd: "12428",
+    openBal: "2634",
+    loanIn: "",
+    otherAmtRecd: "",
+    fromBank: "",
+    creditPurchaseSupplier: "Jotun",
+    creditPurchaseAmt: "2000",
+    cashPurchase: "640",
+    creditPurchasePayment: "",
+    crNote: "",
+    expenseLabel: "Food",
+    expenseAmt: "24",
+    toBankLabel: "",
+    toBankAmt: "",
+    toBankChecked: false,
+    loanOut: "",
+    excessAmt: "",
+  },
+  {
+    id: "ds-2",
+    invoiceNo: "30063",
+    amtCashSale: "1450",
+    creditInvAmt: "",
+    receiptNo: "",
+    creditSaleRecd: "",
+    openBal: "",
+    loanIn: "2000",
+    otherAmtRecd: "",
+    fromBank: "",
+    creditPurchaseSupplier: "Hempel",
+    creditPurchaseAmt: "1450",
+    cashPurchase: "",
+    creditPurchasePayment: "3200",
+    crNote: "",
+    expenseLabel: "Water",
+    expenseAmt: "150",
+    toBankLabel: "SAB Swipe #30063",
+    toBankAmt: "1450",
+    toBankChecked: true,
+    loanOut: "",
+    excessAmt: "",
+  },
+  {
+    id: "ds-3",
+    invoiceNo: "30064",
+    amtCashSale: "",
+    creditInvAmt: "2300",
+    receiptNo: "",
+    creditSaleRecd: "",
+    openBal: "",
+    loanIn: "",
+    otherAmtRecd: "",
+    fromBank: "",
+    creditPurchaseSupplier: "",
+    creditPurchaseAmt: "",
+    cashPurchase: "",
+    creditPurchasePayment: "",
+    crNote: "",
+    expenseLabel: "Salary",
+    expenseAmt: "1500",
+    toBankLabel: "",
+    toBankAmt: "",
+    toBankChecked: false,
+    loanOut: "",
+    excessAmt: "",
+  },
+  {
+    id: "ds-4",
+    invoiceNo: "30065",
+    amtCashSale: "2150",
+    creditInvAmt: "",
+    receiptNo: "",
+    creditSaleRecd: "",
+    openBal: "",
+    loanIn: "",
+    otherAmtRecd: "",
+    fromBank: "",
+    creditPurchaseSupplier: "",
+    creditPurchaseAmt: "",
+    cashPurchase: "",
+    creditPurchasePayment: "",
+    crNote: "",
+    expenseLabel: "",
+    expenseAmt: "",
+    toBankLabel: "Bank Transfer #30065",
+    toBankAmt: "2150",
+    toBankChecked: true,
+    loanOut: "",
+    excessAmt: "",
+  },
+  {
+    id: "ds-5",
+    invoiceNo: "30066",
+    amtCashSale: "1150",
+    creditInvAmt: "",
+    receiptNo: "",
+    creditSaleRecd: "",
+    openBal: "",
+    loanIn: "",
+    otherAmtRecd: "",
+    fromBank: "",
+    creditPurchaseSupplier: "",
+    creditPurchaseAmt: "",
+    cashPurchase: "",
+    creditPurchasePayment: "",
+    crNote: "",
+    expenseLabel: "",
+    expenseAmt: "",
+    toBankLabel: "",
+    toBankAmt: "",
+    toBankChecked: false,
+    loanOut: "",
+    excessAmt: "",
+  },
+  {
+    id: "ds-6",
+    invoiceNo: "30067",
+    amtCashSale: "2600",
+    creditInvAmt: "",
+    receiptNo: "",
+    creditSaleRecd: "",
+    openBal: "",
+    loanIn: "",
+    otherAmtRecd: "",
+    fromBank: "",
+    creditPurchaseSupplier: "",
+    creditPurchaseAmt: "",
+    cashPurchase: "",
+    creditPurchasePayment: "",
+    crNote: "",
+    expenseLabel: "",
+    expenseAmt: "",
+    toBankLabel: "",
+    toBankAmt: "",
+    toBankChecked: false,
+    loanOut: "",
+    excessAmt: "",
+  },
+  {
+    id: "ds-7",
+    invoiceNo: "30068",
+    amtCashSale: "3820",
+    creditInvAmt: "",
+    receiptNo: "",
+    creditSaleRecd: "",
+    openBal: "",
+    loanIn: "",
+    otherAmtRecd: "",
+    fromBank: "",
+    creditPurchaseSupplier: "",
+    creditPurchaseAmt: "",
+    cashPurchase: "",
+    creditPurchasePayment: "",
+    crNote: "",
+    expenseLabel: "",
+    expenseAmt: "",
+    toBankLabel: "Al Rajhi POS #30068",
+    toBankAmt: "3820",
+    toBankChecked: true,
+    loanOut: "",
+    excessAmt: "",
+  },
+  {
+    id: "ds-8",
+    invoiceNo: "30069",
+    amtCashSale: "920",
+    creditInvAmt: "",
+    receiptNo: "",
+    creditSaleRecd: "",
+    openBal: "",
+    loanIn: "",
+    otherAmtRecd: "",
+    fromBank: "",
+    creditPurchaseSupplier: "",
+    creditPurchaseAmt: "",
+    cashPurchase: "",
+    creditPurchasePayment: "",
+    crNote: "",
+    expenseLabel: "",
+    expenseAmt: "",
+    toBankLabel: "",
+    toBankAmt: "",
+    toBankChecked: false,
+    loanOut: "",
+    excessAmt: "",
+  },
+  {
+    id: "ds-9",
+    invoiceNo: "30070",
+    amtCashSale: "2750",
+    creditInvAmt: "",
+    receiptNo: "",
+    creditSaleRecd: "",
+    openBal: "",
+    loanIn: "",
+    otherAmtRecd: "",
+    fromBank: "",
+    creditPurchaseSupplier: "",
+    creditPurchaseAmt: "",
+    cashPurchase: "",
+    creditPurchasePayment: "",
+    crNote: "",
+    expenseLabel: "",
+    expenseAmt: "",
+    toBankLabel: "",
+    toBankAmt: "",
+    toBankChecked: false,
+    loanOut: "",
+    excessAmt: "",
+  },
+  {
+    id: "ds-10",
+    invoiceNo: "30071",
+    amtCashSale: "690",
+    creditInvAmt: "",
+    receiptNo: "",
+    creditSaleRecd: "",
+    openBal: "",
+    loanIn: "",
+    otherAmtRecd: "",
+    fromBank: "",
+    creditPurchaseSupplier: "",
+    creditPurchaseAmt: "",
+    cashPurchase: "",
+    creditPurchasePayment: "",
+    crNote: "",
+    expenseLabel: "",
+    expenseAmt: "",
+    toBankLabel: "",
+    toBankAmt: "",
+    toBankChecked: false,
+    loanOut: "",
+    excessAmt: "",
+  },
+  {
+    id: "ds-11",
+    invoiceNo: "30072",
+    amtCashSale: "3325",
+    creditInvAmt: "",
+    receiptNo: "",
+    creditSaleRecd: "",
+    openBal: "",
+    loanIn: "",
+    otherAmtRecd: "",
+    fromBank: "",
+    creditPurchaseSupplier: "",
+    creditPurchaseAmt: "",
+    cashPurchase: "",
+    creditPurchasePayment: "",
+    crNote: "",
+    expenseLabel: "",
+    expenseAmt: "",
+    toBankLabel: "",
+    toBankAmt: "",
+    toBankChecked: false,
+    loanOut: "",
+    excessAmt: "",
+  },
+  {
+    id: "ds-12",
+    invoiceNo: "30073",
+    amtCashSale: "1725",
+    creditInvAmt: "",
+    receiptNo: "",
+    creditSaleRecd: "",
+    openBal: "",
+    loanIn: "",
+    otherAmtRecd: "",
+    fromBank: "",
+    creditPurchaseSupplier: "",
+    creditPurchaseAmt: "",
+    cashPurchase: "",
+    creditPurchasePayment: "",
+    crNote: "",
+    expenseLabel: "",
+    expenseAmt: "",
+    toBankLabel: "",
+    toBankAmt: "",
+    toBankChecked: false,
+    loanOut: "",
+    excessAmt: "",
+  },
+  {
+    id: "ds-13",
+    invoiceNo: "30074",
+    amtCashSale: "960",
+    creditInvAmt: "",
+    receiptNo: "",
+    creditSaleRecd: "",
+    openBal: "",
+    loanIn: "",
+    otherAmtRecd: "",
+    fromBank: "",
+    creditPurchaseSupplier: "",
+    creditPurchaseAmt: "",
+    cashPurchase: "",
+    creditPurchasePayment: "",
+    crNote: "",
+    expenseLabel: "",
+    expenseAmt: "",
+    toBankLabel: "SAB Swipe #30074",
+    toBankAmt: "960",
+    toBankChecked: true,
+    loanOut: "",
+    excessAmt: "",
+  },
+  {
+    id: "ds-14",
+    invoiceNo: "30075",
+    amtCashSale: "2450",
+    creditInvAmt: "",
+    receiptNo: "",
+    creditSaleRecd: "",
+    openBal: "",
+    loanIn: "",
+    otherAmtRecd: "",
+    fromBank: "",
+    creditPurchaseSupplier: "",
+    creditPurchaseAmt: "",
+    cashPurchase: "",
+    creditPurchasePayment: "",
+    crNote: "",
+    expenseLabel: "",
+    expenseAmt: "",
+    toBankLabel: "",
+    toBankAmt: "",
+    toBankChecked: false,
+    loanOut: "",
+    excessAmt: "",
+  },
+  {
+    id: "ds-15",
+    invoiceNo: "30076",
+    amtCashSale: "2017",
+    creditInvAmt: "",
+    receiptNo: "",
+    creditSaleRecd: "",
+    openBal: "",
+    loanIn: "",
+    otherAmtRecd: "",
+    fromBank: "",
+    creditPurchaseSupplier: "",
+    creditPurchaseAmt: "",
+    cashPurchase: "",
+    creditPurchasePayment: "",
+    crNote: "",
+    expenseLabel: "",
+    expenseAmt: "",
+    toBankLabel: "Bank Cash Deposit",
+    toBankAmt: "26515",
+    toBankChecked: true,
+    loanOut: "",
+    excessAmt: "",
+  },
+];
 
-  const [completedDaysLog] = useState<CompletedDaySummary[]>([
-    {
-      date: "11-09-2026",
-      branch: "Jubail - Main Branch",
-      totalCashSales: 28450,
-      totalBankSwipe: 13530,
-      totalExpenses: 4120,
-      closingBalance: 42360,
-      status: "AUDITED",
-    },
-    {
-      date: "10-09-2026",
-      branch: "Jubail - Main Branch",
-      totalCashSales: 31900,
-      totalBankSwipe: 9840,
-      totalExpenses: 2890,
-      closingBalance: 43350,
-      status: "LOCKED",
-    },
-  ]);
+export const calcInvoicePosFee = (inv: ErpInvoiceItem): number => {
+  if (inv.paymentMode !== "POS_SWIPE") return 0;
+  const rate = POS_TERMINAL_META[inv.posTerminal || "SAB"].feeRate;
+  return r2(inv.amount * rate);
+};
 
-  // Widget A Local Form State
+export const calcInvoiceNetBank = (inv: ErpInvoiceItem): number => {
+  if (inv.paymentMode === "BANK_TRANSFER") return inv.amount;
+  if (inv.paymentMode === "POS_SWIPE") return r2(inv.amount - calcInvoicePosFee(inv));
+  return 0;
+};
+
+interface DailyRegisterViewProps {
+  trackingMode: TrackingMode;
+  setTrackingMode: React.Dispatch<React.SetStateAction<TrackingMode>>;
+  wizardStep: WizardStep;
+  setWizardStep: React.Dispatch<React.SetStateAction<WizardStep>>;
+  preLoggedBankInvoices: PreLoggedBankInvoice[];
+  setPreLoggedBankInvoices: React.Dispatch<React.SetStateAction<PreLoggedBankInvoice[]>>;
+  preLoggedEntries: PreLoggedEntry[];
+  setPreLoggedEntries: React.Dispatch<React.SetStateAction<PreLoggedEntry[]>>;
+  erpInvoices: ErpInvoiceItem[];
+  setErpInvoices: React.Dispatch<React.SetStateAction<ErpInvoiceItem[]>>;
+  openingBalance: number;
+  setOpeningBalance: React.Dispatch<React.SetStateAction<number>>;
+  completedDaysLog: CompletedDaySummary[];
+  setCompletedDaysLog: React.Dispatch<React.SetStateAction<CompletedDaySummary[]>>;
+  onSyncCreditPurchase: (
+    supplierName: string,
+    amount: number,
+    dueDate: string,
+    category: "Credit Purchase" | "Cash Purchase" | "Bank Purchase"
+  ) => void;
+  onSyncCreditCustomer: (
+    customerName: string,
+    amount: number,
+    followUpDate: string,
+    receiptNo?: string,
+    mode?: "CREDIT_RECD" | "CREDIT_SALE"
+  ) => void;
+  onSwitchTab: (tab: TabId) => void;
+}
+
+function DailyRegisterView({
+  trackingMode,
+  setTrackingMode,
+  wizardStep,
+  setWizardStep,
+  preLoggedBankInvoices,
+  setPreLoggedBankInvoices,
+  preLoggedEntries,
+  setPreLoggedEntries,
+  erpInvoices,
+  setErpInvoices,
+  openingBalance,
+  setOpeningBalance,
+  completedDaysLog,
+  setCompletedDaysLog,
+  onSyncCreditPurchase,
+  onSyncCreditCustomer,
+  onSwitchTab,
+}: DailyRegisterViewProps) {
+  const [activeLoggerTab, setActiveLoggerTab] = useState<"bank" | "expense">("bank");
+  const [showRecordedFeed, setShowRecordedFeed] = useState(true);
+  const [justCompletedToast, setJustCompletedToast] = useState<string | null>(null);
+  const [syncBannerMsg, setSyncBannerMsg] = useState<{
+    text: string;
+    targetTab: TabId;
+    targetLabel: string;
+  } | null>(null);
+
+  // Hub Quick-Logger Form State (Bank / POS)
   const [bankInvoiceInput, setBankInvoiceInput] = useState("");
   const [bankAmountInput, setBankAmountInput] = useState("");
+  const [bankModeInput, setBankModeInput] = useState<"POS_SWIPE" | "BANK_TRANSFER">("POS_SWIPE");
+  const [bankTerminalInput, setBankTerminalInput] = useState<PosTerminalBank>("SAB");
 
-  // Widget B Local Form State
+  // Hub Quick-Logger Form State (Expenses & Cash-In)
   const [entryType, setEntryType] = useState<PreLoggedEntryType>("EXPENSE");
+  const [hubExpenseCat, setHubExpenseCat] = useState<StrictExpenseCategory>("Food");
   const [entryTitle, setEntryTitle] = useState("");
   const [entryAmount, setEntryAmount] = useState("");
+  const [hubSupplierName, setHubSupplierName] = useState("Jotun");
+  const [hubDueDate, setHubDueDate] = useState("2026-09-25");
+  const [hubCustomerName, setHubCustomerName] = useState("");
+  const [hubReceiptNo, setHubReceiptNo] = useState("");
+  const [hubFollowUpDate, setHubFollowUpDate] = useState("2026-09-20");
+
+  // Wizard State
+  const [csvLoadedBanner, setCsvLoadedBanner] = useState(false);
+  const [openingBalanceOriginal, setOpeningBalanceOriginal] = useState<number | undefined>(undefined);
+  const [editingOpening, setEditingOpening] = useState(false);
+  const [openingEditInput, setOpeningEditInput] = useState(String(openingBalance));
+
+  // Step 3 (Credit & Cash Inflows) 2-Panel State
+  const [step3Kind, setStep3Kind] = useState<"CREDIT_RECD" | "CREDIT_SALE" | "LOAN_IN" | "OTHER_IN">("CREDIT_SALE");
+  const [step3Title, setStep3Title] = useState("");
+  const [step3FollowUpDate, setStep3FollowUpDate] = useState("2026-09-20");
+  const [step3ReceiptNo, setStep3ReceiptNo] = useState("");
+  const [step3Amount, setStep3Amount] = useState("");
+
+  // Step 4 (Expenses & Purchases — Strict 7 Categories) State
+  const [step4Category, setStep4Category] = useState<StrictExpenseCategory>("Food");
+  const [step4SupplierName, setStep4SupplierName] = useState("Jotun");
+  const [step4DueDate, setStep4DueDate] = useState("2026-09-25");
+  const [step4Note, setStep4Note] = useState("");
+  const [step4Amount, setStep4Amount] = useState("");
+
+  // Step 5 Expandable Box State & Inline Editing State
+  const [expandedAuditBox, setExpandedAuditBox] = useState<
+    "NONE" | "MONEY_IN" | "EXPENSES" | "BANK_POS"
+  >("NONE");
+  const [editingRowId, setEditingRowId] = useState<string | null>(null);
+  const [editingRowVal, setEditingRowVal] = useState("");
+  const [missingInflowTitle, setMissingInflowTitle] = useState("");
+  const [missingInflowAmt, setMissingInflowAmt] = useState("");
+  const [missingExpenseCat, setMissingExpenseCat] = useState<StrictExpenseCategory>("Food");
+  const [missingExpenseSupplier, setMissingExpenseSupplier] = useState("");
+  const [missingExpenseDueDate, setMissingExpenseDueDate] = useState("2026-09-25");
+  const [missingExpenseAmt, setMissingExpenseAmt] = useState("");
+
+  // Classic Digital Data Sheet State (15 Pre-Populated Rows matching client paper ledger)
+  const [sheetRows, setSheetRows] = useState<DataSheetRow[]>(INITIAL_DATASHEET_ROWS);
+
+  const numCell = (v: string): number => {
+    const parsed = parseFloat(v);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  };
+
+  const handleSheetCellChange = (
+    rowId: string,
+    field: keyof DataSheetRow,
+    value: string | boolean
+  ) => {
+    setSheetRows((prev) =>
+      prev.map((row) => (row.id === rowId ? { ...row, [field]: value } : row))
+    );
+  };
+
+  const handleSheetKeyDown = (
+    e: React.KeyboardEvent<HTMLInputElement>,
+    rowIdx: number,
+    colIdx: number
+  ) => {
+    if (e.key === "Enter" || e.key === "ArrowDown") {
+      e.preventDefault();
+      const next = document.querySelector<HTMLInputElement>(
+        `input[data-ds-row="${rowIdx + 1}"][data-ds-col="${colIdx}"]`
+      );
+      next?.focus();
+      next?.select();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      const prev = document.querySelector<HTMLInputElement>(
+        `input[data-ds-row="${rowIdx - 1}"][data-ds-col="${colIdx}"]`
+      );
+      prev?.focus();
+      prev?.select();
+    }
+  };
+
+  const handleAdd5SheetRows = () => {
+    setSheetRows((prev) => {
+      const lastInv =
+        parseInt(prev[prev.length - 1]?.invoiceNo || "30076", 10) || 30076;
+      const extra: DataSheetRow[] = Array.from({ length: 5 }, (_, idx) => ({
+        id: `ds-${Date.now()}-${idx}`,
+        invoiceNo: String(lastInv + idx + 1),
+        amtCashSale: "",
+        creditInvAmt: "",
+        receiptNo: "",
+        creditSaleRecd: "",
+        openBal: "",
+        loanIn: "",
+        otherAmtRecd: "",
+        fromBank: "",
+        creditPurchaseSupplier: "",
+        creditPurchaseAmt: "",
+        cashPurchase: "",
+        creditPurchasePayment: "",
+        crNote: "",
+        expenseLabel: "",
+        expenseAmt: "",
+        toBankLabel: "",
+        toBankAmt: "",
+        toBankChecked: true,
+        loanOut: "",
+        excessAmt: "",
+      }));
+      return [...prev, ...extra];
+    });
+  };
+
+  const cleanErpInvNo = (raw: string): string =>
+    raw.trim().replace(/^#/i, "").replace(/^inv[-_\s#]*/i, "").trim();
+
+  // Deduplicating upsert helper so pre-logged items never duplicate
+  const upsertEntry = (newEntry: PreLoggedEntry) => {
+    setPreLoggedEntries((prev) => {
+      const normalizedTitle = newEntry.title.trim().toLowerCase();
+      const existingIdx = prev.findIndex(
+        (item) =>
+          item.id === newEntry.id ||
+          (item.type === newEntry.type && item.title.trim().toLowerCase() === normalizedTitle)
+      );
+      if (existingIdx !== -1) {
+        const updated = [...prev];
+        const existing = updated[existingIdx];
+        updated[existingIdx] = {
+          ...existing,
+          amount: newEntry.amount,
+          originalAmount: existing.originalAmount ?? existing.amount,
+          expenseCategory: newEntry.expenseCategory || existing.expenseCategory,
+          supplierName: newEntry.supplierName || existing.supplierName,
+          dueDate: newEntry.dueDate || existing.dueDate,
+          customerName: newEntry.customerName || existing.customerName,
+          followUpDate: newEntry.followUpDate || existing.followUpDate,
+          receiptNo: newEntry.receiptNo || existing.receiptNo,
+          note: newEntry.note || existing.note,
+          time: newEntry.time,
+        };
+        return updated;
+      }
+      return [newEntry, ...prev];
+    });
+  };
+
+  const buildMatchedErpList = (): ErpInvoiceItem[] => {
+    const bankMap = new Map<string, PreLoggedBankInvoice>();
+    preLoggedBankInvoices.forEach((b) => bankMap.set(b.invoiceNo.trim(), b));
+
+    const creditSaleInvSet = new Set<string>();
+    preLoggedEntries.forEach((entry) => {
+      if (entry.type === "CREDIT_SALE" && entry.receiptNo) {
+        const cleaned = cleanErpInvNo(entry.receiptNo);
+        if (cleaned) creditSaleInvSet.add(cleaned);
+      }
+    });
+
+    return JUBAIL_ERP_18_SEED.map((inv) => {
+      const matchedInfo = bankMap.get(inv.invoiceNo);
+      const isCreditSale = creditSaleInvSet.has(inv.invoiceNo);
+      const defaultTerminal: PosTerminalBank =
+        inv.invoiceNo === "30068" ? "AL_RAJHI" : "SAB";
+      return {
+        ...inv,
+        paymentMode: isCreditSale
+          ? "CREDIT_SALE"
+          : matchedInfo
+          ? matchedInfo.paymentMode
+          : "CASH",
+        posTerminal: matchedInfo?.posTerminal || defaultTerminal,
+        autoMatched: Boolean(matchedInfo) || isCreditSale,
+      };
+    });
+  };
+
+  // Auto-Lookup helper for ERP invoices (searches loaded erpInvoices or JUBAIL_ERP_18_SEED)
+  const findErpInvoiceMatch = (rawInput: string): ErpInvoiceItem | undefined => {
+    const cleaned = cleanErpInvNo(rawInput);
+    if (!cleaned) return undefined;
+    const pool = erpInvoices.length > 0 ? erpInvoices : buildMatchedErpList();
+    return pool.find((inv) => inv.invoiceNo === cleaned);
+  };
+
+  const matchedStep3Invoice = findErpInvoiceMatch(step3ReceiptNo);
+  const matchedHubInvoice = findErpInvoiceMatch(hubReceiptNo);
+
+  const handleStep3InvoiceInput = (rawVal: string) => {
+    setStep3ReceiptNo(rawVal);
+    const match = findErpInvoiceMatch(rawVal);
+    if (match) {
+      setStep3Title(match.customer);
+      setStep3Amount(String(match.amount));
+    }
+  };
+
+  const handleHubInvoiceInput = (rawVal: string) => {
+    setHubReceiptNo(rawVal);
+    const match = findErpInvoiceMatch(rawVal);
+    if (match) {
+      setHubCustomerName(match.customer);
+      setEntryAmount(String(match.amount));
+    }
+  };
+
+  const handleStartWizard = () => {
+    if (erpInvoices.length === 0) {
+      setErpInvoices(buildMatchedErpList());
+    }
+    setTrackingMode("wizard");
+    setWizardStep(1);
+    setCsvLoadedBanner(false);
+    setJustCompletedToast(null);
+  };
+
+  const handleSimulateCsvUpload = () => {
+    const matched = buildMatchedErpList();
+    setErpInvoices(matched);
+    setCsvLoadedBanner(true);
+    setTimeout(() => {
+      setWizardStep(2);
+    }, 650);
+  };
+
+  const handleSetInvoiceMode = (invoiceNo: string, mode: InvoicePaymentMode) => {
+    setErpInvoices((prev) => {
+      const base = prev.length > 0 ? prev : buildMatchedErpList();
+      return base.map((inv) =>
+        inv.invoiceNo === invoiceNo
+          ? {
+              ...inv,
+              paymentMode: mode,
+              posTerminal: inv.posTerminal || "SAB",
+            }
+          : inv
+      );
+    });
+  };
+
+  const handleSetInvoiceTerminal = (invoiceNo: string, terminal: PosTerminalBank) => {
+    setErpInvoices((prev) => {
+      const base = prev.length > 0 ? prev : buildMatchedErpList();
+      return base.map((inv) =>
+        inv.invoiceNo === invoiceNo
+          ? { ...inv, paymentMode: "POS_SWIPE", posTerminal: terminal }
+          : inv
+      );
+    });
+  };
+
+  const handleSetInvoiceOtherNote = (invoiceNo: string, note: string) => {
+    setErpInvoices((prev) => {
+      const base = prev.length > 0 ? prev : buildMatchedErpList();
+      return base.map((inv) =>
+        inv.invoiceNo === invoiceNo ? { ...inv, otherNote: note } : inv
+      );
+    });
+  };
 
   const handleLogBankInvoice = (e: React.FormEvent) => {
     e.preventDefault();
@@ -449,9 +1280,27 @@ function DailyRegisterView() {
     const newItem: PreLoggedBankInvoice = {
       invoiceNo: cleaned,
       amount: !Number.isNaN(parsedAmt) && parsedAmt > 0 ? parsedAmt : undefined,
+      paymentMode: bankModeInput,
+      posTerminal: bankModeInput === "POS_SWIPE" ? bankTerminalInput : undefined,
       time: nowHHMM(),
     };
-    setPreLoggedBankInvoices((prev) => [newItem, ...prev]);
+    setPreLoggedBankInvoices((prev) => [
+      newItem,
+      ...prev.filter((item) => item.invoiceNo !== cleaned),
+    ]);
+    // Also update erpInvoices if already loaded
+    setErpInvoices((prev) =>
+      prev.map((inv) =>
+        inv.invoiceNo === cleaned
+          ? {
+              ...inv,
+              paymentMode: bankModeInput,
+              posTerminal: bankModeInput === "POS_SWIPE" ? bankTerminalInput : inv.posTerminal,
+              autoMatched: true,
+            }
+          : inv
+      )
+    );
     setBankInvoiceInput("");
     setBankAmountInput("");
   };
@@ -463,16 +1312,110 @@ function DailyRegisterView() {
   const handleQuickRecord = (e: React.FormEvent) => {
     e.preventDefault();
     const val = parseFloat(entryAmount);
-    if (!entryTitle.trim() || Number.isNaN(val) || val <= 0) return;
-    const newEntry: PreLoggedEntry = {
-      id: `ple-${Date.now()}`,
+    if (Number.isNaN(val) || val <= 0) return;
+
+    if (entryType === "EXPENSE") {
+      const isCreditPurchase = hubExpenseCat === "Credit Purchase";
+      const isPurchase =
+        hubExpenseCat === "Credit Purchase" ||
+        hubExpenseCat === "Cash Purchase" ||
+        hubExpenseCat === "Bank Purchase";
+      const supplierClean = hubSupplierName.trim() || "Jotun";
+      const displayTitle = isPurchase
+        ? `${hubExpenseCat} — ${supplierClean}${entryTitle.trim() ? ` (${entryTitle.trim()})` : ""}`
+        : entryTitle.trim()
+        ? `${hubExpenseCat} — ${entryTitle.trim()}`
+        : hubExpenseCat;
+
+      upsertEntry({
+        id: isPurchase
+          ? `ple-${hubExpenseCat.toLowerCase().replace(/\s+/g, "-")}-${supplierClean.toLowerCase().replace(/\s+/g, "-")}`
+          : `ple-${displayTitle.toLowerCase().replace(/\s+/g, "-")}`,
+        type: "EXPENSE",
+        expenseCategory: hubExpenseCat,
+        supplierName: isPurchase ? supplierClean : undefined,
+        dueDate: isCreditPurchase ? hubDueDate : undefined,
+        title: displayTitle,
+        amount: val,
+        time: nowHHMM(),
+      });
+
+      if (isPurchase) {
+        onSyncCreditPurchase(supplierClean, val, hubDueDate || "2026-09-25", hubExpenseCat);
+        setSyncBannerMsg({
+          text: `${hubExpenseCat} (${supplierClean} · SAR ${fmt(val)}${isCreditPurchase ? ` · Due ${hubDueDate}` : ""}) synced live to Suppliers & Payables`,
+          targetTab: "suppliers",
+          targetLabel: "Open Suppliers & Payables →",
+        });
+      }
+      setEntryTitle("");
+      setEntryAmount("");
+      return;
+    }
+
+    // Inflows (CREDIT_RECD, CREDIT_SALE, LOAN_IN, OTHER_IN)
+    const isCreditCustomer = entryType === "CREDIT_RECD" || entryType === "CREDIT_SALE";
+    const custName = (
+      isCreditCustomer
+        ? hubCustomerName || matchedHubInvoice?.customer || ""
+        : entryTitle
+    ).trim();
+    if (!custName) return;
+
+    const cleanInv = cleanErpInvNo(hubReceiptNo);
+    const formattedInv = cleanInv
+      ? `#${cleanInv}`
+      : hubReceiptNo.trim() || undefined;
+
+    upsertEntry({
+      id: cleanInv
+        ? `ple-${entryType.toLowerCase()}-${cleanInv}`
+        : `ple-${entryType.toLowerCase()}-${custName.toLowerCase().replace(/\s+/g, "-")}`,
       type: entryType,
-      title: entryTitle.trim(),
+      customerName: isCreditCustomer ? custName : undefined,
+      followUpDate: isCreditCustomer ? hubFollowUpDate : undefined,
+      receiptNo: formattedInv,
+      title: custName,
       amount: val,
       time: nowHHMM(),
-    };
-    setPreLoggedEntries((prev) => [newEntry, ...prev]);
+    });
+
+    // Reclassify matched ERP invoice as a Credit Sale (No Double Cash Counting)
+    if (entryType === "CREDIT_SALE" && cleanInv) {
+      setErpInvoices((prev) => {
+        const base = prev.length > 0 ? prev : buildMatchedErpList();
+        return base.map((inv) =>
+          inv.invoiceNo === cleanInv
+            ? {
+                ...inv,
+                customer: custName,
+                amount: val,
+                paymentMode: "CREDIT_SALE",
+                autoMatched: true,
+              }
+            : inv
+        );
+      });
+    }
+
+    if (isCreditCustomer) {
+      onSyncCreditCustomer(
+        custName,
+        val,
+        hubFollowUpDate || "2026-09-20",
+        formattedInv,
+        entryType
+      );
+      setSyncBannerMsg({
+        text: `${custName}${formattedInv ? ` (Inv ${formattedInv})` : ""} · SAR ${fmt(val)} · Reminder: ${hubFollowUpDate} synced live to Credit Radar`,
+        targetTab: "radar",
+        targetLabel: "Open Credit Radar →",
+      });
+    }
+
     setEntryTitle("");
+    setHubCustomerName("");
+    setHubReceiptNo("");
     setEntryAmount("");
   };
 
@@ -480,46 +1423,424 @@ function DailyRegisterView() {
     setPreLoggedEntries((prev) => prev.filter((item) => item.id !== id));
   };
 
+  const handleRemoveErpInvoice = (invoiceNo: string) => {
+    setErpInvoices((prev) => {
+      const base = prev.length > 0 ? prev : buildMatchedErpList();
+      return base.filter((inv) => inv.invoiceNo !== invoiceNo);
+    });
+  };
+
+  const handleAddStep3Receipt = (e: React.FormEvent) => {
+    e.preventDefault();
+    const val = parseFloat(step3Amount);
+    const cleanCustomer = (step3Title.trim() || matchedStep3Invoice?.customer || "").trim();
+    if (!cleanCustomer || Number.isNaN(val) || val <= 0) return;
+
+    const isCredit = step3Kind === "CREDIT_RECD" || step3Kind === "CREDIT_SALE";
+    const cleanInv = cleanErpInvNo(step3ReceiptNo);
+    const formattedReceiptNo = cleanInv
+      ? `#${cleanInv}`
+      : step3ReceiptNo.trim() || undefined;
+
+    upsertEntry({
+      id: cleanInv
+        ? `ple-${step3Kind.toLowerCase()}-${cleanInv}`
+        : `ple-${step3Kind.toLowerCase()}-${cleanCustomer.toLowerCase().replace(/\s+/g, "-")}`,
+      type: step3Kind,
+      customerName: isCredit ? cleanCustomer : undefined,
+      followUpDate: isCredit ? step3FollowUpDate : undefined,
+      receiptNo: formattedReceiptNo,
+      title: cleanCustomer,
+      amount: val,
+      time: nowHHMM(),
+    });
+
+    // If a matched ERP invoice is saved as a Credit Sale, reclassify it in erpInvoices as CREDIT_SALE so it is not double-counted in Cash Drawer Sales
+    if (step3Kind === "CREDIT_SALE" && cleanInv) {
+      setErpInvoices((prev) => {
+        const base = prev.length > 0 ? prev : buildMatchedErpList();
+        return base.map((inv) =>
+          inv.invoiceNo === cleanInv
+            ? {
+                ...inv,
+                customer: cleanCustomer,
+                amount: val,
+                paymentMode: "CREDIT_SALE",
+                autoMatched: true,
+              }
+            : inv
+        );
+      });
+    }
+
+    if (isCredit) {
+      onSyncCreditCustomer(
+        cleanCustomer,
+        val,
+        step3FollowUpDate || "2026-09-20",
+        formattedReceiptNo,
+        step3Kind
+      );
+      setSyncBannerMsg({
+        text: `${cleanCustomer}${formattedReceiptNo ? ` (Inv ${formattedReceiptNo})` : ""} · SAR ${fmt(val)} · Reminder: ${step3FollowUpDate} synced live to Credit Radar`,
+        targetTab: "radar",
+        targetLabel: "View in Credit Radar →",
+      });
+    }
+
+    setStep3Title("");
+    setStep3ReceiptNo("");
+    setStep3Amount("");
+  };
+
+  const handleAddStep4Expense = (e: React.FormEvent) => {
+    e.preventDefault();
+    const val = parseFloat(step4Amount);
+    if (Number.isNaN(val) || val <= 0) return;
+
+    const isCreditPurchase = step4Category === "Credit Purchase";
+    const isSupplierPurchase =
+      step4Category === "Credit Purchase" ||
+      step4Category === "Cash Purchase" ||
+      step4Category === "Bank Purchase";
+
+    const cleanSupplier = step4SupplierName.trim() || "Jotun";
+    const displayTitle = isSupplierPurchase
+      ? `${step4Category} — ${cleanSupplier}${step4Note.trim() ? ` (${step4Note.trim()})` : ""}`
+      : step4Note.trim()
+      ? `${step4Category} (${step4Note.trim()})`
+      : step4Category;
+
+    upsertEntry({
+      id: isSupplierPurchase
+        ? `ple-${step4Category.toLowerCase().replace(/\s+/g, "-")}-${cleanSupplier.toLowerCase().replace(/\s+/g, "-")}`
+        : `ple-${step4Category.toLowerCase().replace(/\s+/g, "-")}`,
+      type: "EXPENSE",
+      expenseCategory: step4Category,
+      supplierName: isSupplierPurchase ? cleanSupplier : undefined,
+      dueDate: isCreditPurchase ? step4DueDate : undefined,
+      note: step4Note.trim() || undefined,
+      title: displayTitle,
+      amount: val,
+      time: nowHHMM(),
+    });
+
+    if (isSupplierPurchase) {
+      onSyncCreditPurchase(
+        cleanSupplier,
+        val,
+        step4DueDate || "2026-09-25",
+        step4Category
+      );
+      setSyncBannerMsg({
+        text: `${step4Category}: ${cleanSupplier} (SAR ${fmt(val)}${isCreditPurchase ? ` · Due: ${step4DueDate}` : ""}) synced live to Suppliers & Payables`,
+        targetTab: "suppliers",
+        targetLabel: "View in Suppliers & Payables →",
+      });
+    }
+
+    setStep4Amount("");
+    setStep4Note("");
+  };
+
+  const handleSaveInlineEdit = (rowKey: string) => {
+    const val = parseFloat(editingRowVal);
+    if (Number.isNaN(val) || val < 0) {
+      setEditingRowId(null);
+      return;
+    }
+    if (rowKey.startsWith("erp-")) {
+      const invNo = rowKey.replace("erp-", "");
+      setErpInvoices((prev) => {
+        const base = prev.length > 0 ? prev : buildMatchedErpList();
+        return base.map((inv) =>
+          inv.invoiceNo === invNo
+            ? { ...inv, originalAmount: inv.originalAmount ?? inv.amount, amount: val }
+            : inv
+        );
+      });
+    } else {
+      setPreLoggedEntries((prev) =>
+        prev.map((item) =>
+          item.id === rowKey
+            ? { ...item, originalAmount: item.originalAmount ?? item.amount, amount: val }
+            : item
+        )
+      );
+    }
+    setEditingRowId(null);
+  };
+
+  const handleAddMissingInflow = (e: React.FormEvent) => {
+    e.preventDefault();
+    const val = parseFloat(missingInflowAmt);
+    if (!missingInflowTitle.trim() || Number.isNaN(val) || val <= 0) return;
+    upsertEntry({
+      id: `ple-${Date.now()}`,
+      type: "CREDIT_RECD",
+      customerName: missingInflowTitle.trim(),
+      followUpDate: "2026-09-20",
+      title: missingInflowTitle.trim(),
+      amount: val,
+      time: nowHHMM(),
+    });
+    onSyncCreditCustomer(missingInflowTitle.trim(), val, "2026-09-20", undefined, "CREDIT_RECD");
+    setMissingInflowTitle("");
+    setMissingInflowAmt("");
+  };
+
+  const handleAddMissingExpense = (e: React.FormEvent) => {
+    e.preventDefault();
+    const val = parseFloat(missingExpenseAmt);
+    if (Number.isNaN(val) || val <= 0) return;
+    const isCreditPurchase = missingExpenseCat === "Credit Purchase";
+    const isPurchase =
+      missingExpenseCat === "Credit Purchase" ||
+      missingExpenseCat === "Cash Purchase" ||
+      missingExpenseCat === "Bank Purchase";
+    const supplier = missingExpenseSupplier.trim() || "Jotun";
+    const title = isPurchase
+      ? `${missingExpenseCat} — ${supplier}`
+      : missingExpenseSupplier.trim()
+      ? `${missingExpenseCat} (${missingExpenseSupplier.trim()})`
+      : missingExpenseCat;
+
+    upsertEntry({
+      id: `ple-${Date.now()}`,
+      type: "EXPENSE",
+      expenseCategory: missingExpenseCat,
+      supplierName: isPurchase ? supplier : undefined,
+      dueDate: isCreditPurchase ? missingExpenseDueDate : undefined,
+      title,
+      amount: val,
+      time: nowHHMM(),
+    });
+
+    if (isPurchase) {
+      onSyncCreditPurchase(supplier, val, missingExpenseDueDate || "2026-09-25", missingExpenseCat);
+    }
+    setMissingExpenseSupplier("");
+    setMissingExpenseAmt("");
+  };
+
+  // Live Derived Totals
+  const activeErpList = erpInvoices.length > 0 ? erpInvoices : buildMatchedErpList();
+  // Cash Drawer Sales include "CASH" and "OTHER_RECD" (excludes "CREDIT_SALE", "BANK_TRANSFER", "POS_SWIPE")
+  const cashSaleInvoices = activeErpList.filter(
+    (i) => i.paymentMode === "CASH" || i.paymentMode === "OTHER_RECD"
+  );
+  // Bank / POS Invoices include "BANK_TRANSFER" and "POS_SWIPE"
+  const bankSwipeInvoices = activeErpList.filter(
+    (i) => i.paymentMode === "BANK_TRANSFER" || i.paymentMode === "POS_SWIPE"
+  );
+
+  const cashSalesTotal = r2(cashSaleInvoices.reduce((a, b) => a + b.amount, 0));
+  const bankSwipeGrossTotal = r2(bankSwipeInvoices.reduce((a, b) => a + b.amount, 0));
+  const totalPosFees = r2(bankSwipeInvoices.reduce((a, b) => a + calcInvoicePosFee(b), 0));
+  const bankSwipeNetTotal = r2(bankSwipeGrossTotal - totalPosFees);
+
+  // Inflows in drawer (exclude CREDIT_SALE since a new credit sale is not cash received yet, unless CREDIT_RECD)
+  const inflowEntries = preLoggedEntries.filter((e) => e.type !== "EXPENSE");
+  const creditSaleEntries = inflowEntries.filter((e) => e.type === "CREDIT_SALE");
+  const cashInflowEntries = inflowEntries.filter((e) => e.type !== "CREDIT_SALE");
+  const expenseEntries = preLoggedEntries.filter((e) => e.type === "EXPENSE");
+
+  const totalCreditInvAmount = r2(creditSaleEntries.reduce((a, b) => a + b.amount, 0));
+  const totalPreLoggedInflows = r2(cashInflowEntries.reduce((a, b) => a + b.amount, 0));
+  const totalPreLoggedExpenses = r2(expenseEntries.reduce((a, b) => a + b.amount, 0));
+
+  const totalCashInSalesAndReceipts = r2(cashSalesTotal + totalPreLoggedInflows);
+  const totalMoneyInDrawer = r2(openingBalance + totalCashInSalesAndReceipts);
+  const totalMoneyOutDrawer = r2(totalPreLoggedExpenses);
+  const calculatedClosingBalance = r2(totalMoneyInDrawer - totalMoneyOutDrawer);
+
+  const handleLockAndSaveDay = () => {
+    const newSummary: CompletedDaySummary = {
+      date: "12-09-2026",
+      branch: "Jubail - Main Branch",
+      totalCashSales: cashSalesTotal,
+      totalBankSwipe: bankSwipeNetTotal,
+      totalPosFees,
+      totalExpenses: totalPreLoggedExpenses,
+      closingBalance: calculatedClosingBalance,
+      status: "LOCKED",
+    };
+    setCompletedDaysLog((prev) => [newSummary, ...prev.filter((d) => d.date !== "12-09-2026")]);
+    setJustCompletedToast(
+      `Daily Register Closed — Closing Balance: SAR ${fmt(calculatedClosingBalance)} | Net Bank Settlement: SAR ${fmt(bankSwipeNetTotal)}`
+    );
+    setTrackingMode("hub");
+    setWizardStep(1);
+  };
+
+  // Classic Digital Data Sheet Derived Column Totals & Live Actions
+  const dsCashSaleTotal = r2(sheetRows.reduce((s, r) => s + numCell(r.amtCashSale), 0));
+  const dsCreditInvTotal = r2(sheetRows.reduce((s, r) => s + numCell(r.creditInvAmt), 0));
+  const dsCreditRecdTotal = r2(sheetRows.reduce((s, r) => s + numCell(r.creditSaleRecd), 0));
+  const dsOpenBalTotal = r2(sheetRows.reduce((s, r) => s + numCell(r.openBal), 0));
+  const dsLoanInTotal = r2(sheetRows.reduce((s, r) => s + numCell(r.loanIn), 0));
+  const dsOtherRecdTotal = r2(sheetRows.reduce((s, r) => s + numCell(r.otherAmtRecd), 0));
+  const dsFromBankTotal = r2(sheetRows.reduce((s, r) => s + numCell(r.fromBank), 0));
+
+  // Column 10: TOTAL AMT (Auto-calculated inflow total)
+  const dsTotalAmt = r2(
+    dsCashSaleTotal +
+      dsCreditRecdTotal +
+      dsOpenBalTotal +
+      dsLoanInTotal +
+      dsOtherRecdTotal +
+      dsFromBankTotal
+  );
+
+  const dsCreditPurchaseTotal = r2(
+    sheetRows.reduce((s, r) => s + numCell(r.creditPurchaseAmt), 0)
+  );
+  const dsCashPurchaseTotal = r2(sheetRows.reduce((s, r) => s + numCell(r.cashPurchase), 0));
+  const dsCreditPurchasePaymentTotal = r2(
+    sheetRows.reduce((s, r) => s + numCell(r.creditPurchasePayment), 0)
+  );
+  const dsCrNoteTotal = r2(sheetRows.reduce((s, r) => s + numCell(r.crNote), 0));
+  const dsExpenseTotal = r2(sheetRows.reduce((s, r) => s + numCell(r.expenseAmt), 0));
+  const dsToBankTotal = r2(
+    sheetRows.reduce((s, r) => s + (r.toBankChecked ? numCell(r.toBankAmt) : 0), 0)
+  );
+  const dsLoanOutTotal = r2(sheetRows.reduce((s, r) => s + numCell(r.loanOut), 0));
+  const dsExcessAmtTotal = r2(sheetRows.reduce((s, r) => s + numCell(r.excessAmt), 0));
+
+  // Column 19: CLOSING BALANCE (Live calculated physical cash closing balance)
+  const dsClosingBalance = r2(
+    dsTotalAmt -
+      (dsCashPurchaseTotal +
+        dsCreditPurchasePaymentTotal +
+        dsExpenseTotal +
+        dsToBankTotal +
+        dsLoanOutTotal) +
+      dsExcessAmtTotal
+  );
+
+  const handleSyncSheetFromWizard = () => {
+    const syncedRows: DataSheetRow[] = INITIAL_DATASHEET_ROWS.map((baseRow, idx) => {
+      const matchedErp = activeErpList.find((inv) => inv.invoiceNo === baseRow.invoiceNo);
+      const isCreditSale = matchedErp?.paymentMode === "CREDIT_SALE";
+      const isBankOrPos =
+        matchedErp?.paymentMode === "BANK_TRANSFER" || matchedErp?.paymentMode === "POS_SWIPE";
+
+      const expEntry = expenseEntries[idx];
+      const crRecdEntry = cashInflowEntries.find((e) => e.type === "CREDIT_RECD");
+      const loanEntry = cashInflowEntries.find((e) => e.type === "LOAN_IN");
+
+      return {
+        ...baseRow,
+        openBal: idx === 0 ? String(openingBalance) : "",
+        receiptNo: idx === 0 ? crRecdEntry?.customerName || "Chicago" : baseRow.receiptNo,
+        creditSaleRecd:
+          idx === 0 && crRecdEntry ? String(crRecdEntry.amount) : baseRow.creditSaleRecd,
+        loanIn: idx === 1 && loanEntry ? String(loanEntry.amount) : baseRow.loanIn,
+        creditInvAmt: isCreditSale
+          ? String(matchedErp?.amount || baseRow.creditInvAmt)
+          : baseRow.creditInvAmt,
+        amtCashSale: isCreditSale ? "" : baseRow.amtCashSale,
+        expenseLabel: expEntry
+          ? expEntry.expenseCategory || expEntry.title
+          : baseRow.expenseLabel,
+        expenseAmt: expEntry ? String(expEntry.amount) : baseRow.expenseAmt,
+        toBankLabel: isBankOrPos
+          ? `${matchedErp?.paymentMode === "BANK_TRANSFER" ? "Bank" : POS_TERMINAL_META[matchedErp?.posTerminal || "SAB"].shortLabel} #${baseRow.invoiceNo}`
+          : baseRow.toBankLabel,
+      };
+    });
+    setSheetRows(syncedRows);
+    setSyncBannerMsg({
+      text: `Synced ${syncedRows.length} rows from Guided Wizard · Total Amt: SAR ${fmt(dsTotalAmt)} · Closing Balance: SAR ${fmt(dsClosingBalance)}`,
+      targetTab: "pulse",
+      targetLabel: "View Financial Pulse →",
+    });
+  };
+
+  const handleSaveAndCloseSheet = () => {
+    // 1. Sync any Credit Purchases to Suppliers & Payables
+    sheetRows.forEach((row) => {
+      const cpAmt = numCell(row.creditPurchaseAmt);
+      if (cpAmt > 0 && row.creditPurchaseSupplier.trim()) {
+        onSyncCreditPurchase(
+          row.creditPurchaseSupplier.trim(),
+          cpAmt,
+          "2026-09-25",
+          "Credit Purchase"
+        );
+      }
+      // 2. Sync any Credit Invoice Amounts to Credit Radar
+      const crInv = numCell(row.creditInvAmt);
+      if (crInv > 0 && row.invoiceNo.trim()) {
+        const matched = activeErpList.find((i) => i.invoiceNo === row.invoiceNo.trim());
+        onSyncCreditCustomer(
+          matched?.customer || `Inv #${row.invoiceNo.trim()} Customer`,
+          crInv,
+          "2026-09-20",
+          `#${row.invoiceNo.trim()}`,
+          "CREDIT_SALE"
+        );
+      }
+      // 3. Sync any Credit Sale Amt Recd to Credit Radar
+      const crRecd = numCell(row.creditSaleRecd);
+      if (crRecd > 0 && row.receiptNo.trim()) {
+        onSyncCreditCustomer(
+          row.receiptNo.trim(),
+          crRecd,
+          "2026-09-20",
+          `#${row.invoiceNo.trim() || "RCP"}`,
+          "CREDIT_RECD"
+        );
+      }
+    });
+
+    const newSummary: CompletedDaySummary = {
+      date: "12-09-2026",
+      branch: "Jubail - Main Branch",
+      totalCashSales: dsCashSaleTotal,
+      totalBankSwipe: dsToBankTotal,
+      totalPosFees,
+      totalExpenses: r2(dsExpenseTotal + dsCashPurchaseTotal + dsCreditPurchasePaymentTotal),
+      closingBalance: dsClosingBalance,
+      status: "LOCKED",
+    };
+    setCompletedDaysLog((prev) => [newSummary, ...prev.filter((d) => d.date !== "12-09-2026")]);
+    setJustCompletedToast(
+      `Classic Daily Data Sheet Saved & Closed — Total Amt: SAR ${fmt(dsTotalAmt)} | Closing Balance: SAR ${fmt(dsClosingBalance)}`
+    );
+    setTrackingMode("hub");
+  };
+
   const entryTypeMeta: Record<
     PreLoggedEntryType,
-    { label: string; shortBadge: string; badgeClass: string; isOutflow: boolean }
+    { label: string; badgeClass: string; isOutflow: boolean }
   > = {
     EXPENSE: {
-      label: "Expense (Out)",
-      shortBadge: "EXPENSE · OUT",
+      label: "Expense",
       badgeClass: "bg-rose-500/20 text-rose-300 border-rose-500/30",
       isOutflow: true,
     },
     CREDIT_RECD: {
-      label: "Credit Sale Amt Recd (In)",
-      shortBadge: "CREDIT RECD · IN",
+      label: "Credit Recd",
       badgeClass: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
+      isOutflow: false,
+    },
+    CREDIT_SALE: {
+      label: "Credit Sale",
+      badgeClass: "bg-indigo-500/20 text-indigo-300 border-indigo-500/30",
       isOutflow: false,
     },
     LOAN_IN: {
       label: "Loan In",
-      shortBadge: "LOAN · IN",
       badgeClass: "bg-amber-500/20 text-amber-300 border-amber-500/30",
       isOutflow: false,
     },
     OTHER_IN: {
       label: "Other Amt Recd",
-      shortBadge: "OTHER · IN",
       badgeClass: "bg-purple-500/20 text-purple-300 border-purple-500/30",
       isOutflow: false,
     },
   };
-
-  const totalPreLoggedExpenses = r2(
-    preLoggedEntries
-      .filter((e) => e.type === "EXPENSE")
-      .reduce((acc, item) => acc + item.amount, 0)
-  );
-  const totalPreLoggedInflows = r2(
-    preLoggedEntries
-      .filter((e) => e.type !== "EXPENSE")
-      .reduce((acc, item) => acc + item.amount, 0)
-  );
 
   return (
     <div className="relative flex-1 h-full w-full overflow-y-auto bg-gradient-to-br from-[#0c0714] via-[#1a0f2e] to-[#25161b] text-white select-none">
@@ -530,388 +1851,1183 @@ function DailyRegisterView() {
       <div className="pointer-events-none absolute -top-28 left-1/4 h-96 w-96 rounded-full bg-purple-600/15 blur-[130px]" />
       <div className="pointer-events-none absolute bottom-0 right-1/4 h-96 w-96 rounded-full bg-amber-500/10 blur-[140px]" />
 
-      {/* Main Content Container */}
-      <div className="relative z-10 mx-auto flex min-h-full max-w-7xl flex-col justify-between p-6 lg:p-8 gap-6">
-        {trackingMode !== "hub" ? (
-          /* Placeholder View for 'wizard' or 'datasheet' before Step 2 */
-          <div className="flex flex-1 flex-col gap-6">
-            <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/15 bg-white/[0.04] p-5 backdrop-blur-2xl shadow-2xl">
-              <div className="flex items-center gap-4">
-                <button
-                  onClick={() => setTrackingMode("hub")}
-                  className="flex items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/20 hover:border-amber-400/40"
-                >
-                  <ArrowLeft size={16} />
-                  ← Back to Daily Hub
-                </button>
-                <div className="h-6 w-px bg-white/15" />
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/20 border border-amber-400/30 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-widest text-amber-300">
-                      {trackingMode === "wizard" ? "Guided Reconciliation Mode" : "Classic Sheet Mode"}
-                    </span>
-                  </div>
-                  <h2 className="mt-1 font-display text-xl font-bold tracking-tight text-white">
-                    {trackingMode === "wizard"
-                      ? "Nauman Labs Guided End-of-Day Tracking Wizard"
-                      : "Jubail Corp. Classic Daily Data Sheet"}
-                  </h2>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <div className="rounded-xl border border-white/10 bg-black/30 px-3.5 py-2 text-right">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-white/50">
-                    Pre-Logged Bank Invoices
-                  </p>
-                  <p className="font-display text-sm font-bold text-amber-400">
-                    {preLoggedBankInvoices.length} Queued for Auto-Match
-                  </p>
-                </div>
-                <div className="rounded-xl border border-white/10 bg-black/30 px-3.5 py-2 text-right">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-white/50">
-                    Pre-Logged Shift Items
-                  </p>
-                  <p className="font-display text-sm font-bold text-emerald-400">
-                    {preLoggedEntries.length} Ready to Import
-                  </p>
-                </div>
-              </div>
+      {/* Live Cross-Module Sync Toast Banner */}
+      {syncBannerMsg && (
+        <div className="relative z-30 max-w-7xl w-full mx-auto px-6 pt-5">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-purple-400/40 bg-purple-500/15 px-5 py-3 text-xs sm:text-sm font-bold text-purple-100 backdrop-blur-xl shadow-lg">
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-400 text-slate-950">
+                <Check size={12} strokeWidth={3} />
+              </span>
+              <span>{syncBannerMsg.text}</span>
             </div>
-
-            <div className="flex flex-1 flex-col items-center justify-center rounded-3xl border border-white/15 bg-white/[0.03] p-12 text-center backdrop-blur-xl shadow-2xl">
-              <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400/20 via-purple-500/20 to-indigo-500/20 border border-amber-400/30 text-amber-300 shadow-[0_0_30px_rgba(245,158,11,0.2)]">
-                {trackingMode === "wizard" ? <Sparkles size={30} /> : <FileSpreadsheet size={30} />}
-              </div>
-              <h3 className="font-display text-2xl font-bold tracking-tight text-white">
-                {trackingMode === "wizard"
-                  ? "Guided EOD Wizard Engine Ready for Step 2"
-                  : "Classic Jubail Corp Daily Data Sheet Ready for Step 2"}
-              </h3>
-              <p className="mt-2 max-w-lg text-sm text-white/65 leading-relaxed">
-                Your <span className="font-semibold text-amber-300">{preLoggedBankInvoices.length} pre-logged bank invoices</span> (
-                {preLoggedBankInvoices.map((i) => `#${i.invoiceNo}`).join(", ")}) and{" "}
-                <span className="font-semibold text-purple-300">{preLoggedEntries.length} daytime shift entries</span> are buffered in state and will automatically populate here.
-              </p>
+            <div className="flex items-center gap-3">
               <button
-                onClick={() => setTrackingMode("hub")}
-                className="mt-7 flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-purple-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-purple-500/25 transition hover:brightness-110"
+                type="button"
+                onClick={() => onSwitchTab(syncBannerMsg.targetTab)}
+                className="rounded-lg bg-amber-400 px-3 py-1 text-xs font-extrabold text-slate-950 hover:bg-amber-300 transition"
               >
-                <ArrowLeft size={16} />
-                Return to Daily Command Hub
+                {syncBannerMsg.targetLabel}
+              </button>
+              <button
+                type="button"
+                onClick={() => setSyncBannerMsg(null)}
+                className="text-xs text-white/60 hover:text-white"
+              >
+                ✕
               </button>
             </div>
           </div>
-        ) : (
-          /* THE DAILY COMMAND HUB (MAIN HOME SCREEN) */
-          <div className="flex flex-col gap-6">
-            {/* Top Status & Telemetry Strip */}
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <div className="inline-flex items-center gap-2 rounded-full border border-amber-400/30 bg-amber-500/10 px-3 py-1 text-[11px] font-semibold tracking-wide text-amber-300">
-                  <Sparkles size={12} className="text-amber-400" />
-                  JCT FLAGSHIP DAILY HUB · DAYTIME SCRATCHPAD ACTIVE
-                </div>
-                <h1 className="mt-2 font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
-                  The Daily Command Hub
-                </h1>
-                <p className="text-sm text-white/60 font-medium">
-                  Jot down bank/POS invoice numbers and daytime cash movements as they happen—everything feeds into your evening reconciliation.
-                </p>
-              </div>
+        </div>
+      )}
 
-              {/* Quick Live Pre-Tracker Summary Badges */}
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 backdrop-blur-md">
-                  <span className="block text-[10px] font-bold uppercase tracking-wider text-white/45">
-                    Bank / POS Invoices
-                  </span>
-                  <span className="font-display text-base font-extrabold text-amber-400">
-                    {preLoggedBankInvoices.length} Logged
-                  </span>
+      {/* ════════════════════════════════════════════════════════════════════
+          MODE 1: WIDESCREEN HOME HUB (trackingMode === 'hub')
+         ════════════════════════════════════════════════════════════════════ */}
+      {trackingMode === "hub" && (
+        <div className="relative z-10 max-w-7xl w-full mx-auto px-6 py-8 lg:py-10 flex flex-col gap-7">
+          {justCompletedToast && (
+            <div className="flex items-center justify-between gap-4 rounded-2xl border border-emerald-400/40 bg-emerald-500/15 px-5 py-3.5 text-sm font-bold text-emerald-200 shadow-lg backdrop-blur-xl">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-400 text-slate-950">
+                  <Check size={14} strokeWidth={3} />
+                </span>
+                <span>{justCompletedToast}</span>
+              </div>
+              <button
+                onClick={() => setJustCompletedToast(null)}
+                className="text-xs font-bold text-emerald-300/70 hover:text-white"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
+
+          {/* Header & 3 Stat Pills */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h1 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
+                Jubail Corp Daily Hub
+              </h1>
+              <p className="mt-1 text-sm text-white/60">
+                Log daytime SAB / Al Rajhi swipes and cash movements, or start your end-of-day reconciliation.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2.5">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-400/30 bg-amber-500/10 px-4 py-1.5 text-xs font-bold text-amber-300 backdrop-blur-md whitespace-nowrap">
+                <CreditCard size={13} className="text-amber-400" />
+                {preLoggedBankInvoices.length} Bank Invoices Queued
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/30 bg-emerald-500/10 px-4 py-1.5 text-xs font-bold text-emerald-300 backdrop-blur-md whitespace-nowrap">
+                SAR {fmt(totalPreLoggedInflows)} Inflows
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-400/30 bg-rose-500/10 px-4 py-1.5 text-xs font-bold text-rose-300 backdrop-blur-md whitespace-nowrap">
+                SAR {fmt(totalPreLoggedExpenses)} Expenses
+              </span>
+            </div>
+          </div>
+
+          {/* Spacious Hero Card */}
+          <div className="relative overflow-hidden rounded-3xl p-[1.5px] bg-gradient-to-r from-amber-400/70 via-purple-500/70 to-amber-500/70 shadow-[0_0_55px_rgba(168,85,247,0.2)]">
+            <div className="relative overflow-hidden rounded-[22.5px] bg-gradient-to-br from-[#170e29]/95 via-[#130b21]/95 to-[#221319]/95 px-8 py-9 backdrop-blur-2xl">
+              <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-amber-400/15 blur-3xl" />
+              <div className="pointer-events-none absolute -bottom-20 left-1/3 h-64 w-64 rounded-full bg-purple-500/20 blur-3xl" />
+
+              <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                <div className="max-w-2xl space-y-2">
+                  <h2 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
+                    End-of-Day Reconciliation
+                  </h2>
+                  <p className="text-sm sm:text-base text-white/65 leading-relaxed">
+                    Match ERP sales, calculate SAB &amp; Al Rajhi POS terminal fees, and close today&apos;s drawer in 5 guided steps.
+                  </p>
                 </div>
-                <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 backdrop-blur-md">
-                  <span className="block text-[10px] font-bold uppercase tracking-wider text-white/45">
-                    Pre-Logged Inflows
-                  </span>
-                  <span className="font-display text-base font-extrabold text-emerald-400">
-                    SAR {fmt(totalPreLoggedInflows)}
-                  </span>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 backdrop-blur-md">
-                  <span className="block text-[10px] font-bold uppercase tracking-wider text-white/45">
-                    Pre-Logged Expenses
-                  </span>
-                  <span className="font-display text-base font-extrabold text-rose-400">
-                    SAR {fmt(totalPreLoggedExpenses)}
-                  </span>
+
+                <div className="flex flex-wrap items-center gap-3.5 shrink-0">
+                  <button
+                    onClick={handleStartWizard}
+                    className="group flex items-center gap-2.5 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-500 to-purple-600 px-7 py-4 text-sm sm:text-base font-extrabold text-slate-950 shadow-[0_0_30px_rgba(245,158,11,0.4)] transition-all duration-300 hover:scale-[1.02]"
+                  >
+                    <Sparkles size={18} className="text-slate-950" />
+                    <span>✨ Start Guided Tracking</span>
+                    <ArrowRight size={16} className="text-slate-950/80 transition-transform group-hover:translate-x-0.5" />
+                  </button>
+
+                  <button
+                    onClick={() => setTrackingMode("datasheet")}
+                    className="flex items-center gap-2 rounded-2xl border border-white/20 bg-white/10 px-6 py-4 text-sm sm:text-base font-bold text-white backdrop-blur-xl transition-all hover:bg-white/15"
+                  >
+                    <FileSpreadsheet size={18} className="text-amber-300" />
+                    <span>📋 Classic Data Sheet</span>
+                  </button>
                 </div>
               </div>
             </div>
+          </div>
 
-            {/* Widget C: The Flagship "Start Tracking" Hero Box */}
-            <div className="relative overflow-hidden rounded-3xl p-[1.5px] bg-gradient-to-r from-amber-400/70 via-purple-500/70 to-amber-500/70 shadow-[0_0_50px_rgba(168,85,247,0.22)]">
-              <div className="relative overflow-hidden rounded-[22.5px] bg-gradient-to-br from-[#170e29]/95 via-[#130b21]/95 to-[#221319]/95 px-6 py-7 sm:px-9 sm:py-8 backdrop-blur-2xl">
-                {/* Ambient Shimmer Accent */}
-                <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-amber-400/15 blur-3xl" />
-                <div className="pointer-events-none absolute -bottom-20 left-1/3 h-64 w-64 rounded-full bg-purple-500/20 blur-3xl" />
+          {/* Unified Daytime Quick-Logger */}
+          <div className="rounded-3xl border border-white/12 bg-white/[0.04] p-6 sm:p-8 backdrop-blur-2xl shadow-2xl">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-white/10">
+              <div className="inline-flex rounded-2xl bg-black/40 p-1.5 border border-white/10">
+                <button
+                  type="button"
+                  onClick={() => setActiveLoggerTab("bank")}
+                  className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs sm:text-sm font-bold transition-all ${
+                    activeLoggerTab === "bank"
+                      ? "bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 shadow-md"
+                      : "text-white/65 hover:text-white"
+                  }`}
+                >
+                  <span>💳 Log Bank / POS Invoice #</span>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold ${
+                      activeLoggerTab === "bank" ? "bg-slate-950/20 text-slate-950" : "bg-white/10 text-amber-300"
+                    }`}
+                  >
+                    {preLoggedBankInvoices.length}
+                  </span>
+                </button>
 
-                <div className="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-                  <div className="max-w-2xl space-y-2.5">
-                    <div className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-widest text-amber-300 ring-1 ring-white/15">
-                      <Zap size={12} className="text-amber-400" />
-                      Evening Closing & ERP Auto-Match Engine
-                    </div>
-                    <h2 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
-                      End-of-Day Reconciliation &amp; Tracking
-                    </h2>
-                    <p className="text-sm sm:text-base text-white/70 font-medium leading-relaxed">
-                      Launch the guided Nauman Labs journey or enter data in the classic Jubail Corp Daily Data Sheet.
-                    </p>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-3.5 shrink-0">
-                    <button
-                      onClick={() => setTrackingMode("wizard")}
-                      className="group relative flex items-center gap-2.5 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-500 to-purple-600 px-6 py-4 text-sm sm:text-base font-extrabold text-slate-950 shadow-[0_0_30px_rgba(245,158,11,0.4)] transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_0_40px_rgba(245,158,11,0.65)]"
-                    >
-                      <Sparkles size={18} className="text-slate-950 transition-transform group-hover:rotate-12" />
-                      <span>✨ Start Guided Tracking</span>
-                      <ArrowRight size={16} className="text-slate-950/80 transition-transform group-hover:translate-x-0.5" />
-                    </button>
-
-                    <button
-                      onClick={() => setTrackingMode("datasheet")}
-                      className="flex items-center gap-2.5 rounded-2xl border border-white/20 bg-white/10 px-5 py-4 text-sm sm:text-base font-bold text-white backdrop-blur-xl transition-all hover:bg-white/15 hover:border-amber-300/40"
-                    >
-                      <FileSpreadsheet size={18} className="text-amber-300" />
-                      <span>📋 Open Classic Data Sheet</span>
-                    </button>
-                  </div>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveLoggerTab("expense")}
+                  className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs sm:text-sm font-bold transition-all ${
+                    activeLoggerTab === "expense"
+                      ? "bg-gradient-to-r from-purple-500 to-amber-500 text-slate-950 shadow-md"
+                      : "text-white/65 hover:text-white"
+                  }`}
+                >
+                  <span>⚡ Quick Expense &amp; Cash-In</span>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold ${
+                      activeLoggerTab === "expense" ? "bg-slate-950/20 text-slate-950" : "bg-white/10 text-purple-300"
+                    }`}
+                  >
+                    {preLoggedEntries.length}
+                  </span>
+                </button>
               </div>
+
+              <span className="text-xs font-medium text-white/45">
+                {activeLoggerTab === "bank"
+                  ? "Pre-tag invoices with SAB (0.85%), Al Rajhi (0.80%), or Bank Transfer (0%)"
+                  : "Credit Purchases sync to Suppliers & Payables · Credit Sales/Receipts sync to Credit Radar"}
+              </span>
             </div>
 
-            {/* Two-Column Daytime Pre-Tracking Scratchpad Grid (Widget A & Widget B) */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-              {/* Widget A: Daytime Bank / POS Swipe Invoice Logger (5 cols) */}
-              <div className="lg:col-span-5 flex flex-col justify-between rounded-3xl border border-white/12 bg-white/[0.04] p-6 backdrop-blur-2xl shadow-xl">
-                <div>
-                  <div className="flex items-center justify-between gap-2 mb-3">
-                    <div className="flex items-center gap-2.5">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/20 border border-amber-400/30 text-amber-300">
-                        <CreditCard size={20} />
-                      </div>
-                      <div>
-                        <h3 className="font-display text-base font-bold tracking-tight text-white">
-                          Daytime Bank / POS Swipe Logger
-                        </h3>
-                        <p className="text-xs text-white/55">
-                          Jot down ERP Invoice # for Bank Transfer or Card Swipe
-                        </p>
-                      </div>
-                    </div>
-                    <span className="rounded-full bg-amber-500/20 border border-amber-400/30 px-2.5 py-0.5 text-[11px] font-bold text-amber-300">
-                      {preLoggedBankInvoices.length} Queued
-                    </span>
-                  </div>
+            {activeLoggerTab === "bank" ? (
+              <div className="pt-5 space-y-4">
+                <form onSubmit={handleLogBankInvoice} className="flex flex-wrap items-center gap-3">
+                  <input
+                    type="text"
+                    value={bankInvoiceInput}
+                    onChange={(e) => setBankInvoiceInput(e.target.value)}
+                    placeholder="Invoice No. (e.g. 30065)"
+                    className="flex-1 min-w-[160px] rounded-xl border border-white/15 bg-black/35 px-4 py-3 text-sm font-semibold text-white placeholder:text-white/35 outline-none focus:border-amber-400/70"
+                  />
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={bankAmountInput}
+                    onChange={(e) => setBankAmountInput(e.target.value)}
+                    placeholder="Optional SAR"
+                    className="w-36 rounded-xl border border-white/15 bg-black/35 px-4 py-3 text-sm font-semibold text-white placeholder:text-white/35 outline-none focus:border-amber-400/70"
+                  />
 
-                  {/* Form */}
-                  <form onSubmit={handleLogBankInvoice} className="mt-4 flex flex-col sm:flex-row gap-2.5">
-                    <input
-                      type="text"
-                      value={bankInvoiceInput}
-                      onChange={(e) => setBankInvoiceInput(e.target.value)}
-                      placeholder="Invoice No. (e.g. 30063)"
-                      className="flex-1 rounded-xl border border-white/15 bg-black/35 px-3.5 py-2.5 text-sm font-semibold text-white placeholder:text-white/35 outline-none focus:border-amber-400/70 focus:ring-2 focus:ring-amber-400/20"
-                    />
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={bankAmountInput}
-                      onChange={(e) => setBankAmountInput(e.target.value)}
-                      placeholder="Amount (SAR, opt)"
-                      className="w-full sm:w-36 rounded-xl border border-white/15 bg-black/35 px-3.5 py-2.5 text-sm font-semibold text-white placeholder:text-white/35 outline-none focus:border-amber-400/70 focus:ring-2 focus:ring-amber-400/20"
-                    />
-                    <button
-                      type="submit"
-                      className="flex items-center justify-center gap-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 px-4 py-2.5 text-xs font-extrabold uppercase tracking-wider text-slate-950 transition shrink-0 shadow-md shadow-amber-500/20"
-                    >
-                      <Plus size={15} strokeWidth={2.5} />
-                      Log Bank Invoice
-                    </button>
-                  </form>
+                  <select
+                    value={bankModeInput}
+                    onChange={(e) => setBankModeInput(e.target.value as "POS_SWIPE" | "BANK_TRANSFER")}
+                    className="rounded-xl border border-white/15 bg-[#160f26] px-3.5 py-3 text-xs sm:text-sm font-bold text-white outline-none"
+                  >
+                    <option value="POS_SWIPE">Swipe (POS)</option>
+                    <option value="BANK_TRANSFER">Bank Transfer (0% Fee)</option>
+                  </select>
 
-                  {/* Live Pill List */}
-                  <div className="mt-5">
-                    <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider text-white/45 mb-2.5">
-                      <span>Pre-Logged Bank / Swipe Invoices</span>
-                      <span>Auto-matches ERP CSV</span>
-                    </div>
-                    <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto pr-1">
-                      {preLoggedBankInvoices.map((inv) => (
-                        <div
-                          key={inv.invoiceNo}
-                          className="group flex items-center gap-2 rounded-xl border border-amber-400/30 bg-gradient-to-r from-amber-500/15 to-purple-500/10 px-3 py-2 text-xs font-bold text-white shadow-sm transition hover:border-amber-400/60"
-                        >
-                          <Receipt size={13} className="text-amber-400 shrink-0" />
-                          <span className="font-mono text-sm font-extrabold text-amber-300">
-                            #{inv.invoiceNo}
-                          </span>
-                          {inv.amount !== undefined && (
-                            <span className="rounded-md bg-black/40 px-1.5 py-0.5 text-[11px] font-semibold text-white/80">
-                              SAR {fmt(inv.amount)}
-                            </span>
-                          )}
-                          <span className="text-[10px] text-white/40">{inv.time}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveBankInvoice(inv.invoiceNo)}
-                            className="ml-0.5 text-white/35 hover:text-rose-400 transition"
-                            title="Remove invoice"
-                          >
-                            <Trash2 size={12} />
-                          </button>
-                        </div>
-                      ))}
-                      {preLoggedBankInvoices.length === 0 && (
-                        <p className="text-xs text-white/40 italic py-4">
-                          No bank/POS invoices logged yet today.
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-5 rounded-2xl border border-white/10 bg-black/25 p-3.5 text-xs text-white/60 flex items-center gap-2.5">
-                  <Sparkles size={15} className="text-amber-400 shrink-0" />
-                  <span>
-                    When the Fujishka ERP CSV is uploaded during <strong className="text-white">Start Tracking</strong>, these invoice numbers are automatically classified as Bank/Swipe!
-                  </span>
-                </div>
-              </div>
-
-              {/* Widget B: Quick Daytime Expense & Cash-In Logger (7 cols) */}
-              <div className="lg:col-span-7 flex flex-col justify-between rounded-3xl border border-white/12 bg-white/[0.04] p-6 backdrop-blur-2xl shadow-xl">
-                <div>
-                  <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-                    <div className="flex items-center gap-2.5">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-500/20 border border-purple-400/30 text-purple-300">
-                        <Landmark size={20} />
-                      </div>
-                      <div>
-                        <h3 className="font-display text-base font-bold tracking-tight text-white">
-                          Quick Daytime Expense &amp; Cash-In Logger
-                        </h3>
-                        <p className="text-xs text-white/55">
-                          Record ad-hoc shift movements using official Jubail Corp sheet categories
-                        </p>
-                      </div>
-                    </div>
-                    <span className="rounded-full bg-purple-500/20 border border-purple-400/30 px-2.5 py-0.5 text-[11px] font-bold text-purple-300">
-                      {preLoggedEntries.length} Recorded Today
-                    </span>
-                  </div>
-
-                  {/* Category Toggle Pills (Exact Jubail Corp Sheet Terminology) */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3.5">
-                    {(
-                      [
-                        { id: "EXPENSE", label: "Expense (Out)" },
-                        { id: "CREDIT_RECD", label: "Credit Sale Amt Recd (In)" },
-                        { id: "LOAN_IN", label: "Loan In" },
-                        { id: "OTHER_IN", label: "Other Amt Recd" },
-                      ] as { id: PreLoggedEntryType; label: string }[]
-                    ).map((tabOption) => {
-                      const active = entryType === tabOption.id;
-                      return (
+                  {bankModeInput === "POS_SWIPE" && (
+                    <div className="inline-flex rounded-xl bg-black/50 p-1 border border-amber-400/30">
+                      {(["SAB", "AL_RAJHI"] as PosTerminalBank[]).map((term) => (
                         <button
-                          key={tabOption.id}
+                          key={term}
                           type="button"
-                          onClick={() => setEntryType(tabOption.id)}
-                          className={`rounded-xl px-3 py-2 text-xs font-bold transition-all text-center truncate ${
-                            active
-                              ? "bg-gradient-to-r from-purple-500 to-amber-500 text-slate-950 shadow-md shadow-purple-500/20 font-extrabold"
-                              : "border border-white/10 bg-black/30 text-white/70 hover:bg-white/10 hover:text-white"
+                          onClick={() => setBankTerminalInput(term)}
+                          className={`rounded-lg px-3 py-2 text-xs font-extrabold transition ${
+                            bankTerminalInput === term
+                              ? "bg-amber-400 text-slate-950"
+                              : "text-white/65 hover:text-white"
                           }`}
                         >
-                          {tabOption.label}
+                          {POS_TERMINAL_META[term].shortLabel} ({POS_TERMINAL_META[term].feePctLabel})
                         </button>
-                      );
-                    })}
-                  </div>
+                      ))}
+                    </div>
+                  )}
 
-                  {/* Input Row */}
-                  <form onSubmit={handleQuickRecord} className="flex flex-col sm:flex-row gap-2.5">
-                    <input
-                      type="text"
-                      value={entryTitle}
-                      onChange={(e) => setEntryTitle(e.target.value)}
-                      placeholder="Title / Cause (e.g. Food, Cleaner, Wash, Leave Salary, Chivago)"
-                      className="flex-1 rounded-xl border border-white/15 bg-black/35 px-3.5 py-2.5 text-sm font-semibold text-white placeholder:text-white/35 outline-none focus:border-purple-400/70 focus:ring-2 focus:ring-purple-400/20"
-                    />
+                  <button
+                    type="submit"
+                    className="flex items-center justify-center gap-2 rounded-xl bg-amber-400 hover:bg-amber-300 px-6 py-3 text-sm font-extrabold text-slate-950 transition shrink-0 whitespace-nowrap"
+                  >
+                    <Plus size={16} strokeWidth={2.5} />
+                    <span>+ Add Invoice</span>
+                  </button>
+                </form>
+
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  {preLoggedBankInvoices.map((inv) => (
+                    <div
+                      key={inv.invoiceNo}
+                      className="inline-flex items-center gap-2 rounded-xl border border-amber-400/30 bg-amber-500/10 px-3.5 py-1.5 text-xs font-bold text-white"
+                    >
+                      <span className="font-mono font-extrabold text-amber-300">#{inv.invoiceNo}</span>
+                      <span className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-extrabold text-purple-200">
+                        {inv.paymentMode === "BANK_TRANSFER"
+                          ? "Bank Transfer (0%)"
+                          : `${POS_TERMINAL_META[inv.posTerminal || "SAB"].shortLabel} (${POS_TERMINAL_META[inv.posTerminal || "SAB"].feePctLabel})`}
+                      </span>
+                      {inv.amount !== undefined && (
+                        <span className="text-white/75">SAR {fmt(inv.amount)}</span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveBankInvoice(inv.invoiceNo)}
+                        className="text-white/35 hover:text-rose-400 transition"
+                        title="Remove invoice"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="pt-5 space-y-4">
+                <form onSubmit={handleQuickRecord} className="space-y-3">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <select
+                      value={entryType}
+                      onChange={(e) => setEntryType(e.target.value as PreLoggedEntryType)}
+                      className="rounded-xl border border-white/15 bg-[#160f26] px-4 py-3 text-sm font-bold text-white outline-none"
+                    >
+                      <option value="EXPENSE">Expense / Purchase</option>
+                      <option value="CREDIT_RECD">Credit Sale Amt Recd</option>
+                      <option value="CREDIT_SALE">Credit Sale (New Customer Credit)</option>
+                      <option value="LOAN_IN">Loan In</option>
+                      <option value="OTHER_IN">Other Amt Recd</option>
+                    </select>
+
+                    {entryType === "EXPENSE" ? (
+                      <>
+                        <select
+                          value={hubExpenseCat}
+                          onChange={(e) => setHubExpenseCat(e.target.value as StrictExpenseCategory)}
+                          className="rounded-xl border border-amber-400/40 bg-[#160f26] px-4 py-3 text-sm font-extrabold text-amber-300 outline-none"
+                        >
+                          {STRICT_EXPENSE_CATEGORIES.map((cat) => (
+                            <option key={cat} value={cat}>
+                              {cat}
+                            </option>
+                          ))}
+                        </select>
+
+                        {(hubExpenseCat === "Credit Purchase" ||
+                          hubExpenseCat === "Cash Purchase" ||
+                          hubExpenseCat === "Bank Purchase") && (
+                          <input
+                            type="text"
+                            list="hub-suppliers-list"
+                            value={hubSupplierName}
+                            onChange={(e) => setHubSupplierName(e.target.value)}
+                            placeholder="Supplier Name (e.g. Jotun, Hempel)"
+                            className="flex-1 min-w-[180px] rounded-xl border border-purple-400/40 bg-black/40 px-4 py-3 text-sm font-bold text-white placeholder:text-white/40 outline-none"
+                          />
+                        )}
+                        <datalist id="hub-suppliers-list">
+                          <option value="Jotun" />
+                          <option value="Hempel" />
+                          <option value="Sigma" />
+                        </datalist>
+
+                        {hubExpenseCat === "Credit Purchase" && (
+                          <div className="flex items-center gap-2 rounded-xl border border-amber-400/40 bg-black/40 px-3 py-2">
+                            <span className="text-[11px] font-bold text-amber-300 whitespace-nowrap">Due Date:</span>
+                            <input
+                              type="date"
+                              value={hubDueDate}
+                              onChange={(e) => setHubDueDate(e.target.value)}
+                              className="bg-transparent text-xs font-bold text-white outline-none"
+                            />
+                          </div>
+                        )}
+
+                        <input
+                          type="text"
+                          value={entryTitle}
+                          onChange={(e) => setEntryTitle(e.target.value)}
+                          placeholder="Optional note / details..."
+                          className="flex-1 min-w-[160px] rounded-xl border border-white/15 bg-black/35 px-4 py-3 text-sm font-semibold text-white placeholder:text-white/35 outline-none"
+                        />
+                      </>
+                    ) : entryType === "CREDIT_RECD" || entryType === "CREDIT_SALE" ? (
+                      <>
+                        <input
+                          type="text"
+                          list="erp-invoices-datalist"
+                          value={hubReceiptNo}
+                          onChange={(e) => handleHubInvoiceInput(e.target.value)}
+                          placeholder={
+                            entryType === "CREDIT_SALE"
+                              ? "Invoice # (e.g. 30064)"
+                              : "Receipt / Inv # (opt)"
+                          }
+                          className="w-44 rounded-xl border border-amber-400/50 bg-black/50 px-3.5 py-3 font-mono text-sm font-extrabold text-amber-300 placeholder:font-sans placeholder:text-white/40 outline-none focus:border-amber-300"
+                        />
+                        <input
+                          type="text"
+                          value={hubCustomerName}
+                          onChange={(e) => setHubCustomerName(e.target.value)}
+                          placeholder="Customer Name (auto-fills from ERP #)"
+                          className="flex-1 min-w-[200px] rounded-xl border border-emerald-400/40 bg-black/40 px-4 py-3 text-sm font-bold text-white placeholder:text-white/40 outline-none"
+                        />
+                        <div className="flex items-center gap-2 rounded-xl border border-emerald-400/40 bg-black/40 px-3 py-2">
+                          <span className="text-[11px] font-bold text-emerald-300 whitespace-nowrap">
+                            Follow-up Date:
+                          </span>
+                          <input
+                            type="date"
+                            value={hubFollowUpDate}
+                            onChange={(e) => setHubFollowUpDate(e.target.value)}
+                            className="bg-transparent text-xs font-bold text-white outline-none"
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      <input
+                        type="text"
+                        value={entryTitle}
+                        onChange={(e) => setEntryTitle(e.target.value)}
+                        placeholder="Source / Note for this amount..."
+                        className="flex-1 min-w-[200px] rounded-xl border border-white/15 bg-black/35 px-4 py-3 text-sm font-semibold text-white placeholder:text-white/35 outline-none"
+                      />
+                    )}
+
                     <input
                       type="number"
                       step="0.01"
                       value={entryAmount}
                       onChange={(e) => setEntryAmount(e.target.value)}
                       placeholder="Amount (SAR)"
-                      className="w-full sm:w-36 rounded-xl border border-white/15 bg-black/35 px-3.5 py-2.5 text-sm font-semibold text-white placeholder:text-white/35 outline-none focus:border-purple-400/70 focus:ring-2 focus:ring-purple-400/20"
+                      className="w-40 rounded-xl border border-white/15 bg-black/35 px-4 py-3 text-sm font-extrabold text-white placeholder:text-white/35 outline-none"
                     />
+
                     <button
                       type="submit"
-                      className="flex items-center justify-center gap-1.5 rounded-xl bg-purple-500 hover:bg-purple-400 px-4 py-2.5 text-xs font-extrabold uppercase tracking-wider text-white transition shrink-0 shadow-md shadow-purple-500/25"
+                      className="flex items-center justify-center gap-1.5 rounded-xl bg-purple-500 hover:bg-purple-400 px-6 py-3 text-sm font-extrabold text-white transition shrink-0 whitespace-nowrap"
                     >
-                      <Plus size={15} strokeWidth={2.5} />
-                      Quick Record
+                      <Plus size={16} strokeWidth={2.5} />
+                      <span>+ Record</span>
                     </button>
-                  </form>
+                  </div>
 
-                  {/* Compact Feed of Today's Pre-Logged Items */}
-                  <div className="mt-5">
-                    <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider text-white/45 mb-2.5">
-                      <span>Today&apos;s Pre-Logged Shift Feed</span>
-                      <span>Auto-detected at EOD</span>
-                    </div>
-                    <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                  {/* Glowing ERP Match Pill inside Daytime Quick-Logger */}
+                  {(entryType === "CREDIT_SALE" || entryType === "CREDIT_RECD") &&
+                    matchedHubInvoice && (
+                      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-400/50 bg-gradient-to-r from-amber-500/20 via-purple-500/20 to-emerald-500/20 px-4 py-2.5 text-xs font-extrabold text-amber-200 shadow-[0_0_25px_rgba(245,158,11,0.2)]">
+                        <span>
+                          ✨ ERP Invoice #{matchedHubInvoice.invoiceNo} Matched:{" "}
+                          <strong className="text-white">{matchedHubInvoice.customer}</strong> — SAR{" "}
+                          {fmt(matchedHubInvoice.amount)}
+                        </span>
+                        <span className="rounded-full bg-black/40 border border-white/15 px-2.5 py-0.5 text-[10px] font-bold text-emerald-300">
+                          Auto-filled Customer &amp; SAR · Reclassifies as Credit Sale
+                        </span>
+                      </div>
+                    )}
+                </form>
+
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowRecordedFeed(!showRecordedFeed)}
+                    className="text-xs font-bold text-white/55 hover:text-white transition"
+                  >
+                    {showRecordedFeed ? "▾" : "▸"} Today&apos;s Recorded Items ({preLoggedEntries.length})
+                  </button>
+
+                  {showRecordedFeed && (
+                    <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2.5">
                       {preLoggedEntries.map((entry) => {
                         const meta = entryTypeMeta[entry.type];
                         return (
                           <div
                             key={entry.id}
-                            className="flex items-center justify-between rounded-xl border border-white/10 bg-black/30 px-3.5 py-2.5 text-sm transition hover:border-white/25"
+                            className="flex items-center justify-between rounded-xl border border-white/10 bg-black/30 px-3.5 py-2.5 text-xs"
                           >
-                            <div className="flex items-center gap-3 min-w-0">
-                              <span
-                                className={`rounded-md border px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider shrink-0 ${meta.badgeClass}`}
-                              >
-                                {meta.shortBadge}
-                              </span>
-                              <span className="font-semibold text-white truncate">
-                                {entry.title}
-                              </span>
-                              <span className="text-[11px] text-white/40 shrink-0">
-                                {entry.time}
-                              </span>
+                            <div className="flex flex-col min-w-0 pr-2">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className={`rounded border px-1.5 py-0.5 text-[10px] font-bold shrink-0 ${meta.badgeClass}`}>
+                                  {entry.expenseCategory || meta.label}
+                                </span>
+                                {entry.receiptNo && (
+                                  <span className="font-mono text-[11px] font-extrabold text-amber-300 shrink-0">
+                                    {entry.receiptNo}
+                                  </span>
+                                )}
+                                <span className="font-bold text-white truncate">{entry.title}</span>
+                              </div>
+                              {(entry.dueDate || entry.followUpDate) && (
+                                <span className="text-[10px] text-amber-300/80 mt-0.5">
+                                  {entry.dueDate
+                                    ? `Due: ${entry.dueDate}`
+                                    : `🔔 Reminder: ${entry.followUpDate}${entry.receiptNo ? ` · Inv ${entry.receiptNo}` : ""}`}
+                                </span>
+                              )}
                             </div>
-
-                            <div className="flex items-center gap-3 shrink-0">
-                              <span
-                                className={`font-display text-sm font-extrabold ${
-                                  meta.isOutflow ? "text-rose-400" : "text-emerald-400"
-                                }`}
-                              >
-                                {meta.isOutflow ? "-" : "+"}
-                                {fmt(entry.amount)} SAR
+                            <div className="flex items-center gap-2.5 shrink-0">
+                              <span className={`font-display font-extrabold whitespace-nowrap ${meta.isOutflow ? "text-rose-400" : entry.type === "CREDIT_SALE" ? "text-indigo-300" : "text-emerald-400"}`}>
+                                {meta.isOutflow ? "-" : entry.type === "CREDIT_SALE" ? "" : "+"}SAR {fmt(entry.amount)}
                               </span>
                               <button
                                 type="button"
                                 onClick={() => handleRemoveEntry(entry.id)}
-                                className="text-white/35 hover:text-rose-400 transition"
-                                title="Delete entry"
+                                className="text-white/35 hover:text-rose-400"
                               >
-                                <Trash2 size={13} />
+                                <Trash2 size={12} />
                               </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Closed Register History */}
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/25 px-5 py-3.5 text-xs text-white/60 backdrop-blur-md">
+            <span className="font-bold text-white/50">
+              Recent Closed Registers ({completedDaysLog.length})
+            </span>
+            <div className="flex flex-wrap items-center gap-2.5">
+              {completedDaysLog.map((d) => (
+                <span
+                  key={d.date}
+                  className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-white/85"
+                >
+                  <Check size={12} className="text-emerald-400" />
+                  <span>{d.date}</span>
+                  <span className="text-white/30">·</span>
+                  <strong className="text-amber-300">Closing: SAR {fmt(d.closingBalance)}</strong>
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Shared Datalist of Today's 18 ERP Invoices (30062 to 30079) for Instant Auto-Lookup */}
+      <datalist id="erp-invoices-datalist">
+        {activeErpList.map((inv) => (
+          <option
+            key={inv.invoiceNo}
+            value={inv.invoiceNo}
+            label={`#${inv.invoiceNo} — ${inv.customer} (SAR ${fmt(inv.amount)})`}
+          />
+        ))}
+      </datalist>
+
+      {/* ════════════════════════════════════════════════════════════════════
+          MODE 2: WIDESCREEN 5-STEP GUIDED WIZARD (trackingMode === 'wizard')
+         ════════════════════════════════════════════════════════════════════ */}
+      {trackingMode === "wizard" && (
+        <div className="relative z-10 max-w-7xl w-full mx-auto px-6 py-6 lg:py-8 flex flex-col gap-6">
+          {/* Calm Top Step Navigation Bar */}
+          <div className="rounded-2xl border border-white/15 bg-white/[0.04] px-5 py-4 backdrop-blur-2xl shadow-xl">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <button
+                onClick={() => setTrackingMode("hub")}
+                className="flex items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-3.5 py-2 text-xs sm:text-sm font-bold text-white transition hover:bg-white/20"
+              >
+                <ArrowLeft size={15} />
+                <span>Daily Hub</span>
+              </button>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {([1, 2, 3, 4, 5] as WizardStep[]).map((s) => {
+                  const active = wizardStep === s;
+                  const done = wizardStep > s;
+                  const labels: Record<WizardStep, string> = {
+                    1: "1. Import Sales",
+                    2: "2. Bank & POS Match",
+                    3: "3. Cash Inflows",
+                    4: "4. Expenses",
+                    5: "5. Final Audit",
+                  };
+                  return (
+                    <button
+                      key={s}
+                      onClick={() => {
+                        if (erpInvoices.length === 0 && s > 1) {
+                          setErpInvoices(buildMatchedErpList());
+                        }
+                        setWizardStep(s);
+                      }}
+                      className={`rounded-xl px-3.5 py-2 text-xs font-bold transition-all ${
+                        active
+                          ? "bg-gradient-to-r from-amber-400 to-purple-500 text-slate-950 font-extrabold shadow-md"
+                          : done
+                          ? "bg-emerald-500/20 text-emerald-300 border border-emerald-400/30"
+                          : "bg-white/5 text-white/55 hover:text-white"
+                      }`}
+                    >
+                      {done ? `✓ ${labels[s]}` : labels[s]}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="mt-3.5 h-1 w-full overflow-hidden rounded-full bg-white/10">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-amber-400 via-purple-500 to-emerald-400 transition-all duration-500"
+                style={{ width: `${(wizardStep / 5) * 100}%` }}
+              />
+            </div>
+          </div>
+
+          {/* ──────────────────────────────────────────────────────────────
+              STEP 1: IMPORT TODAY'S ERP SALES (CALM & CENTERED)
+             ────────────────────────────────────────────────────────────── */}
+          {wizardStep === 1 && (
+            <div className="mx-auto my-6 flex w-full max-w-2xl flex-col items-center justify-center rounded-3xl border border-white/15 bg-white/[0.04] p-10 sm:p-14 text-center backdrop-blur-2xl shadow-2xl">
+              <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400/20 to-purple-500/20 border border-amber-400/40 text-amber-300">
+                <UploadCloud size={34} />
+              </div>
+
+              <h2 className="font-display text-2xl sm:text-3xl font-extrabold text-white">
+                Import Today&apos;s ERP Sales
+              </h2>
+              <p className="mt-2 text-sm text-white/60">
+                Drop your daily CSV export or load today&apos;s 18 Jubail invoices in one click.
+              </p>
+
+              <label className="mt-7 flex w-full cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-white/20 bg-black/25 px-6 py-10 transition hover:border-amber-400/60 hover:bg-white/[0.04]">
+                <UploadCloud size={28} className="text-amber-300 mb-2.5" />
+                <span className="text-sm font-bold text-white">
+                  Drop ERP `.csv` file here or click to browse
+                </span>
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={handleSimulateCsvUpload}
+                  className="hidden"
+                />
+              </label>
+
+              <button
+                type="button"
+                onClick={handleSimulateCsvUpload}
+                className="mt-6 flex items-center gap-2.5 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-500 to-purple-600 px-7 py-4 text-sm sm:text-base font-extrabold text-slate-950 shadow-[0_0_30px_rgba(245,158,11,0.4)] transition hover:scale-[1.02]"
+              >
+                <Zap size={18} className="text-slate-950" />
+                <span>⚡ Load Today&apos;s ERP Batch (18 Invoices)</span>
+              </button>
+
+              {csvLoadedBanner && (
+                <div className="mt-5 inline-flex items-center gap-2 rounded-xl border border-emerald-400/40 bg-emerald-500/20 px-4 py-2 text-xs font-bold text-emerald-200">
+                  <Check size={15} className="text-emerald-300" />
+                  <span>18 ERP Invoices Loaded (SAR 44,909.00)</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ──────────────────────────────────────────────────────────────
+              STEP 2: VERIFY BANK SWIPES (SAB / AL RAJHI POS FEES) & CASH SALES
+             ────────────────────────────────────────────────────────────── */}
+          {wizardStep === 2 && (
+            <div className="flex flex-col gap-5 rounded-3xl border border-white/15 bg-white/[0.04] p-6 sm:p-8 backdrop-blur-2xl shadow-2xl">
+              {/* Header + 3-Card Summary Header */}
+              <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 pb-5 border-b border-white/10">
+                <div>
+                  <h2 className="font-display text-2xl font-extrabold text-white">
+                    Verify Bank Swipes &amp; Cash Sales
+                  </h2>
+                  <p className="mt-1 text-sm text-white/60">
+                    Choose Cash Sale, Bank Transfer (0%), Swipe (POS: SAB 0.85% / Al Rajhi 0.80%), or Other Amt Recd.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 shrink-0">
+                  <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3">
+                    <span className="block text-xs font-semibold text-emerald-200/80">
+                      Cash Drawer Sales ({cashSaleInvoices.length})
+                    </span>
+                    <span className="font-display text-lg font-extrabold text-emerald-300 whitespace-nowrap">
+                      SAR {fmt(cashSalesTotal)}
+                    </span>
+                  </div>
+
+                  <div className="rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3">
+                    <span className="block text-xs font-semibold text-rose-200/80">
+                      Total POS Terminal Fees
+                    </span>
+                    <span className="font-display text-lg font-extrabold text-rose-300 whitespace-nowrap">
+                      -SAR {fmt(totalPosFees)}
+                    </span>
+                    <span className="block text-[10px] text-rose-200/60">
+                      SAB (0.85%) &amp; Al Rajhi (0.80%)
+                    </span>
+                  </div>
+
+                  <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 px-4 py-3">
+                    <span className="block text-xs font-semibold text-amber-200/80">
+                      Net Bank Settlement ({bankSwipeInvoices.length})
+                    </span>
+                    <span className="font-display text-lg font-extrabold text-amber-300 whitespace-nowrap">
+                      SAR {fmt(bankSwipeNetTotal)}
+                    </span>
+                    <span className="block text-[10px] text-amber-200/60">
+                      Gross: SAR {fmt(bankSwipeGrossTotal)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Clean Table of 18 Invoices with 4 Payment Options + SAB / Al Rajhi Fee Breakdown */}
+              <div className="divide-y divide-white/10 rounded-2xl border border-white/10 bg-black/30 overflow-hidden">
+                {activeErpList.map((inv) => {
+                  const isBankOrPos =
+                    inv.paymentMode === "BANK_TRANSFER" || inv.paymentMode === "POS_SWIPE";
+                  const isPosSwipe = inv.paymentMode === "POS_SWIPE";
+                  const isOtherRecd = inv.paymentMode === "OTHER_RECD";
+                  const isCreditSaleInv = inv.paymentMode === "CREDIT_SALE";
+                  const posFee = calcInvoicePosFee(inv);
+                  const netBank = calcInvoiceNetBank(inv);
+                  const termMeta = POS_TERMINAL_META[inv.posTerminal || "SAB"];
+
+                  return (
+                    <div
+                      key={inv.invoiceNo}
+                      className={`flex flex-col gap-2.5 px-5 py-3.5 transition ${
+                        isBankOrPos
+                          ? "bg-amber-500/[0.07]"
+                          : isCreditSaleInv
+                          ? "bg-indigo-500/[0.10]"
+                          : isOtherRecd
+                          ? "bg-purple-500/[0.08]"
+                          : "hover:bg-white/[0.03]"
+                      }`}
+                    >
+                      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span className="font-mono text-sm font-extrabold text-amber-300 w-16 shrink-0">
+                            #{inv.invoiceNo}
+                          </span>
+                          <span className="text-sm font-semibold text-white truncate">
+                            {inv.customer}
+                          </span>
+                          {inv.autoMatched && isBankOrPos && (
+                            <span className="rounded-full bg-amber-400/20 border border-amber-300/40 px-2.5 py-0.5 text-[10px] font-bold text-amber-200 shrink-0">
+                              ✓ Auto-Matched
+                            </span>
+                          )}
+                          {isCreditSaleInv && (
+                            <span className="rounded-full bg-indigo-500/25 border border-indigo-400/40 px-2.5 py-0.5 text-[10px] font-extrabold text-indigo-200 shrink-0">
+                              🔔 Credit Sale · Synced to Credit Radar
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex flex-wrap items-center justify-between lg:justify-end gap-4 shrink-0">
+                          <span
+                            className={`font-display text-sm font-extrabold w-28 text-right whitespace-nowrap ${
+                              isBankOrPos
+                                ? "text-amber-300"
+                                : isCreditSaleInv
+                                ? "text-indigo-300"
+                                : isOtherRecd
+                                ? "text-purple-300"
+                                : "text-emerald-300"
+                            }`}
+                          >
+                            SAR {fmt(inv.amount)}
+                          </span>
+
+                          {/* 4-Option Payment Method Selector */}
+                          <div className="inline-flex flex-wrap rounded-xl bg-black/50 p-1 border border-white/10 gap-0.5">
+                            <button
+                              type="button"
+                              onClick={() => handleSetInvoiceMode(inv.invoiceNo, "CASH")}
+                              className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${
+                                inv.paymentMode === "CASH"
+                                  ? "bg-emerald-500 text-slate-950 font-extrabold"
+                                  : "text-white/55 hover:text-white"
+                              }`}
+                            >
+                              Cash Sale
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleSetInvoiceMode(inv.invoiceNo, "BANK_TRANSFER")}
+                              className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${
+                                inv.paymentMode === "BANK_TRANSFER"
+                                  ? "bg-sky-400 text-slate-950 font-extrabold"
+                                  : "text-white/55 hover:text-white"
+                              }`}
+                            >
+                              Bank Transfer
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleSetInvoiceMode(inv.invoiceNo, "POS_SWIPE")}
+                              className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${
+                                inv.paymentMode === "POS_SWIPE"
+                                  ? "bg-amber-400 text-slate-950 font-extrabold"
+                                  : "text-white/55 hover:text-white"
+                              }`}
+                            >
+                              Swipe (POS)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleSetInvoiceMode(inv.invoiceNo, "OTHER_RECD")}
+                              className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${
+                                inv.paymentMode === "OTHER_RECD"
+                                  ? "bg-purple-400 text-slate-950 font-extrabold"
+                                  : "text-white/55 hover:text-white"
+                              }`}
+                            >
+                              Other Amt Recd
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Conditional Sub-Row for Swipe (POS): SAB vs Al Rajhi + Live POS Fee Breakdown */}
+                      {isPosSwipe && (
+                        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-400/25 bg-black/40 px-4 py-2 text-xs">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-amber-200/80">Card Machine:</span>
+                            <div className="inline-flex rounded-lg bg-black/60 p-0.5 border border-white/10">
+                              {(["SAB", "AL_RAJHI"] as PosTerminalBank[]).map((term) => (
+                                <button
+                                  key={term}
+                                  type="button"
+                                  onClick={() => handleSetInvoiceTerminal(inv.invoiceNo, term)}
+                                  className={`rounded-md px-2.5 py-1 text-[11px] font-extrabold transition ${
+                                    inv.posTerminal === term
+                                      ? "bg-amber-400 text-slate-950"
+                                      : "text-white/60 hover:text-white"
+                                  }`}
+                                >
+                                  {POS_TERMINAL_META[term].label} ({POS_TERMINAL_META[term].feePctLabel})
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2 font-mono text-xs">
+                            <span className="text-white/75">
+                              Gross: <strong className="text-white">SAR {fmt(inv.amount)}</strong>
+                            </span>
+                            <span className="text-white/30">|</span>
+                            <span className="text-rose-300">
+                              POS Fee ({termMeta.feePctLabel}): <strong>-SAR {fmt(posFee)}</strong>
+                            </span>
+                            <span className="text-white/30">|</span>
+                            <span className="rounded bg-amber-400/15 border border-amber-400/30 px-2 py-0.5 font-extrabold text-amber-300">
+                              Net to Bank: SAR {fmt(netBank)}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Conditional Sub-Row for Bank Transfer (0% Fee) */}
+                      {inv.paymentMode === "BANK_TRANSFER" && (
+                        <div className="flex items-center justify-between rounded-xl border border-sky-400/25 bg-black/40 px-4 py-1.5 text-xs">
+                          <span className="font-semibold text-sky-300">
+                            Direct Bank Transfer · 0% POS Terminal Fee
+                          </span>
+                          <span className="font-mono font-extrabold text-sky-200">
+                            Gross: SAR {fmt(inv.amount)} | POS Fee: SAR 0.00 | Net to Bank: SAR {fmt(inv.amount)}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Conditional Sub-Row for Other Amt Recd: Inline Note / Cause Input */}
+                      {isOtherRecd && (
+                        <div className="flex items-center gap-3 rounded-xl border border-purple-400/30 bg-black/40 px-4 py-2">
+                          <span className="text-xs font-bold text-purple-300 whitespace-nowrap">
+                            Cause / Note:
+                          </span>
+                          <input
+                            type="text"
+                            value={inv.otherNote || ""}
+                            onChange={(e) => handleSetInvoiceOtherNote(inv.invoiceNo, e.target.value)}
+                            placeholder="Add note / cause for this amount..."
+                            className="flex-1 bg-transparent text-xs font-semibold text-white placeholder:text-white/40 outline-none"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="flex items-center justify-between pt-2">
+                <button
+                  type="button"
+                  onClick={() => setWizardStep(1)}
+                  className="rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-xs font-bold text-white/80 hover:bg-white/10"
+                >
+                  ← Back
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWizardStep(3)}
+                  className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-400 to-purple-500 px-6 py-3 text-sm font-extrabold text-slate-950 shadow-lg transition hover:brightness-110"
+                >
+                  <span>Continue to Cash Inflows</span>
+                  <ArrowRight size={16} />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ──────────────────────────────────────────────────────────────
+              STEP 3: CREDIT & CASH INFLOWS (AUTO ERP INVOICE LOOKUP + CREDIT RADAR REMINDER SYNC)
+             ────────────────────────────────────────────────────────────── */}
+          {wizardStep === 3 && (
+            <div className="flex flex-col gap-6 rounded-3xl border border-white/15 bg-white/[0.04] p-6 sm:p-8 backdrop-blur-2xl shadow-2xl">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-5">
+                <div>
+                  <h2 className="font-display text-2xl font-extrabold text-white">
+                    Credit Sales, Receipts &amp; Opening Balance
+                  </h2>
+                  <p className="mt-1 text-sm text-white/60">
+                    Type an ERP Invoice # (e.g. 30064) on a Credit Sale to auto-fill Customer &amp; SAR and push a collection reminder to Credit Radar.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-3 rounded-2xl border border-amber-400/35 bg-amber-500/10 px-5 py-3 shrink-0">
+                  <div>
+                    <span className="block text-xs font-semibold text-amber-200/80">
+                      Opening Drawer Balance
+                    </span>
+                    {editingOpening ? (
+                      <div className="mt-1 flex items-center gap-2">
+                        <input
+                          type="number"
+                          value={openingEditInput}
+                          onChange={(e) => setOpeningEditInput(e.target.value)}
+                          className="w-28 rounded-lg border border-amber-300 bg-black/50 px-2.5 py-1 text-sm font-extrabold text-white outline-none"
+                          autoFocus
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const v = parseFloat(openingEditInput);
+                            if (!Number.isNaN(v) && v >= 0) {
+                              setOpeningBalanceOriginal(openingBalanceOriginal ?? openingBalance);
+                              setOpeningBalance(v);
+                            }
+                            setEditingOpening(false);
+                          }}
+                          className="rounded-lg bg-emerald-500 px-2.5 py-1 text-xs font-extrabold text-slate-950"
+                        >
+                          Save
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2.5">
+                        <span className="font-display text-xl font-extrabold text-white whitespace-nowrap">
+                          SAR {fmt(openingBalance)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOpeningEditInput(String(openingBalance));
+                            setEditingOpening(true);
+                          }}
+                          className="rounded-lg bg-white/10 px-2.5 py-1 text-xs font-bold text-amber-300 hover:bg-white/20"
+                        >
+                          Edit
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* 2-Panel Layout */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                {/* Left Panel (5 cols): Quick-Select Category Pills + ERP Invoice Auto-Lookup + Customer & Follow-up Date Inputs */}
+                <div className="lg:col-span-5 rounded-2xl border border-white/10 bg-black/30 p-5 flex flex-col gap-4">
+                  <span className="text-xs font-bold text-white/60">
+                    1. Quick-Select Source or ERP Credit Invoice
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { kind: "CREDIT_SALE" as const, title: "Retail · Jotashield Exterior", amt: "2300", rcp: "30064", date: "2026-09-20", label: "Inv #30064 (Credit Sale)" },
+                      { kind: "CREDIT_RECD" as const, title: "Chicago Credit Recd", amt: "12428", rcp: "RCP-1042", date: "2026-09-20", label: "Chicago Credit Recd" },
+                      { kind: "CREDIT_RECD" as const, title: "Al-Futtaim Contractors", amt: "15000", rcp: "RCP-1045", date: "2026-09-22", label: "Al-Futtaim Contractors" },
+                      { kind: "CREDIT_SALE" as const, title: "Eastern Paint Bros", amt: "6500", rcp: "30075", date: "2026-09-25", label: "Eastern Paint Bros" },
+                      { kind: "LOAN_IN" as const, title: "Shadab Loan In", amt: "2000", rcp: "", date: "2026-09-20", label: "Shadab Loan In" },
+                      { kind: "OTHER_IN" as const, title: "Return / From Bank", amt: "1000", rcp: "", date: "2026-09-20", label: "Return / From Bank" },
+                    ].map((preset) => {
+                      const active = step3Title === preset.title;
+                      return (
+                        <button
+                          key={preset.label}
+                          type="button"
+                          onClick={() => {
+                            setStep3Kind(preset.kind);
+                            setStep3Title(preset.title);
+                            setStep3Amount(preset.amt);
+                            setStep3FollowUpDate(preset.date);
+                            handleStep3InvoiceInput(preset.rcp);
+                          }}
+                          className={`rounded-xl px-3.5 py-2 text-xs font-bold transition ${
+                            active
+                              ? "bg-emerald-400 text-slate-950 font-extrabold"
+                              : "border border-white/15 bg-white/5 text-white hover:bg-white/10"
+                          }`}
+                        >
+                          {preset.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <form onSubmit={handleAddStep3Receipt} className="space-y-3 pt-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <select
+                        value={step3Kind}
+                        onChange={(e) =>
+                          setStep3Kind(
+                            e.target.value as "CREDIT_RECD" | "CREDIT_SALE" | "LOAN_IN" | "OTHER_IN"
+                          )
+                        }
+                        className="rounded-xl border border-white/15 bg-[#160f26] px-3 py-2.5 text-xs font-bold text-white outline-none"
+                      >
+                        <option value="CREDIT_SALE">Credit Sale (New Credit)</option>
+                        <option value="CREDIT_RECD">Credit Sale Amt Recd</option>
+                        <option value="LOAN_IN">Loan In</option>
+                        <option value="OTHER_IN">Other Amt Recd</option>
+                      </select>
+
+                      <input
+                        type="text"
+                        list="erp-invoices-datalist"
+                        value={step3ReceiptNo}
+                        onChange={(e) => handleStep3InvoiceInput(e.target.value)}
+                        placeholder={
+                          step3Kind === "CREDIT_SALE"
+                            ? "Invoice # (e.g. 30064)"
+                            : "Receipt # (opt)"
+                        }
+                        className="rounded-xl border border-amber-400/50 bg-black/50 px-3 py-2.5 font-mono text-xs font-extrabold text-amber-300 placeholder:font-sans placeholder:text-white/40 outline-none focus:border-amber-300"
+                      />
+                    </div>
+
+                    {/* Clickable ERP Invoice Selector Dropdown & Quick Pills when Credit Sale is active */}
+                    {step3Kind === "CREDIT_SALE" && (
+                      <div className="space-y-2 rounded-2xl border border-white/10 bg-black/40 p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[11px] font-bold text-amber-200/90">
+                            Quick-Pick Today&apos;s ERP Invoice (30062–30079):
+                          </span>
+                          <select
+                            value={cleanErpInvNo(step3ReceiptNo)}
+                            onChange={(e) => {
+                              if (e.target.value) handleStep3InvoiceInput(e.target.value);
+                            }}
+                            className="rounded-lg border border-amber-400/40 bg-[#160f26] px-2.5 py-1 text-[11px] font-bold text-amber-300 outline-none"
+                          >
+                            <option value="">Select ERP Invoice #...</option>
+                            {activeErpList.map((inv) => (
+                              <option key={inv.invoiceNo} value={inv.invoiceNo}>
+                                #{inv.invoiceNo} — {inv.customer} (SAR {fmt(inv.amount)})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="flex flex-wrap gap-1.5">
+                          {["30064", "30067", "30070", "30072", "30075", "30077"].map((invNo) => {
+                            const isSelected = cleanErpInvNo(step3ReceiptNo) === invNo;
+                            return (
+                              <button
+                                key={invNo}
+                                type="button"
+                                onClick={() => handleStep3InvoiceInput(invNo)}
+                                className={`rounded-lg px-2.5 py-1 font-mono text-[11px] font-extrabold transition ${
+                                  isSelected
+                                    ? "bg-amber-400 text-slate-950 shadow-sm"
+                                    : "border border-white/10 bg-white/5 text-amber-300 hover:bg-white/10"
+                                }`}
+                              >
+                                #{invNo}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Sleek Glowing ERP Invoice Match Pill */}
+                    {matchedStep3Invoice && (
+                      <div className="rounded-xl border border-amber-400/50 bg-gradient-to-r from-amber-500/20 via-purple-500/20 to-emerald-500/20 px-3.5 py-2.5 text-xs font-extrabold text-amber-200 shadow-[0_0_25px_rgba(245,158,11,0.25)]">
+                        ✨ ERP Invoice #{matchedStep3Invoice.invoiceNo} Matched:{" "}
+                        <span className="text-white">{matchedStep3Invoice.customer}</span> — SAR{" "}
+                        {fmt(matchedStep3Invoice.amount)}
+                      </div>
+                    )}
+
+                    <input
+                      type="text"
+                      value={step3Title}
+                      onChange={(e) => setStep3Title(e.target.value)}
+                      placeholder={
+                        step3Kind === "CREDIT_RECD" || step3Kind === "CREDIT_SALE"
+                          ? "Customer Name (auto-populates from ERP Invoice #)"
+                          : "Source or Note"
+                      }
+                      className="w-full rounded-xl border border-white/15 bg-black/40 px-4 py-3 text-sm font-semibold text-white placeholder:text-white/35 outline-none"
+                    />
+
+                    {(step3Kind === "CREDIT_RECD" || step3Kind === "CREDIT_SALE") && (
+                      <div className="flex items-center justify-between gap-3 rounded-xl border border-emerald-400/35 bg-emerald-500/10 px-4 py-2.5">
+                        <span className="text-xs font-bold text-emerald-200">
+                          Follow-up Reminder Date (Credit Radar):
+                        </span>
+                        <input
+                          type="date"
+                          value={step3FollowUpDate}
+                          onChange={(e) => setStep3FollowUpDate(e.target.value)}
+                          className="rounded-lg bg-black/40 px-3 py-1.5 text-xs font-bold text-white outline-none border border-white/15"
+                        />
+                      </div>
+                    )}
+
+                    <div className="flex gap-3">
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={step3Amount}
+                        onChange={(e) => setStep3Amount(e.target.value)}
+                        placeholder="Amount (SAR)"
+                        className="flex-1 rounded-xl border border-white/15 bg-black/40 px-4 py-3.5 font-display text-lg font-extrabold text-white placeholder:text-white/30 outline-none focus:border-emerald-400"
+                      />
+                      <button
+                        type="submit"
+                        className="rounded-xl bg-emerald-400 hover:bg-emerald-300 px-6 py-3.5 text-sm font-extrabold text-slate-950 transition shrink-0"
+                      >
+                        + Save &amp; Sync
+                      </button>
+                    </div>
+                  </form>
+                </div>
+
+                {/* Right Panel (7 cols): Live Table of Added Inflows & Reclassified Credit Sales */}
+                <div className="lg:col-span-7 rounded-2xl border border-white/10 bg-black/30 p-5 flex flex-col justify-between">
+                  <div>
+                    <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-white/10">
+                      <span className="text-xs font-bold text-white/60">
+                        Recorded Credit Sales &amp; Cash Inflows ({inflowEntries.length})
+                      </span>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <span className="rounded-lg border border-indigo-400/35 bg-indigo-500/15 px-3 py-1 font-display text-xs font-extrabold text-indigo-200 whitespace-nowrap">
+                          CREDIT INV. AMOUNT: SAR {fmt(totalCreditInvAmount)}
+                        </span>
+                        <span className="font-display text-sm font-extrabold text-emerald-300 whitespace-nowrap">
+                          Cash Inflows Total: SAR {fmt(totalPreLoggedInflows)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="divide-y divide-white/10 mt-2">
+                      {inflowEntries.map((item) => {
+                        const isEditing = editingRowId === item.id;
+                        const isCreditSaleRow = item.type === "CREDIT_SALE";
+                        return (
+                          <div key={item.id} className="flex items-center justify-between gap-3 py-3">
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                {item.receiptNo && (
+                                  <span className="font-mono text-xs font-extrabold text-amber-300">
+                                    {item.receiptNo}
+                                  </span>
+                                )}
+                                <p className="text-sm font-bold text-white truncate">{item.title}</p>
+                                {isCreditSaleRow && (
+                                  <span className="rounded bg-indigo-500/25 border border-indigo-400/40 px-2 py-0.5 text-[10px] font-extrabold text-indigo-200">
+                                    CREDIT INV. AMOUNT
+                                  </span>
+                                )}
+                                {item.followUpDate && (
+                                  <span className="rounded bg-emerald-500/20 border border-emerald-400/30 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
+                                    🔔 Reminder: {item.followUpDate}
+                                    {item.receiptNo ? ` · Inv ${item.receiptNo}` : ""}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-white/45 mt-0.5">
+                                {isCreditSaleRow
+                                  ? "Reclassified Credit Sale (Not counted in physical Cash Drawer) · Synced to Credit Radar"
+                                  : `${item.receiptNo ? `${item.receiptNo} · ` : ""}${entryTypeMeta[item.type].label}`}
+                              </p>
+                            </div>
+
+                            <div className="flex items-center gap-2.5 shrink-0">
+                              {isEditing ? (
+                                <>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    value={editingRowVal}
+                                    onChange={(e) => setEditingRowVal(e.target.value)}
+                                    className="w-28 rounded-lg border border-amber-400 bg-black/60 px-2.5 py-1 text-right text-sm font-extrabold text-white outline-none"
+                                    autoFocus
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSaveInlineEdit(item.id)}
+                                    className="rounded-lg bg-emerald-400 px-2.5 py-1 text-xs font-extrabold text-slate-950"
+                                  >
+                                    Save
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <span
+                                    className={`font-display text-sm font-extrabold whitespace-nowrap ${
+                                      isCreditSaleRow ? "text-indigo-300" : "text-emerald-400"
+                                    }`}
+                                  >
+                                    {isCreditSaleRow ? "" : "+"}SAR {fmt(item.amount)}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingRowId(item.id);
+                                      setEditingRowVal(String(item.amount));
+                                    }}
+                                    className="rounded-lg bg-white/10 px-2.5 py-1 text-xs font-bold text-white/70 hover:text-white"
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveEntry(item.id)}
+                                    className="text-white/35 hover:text-rose-400 p-1"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </>
+                              )}
                             </div>
                           </div>
                         );
@@ -919,186 +3035,2035 @@ function DailyRegisterView() {
                     </div>
                   </div>
                 </div>
+              </div>
 
-                {/* Recent Completed Days Log Strip */}
-                <div className="mt-5 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/10 bg-black/25 px-4 py-2.5 text-xs text-white/60">
-                  <span className="font-semibold text-white/75">
-                    Recent Closed Registers ({completedDaysLog.length}):
+              <div className="flex items-center justify-between pt-2">
+                <button
+                  type="button"
+                  onClick={() => setWizardStep(2)}
+                  className="rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-xs font-bold text-white/80 hover:bg-white/10"
+                >
+                  ← Back
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWizardStep(4)}
+                  className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-400 to-purple-500 px-6 py-3 text-sm font-extrabold text-slate-950 shadow-lg transition hover:brightness-110"
+                >
+                  <span>Continue to Expenses &amp; Purchases</span>
+                  <ArrowRight size={16} />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ──────────────────────────────────────────────────────────────
+              STEP 4: EXPENSES & SUPPLIER PURCHASES (STRICT 7 CATEGORIES + SUPPLIER SYNC)
+             ────────────────────────────────────────────────────────────── */}
+          {wizardStep === 4 && (
+            <div className="flex flex-col gap-6 rounded-3xl border border-white/15 bg-white/[0.04] p-6 sm:p-8 backdrop-blur-2xl shadow-2xl">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-5">
+                <div>
+                  <h2 className="font-display text-2xl font-extrabold text-white">
+                    Expenses &amp; Supplier Purchases
+                  </h2>
+                  <p className="mt-1 text-sm text-white/60">
+                    Select from the 7 official categories. Credit Purchases sync directly into Suppliers &amp; Payables.
+                  </p>
+                </div>
+                <span className="font-display text-lg font-extrabold text-rose-300 whitespace-nowrap">
+                  Total Outflows: SAR {fmt(totalPreLoggedExpenses)}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                {/* Left Panel (5 cols): Strict 7 Category Pills + Conditional Supplier & Due Date Inputs */}
+                <div className="lg:col-span-5 rounded-2xl border border-white/10 bg-black/30 p-5 flex flex-col gap-4">
+                  <span className="text-xs font-bold text-white/60">
+                    1. Select Category (Strict 7 Categories)
                   </span>
-                  <div className="flex flex-wrap items-center gap-3">
-                    {completedDaysLog.map((d) => (
-                      <span
-                        key={d.date}
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-white/80"
+
+                  <div className="flex flex-wrap gap-2">
+                    {STRICT_EXPENSE_CATEGORIES.map((category) => {
+                      const active = step4Category === category;
+                      const existing = expenseEntries.find(
+                        (e) =>
+                          e.expenseCategory === category ||
+                          e.title.trim().toLowerCase() === category.toLowerCase()
+                      );
+                      const defaultAmts: Record<StrictExpenseCategory, string> = {
+                        Food: "24",
+                        Water: "150",
+                        Salary: "1500",
+                        "Credit Purchase": "2000",
+                        "Cash Purchase": "640",
+                        "Bank Purchase": "1800",
+                        "Personal Reasons": "200",
+                      };
+                      return (
+                        <button
+                          key={category}
+                          type="button"
+                          onClick={() => {
+                            setStep4Category(category);
+                            setStep4Amount(
+                              existing ? String(existing.amount) : defaultAmts[category]
+                            );
+                          }}
+                          className={`rounded-xl px-3.5 py-2 text-xs font-bold transition ${
+                            active
+                              ? "bg-amber-400 text-slate-950 font-extrabold shadow-md"
+                              : existing
+                              ? "border border-emerald-400/40 bg-emerald-500/10 text-emerald-200"
+                              : "border border-white/15 bg-white/5 text-white hover:bg-white/10"
+                          }`}
+                        >
+                          {category} {existing ? `(${existing.amount} SAR)` : ""}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <form onSubmit={handleAddStep4Expense} className="space-y-3 pt-2">
+                    {/* Show Supplier Name when Credit Purchase, Cash Purchase, or Bank Purchase is selected */}
+                    {(step4Category === "Credit Purchase" ||
+                      step4Category === "Cash Purchase" ||
+                      step4Category === "Bank Purchase") && (
+                      <div className="space-y-2.5 rounded-2xl border border-purple-400/35 bg-purple-500/10 p-3.5">
+                        <div>
+                          <label className="block text-[11px] font-bold text-purple-200 mb-1">
+                            Supplier Name (Syncs to Suppliers &amp; Payables)
+                          </label>
+                          <input
+                            type="text"
+                            list="step4-suppliers-list"
+                            value={step4SupplierName}
+                            onChange={(e) => setStep4SupplierName(e.target.value)}
+                            placeholder="e.g. Jotun, Hempel, Sigma..."
+                            className="w-full rounded-xl border border-white/15 bg-black/50 px-3.5 py-2.5 text-sm font-bold text-white placeholder:text-white/35 outline-none focus:border-amber-400"
+                          />
+                          <datalist id="step4-suppliers-list">
+                            <option value="Jotun" />
+                            <option value="Hempel" />
+                            <option value="Sigma" />
+                          </datalist>
+                        </div>
+
+                        {step4Category === "Credit Purchase" && (
+                          <div className="flex items-center justify-between gap-3 pt-1">
+                            <span className="text-xs font-bold text-amber-300">
+                              Payment Due Date:
+                            </span>
+                            <input
+                              type="date"
+                              value={step4DueDate}
+                              onChange={(e) => setStep4DueDate(e.target.value)}
+                              className="rounded-lg border border-amber-400/40 bg-black/50 px-3 py-1.5 text-xs font-bold text-white outline-none"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <input
+                      type="text"
+                      value={step4Note}
+                      onChange={(e) => setStep4Note(e.target.value)}
+                      placeholder={`Optional note for ${step4Category}...`}
+                      className="w-full rounded-xl border border-white/15 bg-black/40 px-4 py-3 text-sm font-semibold text-white placeholder:text-white/35 outline-none"
+                    />
+
+                    <div className="flex gap-3">
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={step4Amount}
+                        onChange={(e) => setStep4Amount(e.target.value)}
+                        placeholder="Amount (SAR)"
+                        className="flex-1 rounded-xl border border-white/15 bg-black/40 px-4 py-3.5 font-display text-lg font-extrabold text-white placeholder:text-white/30 outline-none focus:border-amber-400"
+                      />
+                      <button
+                        type="submit"
+                        className="rounded-xl bg-rose-500 hover:bg-rose-400 px-6 py-3.5 text-sm font-extrabold text-white transition shrink-0"
                       >
-                        <Check size={12} className="text-emerald-400" />
-                        {d.date}: <strong className="text-amber-300">SAR {fmt(d.closingBalance)}</strong>
+                        + Save {step4Category === "Credit Purchase" ? "& Sync Bill" : "Expense"}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+
+                {/* Right Panel (7 cols): Clean Live Table of Added Expenses */}
+                <div className="lg:col-span-7 rounded-2xl border border-white/10 bg-black/30 p-5 flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                      <span className="text-xs font-bold text-white/60">
+                        Logged Expenses &amp; Supplier Purchases ({expenseEntries.length})
                       </span>
-                    ))}
+                      <span className="text-xs text-white/45">
+                        Deduplicated automatically
+                      </span>
+                    </div>
+
+                    <div className="divide-y divide-white/10 mt-2">
+                      {expenseEntries.map((item) => {
+                        const isEditing = editingRowId === item.id;
+                        return (
+                          <div key={item.id} className="flex items-center justify-between gap-3 py-3">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="rounded bg-rose-500/20 border border-rose-400/30 px-2 py-0.5 text-[10px] font-extrabold text-rose-300">
+                                  {item.expenseCategory || "Food"}
+                                </span>
+                                <p className="text-sm font-bold text-white truncate">{item.title}</p>
+                                {item.dueDate && (
+                                  <span className="rounded bg-amber-500/20 border border-amber-400/40 px-2 py-0.5 text-[10px] font-bold text-amber-300">
+                                    Due: {item.dueDate}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-white/45 mt-0.5">
+                                {item.supplierName ? `Supplier: ${item.supplierName} · ` : ""}
+                                {item.time}
+                              </p>
+                            </div>
+
+                            <div className="flex items-center gap-2.5 shrink-0">
+                              {isEditing ? (
+                                <>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    value={editingRowVal}
+                                    onChange={(e) => setEditingRowVal(e.target.value)}
+                                    className="w-28 rounded-lg border border-amber-400 bg-black/60 px-2.5 py-1 text-right text-sm font-extrabold text-white outline-none"
+                                    autoFocus
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSaveInlineEdit(item.id)}
+                                    className="rounded-lg bg-emerald-400 px-2.5 py-1 text-xs font-extrabold text-slate-950"
+                                  >
+                                    Save
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <span className="font-display text-sm font-extrabold text-rose-400 whitespace-nowrap">
+                                    -SAR {fmt(item.amount)}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingRowId(item.id);
+                                      setEditingRowVal(String(item.amount));
+                                    }}
+                                    className="rounded-lg bg-white/10 px-2.5 py-1 text-xs font-bold text-white/70 hover:text-white"
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveEntry(item.id)}
+                                    className="text-white/35 hover:text-rose-400 p-1"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               </div>
+
+              <div className="flex items-center justify-between pt-2">
+                <button
+                  type="button"
+                  onClick={() => setWizardStep(3)}
+                  className="rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-xs font-bold text-white/80 hover:bg-white/10"
+                >
+                  ← Back
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWizardStep(5)}
+                  className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-400 to-purple-500 px-6 py-3 text-sm font-extrabold text-slate-950 shadow-lg transition hover:brightness-110"
+                >
+                  <span>Open Final Audit Workbench</span>
+                  <ArrowRight size={16} />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ──────────────────────────────────────────────────────────────
+              STEP 5: FULL-WIDESCREEN EDITABLE AUDIT WORKBENCH WITH [⤢ EXPAND] ON ALL 3 BOXES
+             ────────────────────────────────────────────────────────────── */}
+          {wizardStep === 5 && (
+            <div className="flex flex-col gap-6 pb-8">
+              {/* Top Row — 4 Full-Width KPI Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="rounded-2xl border border-white/12 bg-white/[0.04] p-5 backdrop-blur-2xl">
+                  <span className="block text-xs font-semibold text-white/55">
+                    Total Cash In (Sales + Receipts)
+                  </span>
+                  <span className="mt-1.5 block font-display text-2xl font-extrabold text-emerald-400 whitespace-nowrap">
+                    SAR {fmt(totalCashInSalesAndReceipts)}
+                  </span>
+                  <span className="mt-1 block text-[11px] text-white/40">
+                    + Opening Float: SAR {fmt(openingBalance)}
+                  </span>
+                </div>
+
+                <div className="rounded-2xl border border-white/12 bg-white/[0.04] p-5 backdrop-blur-2xl">
+                  <span className="block text-xs font-semibold text-white/55">
+                    Net Bank / POS Settlement
+                  </span>
+                  <span className="mt-1.5 block font-display text-2xl font-extrabold text-amber-300 whitespace-nowrap">
+                    SAR {fmt(bankSwipeNetTotal)}
+                  </span>
+                  <span className="mt-1 block text-[11px] text-rose-300/80">
+                    Gross: SAR {fmt(bankSwipeGrossTotal)} · POS Fees: -SAR {fmt(totalPosFees)}
+                  </span>
+                </div>
+
+                <div className="rounded-2xl border border-white/12 bg-white/[0.04] p-5 backdrop-blur-2xl">
+                  <span className="block text-xs font-semibold text-white/55">
+                    Total Outflows (Expenses &amp; Purchases)
+                  </span>
+                  <span className="mt-1.5 block font-display text-2xl font-extrabold text-rose-400 whitespace-nowrap">
+                    SAR {fmt(totalMoneyOutDrawer)}
+                  </span>
+                  <span className="mt-1 block text-[11px] text-white/40">
+                    {expenseEntries.length} Recorded shop outflows
+                  </span>
+                </div>
+
+                <div className="rounded-2xl border border-amber-400/50 bg-gradient-to-br from-amber-500/20 via-purple-500/20 to-indigo-500/20 p-5 backdrop-blur-2xl shadow-[0_0_30px_rgba(245,158,11,0.18)]">
+                  <span className="block text-xs font-bold text-amber-300">
+                    Closing Drawer Balance
+                  </span>
+                  <span className="mt-1.5 block font-display text-2xl font-extrabold text-white whitespace-nowrap">
+                    SAR {fmt(calculatedClosingBalance)}
+                  </span>
+                  <span className="mt-1 block text-[11px] text-amber-200/70">
+                    Ready for final sign-off
+                  </span>
+                </div>
+              </div>
+
+              {/* Expanded Mode Banner if a Box is Expanded */}
+              {expandedAuditBox !== "NONE" && (
+                <div className="flex items-center justify-between rounded-2xl border border-amber-400/40 bg-amber-500/10 px-5 py-3 backdrop-blur-xl">
+                  <span className="text-xs sm:text-sm font-extrabold text-amber-200">
+                    ⤢ Focused Full-Width Mode:{" "}
+                    {expandedAuditBox === "MONEY_IN"
+                      ? "Money In — Cash Sales & Receipts"
+                      : expandedAuditBox === "EXPENSES"
+                      ? "Shop Expenses & Supplier Purchases"
+                      : "Bank / POS Transfers (SAB / Al Rajhi / Bank)"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setExpandedAuditBox("NONE")}
+                    className="flex items-center gap-1.5 rounded-xl bg-amber-400 px-4 py-1.5 text-xs font-extrabold text-slate-950 hover:bg-amber-300 transition"
+                  >
+                    <Minimize2 size={14} />
+                    <span>⤡ Collapse to 3-Box View</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Main Body — 3 Expandable Boxes */}
+              <div
+                className={`grid grid-cols-1 ${
+                  expandedAuditBox === "NONE" ? "lg:grid-cols-2" : "lg:grid-cols-1"
+                } gap-6 items-start`}
+              >
+                {/* ══════════════════════════════════════════════════════════
+                    BOX 1: Money In — Cash Sales & Receipts
+                   ══════════════════════════════════════════════════════════ */}
+                {(expandedAuditBox === "NONE" || expandedAuditBox === "MONEY_IN") && (
+                  <div className="rounded-3xl border border-white/15 bg-white/[0.04] p-6 backdrop-blur-2xl shadow-xl flex flex-col gap-4">
+                    <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-3.5">
+                      <div>
+                        <h3 className="font-display text-lg font-extrabold text-white">
+                          Money In — Cash Sales &amp; Receipts
+                        </h3>
+                        <p className="text-xs text-white/50">
+                          Includes 15% Saudi VAT breakdown, notes, and inline amount editing
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <span className="font-display text-base font-extrabold text-emerald-400 whitespace-nowrap">
+                          +SAR {fmt(totalMoneyInDrawer)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setExpandedAuditBox(
+                              expandedAuditBox === "MONEY_IN" ? "NONE" : "MONEY_IN"
+                            )
+                          }
+                          className="flex items-center gap-1.5 rounded-xl border border-white/20 bg-white/10 hover:bg-white/20 px-3 py-1.5 text-xs font-extrabold text-white transition"
+                        >
+                          {expandedAuditBox === "MONEY_IN" ? (
+                            <>
+                              <Minimize2 size={13} />
+                              <span>⤡ Collapse</span>
+                            </>
+                          ) : (
+                            <>
+                              <Maximize2 size={13} />
+                              <span>⤢ Expand</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="divide-y divide-white/10 rounded-2xl border border-white/10 bg-black/30 overflow-hidden">
+                      {/* Opening Float Row */}
+                      <div className="flex items-center justify-between gap-2 px-4 py-2.5 bg-white/[0.02]">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span className="font-mono text-xs font-bold text-amber-300 w-16 shrink-0">
+                            FLOAT
+                          </span>
+                          <span className="text-xs font-bold text-white truncate">
+                            Opening Drawer Balance
+                          </span>
+                          {openingBalanceOriginal !== undefined && (
+                            <span className="rounded bg-amber-500/20 border border-amber-400/40 px-1.5 py-0.5 text-[10px] font-bold text-amber-300">
+                              Orig: SAR {fmt(openingBalanceOriginal)}
+                            </span>
+                          )}
+                        </div>
+                        <span className="font-display text-xs font-extrabold text-emerald-300 whitespace-nowrap">
+                          +SAR {fmt(openingBalance)}
+                        </span>
+                      </div>
+
+                      {/* All Cash Sale & Other Amt Recd Invoices */}
+                      {cashSaleInvoices.map((inv) => {
+                        const rowKey = `erp-${inv.invoiceNo}`;
+                        const isEditing = editingRowId === rowKey;
+                        const netExclVat = inv.amount / 1.15;
+                        return (
+                          <div
+                            key={inv.invoiceNo}
+                            className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-4 py-2.5 hover:bg-white/[0.02] transition"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                              <span className="font-mono text-xs font-extrabold text-emerald-300 w-16 shrink-0">
+                                #{inv.invoiceNo}
+                              </span>
+                              <span className="text-xs font-semibold text-white truncate">
+                                {inv.customer}
+                              </span>
+                              {inv.paymentMode === "OTHER_RECD" && (
+                                <span className="rounded bg-purple-500/20 border border-purple-400/40 px-2 py-0.5 text-[10px] font-bold text-purple-200 shrink-0">
+                                  Other Recd{inv.otherNote ? `: ${inv.otherNote}` : ""}
+                                </span>
+                              )}
+                              {inv.originalAmount !== undefined && (
+                                <span className="rounded bg-amber-500/20 border border-amber-400/40 px-1.5 py-0.5 text-[10px] font-bold text-amber-300 shrink-0">
+                                  Orig: SAR {fmt(inv.originalAmount)}
+                                </span>
+                              )}
+                            </div>
+
+                            {expandedAuditBox === "MONEY_IN" && (
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  value={inv.otherNote || ""}
+                                  onChange={(e) =>
+                                    handleSetInvoiceOtherNote(inv.invoiceNo, e.target.value)
+                                  }
+                                  placeholder="Note / Cause..."
+                                  className="w-40 rounded-lg border border-white/15 bg-black/50 px-2.5 py-1 text-xs text-white placeholder:text-white/30 outline-none"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleSetInvoiceMode(inv.invoiceNo, "POS_SWIPE")}
+                                  className="rounded-lg border border-amber-400/30 bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold text-amber-300 hover:bg-amber-500/20"
+                                >
+                                  Move to POS Swipe →
+                                </button>
+                              </div>
+                            )}
+
+                            <div className="flex items-center justify-end gap-3 shrink-0">
+                              <span className="text-[11px] text-white/45 whitespace-nowrap">
+                                Excl. 15% VAT: SAR {fmt(netExclVat)}
+                              </span>
+
+                              {isEditing ? (
+                                <div className="flex items-center gap-1.5">
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    value={editingRowVal}
+                                    onChange={(e) => setEditingRowVal(e.target.value)}
+                                    className="w-24 rounded-lg border border-amber-400 bg-black/70 px-2 py-1 text-right text-xs font-extrabold text-white outline-none"
+                                    autoFocus
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSaveInlineEdit(rowKey)}
+                                    className="rounded-lg bg-emerald-400 px-2 py-1 text-[10px] font-extrabold text-slate-950"
+                                  >
+                                    Save
+                                  </button>
+                                </div>
+                              ) : (
+                                <>
+                                  <span className="font-display text-xs font-extrabold text-emerald-400 w-24 text-right whitespace-nowrap">
+                                    +SAR {fmt(inv.amount)}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingRowId(rowKey);
+                                      setEditingRowVal(String(inv.amount));
+                                    }}
+                                    className="rounded bg-white/10 px-2 py-0.5 text-[10px] font-bold text-white/75 hover:bg-white/20 hover:text-white"
+                                  >
+                                    Edit
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {/* Credit & Other Cash Receipts */}
+                      {cashInflowEntries.map((entry) => {
+                        const isEditing = editingRowId === entry.id;
+                        return (
+                          <div
+                            key={entry.id}
+                            className="flex items-center justify-between gap-2 px-4 py-2.5 bg-emerald-500/[0.04] hover:bg-emerald-500/[0.08] transition"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <span className="font-mono text-xs font-extrabold text-teal-300 w-16 shrink-0">
+                                {entry.receiptNo || "RECEIPT"}
+                              </span>
+                              <span className="text-xs font-bold text-white truncate">
+                                {entry.title}
+                              </span>
+                              {entry.followUpDate && (
+                                <span className="rounded bg-emerald-500/20 border border-emerald-400/30 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300 shrink-0">
+                                  Follow-up: {entry.followUpDate}
+                                </span>
+                              )}
+                              {entry.originalAmount !== undefined && (
+                                <span className="rounded bg-amber-500/20 border border-amber-400/40 px-1.5 py-0.5 text-[10px] font-bold text-amber-300 shrink-0">
+                                  Orig: SAR {fmt(entry.originalAmount)}
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-2.5 shrink-0">
+                              {isEditing ? (
+                                <div className="flex items-center gap-1.5">
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    value={editingRowVal}
+                                    onChange={(e) => setEditingRowVal(e.target.value)}
+                                    className="w-24 rounded-lg border border-amber-400 bg-black/70 px-2 py-1 text-right text-xs font-extrabold text-white outline-none"
+                                    autoFocus
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSaveInlineEdit(entry.id)}
+                                    className="rounded-lg bg-emerald-400 px-2 py-1 text-[10px] font-extrabold text-slate-950"
+                                  >
+                                    Save
+                                  </button>
+                                </div>
+                              ) : (
+                                <>
+                                  <span className="font-display text-xs font-extrabold text-emerald-300 whitespace-nowrap">
+                                    +SAR {fmt(entry.amount)}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingRowId(entry.id);
+                                      setEditingRowVal(String(entry.amount));
+                                    }}
+                                    className="rounded bg-white/10 px-2 py-0.5 text-[10px] font-bold text-white/75 hover:bg-white/20 hover:text-white"
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveEntry(entry.id)}
+                                    className="text-white/35 hover:text-rose-400 text-xs font-bold px-1"
+                                    title="Delete inflow"
+                                  >
+                                    ×
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* [+ Add Missing Inflow] Row at Bottom */}
+                    <form onSubmit={handleAddMissingInflow} className="flex items-center gap-2 pt-1">
+                      <input
+                        type="text"
+                        value={missingInflowTitle}
+                        onChange={(e) => setMissingInflowTitle(e.target.value)}
+                        placeholder="Missing receipt or customer name..."
+                        className="flex-1 rounded-xl border border-white/15 bg-black/35 px-3.5 py-2 text-xs font-semibold text-white placeholder:text-white/35 outline-none"
+                      />
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={missingInflowAmt}
+                        onChange={(e) => setMissingInflowAmt(e.target.value)}
+                        placeholder="SAR"
+                        className="w-28 rounded-xl border border-white/15 bg-black/35 px-3 py-2 text-xs font-bold text-white placeholder:text-white/35 outline-none"
+                      />
+                      <button
+                        type="submit"
+                        className="rounded-xl border border-emerald-400/40 bg-emerald-500/15 hover:bg-emerald-500/25 px-3.5 py-2 text-xs font-extrabold text-emerald-300 transition whitespace-nowrap"
+                      >
+                        + Add Missing Inflow
+                      </button>
+                    </form>
+                  </div>
+                )}
+
+                {/* RIGHT STACK (OR FULL-WIDTH WHEN EXPANDED): BOX 2 & BOX 3 */}
+                {(expandedAuditBox === "NONE" ||
+                  expandedAuditBox === "EXPENSES" ||
+                  expandedAuditBox === "BANK_POS") && (
+                  <div className="flex flex-col gap-6">
+                    {/* ══════════════════════════════════════════════════════
+                        BOX 2: Shop Expenses & Supplier Purchases
+                       ══════════════════════════════════════════════════════ */}
+                    {(expandedAuditBox === "NONE" || expandedAuditBox === "EXPENSES") && (
+                      <div className="rounded-3xl border border-white/15 bg-white/[0.04] p-6 backdrop-blur-2xl shadow-xl flex flex-col gap-4">
+                        <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-3.5">
+                          <div>
+                            <h3 className="font-display text-lg font-extrabold text-white">
+                              Shop Expenses &amp; Supplier Purchases ({expenseEntries.length})
+                            </h3>
+                            <p className="text-xs text-white/50">
+                              7 official categories · Credit Purchases sync to Suppliers &amp; Payables
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-3 shrink-0">
+                            <span className="font-display text-base font-extrabold text-rose-400 whitespace-nowrap">
+                              -SAR {fmt(totalMoneyOutDrawer)}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedAuditBox(
+                                  expandedAuditBox === "EXPENSES" ? "NONE" : "EXPENSES"
+                                )
+                              }
+                              className="flex items-center gap-1.5 rounded-xl border border-white/20 bg-white/10 hover:bg-white/20 px-3 py-1.5 text-xs font-extrabold text-white transition"
+                            >
+                              {expandedAuditBox === "EXPENSES" ? (
+                                <>
+                                  <Minimize2 size={13} />
+                                  <span>⤡ Collapse</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Maximize2 size={13} />
+                                  <span>⤢ Expand</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="divide-y divide-white/10 rounded-2xl border border-white/10 bg-black/30 overflow-hidden">
+                          {expenseEntries.map((entry) => {
+                            const isEditing = editingRowId === entry.id;
+                            return (
+                              <div
+                                key={entry.id}
+                                className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 hover:bg-white/[0.02] transition"
+                              >
+                                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                  <span className="rounded bg-rose-500/20 border border-rose-400/30 px-2 py-0.5 text-[10px] font-bold text-rose-300 shrink-0">
+                                    {entry.expenseCategory || "Food"}
+                                  </span>
+                                  <span className="text-xs font-bold text-white truncate">
+                                    {entry.title}
+                                  </span>
+                                  {entry.dueDate && (
+                                    <span className="rounded bg-purple-500/20 border border-purple-400/40 px-1.5 py-0.5 text-[10px] font-bold text-purple-200 shrink-0">
+                                      Due: {entry.dueDate}
+                                    </span>
+                                  )}
+                                  {entry.originalAmount !== undefined && (
+                                    <span className="rounded bg-amber-500/20 border border-amber-400/40 px-1.5 py-0.5 text-[10px] font-bold text-amber-300 shrink-0">
+                                      Orig: SAR {fmt(entry.originalAmount)}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {expandedAuditBox === "EXPENSES" && (
+                                  <div className="flex items-center gap-2">
+                                    <select
+                                      value={entry.expenseCategory || "Food"}
+                                      onChange={(e) => {
+                                        const newCat = e.target.value as StrictExpenseCategory;
+                                        setPreLoggedEntries((prev) =>
+                                          prev.map((it) =>
+                                            it.id === entry.id
+                                              ? { ...it, expenseCategory: newCat }
+                                              : it
+                                          )
+                                        );
+                                      }}
+                                      className="rounded-lg border border-white/15 bg-[#160f26] px-2 py-1 text-xs font-bold text-amber-300 outline-none"
+                                    >
+                                      {STRICT_EXPENSE_CATEGORIES.map((c) => (
+                                        <option key={c} value={c}>
+                                          {c}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    {entry.expenseCategory === "Credit Purchase" && (
+                                      <input
+                                        type="date"
+                                        value={entry.dueDate || "2026-09-25"}
+                                        onChange={(e) => {
+                                          const newDate = e.target.value;
+                                          setPreLoggedEntries((prev) =>
+                                            prev.map((it) =>
+                                              it.id === entry.id
+                                                ? { ...it, dueDate: newDate }
+                                                : it
+                                            )
+                                          );
+                                        }}
+                                        className="rounded-lg border border-white/15 bg-black/60 px-2 py-1 text-xs font-bold text-white outline-none"
+                                      />
+                                    )}
+                                  </div>
+                                )}
+
+                                <div className="flex items-center gap-2.5 shrink-0">
+                                  {isEditing ? (
+                                    <div className="flex items-center gap-1.5">
+                                      <input
+                                        type="number"
+                                        step="0.01"
+                                        value={editingRowVal}
+                                        onChange={(e) => setEditingRowVal(e.target.value)}
+                                        className="w-24 rounded-lg border border-amber-400 bg-black/70 px-2 py-1 text-right text-xs font-extrabold text-white outline-none"
+                                        autoFocus
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => handleSaveInlineEdit(entry.id)}
+                                        className="rounded-lg bg-emerald-400 px-2 py-1 text-[10px] font-extrabold text-slate-950"
+                                      >
+                                        Save
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <>
+                                      <span className="font-display text-xs font-extrabold text-rose-400 whitespace-nowrap">
+                                        -SAR {fmt(entry.amount)}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setEditingRowId(entry.id);
+                                          setEditingRowVal(String(entry.amount));
+                                        }}
+                                        className="rounded bg-white/10 px-2 py-0.5 text-[10px] font-bold text-white/75 hover:bg-white/20 hover:text-white"
+                                      >
+                                        Edit
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRemoveEntry(entry.id)}
+                                        className="text-white/35 hover:text-rose-400 text-xs font-bold px-1"
+                                        title="Delete expense"
+                                      >
+                                        ×
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* [+ Add Missing Expense] Row at Bottom */}
+                        <form onSubmit={handleAddMissingExpense} className="flex flex-wrap items-center gap-2 pt-1">
+                          <select
+                            value={missingExpenseCat}
+                            onChange={(e) =>
+                              setMissingExpenseCat(e.target.value as StrictExpenseCategory)
+                            }
+                            className="rounded-xl border border-white/15 bg-[#160f26] px-3 py-2 text-xs font-bold text-amber-300 outline-none"
+                          >
+                            {STRICT_EXPENSE_CATEGORIES.map((c) => (
+                              <option key={c} value={c}>
+                                {c}
+                              </option>
+                            ))}
+                          </select>
+                          <input
+                            type="text"
+                            value={missingExpenseSupplier}
+                            onChange={(e) => setMissingExpenseSupplier(e.target.value)}
+                            placeholder={
+                              missingExpenseCat === "Credit Purchase" ||
+                              missingExpenseCat === "Cash Purchase" ||
+                              missingExpenseCat === "Bank Purchase"
+                                ? "Supplier Name (e.g. Jotun)..."
+                                : "Note / Details..."
+                            }
+                            className="flex-1 min-w-[140px] rounded-xl border border-white/15 bg-black/35 px-3.5 py-2 text-xs font-semibold text-white placeholder:text-white/35 outline-none"
+                          />
+                          {missingExpenseCat === "Credit Purchase" && (
+                            <input
+                              type="date"
+                              value={missingExpenseDueDate}
+                              onChange={(e) => setMissingExpenseDueDate(e.target.value)}
+                              className="rounded-xl border border-amber-400/40 bg-black/35 px-2.5 py-2 text-xs font-bold text-white outline-none"
+                            />
+                          )}
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={missingExpenseAmt}
+                            onChange={(e) => setMissingExpenseAmt(e.target.value)}
+                            placeholder="SAR"
+                            className="w-24 rounded-xl border border-white/15 bg-black/35 px-3 py-2 text-xs font-bold text-white placeholder:text-white/35 outline-none"
+                          />
+                          <button
+                            type="submit"
+                            className="rounded-xl border border-rose-400/40 bg-rose-500/15 hover:bg-rose-500/25 px-3.5 py-2 text-xs font-extrabold text-rose-300 transition whitespace-nowrap"
+                          >
+                            + Add Expense
+                          </button>
+                        </form>
+                      </div>
+                    )}
+
+                    {/* ══════════════════════════════════════════════════════
+                        BOX 3: Bank / POS Transfers (SAB / Al Rajhi / Bank)
+                       ══════════════════════════════════════════════════════ */}
+                    {(expandedAuditBox === "NONE" || expandedAuditBox === "BANK_POS") && (
+                      <div className="rounded-3xl border border-white/15 bg-white/[0.04] p-6 backdrop-blur-2xl shadow-xl flex flex-col gap-4">
+                        <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-3.5">
+                          <div>
+                            <h3 className="font-display text-lg font-extrabold text-white">
+                              Bank / POS Transfers ({bankSwipeInvoices.length})
+                            </h3>
+                            <p className="text-xs text-white/50">
+                              SAB (0.85%) &amp; Al Rajhi (0.80%) POS fees deducted from net settlement
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-3 shrink-0">
+                            <div className="text-right">
+                              <span className="block font-display text-base font-extrabold text-amber-300 whitespace-nowrap">
+                                Net: SAR {fmt(bankSwipeNetTotal)}
+                              </span>
+                              <span className="block text-[10px] font-bold text-rose-300/80">
+                                POS Fees: -SAR {fmt(totalPosFees)}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedAuditBox(
+                                  expandedAuditBox === "BANK_POS" ? "NONE" : "BANK_POS"
+                                )
+                              }
+                              className="flex items-center gap-1.5 rounded-xl border border-white/20 bg-white/10 hover:bg-white/20 px-3 py-1.5 text-xs font-extrabold text-white transition"
+                            >
+                              {expandedAuditBox === "BANK_POS" ? (
+                                <>
+                                  <Minimize2 size={13} />
+                                  <span>⤡ Collapse</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Maximize2 size={13} />
+                                  <span>⤢ Expand</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="divide-y divide-white/10 rounded-2xl border border-amber-400/20 bg-amber-500/[0.04] overflow-hidden">
+                          {bankSwipeInvoices.map((inv) => {
+                            const rowKey = `erp-${inv.invoiceNo}`;
+                            const isEditing = editingRowId === rowKey;
+                            const posFee = calcInvoicePosFee(inv);
+                            const netBank = calcInvoiceNetBank(inv);
+                            const termMeta = POS_TERMINAL_META[inv.posTerminal || "SAB"];
+
+                            return (
+                              <div
+                                key={inv.invoiceNo}
+                                className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 px-4 py-3 hover:bg-white/[0.02] transition"
+                              >
+                                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                  <span className="font-mono text-xs font-extrabold text-amber-300 w-14 shrink-0">
+                                    #{inv.invoiceNo}
+                                  </span>
+                                  <span className="text-xs font-semibold text-white truncate">
+                                    {inv.customer}
+                                  </span>
+                                  <span className="rounded bg-amber-400/15 border border-amber-400/30 px-2 py-0.5 text-[10px] font-extrabold text-amber-200 shrink-0">
+                                    {inv.paymentMode === "BANK_TRANSFER"
+                                      ? "Bank (0%)"
+                                      : `${termMeta.shortLabel} (${termMeta.feePctLabel})`}
+                                  </span>
+                                  {inv.originalAmount !== undefined && (
+                                    <span className="rounded bg-amber-500/20 border border-amber-400/40 px-1.5 py-0.5 text-[10px] font-bold text-amber-300 shrink-0">
+                                      Orig: SAR {fmt(inv.originalAmount)}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* Terminal Switcher Pill (Always comfortable in Expanded Mode, compact in normal) */}
+                                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                                  <div className="inline-flex rounded-lg bg-black/50 p-0.5 border border-white/10">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSetInvoiceTerminal(inv.invoiceNo, "SAB")}
+                                      className={`rounded px-2 py-0.5 text-[10px] font-extrabold transition ${
+                                        inv.paymentMode === "POS_SWIPE" && inv.posTerminal === "SAB"
+                                          ? "bg-amber-400 text-slate-950"
+                                          : "text-white/55 hover:text-white"
+                                      }`}
+                                    >
+                                      SAB
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        handleSetInvoiceTerminal(inv.invoiceNo, "AL_RAJHI")
+                                      }
+                                      className={`rounded px-2 py-0.5 text-[10px] font-extrabold transition ${
+                                        inv.paymentMode === "POS_SWIPE" &&
+                                        inv.posTerminal === "AL_RAJHI"
+                                          ? "bg-amber-400 text-slate-950"
+                                          : "text-white/55 hover:text-white"
+                                      }`}
+                                    >
+                                      Al Rajhi
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        handleSetInvoiceMode(inv.invoiceNo, "BANK_TRANSFER")
+                                      }
+                                      className={`rounded px-2 py-0.5 text-[10px] font-extrabold transition ${
+                                        inv.paymentMode === "BANK_TRANSFER"
+                                          ? "bg-sky-400 text-slate-950"
+                                          : "text-white/55 hover:text-white"
+                                      }`}
+                                    >
+                                      0% Bank
+                                    </button>
+                                  </div>
+
+                                  {isEditing ? (
+                                    <div className="flex items-center gap-1.5">
+                                      <input
+                                        type="number"
+                                        step="0.01"
+                                        value={editingRowVal}
+                                        onChange={(e) => setEditingRowVal(e.target.value)}
+                                        className="w-24 rounded-lg border border-amber-400 bg-black/70 px-2 py-1 text-right text-xs font-extrabold text-white outline-none"
+                                        autoFocus
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => handleSaveInlineEdit(rowKey)}
+                                        className="rounded-lg bg-emerald-400 px-2 py-1 text-[10px] font-extrabold text-slate-950"
+                                      >
+                                        Save
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <>
+                                      <div className="text-right">
+                                        <span className="block font-display text-xs font-extrabold text-amber-300 whitespace-nowrap">
+                                          Net: SAR {fmt(netBank)}
+                                        </span>
+                                        {posFee > 0 && (
+                                          <span className="block text-[10px] text-rose-300/80 whitespace-nowrap">
+                                            Gross {fmt(inv.amount)} · Fee -{fmt(posFee)}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setEditingRowId(rowKey);
+                                          setEditingRowVal(String(inv.amount));
+                                        }}
+                                        className="rounded bg-white/10 px-2 py-0.5 text-[10px] font-bold text-white/75 hover:bg-white/20 hover:text-white"
+                                      >
+                                        Edit
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRemoveErpInvoice(inv.invoiceNo)}
+                                        className="text-white/35 hover:text-rose-400 text-xs font-bold px-1"
+                                        title="Remove invoice"
+                                      >
+                                        ×
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Sticky Bottom Action Bar */}
+              <div className="sticky bottom-4 z-20 flex flex-col md:flex-row md:items-center justify-between gap-4 rounded-2xl border border-amber-400/40 bg-[#140b24]/95 px-6 py-4 backdrop-blur-2xl shadow-[0_10px_40px_rgba(0,0,0,0.6)]">
+                <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm font-semibold text-white/80">
+                  <span>Opening <strong className="text-white">SAR {fmt(openingBalance)}</strong></span>
+                  <span className="text-white/40">+</span>
+                  <span>Cash In <strong className="text-emerald-400">SAR {fmt(totalCashInSalesAndReceipts)}</strong></span>
+                  <span className="text-white/40">−</span>
+                  <span>Cash Out <strong className="text-rose-400">SAR {fmt(totalMoneyOutDrawer)}</strong></span>
+                  <span className="text-white/40">=</span>
+                  <span className="rounded-lg bg-amber-400/20 border border-amber-400/40 px-3 py-1 font-display font-extrabold text-amber-300 whitespace-nowrap">
+                    Closing Balance: SAR {fmt(calculatedClosingBalance)}
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleLockAndSaveDay}
+                  className="flex items-center justify-center gap-2.5 rounded-xl bg-gradient-to-r from-emerald-400 via-amber-400 to-purple-500 px-7 py-3.5 text-sm sm:text-base font-extrabold text-slate-950 shadow-[0_0_30px_rgba(16,185,129,0.35)] transition hover:scale-[1.01] whitespace-nowrap"
+                >
+                  <Lock size={18} className="text-slate-950" />
+                  <span>🔒 Confirm &amp; Close Today&apos;s Register</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ════════════════════════════════════════════════════════════════════
+          MODE 3: CLASSIC JUBAIL CORP DIGITAL DATA SHEET (trackingMode === 'datasheet')
+         ════════════════════════════════════════════════════════════════════ */}
+      {trackingMode === "datasheet" && (
+        <div className="relative z-10 w-full px-4 sm:px-6 py-6 flex flex-col gap-5">
+          {/* 1. Official Sheet Header Bar */}
+          <div className="rounded-3xl border border-amber-400/40 bg-gradient-to-r from-[#170e29]/95 via-[#1c1132]/95 to-[#25151d]/95 p-5 sm:p-6 backdrop-blur-2xl shadow-2xl">
+            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+              <div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="rounded-lg bg-amber-400 px-2.5 py-1 font-mono text-xs font-black text-slate-950">
+                    JCT OFFICIAL LEDGER
+                  </span>
+                  <h1 className="font-display text-xl sm:text-2xl font-black tracking-wide text-white">
+                    DAILY DATA SHEET : JUBAIL CORP. TRADING EST.
+                  </h1>
+                </div>
+                <p className="mt-1.5 font-mono text-xs sm:text-sm font-semibold text-amber-200/80">
+                  Tel.: 3623251 / 3614748 · P.O. Box 1461 - Jubail 31951 - Kingdom of Saudi Arabia
+                </p>
+              </div>
+
+              {/* Right-Side Action Controls */}
+              <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setTrackingMode("hub")}
+                  className="flex items-center gap-1.5 rounded-xl border border-white/20 bg-white/10 hover:bg-white/20 px-3.5 py-2.5 text-xs font-extrabold text-white transition whitespace-nowrap"
+                >
+                  <ArrowLeft size={14} />
+                  <span>← Back to Daily Hub</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleSyncSheetFromWizard}
+                  className="flex items-center gap-1.5 rounded-xl border border-purple-400/40 bg-purple-500/20 hover:bg-purple-500/30 px-3.5 py-2.5 text-xs font-extrabold text-purple-200 transition whitespace-nowrap"
+                >
+                  <Zap size={14} className="text-amber-300" />
+                  <span>⚡ Sync from Guided Wizard</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleAdd5SheetRows}
+                  className="flex items-center gap-1.5 rounded-xl border border-amber-400/40 bg-amber-500/15 hover:bg-amber-500/25 px-3.5 py-2.5 text-xs font-extrabold text-amber-300 transition whitespace-nowrap"
+                >
+                  <Plus size={14} />
+                  <span>+ Add 5 Rows</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleSaveAndCloseSheet}
+                  className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-emerald-400 via-amber-400 to-purple-500 px-5 py-2.5 text-xs sm:text-sm font-black text-slate-950 shadow-[0_0_25px_rgba(16,185,129,0.35)] hover:scale-[1.01] transition whitespace-nowrap"
+                >
+                  <Lock size={14} />
+                  <span>🔒 Save &amp; Close Sheet</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Live Executive Strip inside Header */}
+            <div className="mt-4 pt-4 border-t border-white/10 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
+              <div className="rounded-xl border border-white/10 bg-black/35 px-3.5 py-2">
+                <span className="block text-[10px] font-bold text-white/50">DATE &amp; BRANCH</span>
+                <span className="font-mono font-extrabold text-white">12-09-2026 · Jubail Main</span>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/35 px-3.5 py-2">
+                <span className="block text-[10px] font-bold text-emerald-300/80">AMT CASH SALE</span>
+                <span className="font-display font-extrabold text-emerald-300">SAR {fmt(dsCashSaleTotal)}</span>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/35 px-3.5 py-2">
+                <span className="block text-[10px] font-bold text-indigo-300/80">CREDIT INV. AMOUNT</span>
+                <span className="font-display font-extrabold text-indigo-300">SAR {fmt(dsCreditInvTotal)}</span>
+              </div>
+              <div className="rounded-xl border border-amber-400/35 bg-amber-500/10 px-3.5 py-2">
+                <span className="block text-[10px] font-extrabold text-amber-300">TOTAL AMT (INFLOWS)</span>
+                <span className="font-display text-sm font-black text-amber-300">SAR {fmt(dsTotalAmt)}</span>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/35 px-3.5 py-2">
+                <span className="block text-[10px] font-bold text-sky-300/80">TO BANK (✓ VERIFIED)</span>
+                <span className="font-display font-extrabold text-sky-300">SAR {fmt(dsToBankTotal)}</span>
+              </div>
+              <div className="rounded-xl border border-emerald-400/50 bg-emerald-500/15 px-3.5 py-2">
+                <span className="block text-[10px] font-extrabold text-emerald-200">CLOSING BALANCE</span>
+                <span className="font-display text-sm font-black text-white">SAR {fmt(dsClosingBalance)}</span>
+              </div>
             </div>
           </div>
-        )}
-      </div>
+
+          {/* 2. Editable 19-Column Spreadsheet Grid */}
+          <div className="rounded-3xl border border-white/15 bg-[#0e091a]/95 backdrop-blur-2xl shadow-2xl overflow-hidden">
+            <div className="overflow-x-auto max-h-[68vh] overflow-y-auto">
+              <table className="w-full border-collapse text-xs font-mono">
+                <thead className="sticky top-0 z-20 bg-[#19102c] text-[10px] font-extrabold uppercase tracking-wider text-amber-200 shadow-md">
+                  <tr className="border-b border-white/20 divide-x divide-white/15">
+                    <th className="px-2.5 py-3 text-center bg-[#211538] text-white/60 w-9">#</th>
+                    <th className="px-3 py-3 text-left min-w-[96px] text-amber-300">1. INVOICE NO.</th>
+                    <th className="px-3 py-3 text-right min-w-[115px] text-emerald-300">2. AMT CASH SALE</th>
+                    <th className="px-3 py-3 text-right min-w-[125px] text-indigo-300">3. CREDIT INV. AMOUNT</th>
+                    <th className="px-3 py-3 text-left min-w-[120px] text-teal-300">4. RECEIPT NO.</th>
+                    <th className="px-3 py-3 text-right min-w-[135px] text-teal-300">5. CREDIT SALE AMT RECD</th>
+                    <th className="px-3 py-3 text-right min-w-[105px] text-amber-200">6. OPEN BAL</th>
+                    <th className="px-3 py-3 text-right min-w-[110px] text-purple-300">7. LOAN IN</th>
+                    <th className="px-3 py-3 text-right min-w-[115px] text-purple-200">8. OTHER AMT RECD</th>
+                    <th className="px-3 py-3 text-right min-w-[105px] text-sky-200">9. FROM BANK</th>
+                    <th className="px-3.5 py-3 text-right min-w-[130px] bg-amber-500/20 text-amber-300 font-black">
+                      10. TOTAL AMT
+                    </th>
+                    <th className="px-3 py-3 text-left min-w-[175px] text-fuchsia-300">
+                      11. CREDIT PURCHASE
+                    </th>
+                    <th className="px-3 py-3 text-right min-w-[115px] text-rose-300">12. CASH PURCHASE</th>
+                    <th className="px-3 py-3 text-right min-w-[145px] text-rose-300">
+                      13. CREDIT PURCHASE PAYMENT
+                    </th>
+                    <th className="px-3 py-3 text-right min-w-[95px] text-amber-200">14. CR NOTE</th>
+                    <th className="px-3 py-3 text-left min-w-[170px] text-rose-300">15. EXPENSE</th>
+                    <th className="px-3 py-3 text-left min-w-[195px] text-sky-300">
+                      16. TO BANK (SAB / AL RAJHI ✓)
+                    </th>
+                    <th className="px-3 py-3 text-right min-w-[100px] text-rose-200">17. LOAN OUT</th>
+                    <th className="px-3 py-3 text-right min-w-[105px] text-emerald-200">18. EXCESS AMT</th>
+                    <th className="px-3.5 py-3 text-right min-w-[140px] bg-emerald-500/20 text-emerald-300 font-black">
+                      19. CLOSING BALANCE
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody className="divide-y divide-white/10">
+                  {sheetRows.map((row, rIdx) => {
+                    const rowInflow = r2(
+                      numCell(row.amtCashSale) +
+                        numCell(row.creditSaleRecd) +
+                        numCell(row.openBal) +
+                        numCell(row.loanIn) +
+                        numCell(row.otherAmtRecd) +
+                        numCell(row.fromBank)
+                    );
+                    const rowOutflow = r2(
+                      numCell(row.cashPurchase) +
+                        numCell(row.creditPurchasePayment) +
+                        numCell(row.expenseAmt) +
+                        (row.toBankChecked ? numCell(row.toBankAmt) : 0) +
+                        numCell(row.loanOut) -
+                        numCell(row.excessAmt)
+                    );
+                    const rowNetCash = r2(rowInflow - rowOutflow);
+
+                    return (
+                      <tr
+                        key={row.id}
+                        className="divide-x divide-white/10 hover:bg-white/[0.04] transition-colors"
+                      >
+                        {/* Row Index */}
+                        <td className="px-2 py-1.5 text-center text-[11px] font-bold text-white/40 bg-black/30">
+                          {rIdx + 1}
+                        </td>
+
+                        {/* 1. INVOICE NO. */}
+                        <td className="p-1">
+                          <input
+                            type="text"
+                            data-ds-row={rIdx}
+                            data-ds-col={1}
+                            onKeyDown={(e) => handleSheetKeyDown(e, rIdx, 1)}
+                            value={row.invoiceNo}
+                            onChange={(e) =>
+                              handleSheetCellChange(row.id, "invoiceNo", e.target.value)
+                            }
+                            placeholder="30062"
+                            className="w-full rounded-lg bg-transparent px-2 py-1.5 font-mono text-xs font-extrabold text-amber-300 outline-none focus:bg-black/60 focus:ring-1 focus:ring-amber-400"
+                          />
+                        </td>
+
+                        {/* 2. AMT CASH SALE */}
+                        <td className="p-1">
+                          <input
+                            type="number"
+                            step="0.01"
+                            data-ds-row={rIdx}
+                            data-ds-col={2}
+                            onKeyDown={(e) => handleSheetKeyDown(e, rIdx, 2)}
+                            value={row.amtCashSale}
+                            onChange={(e) =>
+                              handleSheetCellChange(row.id, "amtCashSale", e.target.value)
+                            }
+                            placeholder="—"
+                            className="w-full rounded-lg bg-transparent px-2 py-1.5 text-right font-mono text-xs font-bold text-emerald-300 placeholder:text-white/20 outline-none focus:bg-black/60 focus:ring-1 focus:ring-emerald-400"
+                          />
+                        </td>
+
+                        {/* 3. CREDIT INV. AMOUNT */}
+                        <td className="p-1 bg-indigo-500/[0.03]">
+                          <input
+                            type="number"
+                            step="0.01"
+                            data-ds-row={rIdx}
+                            data-ds-col={3}
+                            onKeyDown={(e) => handleSheetKeyDown(e, rIdx, 3)}
+                            value={row.creditInvAmt}
+                            onChange={(e) =>
+                              handleSheetCellChange(row.id, "creditInvAmt", e.target.value)
+                            }
+                            placeholder="—"
+                            className="w-full rounded-lg bg-transparent px-2 py-1.5 text-right font-mono text-xs font-extrabold text-indigo-300 placeholder:text-white/20 outline-none focus:bg-black/60 focus:ring-1 focus:ring-indigo-400"
+                          />
+                        </td>
+
+                        {/* 4. RECEIPT NO. */}
+                        <td className="p-1">
+                          <input
+                            type="text"
+                            data-ds-row={rIdx}
+                            data-ds-col={4}
+                            onKeyDown={(e) => handleSheetKeyDown(e, rIdx, 4)}
+                            value={row.receiptNo}
+                            onChange={(e) =>
+                              handleSheetCellChange(row.id, "receiptNo", e.target.value)
+                            }
+                            placeholder="—"
+                            className="w-full rounded-lg bg-transparent px-2 py-1.5 text-left font-sans text-xs font-bold text-teal-200 placeholder:text-white/20 outline-none focus:bg-black/60 focus:ring-1 focus:ring-teal-400"
+                          />
+                        </td>
+
+                        {/* 5. CREDIT SALE AMT RECD */}
+                        <td className="p-1">
+                          <input
+                            type="number"
+                            step="0.01"
+                            data-ds-row={rIdx}
+                            data-ds-col={5}
+                            onKeyDown={(e) => handleSheetKeyDown(e, rIdx, 5)}
+                            value={row.creditSaleRecd}
+                            onChange={(e) =>
+                              handleSheetCellChange(row.id, "creditSaleRecd", e.target.value)
+                            }
+                            placeholder="—"
+                            className="w-full rounded-lg bg-transparent px-2 py-1.5 text-right font-mono text-xs font-extrabold text-teal-300 placeholder:text-white/20 outline-none focus:bg-black/60 focus:ring-1 focus:ring-teal-400"
+                          />
+                        </td>
+
+                        {/* 6. OPEN BAL */}
+                        <td className="p-1">
+                          <input
+                            type="number"
+                            step="0.01"
+                            data-ds-row={rIdx}
+                            data-ds-col={6}
+                            onKeyDown={(e) => handleSheetKeyDown(e, rIdx, 6)}
+                            value={row.openBal}
+                            onChange={(e) =>
+                              handleSheetCellChange(row.id, "openBal", e.target.value)
+                            }
+                            placeholder="—"
+                            className="w-full rounded-lg bg-transparent px-2 py-1.5 text-right font-mono text-xs font-extrabold text-amber-200 placeholder:text-white/20 outline-none focus:bg-black/60 focus:ring-1 focus:ring-amber-400"
+                          />
+                        </td>
+
+                        {/* 7. LOAN IN */}
+                        <td className="p-1">
+                          <input
+                            type="number"
+                            step="0.01"
+                            data-ds-row={rIdx}
+                            data-ds-col={7}
+                            onKeyDown={(e) => handleSheetKeyDown(e, rIdx, 7)}
+                            value={row.loanIn}
+                            onChange={(e) =>
+                              handleSheetCellChange(row.id, "loanIn", e.target.value)
+                            }
+                            placeholder={rIdx === 1 ? "Shadab" : "—"}
+                            className="w-full rounded-lg bg-transparent px-2 py-1.5 text-right font-mono text-xs font-extrabold text-purple-300 placeholder:text-white/20 outline-none focus:bg-black/60 focus:ring-1 focus:ring-purple-400"
+                          />
+                        </td>
+
+                        {/* 8. OTHER AMT RECD */}
+                        <td className="p-1">
+                          <input
+                            type="number"
+                            step="0.01"
+                            data-ds-row={rIdx}
+                            data-ds-col={8}
+                            onKeyDown={(e) => handleSheetKeyDown(e, rIdx, 8)}
+                            value={row.otherAmtRecd}
+                            onChange={(e) =>
+                              handleSheetCellChange(row.id, "otherAmtRecd", e.target.value)
+                            }
+                            placeholder="—"
+                            className="w-full rounded-lg bg-transparent px-2 py-1.5 text-right font-mono text-xs font-bold text-purple-200 placeholder:text-white/20 outline-none focus:bg-black/60 focus:ring-1 focus:ring-purple-400"
+                          />
+                        </td>
+
+                        {/* 9. FROM BANK */}
+                        <td className="p-1">
+                          <input
+                            type="number"
+                            step="0.01"
+                            data-ds-row={rIdx}
+                            data-ds-col={9}
+                            onKeyDown={(e) => handleSheetKeyDown(e, rIdx, 9)}
+                            value={row.fromBank}
+                            onChange={(e) =>
+                              handleSheetCellChange(row.id, "fromBank", e.target.value)
+                            }
+                            placeholder="—"
+                            className="w-full rounded-lg bg-transparent px-2 py-1.5 text-right font-mono text-xs font-bold text-sky-200 placeholder:text-white/20 outline-none focus:bg-black/60 focus:ring-1 focus:ring-sky-400"
+                          />
+                        </td>
+
+                        {/* 10. TOTAL AMT (Auto-Calculated Row Inflow) */}
+                        <td className="px-3 py-1.5 text-right font-mono text-xs font-black bg-amber-500/[0.08] text-amber-300">
+                          {rowInflow > 0 ? fmt(rowInflow) : "—"}
+                        </td>
+
+                        {/* 11. CREDIT PURCHASE (Supplier + Amt) */}
+                        <td className="p-1">
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="text"
+                              list="hub-suppliers-list"
+                              value={row.creditPurchaseSupplier}
+                              onChange={(e) =>
+                                handleSheetCellChange(
+                                  row.id,
+                                  "creditPurchaseSupplier",
+                                  e.target.value
+                                )
+                              }
+                              placeholder="Supplier"
+                              className="w-20 rounded bg-white/[0.03] px-1.5 py-1 font-sans text-[11px] font-bold text-fuchsia-200 placeholder:text-white/20 outline-none focus:bg-black/60 focus:ring-1 focus:ring-fuchsia-400"
+                            />
+                            <input
+                              type="number"
+                              step="0.01"
+                              data-ds-row={rIdx}
+                              data-ds-col={11}
+                              onKeyDown={(e) => handleSheetKeyDown(e, rIdx, 11)}
+                              value={row.creditPurchaseAmt}
+                              onChange={(e) =>
+                                handleSheetCellChange(row.id, "creditPurchaseAmt", e.target.value)
+                              }
+                              placeholder="Amt"
+                              className="w-20 rounded bg-transparent px-1.5 py-1 text-right font-mono text-xs font-bold text-fuchsia-300 placeholder:text-white/20 outline-none focus:bg-black/60 focus:ring-1 focus:ring-fuchsia-400"
+                            />
+                          </div>
+                        </td>
+
+                        {/* 12. CASH PURCHASE */}
+                        <td className="p-1">
+                          <input
+                            type="number"
+                            step="0.01"
+                            data-ds-row={rIdx}
+                            data-ds-col={12}
+                            onKeyDown={(e) => handleSheetKeyDown(e, rIdx, 12)}
+                            value={row.cashPurchase}
+                            onChange={(e) =>
+                              handleSheetCellChange(row.id, "cashPurchase", e.target.value)
+                            }
+                            placeholder="—"
+                            className="w-full rounded-lg bg-transparent px-2 py-1.5 text-right font-mono text-xs font-bold text-rose-300 placeholder:text-white/20 outline-none focus:bg-black/60 focus:ring-1 focus:ring-rose-400"
+                          />
+                        </td>
+
+                        {/* 13. CREDIT PURCHASE PAYMENT */}
+                        <td className="p-1">
+                          <input
+                            type="number"
+                            step="0.01"
+                            data-ds-row={rIdx}
+                            data-ds-col={13}
+                            onKeyDown={(e) => handleSheetKeyDown(e, rIdx, 13)}
+                            value={row.creditPurchasePayment}
+                            onChange={(e) =>
+                              handleSheetCellChange(
+                                row.id,
+                                "creditPurchasePayment",
+                                e.target.value
+                              )
+                            }
+                            placeholder="—"
+                            className="w-full rounded-lg bg-transparent px-2 py-1.5 text-right font-mono text-xs font-bold text-rose-300 placeholder:text-white/20 outline-none focus:bg-black/60 focus:ring-1 focus:ring-rose-400"
+                          />
+                        </td>
+
+                        {/* 14. CR NOTE */}
+                        <td className="p-1">
+                          <input
+                            type="number"
+                            step="0.01"
+                            data-ds-row={rIdx}
+                            data-ds-col={14}
+                            onKeyDown={(e) => handleSheetKeyDown(e, rIdx, 14)}
+                            value={row.crNote}
+                            onChange={(e) =>
+                              handleSheetCellChange(row.id, "crNote", e.target.value)
+                            }
+                            placeholder="—"
+                            className="w-full rounded-lg bg-transparent px-2 py-1.5 text-right font-mono text-xs font-bold text-amber-200 placeholder:text-white/20 outline-none focus:bg-black/60 focus:ring-1 focus:ring-amber-400"
+                          />
+                        </td>
+
+                        {/* 15. EXPENSE (Category/Note + Amount) */}
+                        <td className="p-1">
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="text"
+                              value={row.expenseLabel}
+                              onChange={(e) =>
+                                handleSheetCellChange(row.id, "expenseLabel", e.target.value)
+                              }
+                              placeholder="Item"
+                              className="w-20 rounded bg-white/[0.03] px-1.5 py-1 font-sans text-[11px] font-bold text-rose-200 placeholder:text-white/20 outline-none focus:bg-black/60 focus:ring-1 focus:ring-rose-400"
+                            />
+                            <input
+                              type="number"
+                              step="0.01"
+                              data-ds-row={rIdx}
+                              data-ds-col={15}
+                              onKeyDown={(e) => handleSheetKeyDown(e, rIdx, 15)}
+                              value={row.expenseAmt}
+                              onChange={(e) =>
+                                handleSheetCellChange(row.id, "expenseAmt", e.target.value)
+                              }
+                              placeholder="SAR"
+                              className="w-20 rounded bg-transparent px-1.5 py-1 text-right font-mono text-xs font-bold text-rose-300 placeholder:text-white/20 outline-none focus:bg-black/60 focus:ring-1 focus:ring-rose-400"
+                            />
+                          </div>
+                        </td>
+
+                        {/* 16. TO BANK (SAB / Al Rajhi Swipes & Transfers with ✓ Toggle) */}
+                        <td className="p-1">
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleSheetCellChange(
+                                  row.id,
+                                  "toBankChecked",
+                                  !row.toBankChecked
+                                )
+                              }
+                              title="Toggle Bank/POS Verification ✓"
+                              className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border text-[10px] font-black transition ${
+                                row.toBankChecked && numCell(row.toBankAmt) > 0
+                                  ? "border-emerald-400 bg-emerald-400 text-slate-950"
+                                  : "border-white/20 bg-black/40 text-white/30 hover:text-white"
+                              }`}
+                            >
+                              ✓
+                            </button>
+                            <input
+                              type="text"
+                              value={row.toBankLabel}
+                              onChange={(e) =>
+                                handleSheetCellChange(row.id, "toBankLabel", e.target.value)
+                              }
+                              placeholder="SAB / Bank"
+                              className="w-24 rounded bg-white/[0.03] px-1.5 py-1 font-sans text-[10px] font-bold text-sky-200 placeholder:text-white/20 outline-none focus:bg-black/60"
+                            />
+                            <input
+                              type="number"
+                              step="0.01"
+                              data-ds-row={rIdx}
+                              data-ds-col={16}
+                              onKeyDown={(e) => handleSheetKeyDown(e, rIdx, 16)}
+                              value={row.toBankAmt}
+                              onChange={(e) =>
+                                handleSheetCellChange(row.id, "toBankAmt", e.target.value)
+                              }
+                              placeholder="—"
+                              className="w-20 rounded bg-transparent px-1.5 py-1 text-right font-mono text-xs font-extrabold text-sky-300 placeholder:text-white/20 outline-none focus:bg-black/60 focus:ring-1 focus:ring-sky-400"
+                            />
+                          </div>
+                        </td>
+
+                        {/* 17. LOAN OUT */}
+                        <td className="p-1">
+                          <input
+                            type="number"
+                            step="0.01"
+                            data-ds-row={rIdx}
+                            data-ds-col={17}
+                            onKeyDown={(e) => handleSheetKeyDown(e, rIdx, 17)}
+                            value={row.loanOut}
+                            onChange={(e) =>
+                              handleSheetCellChange(row.id, "loanOut", e.target.value)
+                            }
+                            placeholder="—"
+                            className="w-full rounded-lg bg-transparent px-2 py-1.5 text-right font-mono text-xs font-bold text-rose-200 placeholder:text-white/20 outline-none focus:bg-black/60 focus:ring-1 focus:ring-rose-400"
+                          />
+                        </td>
+
+                        {/* 18. EXCESS AMT */}
+                        <td className="p-1">
+                          <input
+                            type="number"
+                            step="0.01"
+                            data-ds-row={rIdx}
+                            data-ds-col={18}
+                            onKeyDown={(e) => handleSheetKeyDown(e, rIdx, 18)}
+                            value={row.excessAmt}
+                            onChange={(e) =>
+                              handleSheetCellChange(row.id, "excessAmt", e.target.value)
+                            }
+                            placeholder="—"
+                            className="w-full rounded-lg bg-transparent px-2 py-1.5 text-right font-mono text-xs font-bold text-emerald-200 placeholder:text-white/20 outline-none focus:bg-black/60 focus:ring-1 focus:ring-emerald-400"
+                          />
+                        </td>
+
+                        {/* 19. CLOSING BALANCE (Row Net Cash / Final Closing Balance on bottom row) */}
+                        <td className="px-3 py-1.5 text-right font-mono text-xs font-black bg-emerald-500/[0.07] text-emerald-300">
+                          {rIdx === sheetRows.length - 1
+                            ? `SAR ${fmt(dsClosingBalance)}`
+                            : rowInflow !== 0 || rowOutflow !== 0
+                            ? fmt(rowNetCash)
+                            : "—"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+
+                {/* Sticky Footer Row — Live Column Totals, TOTAL AMT (44,909.00) & CLOSING BALANCE (4,500.00) */}
+                <tfoot className="sticky bottom-0 z-20 bg-[#1c1132] border-t-2 border-amber-400/60 text-xs font-mono font-black text-white shadow-[0_-10px_25px_rgba(0,0,0,0.6)]">
+                  <tr className="divide-x divide-white/15">
+                    <td className="px-2 py-3.5 text-center text-amber-300">∑</td>
+                    <td className="px-3 py-3.5 text-left text-amber-300">
+                      TOTAL ({sheetRows.length} ROWS)
+                    </td>
+                    <td className="px-3 py-3.5 text-right text-emerald-300">
+                      {fmt(dsCashSaleTotal)}
+                    </td>
+                    <td className="px-3 py-3.5 text-right text-indigo-300">
+                      {fmt(dsCreditInvTotal)}
+                    </td>
+                    <td className="px-3 py-3.5 text-left text-teal-200">Chicago</td>
+                    <td className="px-3 py-3.5 text-right text-teal-300">
+                      {fmt(dsCreditRecdTotal)}
+                    </td>
+                    <td className="px-3 py-3.5 text-right text-amber-200">
+                      {fmt(dsOpenBalTotal)}
+                    </td>
+                    <td className="px-3 py-3.5 text-right text-purple-300">
+                      {fmt(dsLoanInTotal)}
+                    </td>
+                    <td className="px-3 py-3.5 text-right text-purple-200">
+                      {fmt(dsOtherRecdTotal)}
+                    </td>
+                    <td className="px-3 py-3.5 text-right text-sky-200">
+                      {fmt(dsFromBankTotal)}
+                    </td>
+                    <td className="px-3.5 py-3.5 text-right bg-amber-400 text-slate-950 text-sm font-black">
+                      SAR {fmt(dsTotalAmt)}
+                    </td>
+                    <td className="px-3 py-3.5 text-right text-fuchsia-300">
+                      {fmt(dsCreditPurchaseTotal)}
+                    </td>
+                    <td className="px-3 py-3.5 text-right text-rose-300">
+                      {fmt(dsCashPurchaseTotal)}
+                    </td>
+                    <td className="px-3 py-3.5 text-right text-rose-300">
+                      {fmt(dsCreditPurchasePaymentTotal)}
+                    </td>
+                    <td className="px-3 py-3.5 text-right text-amber-200">
+                      {fmt(dsCrNoteTotal)}
+                    </td>
+                    <td className="px-3 py-3.5 text-right text-rose-300">
+                      {fmt(dsExpenseTotal)}
+                    </td>
+                    <td className="px-3 py-3.5 text-right text-sky-300">
+                      {fmt(dsToBankTotal)}
+                    </td>
+                    <td className="px-3 py-3.5 text-right text-rose-200">
+                      {fmt(dsLoanOutTotal)}
+                    </td>
+                    <td className="px-3 py-3.5 text-right text-emerald-200">
+                      {fmt(dsExcessAmtTotal)}
+                    </td>
+                    <td className="px-3.5 py-3.5 text-right bg-emerald-400 text-slate-950 text-sm font-black">
+                      SAR {fmt(dsClosingBalance)}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function CreditRadarView() {
-  const [activeId, setActiveId] = useState(CONTRACTORS[0].id);
-  const active = CONTRACTORS.find(c => c.id === activeId)!;
+function CreditRadarView({
+  customers,
+  onIssueCredit,
+}: {
+  customers: ContractorAccount[];
+  onIssueCredit: (
+    customerName: string,
+    amount: number,
+    followUpDate: string,
+    receiptNo?: string,
+    mode?: "CREDIT_RECD" | "CREDIT_SALE"
+  ) => void;
+}) {
+  const [activeId, setActiveId] = useState(customers[0]?.id || "c1");
+  const [contractorInput, setContractorInput] = useState("");
+  const [amountInput, setAmountInput] = useState("");
+  const [receiptInput, setReceiptInput] = useState("");
+  const [dueDateInput, setDueDateInput] = useState("2026-09-25");
+
+  const active = customers.find((c) => c.id === activeId) || customers[0];
+  const reminderAccounts = customers.filter(
+    (c) => Boolean(c.followUpDate || c.dueDate) && c.outstanding > 0
+  );
+
+  const handleCreateCredit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const val = parseFloat(amountInput);
+    if (!contractorInput.trim() || Number.isNaN(val) || val <= 0) return;
+    onIssueCredit(
+      contractorInput.trim(),
+      val,
+      dueDateInput || "2026-09-25",
+      receiptInput.trim() || `#${Math.floor(30080 + Math.random() * 19)}`,
+      "CREDIT_SALE"
+    );
+    setContractorInput("");
+    setAmountInput("");
+    setReceiptInput("");
+  };
 
   return (
-    <div className="flex h-full w-full gap-6 p-6 overflow-hidden">
-      {/* Left Column: Active Radar & Entry */}
-      <div className="flex-[2] flex flex-col gap-6 overflow-hidden">
-        
-        {/* New Credit Issue Box */}
-        <div className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-900/5 p-5 shrink-0 dark:bg-[#121620] dark:ring-white/10">
-           <h2 className="font-display font-extrabold text-lg mb-4 text-slate-900 dark:text-white flex items-center gap-2">
-              <Plus size={18} className="text-purple-500" /> Issue New Credit
-           </h2>
-           <div className="flex flex-wrap items-center gap-3">
-             <div className="flex-[2] min-w-[200px] relative">
-               <input type="text" placeholder="Search Contractor..." className="w-full px-4 py-2.5 bg-slate-50 rounded-xl ring-1 ring-slate-200 focus:ring-2 focus:ring-purple-500 font-medium text-sm outline-none dark:bg-[#171b28] dark:ring-white/10 dark:text-white transition-shadow" />
-             </div>
-             <input type="number" placeholder="Amount (SAR)" className="flex-1 min-w-[120px] px-4 py-2.5 bg-slate-50 rounded-xl ring-1 ring-slate-200 focus:ring-2 focus:ring-purple-500 font-bold text-sm outline-none dark:bg-[#171b28] dark:ring-white/10 dark:text-white transition-shadow" />
-             <input type="text" placeholder="Receipt #" className="flex-1 min-w-[120px] px-4 py-2.5 bg-slate-50 rounded-xl ring-1 ring-slate-200 focus:ring-2 focus:ring-purple-500 font-medium text-sm outline-none dark:bg-[#171b28] dark:ring-white/10 dark:text-white transition-shadow" />
-             <input type="date" className="flex-1 min-w-[140px] px-4 py-2.5 bg-slate-50 rounded-xl ring-1 ring-slate-200 focus:ring-2 focus:ring-purple-500 font-medium text-sm outline-none dark:bg-[#171b28] dark:ring-white/10 dark:text-white text-slate-500 transition-shadow" />
-             <button className="px-6 py-2.5 bg-purple-600 text-white rounded-xl font-bold hover:bg-purple-700 transition shadow-md shadow-purple-500/20 whitespace-nowrap shrink-0">
-               Issue Credit
-             </button>
-           </div>
+    <div className="flex flex-col h-full w-full gap-5 p-6 overflow-hidden">
+      {/* Prominent Top Banner: Upcoming Follow-Up Reminders */}
+      <div className="rounded-2xl border border-amber-300/60 bg-gradient-to-r from-amber-50 via-purple-50 to-indigo-50 p-4 shadow-sm shrink-0 dark:border-amber-400/30 dark:from-amber-500/10 dark:via-purple-500/10 dark:to-indigo-500/10">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+          <div className="flex items-center gap-2">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-400 text-slate-950 shadow-sm">
+              <Bell size={15} strokeWidth={2.5} />
+            </span>
+            <h2 className="font-display text-sm sm:text-base font-extrabold text-slate-900 dark:text-white">
+              Upcoming Follow-Up Reminders ({reminderAccounts.length})
+            </h2>
+          </div>
+          <span className="text-[11px] font-bold text-purple-700 dark:text-amber-300">
+            Live synced from Step 3 Credit Sales &amp; Daytime Quick-Logger
+          </span>
         </div>
 
-        {/* Pending Collections List */}
-        <div className="flex-1 overflow-y-auto space-y-3 pr-2">
-           <h2 className="font-display font-extrabold text-lg mb-4 text-slate-900 dark:text-white flex items-center justify-between">
-              Pending Collections
-              <span className="text-xs font-bold text-slate-500 bg-slate-200 dark:bg-white/10 px-2 py-1 rounded-md">{CONTRACTORS.length} Accounts</span>
-           </h2>
-           {CONTRACTORS.map(c => (
-              <button 
-                key={c.id} 
+        <div className="flex flex-wrap items-center gap-2.5">
+          {reminderAccounts.map((c) => {
+            const invLabel = c.latestInvoiceNo
+              ? c.latestInvoiceNo.startsWith("#")
+                ? c.latestInvoiceNo
+                : `#${c.latestInvoiceNo}`
+              : "#30064";
+            const remDate = c.followUpDate || c.dueDate;
+            return (
+              <button
+                key={`rem-${c.id}`}
+                type="button"
                 onClick={() => setActiveId(c.id)}
-                className={`w-full text-left flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-2xl ring-1 transition-all gap-4 ${activeId === c.id ? 'bg-white ring-purple-500 shadow-md dark:bg-[#1f2536]' : 'bg-white ring-slate-900/5 hover:shadow-sm dark:bg-[#121620] dark:ring-white/10 hover:dark:bg-[#1a1f2e]'}`}
+                className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition ring-1 ${
+                  active?.id === c.id
+                    ? "bg-purple-600 text-white ring-purple-600 shadow-md"
+                    : c.syncedFromRegister
+                    ? "bg-amber-100/90 text-slate-900 ring-amber-400 hover:bg-amber-200 dark:bg-amber-400/20 dark:text-amber-200 dark:ring-amber-400/50"
+                    : "bg-white text-slate-800 ring-slate-200 hover:bg-slate-50 dark:bg-[#171b28] dark:text-slate-200 dark:ring-white/10"
+                }`}
               >
-                 <div className="flex items-center gap-4">
-                   <div className={`h-12 w-12 rounded-full flex items-center justify-center font-display font-extrabold text-xl text-white shadow-sm shrink-0 ${activeId === c.id ? 'bg-gradient-to-br from-purple-500 to-indigo-500' : 'bg-slate-300 dark:bg-slate-700'}`}>
-                     {c.name.charAt(0)}
-                   </div>
-                   <div>
-                     <h3 className="font-bold text-base text-slate-900 dark:text-white">{c.name}</h3>
-                     <p className="text-xs text-slate-500 dark:text-slate-400 font-bold mt-1 uppercase tracking-wide">Due: {c.dueDate}</p>
-                   </div>
-                 </div>
-                 <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-3 w-full sm:w-auto">
-                   <span className="font-display font-extrabold text-xl text-slate-900 dark:text-white">{fmt(c.outstanding)} <span className="text-xs text-slate-400">SAR</span></span>
-                   {c.status === 'overdue' && <span className="px-2.5 py-1 bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-400 rounded-md text-[10px] font-extrabold uppercase tracking-wide shrink-0">Overdue ({c.daysLate}d late)</span>}
-                   {c.status === 'due_soon' && <span className="px-2.5 py-1 bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400 rounded-md text-[10px] font-extrabold uppercase tracking-wide shrink-0">Due This Week</span>}
-                   {c.status === 'on_track' && <span className="px-2.5 py-1 bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-slate-300 rounded-md text-[10px] font-extrabold uppercase tracking-wide shrink-0">On Track</span>}
-                 </div>
+                <span>
+                  🔔 Reminder: <strong>{remDate}</strong> · Inv <strong>{invLabel}</strong>
+                </span>
+                <span className="opacity-60">—</span>
+                <span className="font-extrabold">{c.name}</span>
+                <span className="rounded bg-black/10 dark:bg-white/10 px-1.5 py-0.5 font-mono text-[10px] font-extrabold">
+                  SAR {fmt(c.latestInvoiceAmount ?? c.outstanding)}
+                </span>
               </button>
-           ))}
+            );
+          })}
         </div>
       </div>
 
-      {/* Right Column: Contractor Intelligence */}
-      <div className="flex-[1.5] flex flex-col bg-white rounded-2xl shadow-sm ring-1 ring-slate-900/5 overflow-hidden dark:bg-[#121620] dark:ring-white/10">
-         <div className="p-8 border-b border-slate-100 dark:border-white/5 bg-slate-50 dark:bg-white/[0.02]">
-            <div className="flex items-center gap-5 mb-6">
-               <div className="h-16 w-16 rounded-2xl flex items-center justify-center font-display font-extrabold text-3xl text-white shadow-md bg-gradient-to-br from-purple-500 to-indigo-500 shrink-0">
+      <div className="flex flex-1 min-h-0 w-full gap-6 overflow-hidden">
+        {/* Left Column: Active Radar & Entry */}
+        <div className="flex-[2] flex flex-col gap-5 overflow-hidden">
+          {/* New Credit Issue Box */}
+          <form
+            onSubmit={handleCreateCredit}
+            className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-900/5 p-5 shrink-0 dark:bg-[#121620] dark:ring-white/10"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-display font-extrabold text-lg text-slate-900 dark:text-white flex items-center gap-2">
+                <Plus size={18} className="text-purple-500" /> Issue New Credit / Update Follow-up
+              </h2>
+              <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-2.5 py-1 rounded-full">
+                ● Live Synced with Daily Register
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex-[2] min-w-[200px] relative">
+                <input
+                  type="text"
+                  value={contractorInput}
+                  onChange={(e) => setContractorInput(e.target.value)}
+                  placeholder="Customer / Contractor Name..."
+                  className="w-full px-4 py-2.5 bg-slate-50 rounded-xl ring-1 ring-slate-200 focus:ring-2 focus:ring-purple-500 font-medium text-sm outline-none dark:bg-[#171b28] dark:ring-white/10 dark:text-white transition-shadow"
+                />
+              </div>
+              <input
+                type="number"
+                step="0.01"
+                value={amountInput}
+                onChange={(e) => setAmountInput(e.target.value)}
+                placeholder="Amount (SAR)"
+                className="flex-1 min-w-[120px] px-4 py-2.5 bg-slate-50 rounded-xl ring-1 ring-slate-200 focus:ring-2 focus:ring-purple-500 font-bold text-sm outline-none dark:bg-[#171b28] dark:ring-white/10 dark:text-white transition-shadow"
+              />
+              <input
+                type="text"
+                value={receiptInput}
+                onChange={(e) => setReceiptInput(e.target.value)}
+                placeholder="Invoice # (e.g. #30064)"
+                className="flex-1 min-w-[120px] px-4 py-2.5 bg-slate-50 rounded-xl ring-1 ring-slate-200 focus:ring-2 focus:ring-purple-500 font-medium text-sm outline-none dark:bg-[#171b28] dark:ring-white/10 dark:text-white transition-shadow"
+              />
+              <input
+                type="date"
+                value={dueDateInput}
+                onChange={(e) => setDueDateInput(e.target.value)}
+                className="flex-1 min-w-[140px] px-4 py-2.5 bg-slate-50 rounded-xl ring-1 ring-slate-200 focus:ring-2 focus:ring-purple-500 font-medium text-sm outline-none dark:bg-[#171b28] dark:ring-white/10 dark:text-white text-slate-500 transition-shadow"
+              />
+              <button
+                type="submit"
+                className="px-6 py-2.5 bg-purple-600 text-white rounded-xl font-bold hover:bg-purple-700 transition shadow-md shadow-purple-500/20 whitespace-nowrap shrink-0"
+              >
+                Issue Credit
+              </button>
+            </div>
+          </form>
+
+          {/* Pending Collections List */}
+          <div className="flex-1 overflow-y-auto space-y-3 pr-2">
+            <h2 className="font-display font-extrabold text-lg mb-4 text-slate-900 dark:text-white flex items-center justify-between">
+              Pending Collections &amp; Follow-up Radar
+              <span className="text-xs font-bold text-slate-500 bg-slate-200 dark:bg-white/10 px-2 py-1 rounded-md">
+                {customers.length} Accounts
+              </span>
+            </h2>
+            {customers.map((c) => {
+              const invBadge = c.latestInvoiceNo
+                ? c.latestInvoiceNo.startsWith("#")
+                  ? c.latestInvoiceNo
+                  : `#${c.latestInvoiceNo}`
+                : "#30064";
+              const remDate = c.followUpDate || c.dueDate;
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => setActiveId(c.id)}
+                  className={`w-full text-left flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-2xl ring-1 transition-all gap-4 ${
+                    active.id === c.id
+                      ? "bg-white ring-purple-500 shadow-md dark:bg-[#1f2536]"
+                      : "bg-white ring-slate-900/5 hover:shadow-sm dark:bg-[#121620] dark:ring-white/10 hover:dark:bg-[#1a1f2e]"
+                  }`}
+                >
+                  <div className="flex items-center gap-4">
+                    <div
+                      className={`h-12 w-12 rounded-full flex items-center justify-center font-display font-extrabold text-xl text-white shadow-sm shrink-0 ${
+                        active.id === c.id
+                          ? "bg-gradient-to-br from-purple-500 to-indigo-500"
+                          : "bg-slate-300 dark:bg-slate-700"
+                      }`}
+                    >
+                      {c.name.charAt(0)}
+                    </div>
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="font-bold text-base text-slate-900 dark:text-white">{c.name}</h3>
+                        {c.syncedFromRegister && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">
+                            ✓ Synced Today
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                        <span className="inline-flex items-center gap-1 rounded-lg bg-amber-100 px-2.5 py-0.5 text-[11px] font-extrabold text-amber-800 dark:bg-amber-500/20 dark:text-amber-300 border border-amber-300/60 dark:border-amber-400/30">
+                          🔔 Reminder: {remDate} · Inv {invBadge}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-3 w-full sm:w-auto">
+                    <span className="font-display font-extrabold text-xl text-slate-900 dark:text-white">
+                      {fmt(c.outstanding)} <span className="text-xs text-slate-400">SAR</span>
+                    </span>
+                    {c.status === "overdue" && (
+                      <span className="px-2.5 py-1 bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-400 rounded-md text-[10px] font-extrabold uppercase tracking-wide shrink-0">
+                        Overdue ({c.daysLate}d late)
+                      </span>
+                    )}
+                    {c.status === "due_soon" && (
+                      <span className="px-2.5 py-1 bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400 rounded-md text-[10px] font-extrabold uppercase tracking-wide shrink-0">
+                        Due This Week
+                      </span>
+                    )}
+                    {c.status === "on_track" && (
+                      <span className="px-2.5 py-1 bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-slate-300 rounded-md text-[10px] font-extrabold uppercase tracking-wide shrink-0">
+                        On Track
+                      </span>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Right Column: Contractor Intelligence */}
+        {active && (
+          <div className="flex-[1.5] flex flex-col bg-white rounded-2xl shadow-sm ring-1 ring-slate-900/5 overflow-hidden dark:bg-[#121620] dark:ring-white/10">
+            <div className="p-8 border-b border-slate-100 dark:border-white/5 bg-slate-50 dark:bg-white/[0.02]">
+              <div className="flex items-center gap-5 mb-6">
+                <div className="h-16 w-16 rounded-2xl flex items-center justify-center font-display font-extrabold text-3xl text-white shadow-md bg-gradient-to-br from-purple-500 to-indigo-500 shrink-0">
                   {active.name.charAt(0)}
-               </div>
-               <div>
-                  <h2 className="font-display font-extrabold text-2xl text-slate-900 dark:text-white leading-tight">{active.name}</h2>
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-2">Contractor ID: {active.id.toUpperCase()}-089</p>
-               </div>
-            </div>
-            
+                </div>
+                <div>
+                  <h2 className="font-display font-extrabold text-2xl text-slate-900 dark:text-white leading-tight">
+                    {active.name}
+                  </h2>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-2">
+                    🔔 Reminder: {active.followUpDate || active.dueDate} · Inv{" "}
+                    {active.latestInvoiceNo || "#30064"} · ID: {active.id.toUpperCase()}-089
+                  </p>
+                </div>
+              </div>
+
             <div className="p-6 rounded-2xl bg-white dark:bg-[#171b28] ring-1 ring-slate-900/5 dark:ring-white/10 shadow-sm flex items-center justify-between">
-               <div>
-                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Total Outstanding Debt</p>
-                 <p className={`font-display font-extrabold text-3xl ${active.status === 'overdue' ? 'text-rose-600 dark:text-rose-500' : 'text-slate-900 dark:text-white'}`}>{fmt(active.outstanding)} <span className="text-sm text-slate-400">SAR</span></p>
-               </div>
-               {active.status === 'overdue' && (
-                 <div className="h-14 w-14 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center dark:bg-rose-500/20 dark:text-rose-400 ring-4 ring-rose-50 dark:ring-rose-500/10">
-                    <AlertTriangle size={26} />
-                 </div>
-               )}
+              <div>
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                  Total Outstanding Debt
+                </p>
+                <p
+                  className={`font-display font-extrabold text-3xl ${
+                    active.status === "overdue"
+                      ? "text-rose-600 dark:text-rose-500"
+                      : "text-slate-900 dark:text-white"
+                  }`}
+                >
+                  {fmt(active.outstanding)} <span className="text-sm text-slate-400">SAR</span>
+                </p>
+              </div>
+              {active.status === "overdue" && (
+                <div className="h-14 w-14 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center dark:bg-rose-500/20 dark:text-rose-400 ring-4 ring-rose-50 dark:ring-rose-500/10">
+                  <AlertTriangle size={26} />
+                </div>
+              )}
             </div>
-         </div>
-         
-         <div className="flex-1 overflow-y-auto p-8 space-y-8">
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-8 space-y-8">
             {/* Analytics */}
             <div>
-               <h3 className="text-sm font-extrabold text-slate-900 dark:text-white mb-4">Historical Reliability</h3>
-               <div className="grid grid-cols-3 gap-4">
-                  <div className="p-4 rounded-xl bg-slate-50 dark:bg-white/5 ring-1 ring-slate-100 dark:ring-white/5 text-center">
-                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Avg. Payment</p>
-                     <p className="font-bold text-slate-800 dark:text-slate-200 text-sm">{active.avgPaymentTime}</p>
-                  </div>
-                  <div className="p-4 rounded-xl bg-slate-50 dark:bg-white/5 ring-1 ring-slate-100 dark:ring-white/5 text-center">
-                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Risk Level</p>
-                     <p className={`font-extrabold text-sm ${active.riskLevel === 'High' ? 'text-rose-600' : active.riskLevel === 'Medium' ? 'text-amber-600' : 'text-emerald-600'}`}>{active.riskLevel}</p>
-                  </div>
-                  <div className="p-4 rounded-xl bg-slate-50 dark:bg-white/5 ring-1 ring-slate-100 dark:ring-white/5 text-center">
-                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Cleared Invs</p>
-                     <p className="font-bold text-slate-800 dark:text-slate-200 text-sm">{active.clearedInvoices}</p>
-                  </div>
-               </div>
+              <h3 className="text-sm font-extrabold text-slate-900 dark:text-white mb-4">
+                Historical Reliability
+              </h3>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="p-4 rounded-xl bg-slate-50 dark:bg-white/5 ring-1 ring-slate-100 dark:ring-white/5 text-center">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+                    Avg. Payment
+                  </p>
+                  <p className="font-bold text-slate-800 dark:text-slate-200 text-sm">
+                    {active.avgPaymentTime}
+                  </p>
+                </div>
+                <div className="p-4 rounded-xl bg-slate-50 dark:bg-white/5 ring-1 ring-slate-100 dark:ring-white/5 text-center">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+                    Risk Level
+                  </p>
+                  <p
+                    className={`font-extrabold text-sm ${
+                      active.riskLevel === "High"
+                        ? "text-rose-600"
+                        : active.riskLevel === "Medium"
+                        ? "text-amber-600"
+                        : "text-emerald-600"
+                    }`}
+                  >
+                    {active.riskLevel}
+                  </p>
+                </div>
+                <div className="p-4 rounded-xl bg-slate-50 dark:bg-white/5 ring-1 ring-slate-100 dark:ring-white/5 text-center">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+                    Cleared Invs
+                  </p>
+                  <p className="font-bold text-slate-800 dark:text-slate-200 text-sm">
+                    {active.clearedInvoices}
+                  </p>
+                </div>
+              </div>
             </div>
-            
+
             {/* Action Zone */}
             <div className="flex gap-4">
-               <button className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl bg-slate-900 text-white font-bold hover:bg-slate-800 transition dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200 shadow-md">
-                 <Mail size={18} /> Email Reminder
-               </button>
-               <button className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl bg-purple-100 text-purple-700 font-bold hover:bg-purple-200 transition dark:bg-purple-500/20 dark:text-purple-300 shadow-sm ring-1 ring-purple-500/20">
-                 <Bell size={18} /> Push Notification
-               </button>
+              <button className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl bg-slate-900 text-white font-bold hover:bg-slate-800 transition dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200 shadow-md">
+                <Mail size={18} /> Email Reminder
+              </button>
+              <button className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl bg-purple-100 text-purple-700 font-bold hover:bg-purple-200 transition dark:bg-purple-500/20 dark:text-purple-300 shadow-sm ring-1 ring-purple-500/20">
+                <Bell size={18} /> Push Notification
+              </button>
             </div>
-            
+
             {/* Timeline */}
             <div>
-               <h3 className="text-sm font-extrabold text-slate-900 dark:text-white mb-5">Recent Receipts</h3>
-               <div className="space-y-5 relative before:absolute before:top-3 before:bottom-3 before:left-3.5 before:w-0.5 before:bg-slate-100 dark:before:bg-slate-800">
-                  {active.history.map(h => (
-                    <div key={h.id} className="relative flex items-start gap-5 z-10">
-                       <div className={`w-7 h-7 rounded-full ring-4 ring-white dark:ring-[#121620] flex items-center justify-center shrink-0 mt-2 ${h.status === 'paid_on_time' ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400' : 'bg-rose-100 text-rose-600 dark:bg-rose-500/20 dark:text-rose-400'}`}>
-                          {h.status === 'paid_on_time' ? <Check size={14} strokeWidth={4} /> : <AlertTriangle size={12} strokeWidth={3} />}
-                       </div>
-                       <div className="flex-1 bg-slate-50 dark:bg-white/5 rounded-xl p-4 ring-1 ring-slate-100 dark:ring-white/5 flex items-center justify-between shadow-sm">
-                          <div>
-                            <p className="font-bold text-sm text-slate-900 dark:text-white">{h.id}</p>
-                            <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-wide">{h.date}</p>
-                          </div>
-                          <div className="text-right">
-                             <p className="font-bold text-sm text-slate-900 dark:text-white mb-1">{fmt(h.amount)} SAR</p>
-                             {h.status === 'paid_on_time' ? (
-                               <span className="text-[10px] font-extrabold uppercase tracking-wide text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-500/20 px-2 py-0.5 rounded-md">On Time</span>
-                             ) : (
-                               <span className="text-[10px] font-extrabold uppercase tracking-wide text-rose-600 dark:text-rose-400 bg-rose-100 dark:bg-rose-500/20 px-2 py-0.5 rounded-md">Late</span>
-                             )}
-                          </div>
-                       </div>
+              <h3 className="text-sm font-extrabold text-slate-900 dark:text-white mb-5">
+                Recent Receipts &amp; Credit Activity
+              </h3>
+              <div className="space-y-5 relative before:absolute before:top-3 before:bottom-3 before:left-3.5 before:w-0.5 before:bg-slate-100 dark:before:bg-slate-800">
+                {active.history.map((h) => (
+                  <div key={h.id} className="relative flex items-start gap-5 z-10">
+                    <div
+                      className={`w-7 h-7 rounded-full ring-4 ring-white dark:ring-[#121620] flex items-center justify-center shrink-0 mt-2 ${
+                        h.status === "paid_on_time"
+                          ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400"
+                          : "bg-rose-100 text-rose-600 dark:bg-rose-500/20 dark:text-rose-400"
+                      }`}
+                    >
+                      {h.status === "paid_on_time" ? (
+                        <Check size={14} strokeWidth={4} />
+                      ) : (
+                        <AlertTriangle size={12} strokeWidth={3} />
+                      )}
                     </div>
-                  ))}
-               </div>
+                    <div className="flex-1 bg-slate-50 dark:bg-white/5 rounded-xl p-4 ring-1 ring-slate-100 dark:ring-white/5 flex items-center justify-between shadow-sm">
+                      <div>
+                        <p className="font-bold text-sm text-slate-900 dark:text-white">{h.id}</p>
+                        <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-wide">
+                          {h.date}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-sm text-slate-900 dark:text-white mb-1">
+                          {fmt(h.amount)} SAR
+                        </p>
+                        {h.status === "paid_on_time" ? (
+                          <span className="text-[10px] font-extrabold uppercase tracking-wide text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-500/20 px-2 py-0.5 rounded-md">
+                            On Time / Synced
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-extrabold uppercase tracking-wide text-rose-600 dark:text-rose-400 bg-rose-100 dark:bg-rose-500/20 px-2 py-0.5 rounded-md">
+                            Late
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-         </div>
+          </div>
+        </div>
+      )}
       </div>
     </div>
   );
 }
 
 /* ════════════════════════════════════════════════════════════════════════
-   MAIN PAGE
+   SUPPLIERS & PAYABLES (LIVE SYNCED WITH DAILY REGISTER CREDIT PURCHASES)
    ════════════════════════════════════════════════════════════════════════ */
 
-function SupplierHubView() {
+function SupplierHubView({
+  supplierBrands,
+  supplierBills,
+  onLogSupplierPurchase,
+}: {
+  supplierBrands: SupplierPayableBrand[];
+  supplierBills: SupplierBillItem[];
+  onLogSupplierPurchase: (
+    supplierName: string,
+    amount: number,
+    dueDate: string,
+    category: "Credit Purchase" | "Cash Purchase" | "Bank Purchase" | "Return"
+  ) => void;
+}) {
   const [unlocked, setUnlocked] = useState(false);
   const [pin, setPin] = useState("");
 
@@ -1111,72 +5076,183 @@ function SupplierHubView() {
     }
   };
 
-  const officialPayables = [
-    { id: 1, brand: "Jotun", amountPaid: 45000, pendingBills: 12000, color: "blue" },
-    { id: 2, brand: "Hempel", amountPaid: 28000, pendingBills: 5400, color: "purple" },
-    { id: 3, brand: "Sigma", amountPaid: 15500, pendingBills: 0, color: "fuchsia" },
-  ];
-
   const privateCommissions = [
     { id: 1, name: "Ali R. (Broker)", dealRef: "Jubail Port Proj.", amount: 15000, date: "2026-09-01" },
     { id: 2, name: "Saad Contractor", dealRef: "Al-Noor Complex", amount: 8500, date: "2026-09-10" },
   ];
-  
+
   const [supplierSearch, setSupplierSearch] = useState("");
   const [logAmount, setLogAmount] = useState("");
-  const [logType, setLogType] = useState("purchase");
-  const [logDate, setLogDate] = useState("");
+  const [logType, setLogType] = useState<"Credit Purchase" | "Cash Purchase" | "Return">("Credit Purchase");
+  const [logDate, setLogDate] = useState("2026-09-25");
+
+  const handleLogSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const val = parseFloat(logAmount);
+    if (!supplierSearch.trim() || Number.isNaN(val) || val <= 0) return;
+    onLogSupplierPurchase(supplierSearch.trim(), val, logDate || "2026-09-25", logType);
+    setSupplierSearch("");
+    setLogAmount("");
+  };
 
   return (
     <div className="flex flex-col gap-6 p-6 h-full overflow-y-auto w-full">
       {/* Top section: Official Brand Payables */}
       <div className="flex flex-col gap-4">
-        <h2 className="font-display font-extrabold text-2xl text-slate-900 dark:text-white flex items-center gap-2">
-          <Package className="text-purple-500" /> Official Brand Payables
-        </h2>
-        
-        {/* Quick Supplier Add/Log Card */}
-        <div className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-900/5 p-5 dark:bg-[#121620] dark:ring-white/10">
-          <h3 className="font-bold text-sm text-slate-500 mb-4 uppercase tracking-wider">Log Purchase or Return</h3>
-          <div className="flex flex-wrap items-center gap-3">
-             <input list="suppliers-list" type="text" placeholder="Search Supplier (Jotun, Hempel...)" value={supplierSearch} onChange={e=>setSupplierSearch(e.target.value)} className="flex-[2] min-w-[200px] px-4 py-2.5 bg-slate-50 rounded-xl ring-1 ring-slate-200 focus:ring-2 focus:ring-purple-500 font-medium text-sm outline-none dark:bg-[#171b28] dark:ring-white/10 dark:text-white transition-shadow" />
-             <datalist id="suppliers-list">
-               <option value="Jotun Arabia" />
-               <option value="Hempel Marine Coatings" />
-               <option value="Sigma Paints" />
-             </datalist>
-             <input type="number" placeholder="Amount (SAR)" value={logAmount} onChange={e=>setLogAmount(e.target.value)} className="flex-1 min-w-[120px] px-4 py-2.5 bg-slate-50 rounded-xl ring-1 ring-slate-200 focus:ring-2 focus:ring-purple-500 font-bold text-sm outline-none dark:bg-[#171b28] dark:ring-white/10 dark:text-white transition-shadow" />
-             <select value={logType} onChange={e=>setLogType(e.target.value)} className={`flex-1 min-w-[140px] px-4 py-2.5 rounded-xl ring-1 outline-none font-bold text-sm transition-shadow ${logType === 'return' ? 'bg-amber-50 ring-amber-200 text-amber-700 focus:ring-amber-500 dark:bg-amber-500/10 dark:ring-amber-500/30 dark:text-amber-400' : 'bg-slate-50 ring-slate-200 focus:ring-2 focus:ring-purple-500 dark:bg-[#171b28] dark:ring-white/10 dark:text-white text-slate-700'}`}>
-               <option value="purchase">Purchase</option>
-               <option value="return">Return / Refund</option>
-             </select>
-             <input type="date" value={logDate} onChange={e=>setLogDate(e.target.value)} className="flex-1 min-w-[140px] px-4 py-2.5 bg-slate-50 rounded-xl ring-1 ring-slate-200 focus:ring-2 focus:ring-purple-500 font-medium text-sm outline-none dark:bg-[#171b28] dark:ring-white/10 dark:text-white text-slate-500 transition-shadow" />
-             <button className={`px-6 py-2.5 text-white rounded-xl font-bold transition shadow-md whitespace-nowrap shrink-0 ${logType === 'return' ? 'bg-amber-500 hover:bg-amber-600 shadow-amber-500/20' : 'bg-purple-600 hover:bg-purple-700 shadow-purple-500/20'}`}>
-               {logType === 'return' ? 'Log Return' : 'Log Purchase'}
-             </button>
-          </div>
+        <div className="flex items-center justify-between">
+          <h2 className="font-display font-extrabold text-2xl text-slate-900 dark:text-white flex items-center gap-2">
+            <Package className="text-purple-500" /> Official Brand Payables
+          </h2>
+          <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-1 rounded-full">
+            ● Live Synced with Daily Register Credit Purchases
+          </span>
         </div>
+
+        {/* Quick Supplier Add/Log Card */}
+        <form
+          onSubmit={handleLogSubmit}
+          className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-900/5 p-5 dark:bg-[#121620] dark:ring-white/10"
+        >
+          <h3 className="font-bold text-sm text-slate-500 mb-4 uppercase tracking-wider">
+            Log Supplier Credit Purchase or Return
+          </h3>
+          <div className="flex flex-wrap items-center gap-3">
+            <input
+              list="suppliers-list"
+              type="text"
+              placeholder="Search Supplier (Jotun, Hempel, Sigma...)"
+              value={supplierSearch}
+              onChange={(e) => setSupplierSearch(e.target.value)}
+              className="flex-[2] min-w-[200px] px-4 py-2.5 bg-slate-50 rounded-xl ring-1 ring-slate-200 focus:ring-2 focus:ring-purple-500 font-medium text-sm outline-none dark:bg-[#171b28] dark:ring-white/10 dark:text-white transition-shadow"
+            />
+            <datalist id="suppliers-list">
+              <option value="Jotun" />
+              <option value="Hempel" />
+              <option value="Sigma" />
+            </datalist>
+            <input
+              type="number"
+              step="0.01"
+              placeholder="Amount (SAR)"
+              value={logAmount}
+              onChange={(e) => setLogAmount(e.target.value)}
+              className="flex-1 min-w-[120px] px-4 py-2.5 bg-slate-50 rounded-xl ring-1 ring-slate-200 focus:ring-2 focus:ring-purple-500 font-bold text-sm outline-none dark:bg-[#171b28] dark:ring-white/10 dark:text-white transition-shadow"
+            />
+            <select
+              value={logType}
+              onChange={(e) =>
+                setLogType(e.target.value as "Credit Purchase" | "Cash Purchase" | "Return")
+              }
+              className={`flex-1 min-w-[150px] px-4 py-2.5 rounded-xl ring-1 outline-none font-bold text-sm transition-shadow ${
+                logType === "Return"
+                  ? "bg-amber-50 ring-amber-200 text-amber-700 focus:ring-amber-500 dark:bg-amber-500/10 dark:ring-amber-500/30 dark:text-amber-400"
+                  : "bg-slate-50 ring-slate-200 focus:ring-2 focus:ring-purple-500 dark:bg-[#171b28] dark:ring-white/10 dark:text-white text-slate-700"
+              }`}
+            >
+              <option value="Credit Purchase">Credit Purchase</option>
+              <option value="Cash Purchase">Cash Purchase</option>
+              <option value="Return">Return / Refund</option>
+            </select>
+            <input
+              type="date"
+              value={logDate}
+              onChange={(e) => setLogDate(e.target.value)}
+              className="flex-1 min-w-[140px] px-4 py-2.5 bg-slate-50 rounded-xl ring-1 ring-slate-200 focus:ring-2 focus:ring-purple-500 font-medium text-sm outline-none dark:bg-[#171b28] dark:ring-white/10 dark:text-white text-slate-500 transition-shadow"
+            />
+            <button
+              type="submit"
+              className={`px-6 py-2.5 text-white rounded-xl font-bold transition shadow-md whitespace-nowrap shrink-0 ${
+                logType === "Return"
+                  ? "bg-amber-500 hover:bg-amber-600 shadow-amber-500/20"
+                  : "bg-purple-600 hover:bg-purple-700 shadow-purple-500/20"
+              }`}
+            >
+              {logType === "Return" ? "Log Return" : "Log Purchase"}
+            </button>
+          </div>
+        </form>
 
         {/* Payables Grid */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {officialPayables.map(p => (
-            <div key={p.id} className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-900/5 p-5 dark:bg-[#121620] dark:ring-white/10 flex flex-col gap-4">
-               <div className="flex items-center gap-3">
-                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-display font-extrabold text-white text-lg bg-${p.color}-500 shadow-sm`}>
-                   {p.brand.charAt(0)}
-                 </div>
-                 <h3 className="font-display font-extrabold text-lg text-slate-900 dark:text-white">{p.brand}</h3>
-               </div>
-               <div className="flex flex-col gap-1">
-                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Paid This Month</p>
-                 <p className="font-display font-extrabold text-xl text-slate-800 dark:text-slate-200">SAR {fmt(p.amountPaid)}</p>
-               </div>
-               <div className="flex flex-col gap-1 pt-3 border-t border-slate-100 dark:border-white/5">
-                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Pending Bills</p>
-                 <p className={`font-display font-extrabold text-lg ${p.pendingBills > 0 ? 'text-amber-600 dark:text-amber-500' : 'text-emerald-600 dark:text-emerald-500'}`}>SAR {fmt(p.pendingBills)}</p>
-               </div>
+          {supplierBrands.map((p) => (
+            <div
+              key={p.id}
+              className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-900/5 p-5 dark:bg-[#121620] dark:ring-white/10 flex flex-col gap-4"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center font-display font-extrabold text-white text-lg bg-gradient-to-br from-purple-600 to-indigo-600 shadow-sm">
+                  {p.brand.charAt(0)}
+                </div>
+                <h3 className="font-display font-extrabold text-lg text-slate-900 dark:text-white">
+                  {p.brand}
+                </h3>
+              </div>
+              <div className="flex flex-col gap-1">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                  Total Paid This Month
+                </p>
+                <p className="font-display font-extrabold text-xl text-slate-800 dark:text-slate-200">
+                  SAR {fmt(p.amountPaid)}
+                </p>
+              </div>
+              <div className="flex flex-col gap-1 pt-3 border-t border-slate-100 dark:border-white/5">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                  Pending Credit Bills
+                </p>
+                <p
+                  className={`font-display font-extrabold text-lg ${
+                    p.pendingBills > 0
+                      ? "text-amber-600 dark:text-amber-500"
+                      : "text-emerald-600 dark:text-emerald-500"
+                  }`}
+                >
+                  SAR {fmt(p.pendingBills)}
+                </p>
+              </div>
             </div>
           ))}
+        </div>
+
+        {/* Live Credit Purchase Bills & Due Dates Table */}
+        <div className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-900/5 p-5 dark:bg-[#121620] dark:ring-white/10">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-display font-extrabold text-base text-slate-900 dark:text-white">
+              Active Supplier Credit Purchases &amp; Payment Due Dates ({supplierBills.length})
+            </h3>
+            <span className="text-xs font-bold text-slate-400">
+              Includes bills logged in Daily Register Step 4
+            </span>
+          </div>
+          <div className="divide-y divide-slate-100 dark:divide-white/5">
+            {supplierBills.map((bill) => (
+              <div
+                key={bill.id}
+                className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="font-extrabold text-slate-900 dark:text-white">
+                    {bill.supplierName}
+                  </span>
+                  <span className="rounded-md bg-purple-100 dark:bg-purple-500/20 px-2 py-0.5 text-xs font-bold text-purple-700 dark:text-purple-300">
+                    {bill.category}
+                  </span>
+                  {bill.source === "Daily Register" && (
+                    <span className="rounded-full bg-emerald-100 dark:bg-emerald-500/20 px-2.5 py-0.5 text-[10px] font-extrabold text-emerald-700 dark:text-emerald-300">
+                      ✓ Synced from Daily Register
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-5">
+                  <span className="text-xs font-bold text-amber-600 dark:text-amber-400">
+                    Due Date: {bill.dueDate}
+                  </span>
+                  <span className="font-display font-extrabold text-slate-900 dark:text-white">
+                    SAR {fmt(bill.amount)}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -1185,407 +5261,399 @@ function SupplierHubView() {
 
       {/* Bottom section: The Private Vault */}
       <div className="flex flex-col gap-4 relative min-h-[300px]">
-        
         {!unlocked && (
           <div className="absolute inset-0 z-10 rounded-2xl backdrop-blur-xl bg-slate-900/10 dark:bg-slate-900/40 flex flex-col items-center justify-center ring-1 ring-white/20 shadow-2xl overflow-hidden">
-             <div className="absolute inset-0 bg-gradient-to-br from-slate-100/40 to-slate-200/40 dark:from-slate-800/60 dark:to-slate-900/60 backdrop-blur-md"></div>
-             <div className="relative z-20 flex flex-col items-center gap-4 bg-white/60 dark:bg-[#121620]/80 p-8 rounded-3xl shadow-xl ring-1 ring-white/50 dark:ring-white/10 backdrop-blur-2xl">
-                <div className="h-16 w-16 rounded-full bg-slate-900 text-white flex items-center justify-center shadow-lg dark:bg-black dark:ring-1 dark:ring-white/10">
-                   <Lock size={28} />
-                </div>
-                <div className="text-center">
-                  <h3 className="font-display font-extrabold text-xl text-slate-900 dark:text-white mb-1">Private Vault Locked</h3>
-                  <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Enter PIN to view confidential ledgers</p>
-                </div>
-                <input 
-                  type="password" 
-                  value={pin}
-                  onChange={handlePin}
-                  placeholder="••••"
-                  className="mt-2 w-32 text-center tracking-[0.5em] font-display text-2xl font-bold py-3 bg-white/80 dark:bg-black/50 rounded-xl ring-1 ring-slate-900/10 dark:ring-white/20 outline-none focus:ring-2 focus:ring-slate-900 dark:focus:ring-white transition-shadow text-slate-900 dark:text-white shadow-inner"
-                />
-             </div>
+            <div className="absolute inset-0 bg-gradient-to-br from-slate-100/40 to-slate-200/40 dark:from-slate-800/60 dark:to-slate-900/60 backdrop-blur-md"></div>
+            <div className="relative z-20 flex flex-col items-center gap-4 bg-white/60 dark:bg-[#121620]/80 p-8 rounded-3xl shadow-xl ring-1 ring-white/50 dark:ring-white/10 backdrop-blur-2xl">
+              <div className="h-16 w-16 rounded-full bg-slate-900 text-white flex items-center justify-center shadow-lg dark:bg-black dark:ring-1 dark:ring-white/10">
+                <Lock size={28} />
+              </div>
+              <div className="text-center">
+                <h3 className="font-display font-extrabold text-xl text-slate-900 dark:text-white mb-1">
+                  Private Vault Locked
+                </h3>
+                <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
+                  Enter PIN to view confidential ledgers
+                </p>
+              </div>
+              <input
+                type="password"
+                value={pin}
+                onChange={handlePin}
+                placeholder="••••"
+                className="mt-2 w-32 text-center tracking-[0.5em] font-display text-2xl font-bold py-3 bg-white/80 dark:bg-black/50 rounded-xl ring-1 ring-slate-900/10 dark:ring-white/20 outline-none focus:ring-2 focus:ring-slate-900 dark:focus:ring-white transition-shadow text-slate-900 dark:text-white shadow-inner"
+              />
+            </div>
           </div>
         )}
 
-        <div className={`flex flex-col gap-4 transition-all duration-500 ${!unlocked ? 'opacity-30 blur-sm pointer-events-none' : 'opacity-100'}`}>
-           <div className="flex items-center justify-between">
-             <h2 className="font-display font-extrabold text-2xl text-slate-900 dark:text-white flex items-center gap-2">
-               <LockOpen className="text-slate-700 dark:text-slate-300" /> The Private Vault
-             </h2>
-             <button onClick={() => setUnlocked(false)} className="px-4 py-2 bg-slate-200 hover:bg-slate-300 dark:bg-white/10 dark:hover:bg-white/20 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-bold transition flex items-center gap-2">
-                <Lock size={14} /> Lock Vault
-             </button>
-           </div>
-           
-           <div className="bg-slate-900 rounded-2xl shadow-xl ring-1 ring-slate-800 p-1 sm:p-6 text-white overflow-hidden relative">
-              <div className="absolute top-0 right-0 p-32 bg-indigo-500/10 blur-[100px] rounded-full"></div>
-              
-              <div className="relative z-10 flex flex-col gap-6">
-                 <div className="flex items-center justify-between px-4 sm:px-0">
-                    <div>
-                      <h3 className="font-bold text-slate-400 uppercase tracking-widest text-xs mb-1">Confidential Ledger</h3>
-                      <p className="font-display font-extrabold text-xl text-white">Broker & Contractor Commissions</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Total Dispensed</p>
-                      <p className="font-display font-extrabold text-2xl text-emerald-400">SAR 23,500</p>
-                    </div>
-                 </div>
+        <div
+          className={`flex flex-col gap-4 transition-all duration-500 ${
+            !unlocked ? "opacity-30 blur-sm pointer-events-none" : "opacity-100"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <h2 className="font-display font-extrabold text-2xl text-slate-900 dark:text-white flex items-center gap-2">
+              <LockOpen className="text-slate-700 dark:text-slate-300" /> The Private Vault
+            </h2>
+            <button
+              onClick={() => setUnlocked(false)}
+              className="px-4 py-2 bg-slate-200 hover:bg-slate-300 dark:bg-white/10 dark:hover:bg-white/20 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-bold transition flex items-center gap-2"
+            >
+              <Lock size={14} /> Lock Vault
+            </button>
+          </div>
 
-                 <div className="bg-black/40 rounded-xl ring-1 ring-white/10 overflow-hidden">
-                    <table className="w-full text-left text-sm whitespace-nowrap">
-                       <thead className="bg-white/5 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
-                          <tr>
-                             <th className="px-4 py-3">Recipient Name</th>
-                             <th className="px-4 py-3">Deal Reference</th>
-                             <th className="px-4 py-3">Date</th>
-                             <th className="px-4 py-3 text-right">Amount</th>
-                          </tr>
-                       </thead>
-                       <tbody className="divide-y divide-white/5 font-medium">
-                          {privateCommissions.map(c => (
-                             <tr key={c.id} className="hover:bg-white/[0.02] transition-colors">
-                                <td className="px-4 py-3 text-white flex items-center gap-2">
-                                  <div className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center text-xs font-bold">{c.name.charAt(0)}</div>
-                                  {c.name}
-                                </td>
-                                <td className="px-4 py-3 text-slate-300">{c.dealRef}</td>
-                                <td className="px-4 py-3 text-slate-400">{c.date}</td>
-                                <td className="px-4 py-3 text-right font-bold text-emerald-400">SAR {fmt(c.amount)}</td>
-                             </tr>
-                          ))}
-                       </tbody>
-                    </table>
-                 </div>
-                 
-                 <div className="flex justify-end px-4 sm:px-0">
-                    <button className="flex items-center gap-2 px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold text-sm transition-colors ring-1 ring-white/20 shadow-lg">
-                      <Plus size={16} /> Add Commission Entry
-                    </button>
-                 </div>
+          <div className="bg-slate-900 rounded-2xl shadow-xl ring-1 ring-slate-800 p-1 sm:p-6 text-white overflow-hidden relative">
+            <div className="absolute top-0 right-0 p-32 bg-indigo-500/10 blur-[100px] rounded-full"></div>
+
+            <div className="relative z-10 flex flex-col gap-6">
+              <div className="flex items-center justify-between px-4 sm:px-0">
+                <div>
+                  <h3 className="font-bold text-slate-400 uppercase tracking-widest text-xs mb-1">
+                    Confidential Ledger
+                  </h3>
+                  <p className="font-display font-extrabold text-xl text-white">
+                    Broker &amp; Contractor Commissions
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">
+                    Total Dispensed
+                  </p>
+                  <p className="font-display font-extrabold text-2xl text-emerald-400">SAR 23,500</p>
+                </div>
               </div>
-           </div>
+
+              <div className="bg-black/40 rounded-xl ring-1 ring-white/10 overflow-hidden">
+                <table className="w-full text-left text-sm whitespace-nowrap">
+                  <thead className="bg-white/5 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+                    <tr>
+                      <th className="px-4 py-3">Recipient Name</th>
+                      <th className="px-4 py-3">Deal Reference</th>
+                      <th className="px-4 py-3">Date</th>
+                      <th className="px-4 py-3 text-right">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5 font-medium">
+                    {privateCommissions.map((c) => (
+                      <tr key={c.id} className="hover:bg-white/[0.02] transition-colors">
+                        <td className="px-4 py-3 text-white flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center text-xs font-bold">
+                            {c.name.charAt(0)}
+                          </div>
+                          {c.name}
+                        </td>
+                        <td className="px-4 py-3 text-slate-300">{c.dealRef}</td>
+                        <td className="px-4 py-3 text-slate-400">{c.date}</td>
+                        <td className="px-4 py-3 text-right font-bold text-emerald-400">
+                          SAR {fmt(c.amount)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex justify-end px-4 sm:px-0">
+                <button className="flex items-center gap-2 px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold text-sm transition-colors ring-1 ring-white/20 shadow-lg">
+                  <Plus size={16} /> Add Commission Entry
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-function FinancialPulseView() {
+interface LiveCrossModuleMetrics {
+  todayCashSales: number;
+  todayBankNet: number;
+  todayPosFees: number;
+  todayExpenses: number;
+  closingDrawerBalance: number;
+  totalCreditOutstanding: number;
+  totalSupplierPayables: number;
+}
+
+function FinancialPulseView({ metrics }: { metrics: LiveCrossModuleMetrics }) {
+  const mtdRevenue = r2(438000 + metrics.todayCashSales + metrics.todayBankNet);
+  const mtdCashCollected = r2(328000 + metrics.todayCashSales + metrics.todayBankNet);
+
   return (
     <div className="flex flex-col gap-6 p-6 h-full overflow-y-auto w-full">
       <div className="flex items-center justify-between mb-2">
-         <div className="flex flex-col gap-1.5">
-           <h2 className="font-display font-extrabold text-2xl text-slate-900 dark:text-white flex items-center gap-2">
-              <Activity className="text-emerald-500 dark:text-emerald-400" /> Sales & Business Analytics Hub
-           </h2>
-           <p className="text-slate-500 dark:text-slate-400 font-semibold text-sm">Core sales revenue, profit margins, and collections performance.</p>
-         </div>
+        <div className="flex flex-col gap-1.5">
+          <h2 className="font-display font-extrabold text-2xl text-slate-900 dark:text-white flex items-center gap-2">
+            <Activity className="text-emerald-500 dark:text-emerald-400" /> Sales &amp; Business Analytics Hub
+          </h2>
+          <p className="text-slate-500 dark:text-slate-400 font-semibold text-sm">
+            Live synced with today&apos;s Daily Register, POS Terminal Fees, and Payables.
+          </p>
+        </div>
+        <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-1.5 rounded-full">
+          ● Live Register Sync Active
+        </span>
       </div>
 
       {/* 1. Top Row: Primary Sales & Cash KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {/* KPI 1 */}
         <div className="bg-white dark:bg-[#121620] rounded-2xl shadow-sm ring-1 ring-slate-900/5 dark:ring-white/10 p-5 flex flex-col gap-3">
-          <div className="text-slate-500 dark:text-slate-400 font-bold text-xs uppercase tracking-wider">Total Revenue (This Month)</div>
-          <div className="text-3xl font-black text-slate-900 dark:text-white">SAR 482,900</div>
+          <div className="text-slate-500 dark:text-slate-400 font-bold text-xs uppercase tracking-wider">
+            Total Revenue (Live MTD)
+          </div>
+          <div className="text-2xl font-black text-slate-900 dark:text-white">
+            SAR {fmt(mtdRevenue)}
+          </div>
           <div className="flex items-center gap-2">
-             <span className="bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1">
-               <TrendingUp size={12} /> +14.2%
-             </span>
-             <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">vs last month</span>
+            <span className="bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1">
+              <TrendingUp size={12} /> +14.2%
+            </span>
+            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+              POS Fees Today: -SAR {fmt(metrics.todayPosFees)}
+            </span>
           </div>
         </div>
 
         {/* KPI 2 */}
         <div className="bg-white dark:bg-[#121620] rounded-2xl shadow-sm ring-1 ring-slate-900/5 dark:ring-white/10 p-5 flex flex-col gap-3">
-          <div className="text-slate-500 dark:text-slate-400 font-bold text-xs uppercase tracking-wider">Cash vs Credit (Collections)</div>
+          <div className="text-slate-500 dark:text-slate-400 font-bold text-xs uppercase tracking-wider">
+            Cash vs Credit (Live Radar)
+          </div>
           <div className="flex flex-col gap-1">
-            <div className="text-lg font-black text-emerald-600 dark:text-emerald-400 leading-none">SAR 364,500 <span className="text-xs text-slate-500">Cash</span></div>
-            <div className="text-sm font-bold text-slate-400 dark:text-slate-500 leading-none">SAR 118,400 <span className="text-xs">Credit</span></div>
+            <div className="text-lg font-black text-emerald-600 dark:text-emerald-400 leading-none">
+              SAR {fmt(mtdCashCollected)} <span className="text-xs text-slate-500">Cash/POS</span>
+            </div>
+            <div className="text-sm font-bold text-slate-400 dark:text-slate-500 leading-none">
+              SAR {fmt(metrics.totalCreditOutstanding)}{" "}
+              <span className="text-xs">Credit Outstanding</span>
+            </div>
           </div>
           <div className="w-full bg-slate-100 dark:bg-white/5 rounded-full h-1.5 mt-1 overflow-hidden flex">
-             <div className="bg-emerald-500 h-full" style={{ width: '75%' }}></div>
-             <div className="bg-slate-300 dark:bg-slate-600 h-full" style={{ width: '25%' }}></div>
+            <div className="bg-emerald-500 h-full" style={{ width: "75%" }}></div>
+            <div className="bg-slate-300 dark:bg-slate-600 h-full" style={{ width: "25%" }}></div>
           </div>
           <p className="text-xs font-semibold text-slate-500">75% cash realization rate</p>
         </div>
 
         {/* KPI 3 */}
         <div className="bg-white dark:bg-[#121620] rounded-2xl shadow-sm ring-1 ring-slate-900/5 dark:ring-white/10 p-5 flex flex-col gap-3">
-          <div className="text-slate-500 dark:text-slate-400 font-bold text-xs uppercase tracking-wider">Estimated Gross Profit</div>
-          <div className="text-3xl font-black text-slate-900 dark:text-white">SAR 128,400</div>
+          <div className="text-slate-500 dark:text-slate-400 font-bold text-xs uppercase tracking-wider">
+            Today&apos;s Drawer Closing Balance
+          </div>
+          <div className="text-2xl font-black text-slate-900 dark:text-white">
+            SAR {fmt(metrics.closingDrawerBalance)}
+          </div>
           <div className="flex items-center gap-2">
-             <span className="bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400 px-2 py-0.5 rounded text-xs font-bold">
-               26.6% Margin
-             </span>
+            <span className="bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400 px-2 py-0.5 rounded text-xs font-bold">
+              Today Outflows: SAR {fmt(metrics.todayExpenses)}
+            </span>
           </div>
         </div>
 
         {/* KPI 4 */}
         <div className="bg-white dark:bg-[#121620] rounded-2xl shadow-sm ring-1 ring-slate-900/5 dark:ring-white/10 p-5 flex flex-col justify-between">
           <div className="flex justify-between items-start">
-             <div className="text-slate-500 dark:text-slate-400 font-bold text-xs uppercase tracking-wider">Monthly Sales Target</div>
-             <div className="text-xs font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 px-2 py-0.5 rounded">8 Days Left</div>
+            <div className="text-slate-500 dark:text-slate-400 font-bold text-xs uppercase tracking-wider">
+              Monthly Sales Target
+            </div>
+            <div className="text-xs font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 px-2 py-0.5 rounded">
+              8 Days Left
+            </div>
           </div>
           <div className="flex items-center gap-4 mt-2">
-             {/* Radial Progress */}
-             <div className="relative w-14 h-14 shrink-0 flex items-center justify-center">
-                <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
-                  <path className="text-slate-100 dark:text-white/5" strokeWidth="4" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                  <path className="text-emerald-500" strokeWidth="4" strokeDasharray="84, 100" strokeLinecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                </svg>
-                <span className="absolute text-sm font-black text-slate-900 dark:text-white">84%</span>
-             </div>
-             <div className="flex flex-col">
-                <span className="text-sm font-extrabold text-slate-900 dark:text-white">SAR 575,000</span>
-                <span className="text-xs font-semibold text-slate-500">Target for June</span>
-             </div>
+            <div className="relative w-14 h-14 shrink-0 flex items-center justify-center">
+              <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+                <path
+                  className="text-slate-100 dark:text-white/5"
+                  strokeWidth="4"
+                  stroke="currentColor"
+                  fill="none"
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                />
+                <path
+                  className="text-emerald-500"
+                  strokeWidth="4"
+                  strokeDasharray="84, 100"
+                  strokeLinecap="round"
+                  stroke="currentColor"
+                  fill="none"
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                />
+              </svg>
+              <span className="absolute text-sm font-black text-slate-900 dark:text-white">84%</span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm font-extrabold text-slate-900 dark:text-white">
+                SAR 575,000
+              </span>
+              <span className="text-xs font-semibold text-slate-500">Target for Cycle</span>
+            </div>
           </div>
         </div>
       </div>
 
       {/* 2. Middle Row: Multi-Type Interactive Charts */}
       <div className="flex flex-col lg:flex-row gap-6">
-         {/* Left (60% width): Monthly Revenue & Collection Trajectory */}
-         <div className="lg:w-[60%] bg-white dark:bg-[#121620] rounded-3xl p-6 shadow-sm ring-1 ring-slate-900/5 dark:ring-white/10 flex flex-col gap-6">
-            <div className="flex justify-between items-start">
-               <div>
-                 <h3 className="font-display font-extrabold text-lg text-slate-900 dark:text-white">Revenue vs Supplier Costs</h3>
-                 <p className="text-slate-500 dark:text-slate-400 text-xs font-semibold mt-1">Monthly Trajectory (Past 6 Months)</p>
-               </div>
-               <select className="bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 outline-none">
-                 <option>Monthly</option>
-                 <option>Weekly</option>
-               </select>
-            </div>
-            
-            <div className="flex-1 flex items-end justify-between gap-4 pt-8 relative min-h-[220px]">
-              {/* Tooltip on the highest month (June) */}
-              <div className="absolute top-0 right-[15%] z-20 bg-slate-900 dark:bg-slate-800 text-white rounded-xl p-3 shadow-xl transform -translate-x-1/2 -translate-y-4 pointer-events-none animate-fade-in-up">
-                 <div className="text-xs font-bold text-slate-300 mb-1">June Analytics</div>
-                 <div className="flex items-center gap-3">
-                    <div className="flex flex-col">
-                       <span className="text-[10px] text-emerald-400 uppercase font-bold">Sales</span>
-                       <span className="font-black text-sm">SAR 124,500</span>
-                    </div>
-                    <div className="w-px h-6 bg-slate-700"></div>
-                    <div className="flex flex-col">
-                       <span className="text-[10px] text-indigo-300 uppercase font-bold">Costs</span>
-                       <span className="font-black text-sm">SAR 88,200</span>
-                    </div>
-                 </div>
-                 <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[8px] border-t-slate-900 dark:border-t-slate-800"></div>
-              </div>
-
-              {/* Chart grid lines */}
-              <div className="absolute inset-0 flex flex-col justify-between pointer-events-none pb-6">
-                <div className="border-b border-dashed border-slate-200 dark:border-white/5 w-full"></div>
-                <div className="border-b border-dashed border-slate-200 dark:border-white/5 w-full"></div>
-                <div className="border-b border-dashed border-slate-200 dark:border-white/5 w-full"></div>
-                <div className="border-b border-slate-200 dark:border-white/10 w-full"></div>
-              </div>
-
-              {/* Month Bars */}
-              {['Jan', 'Feb', 'Mar', 'Apr', 'May'].map((month, i) => (
-                <div key={month} className="relative z-10 flex flex-col items-center gap-2 flex-1 group cursor-pointer hover:opacity-80 transition-opacity">
-                  <div className="flex items-end gap-1.5 h-40 w-full justify-center">
-                    <div className="w-1/3 bg-emerald-400 dark:bg-emerald-500 rounded-t-sm" style={{ height: `${50 + (i * 8)}%` }}></div>
-                    <div className="w-1/3 bg-slate-300 dark:bg-indigo-400/50 rounded-t-sm" style={{ height: `${35 + (i * 5)}%` }}></div>
-                  </div>
-                  <span className="text-[10px] font-bold text-slate-500 uppercase">{month}</span>
-                </div>
-              ))}
-              
-              {/* Highlighted Month (June) */}
-              <div className="relative z-10 flex flex-col items-center gap-2 flex-1 group cursor-pointer">
-                <div className="flex items-end gap-1.5 h-40 w-full justify-center relative">
-                  <div className="absolute -inset-x-2 -inset-y-4 bg-slate-50 dark:bg-white/5 rounded-xl -z-10"></div>
-                  <div className="w-1/3 bg-emerald-500 dark:bg-emerald-400 rounded-t-sm shadow-[0_0_15px_rgba(16,185,129,0.3)]" style={{ height: '95%' }}></div>
-                  <div className="w-1/3 bg-slate-400 dark:bg-indigo-400 rounded-t-sm" style={{ height: '70%' }}></div>
-                </div>
-                <span className="text-[10px] font-bold text-slate-900 dark:text-white uppercase bg-slate-100 dark:bg-white/10 px-2 py-0.5 rounded-full">Jun</span>
-              </div>
-            </div>
-
-            <div className="flex justify-center gap-6 mt-2">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-sm bg-emerald-500"></div>
-                <span className="text-xs font-bold text-slate-600 dark:text-slate-400">Paint Sales</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-sm bg-slate-300 dark:bg-indigo-400/50"></div>
-                <span className="text-xs font-bold text-slate-600 dark:text-slate-400">Supplier Costs</span>
-              </div>
-            </div>
-         </div>
-
-         {/* Right (40% width): Sales by Product Category & Brand */}
-         <div className="lg:w-[40%] bg-white dark:bg-[#121620] rounded-3xl p-6 shadow-sm ring-1 ring-slate-900/5 dark:ring-white/10 flex flex-col gap-6">
+        <div className="lg:w-[60%] bg-white dark:bg-[#121620] rounded-3xl p-6 shadow-sm ring-1 ring-slate-900/5 dark:ring-white/10 flex flex-col gap-6">
+          <div className="flex justify-between items-start">
             <div>
-              <h3 className="font-display font-extrabold text-lg text-slate-900 dark:text-white">Sales by Category & Brand</h3>
-              <p className="text-slate-500 dark:text-slate-400 text-xs font-semibold mt-1">Market share breakdown</p>
+              <h3 className="font-display font-extrabold text-lg text-slate-900 dark:text-white">
+                Revenue vs Supplier Costs
+              </h3>
+              <p className="text-slate-500 dark:text-slate-400 text-xs font-semibold mt-1">
+                Monthly Trajectory (Past 6 Months)
+              </p>
+            </div>
+            <select className="bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 outline-none">
+              <option>Monthly</option>
+              <option>Weekly</option>
+            </select>
+          </div>
+
+          <div className="flex-1 flex items-end justify-between gap-4 pt-8 relative min-h-[220px]">
+            <div className="absolute inset-0 flex flex-col justify-between pointer-events-none pb-6">
+              <div className="border-b border-dashed border-slate-200 dark:border-white/5 w-full"></div>
+              <div className="border-b border-dashed border-slate-200 dark:border-white/5 w-full"></div>
+              <div className="border-b border-dashed border-slate-200 dark:border-white/5 w-full"></div>
+              <div className="border-b border-slate-200 dark:border-white/10 w-full"></div>
             </div>
 
-            <div className="flex-1 flex flex-col justify-center gap-6">
-               <div className="flex flex-col gap-4">
-                 <div>
-                   <div className="flex justify-between text-sm mb-1.5">
-                     <span className="font-bold text-slate-700 dark:text-slate-300">Decorative Wall Paint <span className="text-slate-400 font-medium text-xs">(Jotun)</span></span>
-                     <span className="font-extrabold text-blue-600 dark:text-blue-400">46%</span>
-                   </div>
-                   <div className="h-2 w-full bg-slate-100 dark:bg-white/5 rounded-full overflow-hidden">
-                     <div className="h-full bg-blue-500 rounded-full" style={{ width: '46%' }}></div>
-                   </div>
-                 </div>
-
-                 <div>
-                   <div className="flex justify-between text-sm mb-1.5">
-                     <span className="font-bold text-slate-700 dark:text-slate-300">Protective & Marine <span className="text-slate-400 font-medium text-xs">(Hempel)</span></span>
-                     <span className="font-extrabold text-indigo-600 dark:text-indigo-400">28%</span>
-                   </div>
-                   <div className="h-2 w-full bg-slate-100 dark:bg-white/5 rounded-full overflow-hidden">
-                     <div className="h-full bg-indigo-500 rounded-full" style={{ width: '28%' }}></div>
-                   </div>
-                 </div>
-
-                 <div>
-                   <div className="flex justify-between text-sm mb-1.5">
-                     <span className="font-bold text-slate-700 dark:text-slate-300">Exterior & Enamels <span className="text-slate-400 font-medium text-xs">(Sigma)</span></span>
-                     <span className="font-extrabold text-emerald-600 dark:text-emerald-400">16%</span>
-                   </div>
-                   <div className="h-2 w-full bg-slate-100 dark:bg-white/5 rounded-full overflow-hidden">
-                     <div className="h-full bg-emerald-500 rounded-full" style={{ width: '16%' }}></div>
-                   </div>
-                 </div>
-
-                 <div>
-                   <div className="flex justify-between text-sm mb-1.5">
-                     <span className="font-bold text-slate-700 dark:text-slate-300">Hardware, Brushes & Thinners</span>
-                     <span className="font-extrabold text-amber-600 dark:text-amber-400">10%</span>
-                   </div>
-                   <div className="h-2 w-full bg-slate-100 dark:bg-white/5 rounded-full overflow-hidden">
-                     <div className="h-full bg-amber-500 rounded-full" style={{ width: '10%' }}></div>
-                   </div>
-                 </div>
-               </div>
-
-               <div className="bg-slate-50 dark:bg-white/5 rounded-xl p-4 border border-slate-200 dark:border-white/10 mt-auto">
-                 <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 text-center">Customer Conversion Split</div>
-                 <div className="flex justify-between items-center text-sm">
-                   <div className="flex flex-col items-center">
-                     <span className="font-black text-slate-900 dark:text-white text-lg">42%</span>
-                     <span className="font-semibold text-slate-500 text-xs text-center">Retail Walk-in</span>
-                   </div>
-                   <div className="w-px h-8 bg-slate-200 dark:bg-white/10"></div>
-                   <div className="flex flex-col items-center">
-                     <span className="font-black text-slate-900 dark:text-white text-lg">58%</span>
-                     <span className="font-semibold text-slate-500 text-xs text-center">Wholesale Contractor</span>
-                   </div>
-                 </div>
-               </div>
-            </div>
-         </div>
-      </div>
-
-      {/* 3. Bottom Section: Fast-Moving Inventory & Secondary Cash Buffer */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-         {/* Top 5 Fast-Moving Items */}
-         <div className="lg:col-span-2 bg-white dark:bg-[#121620] rounded-3xl p-6 shadow-sm ring-1 ring-slate-900/5 dark:ring-white/10 flex flex-col gap-4">
-            <h3 className="font-display font-extrabold text-lg text-slate-900 dark:text-white">Top 5 Fast-Moving Items (MTD)</h3>
-            
-            <div className="flex flex-col gap-3">
-              {[
-                { sku: 'Jotun Fenomastic Pure Matt', units: 342, rev: '41,040' },
-                { sku: 'Hempel Hempadur Primer 15570', units: 215, rev: '38,700' },
-                { sku: 'Sigma Rust Primer', units: 180, rev: '19,800' },
-                { sku: 'Hardware Thinner 200L Drum', units: 45, rev: '15,750' },
-                { sku: 'Jotashield Decor High Build', units: 120, rev: '21,600' }
-              ].map((item, idx) => (
-                <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <div className="w-6 h-6 rounded-full bg-slate-200 dark:bg-white/10 flex items-center justify-center text-[10px] font-extrabold text-slate-500">
-                      {idx + 1}
-                    </div>
-                    <span className="text-sm font-bold text-slate-700 dark:text-slate-300">{item.sku}</span>
-                  </div>
-                  <div className="flex items-center gap-6">
-                    <div className="flex flex-col items-end">
-                      <span className="text-xs font-semibold text-slate-500">Units</span>
-                      <span className="text-sm font-bold text-slate-700 dark:text-slate-300">{item.units}</span>
-                    </div>
-                    <div className="flex flex-col items-end w-20">
-                      <span className="text-xs font-semibold text-slate-500">Revenue</span>
-                      <span className="text-sm font-black text-emerald-600 dark:text-emerald-400">{item.rev}</span>
-                    </div>
-                  </div>
+            {["Jan", "Feb", "Mar", "Apr", "May"].map((month, i) => (
+              <div
+                key={month}
+                className="relative z-10 flex flex-col items-center gap-2 flex-1 group cursor-pointer hover:opacity-80 transition-opacity"
+              >
+                <div className="flex items-end gap-1.5 h-40 w-full justify-center">
+                  <div
+                    className="w-1/3 bg-emerald-400 dark:bg-emerald-500 rounded-t-sm"
+                    style={{ height: `${50 + i * 8}%` }}
+                  ></div>
+                  <div
+                    className="w-1/3 bg-slate-300 dark:bg-indigo-400/50 rounded-t-sm"
+                    style={{ height: `${35 + i * 5}%` }}
+                  ></div>
                 </div>
-              ))}
-            </div>
-         </div>
+                <span className="text-[10px] font-bold text-slate-500 uppercase">{month}</span>
+              </div>
+            ))}
 
-         {/* Secondary Cash Health Strip */}
-         <div className="lg:col-span-1 flex flex-col gap-4">
-           <div className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-3xl p-6 text-white shadow-lg shadow-emerald-500/20 flex flex-col justify-center flex-1 relative overflow-hidden group">
-             <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10"></div>
-             <div className="text-emerald-100 font-bold text-xs uppercase tracking-wider mb-1">Cash Buffer</div>
-             <div className="text-4xl font-black mb-2">42 <span className="text-lg font-bold text-emerald-200">Days</span></div>
-             <p className="text-sm font-medium text-emerald-50">Operational runway based on current cash flow and average daily burn.</p>
-           </div>
-           
-           <div className="bg-white dark:bg-[#121620] rounded-3xl p-6 shadow-sm ring-1 ring-slate-900/5 dark:ring-white/10 flex flex-col justify-center flex-1">
-             <div className="text-slate-500 dark:text-slate-400 font-bold text-xs uppercase tracking-wider mb-3">Supplier Obligations</div>
-             <div className="flex flex-col gap-4">
-               <div>
-                 <span className="text-xs font-semibold text-slate-500 block mb-1">Outstanding Payables</span>
-                 <span className="text-xl font-black text-rose-500">SAR 84,300</span>
-               </div>
-               <div className="border-t border-slate-100 dark:border-white/5 pt-4">
-                 <span className="text-xs font-semibold text-slate-500 block mb-1">Next Major Due</span>
-                 <div className="flex items-center gap-2">
-                   <span className="bg-rose-100 text-rose-600 dark:bg-rose-500/20 dark:text-rose-400 px-2 py-1 rounded text-xs font-bold">
-                     In 6 Days
-                   </span>
-                   <span className="text-sm font-bold text-slate-700 dark:text-slate-300">Jotun KSA</span>
-                 </div>
-               </div>
-             </div>
-           </div>
-         </div>
+            <div className="relative z-10 flex flex-col items-center gap-2 flex-1 group cursor-pointer">
+              <div className="flex items-end gap-1.5 h-40 w-full justify-center relative">
+                <div className="absolute -inset-x-2 -inset-y-4 bg-slate-50 dark:bg-white/5 rounded-xl -z-10"></div>
+                <div
+                  className="w-1/3 bg-emerald-500 dark:bg-emerald-400 rounded-t-sm shadow-[0_0_15px_rgba(16,185,129,0.3)]"
+                  style={{ height: "95%" }}
+                ></div>
+                <div
+                  className="w-1/3 bg-slate-400 dark:bg-indigo-400 rounded-t-sm"
+                  style={{ height: "70%" }}
+                ></div>
+              </div>
+              <span className="text-[10px] font-bold text-slate-900 dark:text-white uppercase bg-slate-100 dark:bg-white/10 px-2 py-0.5 rounded-full">
+                Current
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="lg:w-[40%] bg-white dark:bg-[#121620] rounded-3xl p-6 shadow-sm ring-1 ring-slate-900/5 dark:ring-white/10 flex flex-col justify-between gap-6">
+          <div>
+            <h3 className="font-display font-extrabold text-lg text-slate-900 dark:text-white">
+              Supplier Obligations (Live Synced)
+            </h3>
+            <p className="text-slate-500 dark:text-slate-400 text-xs font-semibold mt-1">
+              Includes Credit Purchases added in Daily Register
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-4">
+            <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20">
+              <span className="text-xs font-bold text-rose-600 dark:text-rose-300 uppercase">
+                Outstanding Supplier Payables
+              </span>
+              <div className="text-2xl font-black text-rose-600 dark:text-rose-400 mt-1">
+                SAR {fmt(metrics.totalSupplierPayables)}
+              </div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20">
+              <span className="text-xs font-bold text-amber-700 dark:text-amber-300 uppercase">
+                Today&apos;s Net Bank / POS Settlement
+              </span>
+              <div className="text-2xl font-black text-amber-600 dark:text-amber-400 mt-1">
+                SAR {fmt(metrics.todayBankNet)}
+              </div>
+              <span className="text-xs font-semibold text-amber-700/80 dark:text-amber-300/70">
+                After SAB (0.85%) &amp; Al Rajhi (0.80%) POS fees (-SAR {fmt(metrics.todayPosFees)})
+              </span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-function BranchConsolidationView() {
+function BranchConsolidationView({ metrics }: { metrics: LiveCrossModuleMetrics }) {
+  const jubailTodayCashAndBank = r2(
+    110000 + metrics.todayCashSales + metrics.todayBankNet
+  );
+  const allBranchesSales = r2(jubailTodayCashAndBank + 98400 + 107300);
+
   return (
     <div className="flex flex-col gap-6 p-6 h-full overflow-y-auto w-full">
       <div className="flex items-center justify-between mb-2">
-         <div className="flex flex-col gap-1.5">
-           <h2 className="font-display font-extrabold text-2xl text-slate-900 dark:text-white flex items-center gap-2">
-              <Building2 className="text-purple-500 dark:text-purple-400" /> Branch Consolidation
-           </h2>
-           <p className="text-slate-500 dark:text-slate-400 font-semibold text-sm">All 3 shops combined: daily cash, sales, and stock.</p>
-         </div>
+        <div className="flex flex-col gap-1.5">
+          <h2 className="font-display font-extrabold text-2xl text-slate-900 dark:text-white flex items-center gap-2">
+            <Building2 className="text-purple-500 dark:text-purple-400" /> Branch Consolidation
+          </h2>
+          <p className="text-slate-500 dark:text-slate-400 font-semibold text-sm">
+            All 3 shops combined: live daily cash, POS settlements, and supplier payables.
+          </p>
+        </div>
+        <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-1.5 rounded-full">
+          ● Live Synced with Jubail Register
+        </span>
       </div>
 
       {/* Header Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white dark:bg-[#121620] rounded-2xl shadow-sm ring-1 ring-slate-900/5 dark:ring-white/10 p-5 flex flex-col gap-2">
-          <div className="text-slate-600 dark:text-slate-400 font-bold text-xs uppercase tracking-wider">TOTAL SALES (ALL 3 SHOPS)</div>
-          <div className="text-2xl font-black text-slate-900 dark:text-white">348,200 <span className="text-sm text-slate-500">SAR</span></div>
-          <p className="text-xs font-semibold text-emerald-500 mt-1">↑ +12.4% vs last week across all branches</p>
+          <div className="text-slate-600 dark:text-slate-400 font-bold text-xs uppercase tracking-wider">
+            TOTAL SALES (ALL 3 SHOPS)
+          </div>
+          <div className="text-2xl font-black text-slate-900 dark:text-white">
+            {fmt(allBranchesSales)} <span className="text-sm text-slate-500">SAR</span>
+          </div>
+          <p className="text-xs font-semibold text-emerald-500 mt-1">
+            ↑ Live synced with Jubail Main Register
+          </p>
         </div>
         <div className="bg-white dark:bg-[#121620] rounded-2xl shadow-sm ring-1 ring-slate-900/5 dark:ring-white/10 p-5 flex flex-col gap-2">
-          <div className="text-slate-600 dark:text-slate-400 font-bold text-xs uppercase tracking-wider">VALUE OF PAINT IN STOCK</div>
-          <div className="text-2xl font-black text-slate-900 dark:text-white">1,240,500 <span className="text-sm text-slate-500">SAR</span></div>
-          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-1">Distributed across 3 regional stockrooms</p>
+          <div className="text-slate-600 dark:text-slate-400 font-bold text-xs uppercase tracking-wider">
+            CUSTOMER CREDIT RADAR TOTAL
+          </div>
+          <div className="text-2xl font-black text-slate-900 dark:text-white">
+            {fmt(metrics.totalCreditOutstanding)} <span className="text-sm text-slate-500">SAR</span>
+          </div>
+          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-1">
+            Active contractor receivables across branches
+          </p>
         </div>
         <div className="bg-white dark:bg-[#121620] rounded-2xl shadow-sm ring-1 ring-slate-900/5 dark:ring-white/10 p-5 flex flex-col gap-2">
-          <div className="text-slate-600 dark:text-slate-400 font-bold text-xs uppercase tracking-wider">BILLS WE OWE TO SUPPLIERS</div>
-          <div className="text-2xl font-black text-slate-900 dark:text-white">84,300 <span className="text-sm text-slate-500">SAR</span></div>
-          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-1">Supplier payables due this cycle</p>
+          <div className="text-slate-600 dark:text-slate-400 font-bold text-xs uppercase tracking-wider">
+            BILLS WE OWE TO SUPPLIERS
+          </div>
+          <div className="text-2xl font-black text-rose-600 dark:text-rose-400">
+            {fmt(metrics.totalSupplierPayables)} <span className="text-sm text-slate-500">SAR</span>
+          </div>
+          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-1">
+            Live synced with Credit Purchases
+          </p>
         </div>
       </div>
 
@@ -1594,128 +5662,128 @@ function BranchConsolidationView() {
         {/* Branch 1: Jubail Main Branch */}
         <div className="bg-gradient-to-br from-indigo-50/50 to-white dark:from-[#1A1E29] dark:to-[#121620] rounded-3xl p-6 border-2 border-indigo-400 dark:border-indigo-500/50 shadow-lg shadow-indigo-500/10 flex flex-col gap-5 relative overflow-hidden group">
           <div className="flex justify-between items-start mb-2">
-            <span className="text-[10px] font-extrabold uppercase tracking-widest text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-500/20 px-2 py-1 rounded-md">MAIN BRANCH</span>
+            <span className="text-[10px] font-extrabold uppercase tracking-widest text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-500/20 px-2 py-1 rounded-md">
+              MAIN BRANCH
+            </span>
             <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 text-xs font-bold">
-              <span className="relative flex h-2 w-2"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span></span>
-              Fully Operational
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              Live Session Active
             </div>
           </div>
           <div>
-            <h3 className="font-display font-extrabold text-xl text-slate-900 dark:text-white">Jubail Main Branch</h3>
-            <p className="text-slate-500 dark:text-slate-400 text-xs font-semibold mt-1">Main Shop: Jotun + Hempel + Hardware tools</p>
-          </div>
-          
-          {/* Side-by-side Showrooms Sub-Split */}
-          <div className="flex gap-2">
-            <div className="flex-1 bg-white/60 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl p-3 flex flex-col items-center justify-center text-center shadow-sm">
-              <img src="/logos/jotun.jpg" alt="Jotun" className="h-7 w-auto object-contain rounded-sm mb-1.5" />
-              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Decorative & Marine</span>
-            </div>
-            <div className="flex-1 bg-white/60 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl p-3 flex flex-col items-center justify-center text-center shadow-sm">
-              <img src="/logos/hempel.webp" alt="Hempel" className="h-7 w-auto object-contain rounded-sm mb-1.5" />
-              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Protective Coatings</span>
-            </div>
-          </div>
-          {/* Hardware Tools Section Pill */}
-          <div className="bg-slate-100/80 dark:bg-white/5 rounded-lg p-2.5 flex items-center justify-center gap-2 border border-slate-200 dark:border-white/10 shadow-sm">
-            <span className="text-sm">🛠️</span>
-            <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Hardware & Tools Shop</span>
-            <span className="text-[9px] bg-slate-200 dark:bg-white/10 text-slate-600 dark:text-slate-400 px-1.5 py-0.5 rounded font-extrabold uppercase">Integrated</span>
+            <h3 className="font-display font-extrabold text-xl text-slate-900 dark:text-white">
+              Jubail Main Branch
+            </h3>
+            <p className="text-slate-500 dark:text-slate-400 text-xs font-semibold mt-1">
+              Main Shop: Jotun + Hempel + Hardware tools
+            </p>
           </div>
 
           <div className="flex flex-col gap-3 mt-2">
             <div className="flex justify-between items-center border-b border-slate-100 dark:border-white/5 pb-2">
-              <span className="text-sm font-semibold text-slate-600 dark:text-slate-400">Daily Register Cash:</span>
-              <span className="text-sm font-extrabold text-slate-900 dark:text-white">142,500 SAR</span>
+              <span className="text-sm font-semibold text-slate-600 dark:text-slate-400">
+                Today&apos;s Drawer Closing:
+              </span>
+              <span className="text-sm font-extrabold text-emerald-600 dark:text-emerald-400">
+                SAR {fmt(metrics.closingDrawerBalance)}
+              </span>
             </div>
             <div className="flex justify-between items-center border-b border-slate-100 dark:border-white/5 pb-2">
-              <span className="text-sm font-semibold text-slate-600 dark:text-slate-400">Stock Turnover:</span>
-              <span className="text-sm font-extrabold text-emerald-600 dark:text-emerald-400">High Volume</span>
+              <span className="text-sm font-semibold text-slate-600 dark:text-slate-400">
+                Net Bank / POS Today:
+              </span>
+              <span className="text-sm font-extrabold text-slate-900 dark:text-white">
+                SAR {fmt(metrics.todayBankNet)}
+              </span>
             </div>
             <div className="flex justify-between items-center pb-2">
-              <span className="text-sm font-semibold text-slate-600 dark:text-slate-400">Staff Assigned:</span>
-              <span className="text-sm font-extrabold text-slate-900 dark:text-white">8 Associates</span>
+              <span className="text-sm font-semibold text-slate-600 dark:text-slate-400">
+                POS Fees (SAB / Al Rajhi):
+              </span>
+              <span className="text-sm font-extrabold text-rose-500">
+                -SAR {fmt(metrics.todayPosFees)}
+              </span>
             </div>
           </div>
-          <button className="mt-auto w-full py-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold text-sm hover:bg-indigo-100 dark:hover:bg-indigo-500/20 transition-colors flex items-center justify-center gap-2">
-            <Search size={16} /> View Main Shop Accounts
-          </button>
         </div>
 
         {/* Branch 2: Dammam Franchise */}
         <div className="bg-white dark:bg-[#121620] rounded-3xl p-6 border-2 border-amber-400 dark:border-amber-500/50 shadow-lg shadow-amber-500/10 flex flex-col gap-5 relative overflow-hidden group">
           <div className="flex justify-between items-start mb-2">
-            <span className="text-[10px] font-extrabold uppercase tracking-widest text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-500/20 px-2 py-1 rounded-md">FRANCHISE</span>
+            <span className="text-[10px] font-extrabold uppercase tracking-widest text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-500/20 px-2 py-1 rounded-md">
+              FRANCHISE
+            </span>
             <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 text-xs font-bold">
-              <span className="relative flex h-2 w-2"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span></span>
               Synced EOD
             </div>
           </div>
           <div>
-            <h3 className="font-display font-extrabold text-xl text-slate-900 dark:text-white">Dammam Shop</h3>
-            <p className="text-slate-500 dark:text-slate-400 text-xs font-semibold mt-1">Jotun Exclusive Franchise Outlet</p>
+            <h3 className="font-display font-extrabold text-xl text-slate-900 dark:text-white">
+              Dammam Shop
+            </h3>
+            <p className="text-slate-500 dark:text-slate-400 text-xs font-semibold mt-1">
+              Jotun Exclusive Franchise Outlet
+            </p>
           </div>
-          
-          <div className="bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl p-4 flex flex-col items-center justify-center text-center shadow-sm">
-            <img src="/logos/jotun.jpg" alt="Jotun" className="h-9 w-auto object-contain rounded-md mb-2" />
-            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Exclusive Franchise</span>
-          </div>
-
           <div className="flex flex-col gap-3 mt-2">
             <div className="flex justify-between items-center border-b border-slate-100 dark:border-white/5 pb-2">
-              <span className="text-sm font-semibold text-slate-600 dark:text-slate-400">Daily Register Cash:</span>
-              <span className="text-sm font-extrabold text-slate-900 dark:text-white">98,400 SAR</span>
-            </div>
-            <div className="flex justify-between items-center border-b border-slate-100 dark:border-white/5 pb-2">
-              <span className="text-sm font-semibold text-slate-600 dark:text-slate-400">Stock Turnover:</span>
-              <span className="text-sm font-extrabold text-amber-600 dark:text-amber-400">Moderate</span>
+              <span className="text-sm font-semibold text-slate-600 dark:text-slate-400">
+                Daily Register Cash:
+              </span>
+              <span className="text-sm font-extrabold text-slate-900 dark:text-white">
+                98,400.00 SAR
+              </span>
             </div>
             <div className="flex justify-between items-center pb-2">
-              <span className="text-sm font-semibold text-slate-600 dark:text-slate-400">Staff Assigned:</span>
-              <span className="text-sm font-extrabold text-slate-900 dark:text-white">4 Associates</span>
+              <span className="text-sm font-semibold text-slate-600 dark:text-slate-400">
+                Staff Assigned:
+              </span>
+              <span className="text-sm font-extrabold text-slate-900 dark:text-white">
+                4 Associates
+              </span>
             </div>
           </div>
-          <button className="mt-auto w-full py-2.5 rounded-xl bg-slate-50 dark:bg-white/5 text-slate-600 dark:text-slate-300 font-bold text-sm hover:bg-slate-100 dark:hover:bg-white/10 transition-colors flex items-center justify-center gap-2">
-            <Search size={16} /> View Dammam Shop Accounts
-          </button>
         </div>
 
         {/* Branch 3: Jubail Sigma Franchise */}
         <div className="bg-white dark:bg-[#121620] rounded-3xl p-6 border-2 border-emerald-400 dark:border-emerald-500/50 shadow-lg shadow-emerald-500/10 flex flex-col gap-5 relative overflow-hidden group">
           <div className="flex justify-between items-start mb-2">
-            <span className="text-[10px] font-extrabold uppercase tracking-widest text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-500/20 px-2 py-1 rounded-md">FRANCHISE</span>
+            <span className="text-[10px] font-extrabold uppercase tracking-widest text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-500/20 px-2 py-1 rounded-md">
+              FRANCHISE
+            </span>
             <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 text-xs font-bold">
-              <span className="relative flex h-2 w-2"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span></span>
               Synced EOD
             </div>
           </div>
           <div>
-            <h3 className="font-display font-extrabold text-xl text-slate-900 dark:text-white">Jubail Sigma</h3>
-            <p className="text-slate-500 dark:text-slate-400 text-xs font-semibold mt-1">Sigma Paints Franchise Outlet</p>
+            <h3 className="font-display font-extrabold text-xl text-slate-900 dark:text-white">
+              Jubail Sigma
+            </h3>
+            <p className="text-slate-500 dark:text-slate-400 text-xs font-semibold mt-1">
+              Sigma Paints Franchise Outlet
+            </p>
           </div>
-          
-          <div className="bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl p-4 flex flex-col items-center justify-center text-center shadow-sm">
-            <img src="/logos/sigma.png" alt="Sigma" className="h-9 w-auto object-contain rounded-md mb-2" />
-            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Exclusive Franchise</span>
-          </div>
-
           <div className="flex flex-col gap-3 mt-2">
             <div className="flex justify-between items-center border-b border-slate-100 dark:border-white/5 pb-2">
-              <span className="text-sm font-semibold text-slate-600 dark:text-slate-400">Daily Register Cash:</span>
-              <span className="text-sm font-extrabold text-slate-900 dark:text-white">107,300 SAR</span>
-            </div>
-            <div className="flex justify-between items-center border-b border-slate-100 dark:border-white/5 pb-2">
-              <span className="text-sm font-semibold text-slate-600 dark:text-slate-400">Stock Turnover:</span>
-              <span className="text-sm font-extrabold text-emerald-600 dark:text-emerald-400">High Growth</span>
+              <span className="text-sm font-semibold text-slate-600 dark:text-slate-400">
+                Daily Register Cash:
+              </span>
+              <span className="text-sm font-extrabold text-slate-900 dark:text-white">
+                107,300.00 SAR
+              </span>
             </div>
             <div className="flex justify-between items-center pb-2">
-              <span className="text-sm font-semibold text-slate-600 dark:text-slate-400">Staff Assigned:</span>
-              <span className="text-sm font-extrabold text-slate-900 dark:text-white">5 Associates</span>
+              <span className="text-sm font-semibold text-slate-600 dark:text-slate-400">
+                Staff Assigned:
+              </span>
+              <span className="text-sm font-extrabold text-slate-900 dark:text-white">
+                5 Associates
+              </span>
             </div>
           </div>
-          <button className="mt-auto w-full py-2.5 rounded-xl bg-slate-50 dark:bg-white/5 text-slate-600 dark:text-slate-300 font-bold text-sm hover:bg-slate-100 dark:hover:bg-white/10 transition-colors flex items-center justify-center gap-2">
-            <Search size={16} /> View Sigma Shop Accounts
-          </button>
         </div>
       </div>
     </div>
@@ -1724,41 +5792,43 @@ function BranchConsolidationView() {
 
 function NaumanAiView({ txns }: { txns: Txn[] }) {
   const [aiInsights, setAiInsights] = useState<{
-    leaks: { type: string, severity: 'amber' | 'red', message: string }[],
-    trends: { highlight: string, message: string }[],
-    advice: string,
-    error?: string,
-    source?: string
+    leaks: { type: string; severity: "amber" | "red"; message: string }[];
+    trends: { highlight: string; message: string }[];
+    advice: string;
+    error?: string;
+    source?: string;
   } | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  // Hoisted computations for Blind-Spot Monitor
-  const inflows = txns.filter(t => t.flow === 'in');
-  const outflows = txns.filter(t => t.flow === 'out');
-  const totals = { 
+  const inflows = txns.filter((t) => t.flow === "in");
+  const outflows = txns.filter((t) => t.flow === "out");
+  const totals = {
     in: inflows.reduce((a, b) => a + b.amount, 0),
-    out: outflows.reduce((a, b) => a + b.amount, 0)
+    out: outflows.reduce((a, b) => a + b.amount, 0),
   };
 
   const runAudit = async () => {
     setIsAnalyzing(true);
-    setAiInsights(null); // Clear previous errors or insights
+    setAiInsights(null);
     try {
-      const res = await fetch('/api/ai-pulse', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ inflows, outflows, totals })
+      const res = await fetch("/api/ai-pulse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inflows, outflows, totals }),
       });
-      
+
       const data = await res.json();
       if (!res.ok) {
-        console.error("API returned error:", data);
-        setAiInsights({ error: data.error || "An unknown error occurred during audit.", leaks: [], trends: [], advice: "" });
+        setAiInsights({
+          error: data.error || "An unknown error occurred during audit.",
+          leaks: [],
+          trends: [],
+          advice: "",
+        });
         return;
       }
       setAiInsights(data);
     } catch (e: unknown) {
-      console.error("Audit failed:", e);
       const msg = e instanceof Error ? e.message : "Network error.";
       setAiInsights({ error: msg, leaks: [], trends: [], advice: "" });
     } finally {
@@ -1769,215 +5839,141 @@ function NaumanAiView({ txns }: { txns: Txn[] }) {
   return (
     <div className="flex flex-col gap-6 p-6 h-full overflow-y-auto w-full">
       <div className="flex items-center justify-between mb-2">
-         <div className="flex flex-col gap-1.5">
-           <h2 className="font-display font-extrabold text-2xl text-slate-900 dark:text-white flex items-center gap-2">
-              <Sparkles className="text-amber-500 animate-pulse" /> Nauman AI & Executive Pulse
-           </h2>
-           {/* AI Source Telemetry Indicator */}
-           {aiInsights?.source && (
-             <div className="flex items-center gap-2 text-[10px] font-bold px-2.5 py-1 bg-slate-100 dark:bg-white/5 rounded-md text-slate-500 dark:text-slate-400 w-fit">
-               <span className="relative flex h-1.5 w-1.5">
-                 <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${aiInsights.source.includes('Fallback') ? 'bg-amber-400' : 'bg-emerald-400'}`}></span>
-                 <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${aiInsights.source.includes('Fallback') ? 'bg-amber-500' : 'bg-emerald-500'}`}></span>
-               </span>
-               <span className="uppercase tracking-wider">Source: {aiInsights.source}</span>
-             </div>
-           )}
-         </div>
-         <button 
-           onClick={runAudit}
-           disabled={isAnalyzing}
-           className="relative flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-500 hover:to-orange-600 text-white rounded-xl font-bold transition-all shadow-[0_0_20px_rgba(245,158,11,0.4)] hover:shadow-[0_0_30px_rgba(245,158,11,0.6)] disabled:opacity-70 disabled:cursor-not-allowed"
-         >
-           {isAnalyzing ? (
-             <Sparkles className="animate-spin" size={18} />
-           ) : (
-             <Zap size={18} className="animate-pulse" />
-           )}
-           {isAnalyzing ? "Analyzing..." : "⚡ Run End-of-Day Audit"}
-         </button>
+        <div className="flex flex-col gap-1.5">
+          <h2 className="font-display font-extrabold text-2xl text-slate-900 dark:text-white flex items-center gap-2">
+            <Sparkles className="text-amber-500 animate-pulse" /> Nauman AI &amp; Executive Pulse
+          </h2>
+          {aiInsights?.source && (
+            <div className="flex items-center gap-2 text-[10px] font-bold px-2.5 py-1 bg-slate-100 dark:bg-white/5 rounded-md text-slate-500 dark:text-slate-400 w-fit">
+              <span className="uppercase tracking-wider">Source: {aiInsights.source}</span>
+            </div>
+          )}
+        </div>
+        <button
+          onClick={runAudit}
+          disabled={isAnalyzing}
+          className="relative flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-500 hover:to-orange-600 text-white rounded-xl font-bold transition-all shadow-[0_0_20px_rgba(245,158,11,0.4)] disabled:opacity-70"
+        >
+          {isAnalyzing ? <Sparkles className="animate-spin" size={18} /> : <Zap size={18} />}
+          {isAnalyzing ? "Analyzing..." : "⚡ Run End-of-Day Audit"}
+        </button>
       </div>
 
       {aiInsights?.error && (
         <div className="bg-rose-50 border border-rose-200 text-rose-700 px-4 py-3 rounded-xl flex items-center gap-3 shadow-sm dark:bg-rose-500/10 dark:border-rose-500/20 dark:text-rose-300">
-           <AlertTriangle size={20} className="shrink-0" />
-           <div className="flex-1 text-sm font-semibold">
-              <span className="font-extrabold block mb-0.5">Audit Error</span>
-              {aiInsights.error}
-           </div>
+          <AlertTriangle size={20} className="shrink-0" />
+          <div className="flex-1 text-sm font-semibold">
+            <span className="font-extrabold block mb-0.5">Audit Error</span>
+            {aiInsights.error}
+          </div>
         </div>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 auto-rows-max">
-         {/* Today's Business Summary / Blind-Spot Monitor */}
-         <div className="lg:col-span-2 bg-white dark:bg-[#0F1219] rounded-3xl p-6 ring-1 ring-slate-900/5 dark:ring-white/10 relative overflow-hidden group shadow-sm dark:shadow-2xl flex flex-col gap-6">
-            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-purple-500 via-amber-500 to-emerald-500"></div>
-            <div className="absolute top-0 right-0 w-64 h-64 bg-purple-500/5 dark:bg-purple-500/10 rounded-full blur-3xl -mr-20 -mt-20 transition-all group-hover:bg-purple-500/10 dark:group-hover:bg-purple-500/20"></div>
-            
-            <div className="flex items-center justify-between relative z-10">
-               <div>
-                 <h3 className="font-display font-extrabold text-2xl flex items-center gap-2 text-slate-900 dark:text-white">
-                    <Activity className="text-purple-500 dark:text-purple-400" /> Today&apos;s Business Summary &amp; Blind-Spot Monitor
-                 </h3>
-                 <p className="text-slate-500 dark:text-slate-400 font-semibold text-sm mt-1">Quick daily check on sales, cash spent, and risks.</p>
-               </div>
-               <div className="bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30 px-3 py-1 rounded-full text-xs font-extrabold flex items-center gap-2">
-                 <span className="relative flex h-2 w-2">
-                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                   <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                 </span>
-                 Live Metrics Synced
-               </div>
+        <div className="lg:col-span-2 bg-white dark:bg-[#0F1219] rounded-3xl p-6 ring-1 ring-slate-900/5 dark:ring-white/10 relative overflow-hidden flex flex-col gap-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-display font-extrabold text-2xl flex items-center gap-2 text-slate-900 dark:text-white">
+                <Activity className="text-purple-500 dark:text-purple-400" /> Today&apos;s Business Summary &amp; Blind-Spot Monitor
+              </h3>
+              <p className="text-slate-500 dark:text-slate-400 font-semibold text-sm mt-1">
+                Live synced with today&apos;s Daily Register entries.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 p-5 rounded-2xl flex flex-col gap-2">
+              <div className="text-slate-600 dark:text-slate-400 font-bold text-xs uppercase tracking-wider flex items-center gap-1.5">
+                <ArrowRightLeft size={14} /> TODAY&apos;S NET CASH (IN - OUT)
+              </div>
+              <div
+                className={`text-2xl font-black ${
+                  totals.in - totals.out >= 0
+                    ? "text-emerald-500 dark:text-emerald-400"
+                    : "text-rose-500 dark:text-rose-400"
+                }`}
+              >
+                SAR {fmt(totals.in - totals.out)}
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 relative z-10">
-               {/* Metric 1: Inflow vs Outflow Velocity */}
-               <div className="bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 p-5 rounded-2xl flex flex-col gap-2">
-                 <div className="text-slate-600 dark:text-slate-400 font-bold text-xs uppercase tracking-wider flex items-center gap-1.5"><ArrowRightLeft size={14}/> TODAY&apos;S NET CASH (IN - OUT)</div>
-                 <div className={`text-2xl font-black ${totals.in - totals.out >= 0 ? 'text-emerald-500 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400'}`}>
-                   {totals.in - totals.out >= 0 ? `+${(totals.in - totals.out).toLocaleString()} SAR` : `${(totals.in - totals.out).toLocaleString()} SAR`}
-                 </div>
-                 <p className="text-xs font-semibold text-slate-500">{totals.out > totals.in ? "⚠️ Spending more cash than collecting today" : "✨ Positive daily cash accumulation"}</p>
-               </div>
-
-               {/* Metric 2: Transaction Volume */}
-               <div className="bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 p-5 rounded-2xl flex flex-col gap-2">
-                 <div className="text-slate-600 dark:text-slate-400 font-bold text-xs uppercase tracking-wider flex items-center gap-1.5"><BarChart2 size={14}/> BILLS & TRANSACTIONS</div>
-                 <div className="text-2xl font-black text-amber-500 dark:text-amber-400">{txns.length} <span className="text-base text-slate-500 dark:text-slate-300 font-semibold">Recorded Transactions</span></div>
-                 <p className="text-xs font-semibold text-slate-500">{inflows.length} inflows vs {outflows.length} outflows processed</p>
-               </div>
-
-               {/* Metric 3: Operational Blind Spot Alert */}
-               <div className="bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 p-5 rounded-2xl flex flex-col gap-2">
-                 <div className="text-slate-600 dark:text-slate-400 font-bold text-xs uppercase tracking-wider flex items-center gap-1.5"><Eye size={14}/> THINGS TO WATCH OUT FOR</div>
-                 <div className={`text-lg leading-tight font-black ${outflows.length > 0 ? 'text-rose-500 dark:text-rose-400' : 'text-slate-700 dark:text-slate-300'}`}>
-                   {outflows.length > 0 ? "Supplier concentration risk monitored" : "No outgoing spikes detected"}
-                 </div>
-                 <p className="text-xs font-semibold text-slate-500">Verify payment terms on major wholesale restocking orders before EOD.</p>
-               </div>
+            <div className="bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 p-5 rounded-2xl flex flex-col gap-2">
+              <div className="text-slate-600 dark:text-slate-400 font-bold text-xs uppercase tracking-wider flex items-center gap-1.5">
+                <BarChart2 size={14} /> BILLS &amp; TRANSACTIONS
+              </div>
+              <div className="text-2xl font-black text-amber-500 dark:text-amber-400">
+                {txns.length}{" "}
+                <span className="text-base text-slate-500 dark:text-slate-300 font-semibold">
+                  Recorded Items
+                </span>
+              </div>
             </div>
-         </div>
 
-         {/* Card 1: The Leak Detector */}
-         <div className="bg-white rounded-3xl shadow-sm ring-1 ring-slate-900/5 p-6 dark:bg-[#121620] dark:ring-white/10 flex flex-col gap-5 relative overflow-hidden group">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-rose-500/10 rounded-full blur-3xl -mr-10 -mt-10 transition-all group-hover:bg-rose-500/20"></div>
-            <h3 className="font-display font-extrabold text-xl flex items-center gap-2 text-slate-900 dark:text-white relative z-10">
-               <AlertTriangle className="text-rose-500 animate-pulse" /> The Leak Detector
-            </h3>
-            
-            <div className="flex flex-col gap-4 relative z-10">
-               {isAnalyzing ? (
-                 <div className="flex flex-col gap-3">
-                   <div className="h-16 bg-slate-100 dark:bg-white/5 rounded-xl animate-pulse"></div>
-                   <div className="h-16 bg-slate-100 dark:bg-white/5 rounded-xl animate-pulse delay-75"></div>
-                 </div>
-               ) : aiInsights ? (
-                 (aiInsights?.leaks || []).map((leak, i) => (
-                   <div key={i} className={`border-l-4 p-4 rounded-r-xl ${leak.severity === 'red' ? 'bg-rose-50 border-rose-500 dark:bg-rose-500/10' : 'bg-amber-50 border-amber-500 dark:bg-amber-500/10'}`}>
-                      <p className={`text-sm font-semibold ${leak.severity === 'red' ? 'text-rose-900 dark:text-rose-200' : 'text-amber-900 dark:text-amber-200'}`}>
-                        <span className="font-extrabold">{leak.type}:</span> {leak.message}
-                      </p>
-                   </div>
-                 ))
-               ) : (
-                 <div className="flex items-center justify-center h-24 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-xl">
-                   <p className="text-sm font-bold text-slate-400">Run audit to detect leaks</p>
-                 </div>
-               )}
+            <div className="bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 p-5 rounded-2xl flex flex-col gap-2">
+              <div className="text-slate-600 dark:text-slate-400 font-bold text-xs uppercase tracking-wider flex items-center gap-1.5">
+                <Eye size={14} /> THINGS TO WATCH OUT FOR
+              </div>
+              <div className="text-lg leading-tight font-black text-rose-500 dark:text-rose-400">
+                Supplier &amp; POS Fee Audit Active
+              </div>
             </div>
-         </div>
+          </div>
+        </div>
 
-         {/* Card 2: Trend Predictor & Winning Products */}
-         <div className="bg-white rounded-3xl shadow-sm ring-1 ring-slate-900/5 p-6 dark:bg-[#121620] dark:ring-white/10 flex flex-col gap-5 relative overflow-hidden group">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl -mr-10 -mt-10 transition-all group-hover:bg-emerald-500/20"></div>
-            <h3 className="font-display font-extrabold text-xl flex items-center gap-2 text-slate-900 dark:text-white relative z-10">
-               <TrendingUp className="text-emerald-500" /> Trend Predictor
-            </h3>
-            
-            <div className="flex flex-col gap-4 relative z-10">
-               {isAnalyzing ? (
-                 <div className="flex flex-col gap-3">
-                   <div className="h-16 bg-slate-100 dark:bg-white/5 rounded-xl animate-pulse"></div>
-                   <div className="h-16 bg-slate-100 dark:bg-white/5 rounded-xl animate-pulse delay-75"></div>
-                 </div>
-               ) : aiInsights ? (
-                 (aiInsights?.trends || []).map((trend, i) => (
-                   <div key={i} className={`border-l-4 p-4 rounded-r-xl ${i % 2 === 0 ? 'bg-emerald-50 border-emerald-500 dark:bg-emerald-500/10' : 'bg-purple-50 border-purple-500 dark:bg-purple-500/10'}`}>
-                      <p className={`text-sm font-semibold ${i % 2 === 0 ? 'text-emerald-900 dark:text-emerald-200' : 'text-purple-900 dark:text-purple-200'}`}>
-                        <span className="font-extrabold">{trend.highlight}:</span> {trend.message}
-                      </p>
-                   </div>
-                 ))
-               ) : (
-                 <div className="flex items-center justify-center h-24 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-xl">
-                   <p className="text-sm font-bold text-slate-400">Run audit to reveal trends</p>
-                 </div>
-               )}
-            </div>
-         </div>
+        {/* Leak Detector */}
+        <div className="bg-white rounded-3xl shadow-sm ring-1 ring-slate-900/5 p-6 dark:bg-[#121620] dark:ring-white/10 flex flex-col gap-5">
+          <h3 className="font-display font-extrabold text-xl flex items-center gap-2 text-slate-900 dark:text-white">
+            <AlertTriangle className="text-rose-500" /> The Leak Detector
+          </h3>
+          <div className="flex flex-col gap-4">
+            {aiInsights ? (
+              (aiInsights.leaks || []).map((leak, i) => (
+                <div
+                  key={i}
+                  className={`border-l-4 p-4 rounded-r-xl ${
+                    leak.severity === "red"
+                      ? "bg-rose-50 border-rose-500 dark:bg-rose-500/10"
+                      : "bg-amber-50 border-amber-500 dark:bg-amber-500/10"
+                  }`}
+                >
+                  <p className="text-sm font-semibold">
+                    <span className="font-extrabold">{leak.type}:</span> {leak.message}
+                  </p>
+                </div>
+              ))
+            ) : (
+              <div className="flex items-center justify-center h-24 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-xl">
+                <p className="text-sm font-bold text-slate-400">Run audit to detect leaks</p>
+              </div>
+            )}
+          </div>
+        </div>
 
-         {/* Card 3: Live Advice & Strategy */}
-         <div className="bg-white rounded-3xl shadow-sm ring-1 ring-slate-900/5 p-6 dark:bg-[#121620] dark:ring-white/10 flex flex-col gap-5 relative overflow-hidden group lg:col-span-1">
-            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-400 to-orange-500"></div>
-            <h3 className="font-display font-extrabold text-xl flex items-center gap-2 text-slate-900 dark:text-white">
-               <MessageSquare className="text-orange-500" /> Nauman AI Advisor
-            </h3>
-            
-            <div className="flex-1 flex flex-col gap-4">
-               {isAnalyzing ? (
-                 <div className="flex gap-4">
-                    <div className="w-10 h-10 rounded-full bg-slate-200 dark:bg-white/10 animate-pulse shrink-0"></div>
-                    <div className="flex-1 h-20 bg-slate-100 dark:bg-white/5 rounded-2xl rounded-tl-none animate-pulse"></div>
-                 </div>
-               ) : aiInsights ? (
-                 <div className="flex gap-4">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white shrink-0 shadow-lg shadow-orange-500/30">
-                       <Sparkles size={20} />
-                    </div>
-                    <div className="bg-slate-50 dark:bg-white/5 rounded-2xl rounded-tl-none p-4 ring-1 ring-slate-100 dark:ring-white/5">
-                       <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
-                          {aiInsights?.advice || "No advice generated."}
-                       </p>
-                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-2">Just Now</p>
-                    </div>
-                 </div>
-               ) : (
-                 <div className="flex gap-4 opacity-50 grayscale">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white shrink-0 shadow-lg shadow-orange-500/30">
-                       <Sparkles size={20} />
-                    </div>
-                    <div className="bg-slate-50 dark:bg-white/5 rounded-2xl rounded-tl-none p-4 ring-1 ring-slate-100 dark:ring-white/5 flex-1">
-                       <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
-                          Waiting for your End-of-Day audit...
-                       </p>
-                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-2">Standby</p>
-                    </div>
-                 </div>
-               )}
-            </div>
-         </div>
-
-         {/* Card 4: The ERP Bridge */}
-         <div className="bg-white rounded-3xl shadow-sm ring-1 ring-slate-900/5 p-6 dark:bg-[#121620] dark:ring-white/10 flex flex-col gap-5 relative overflow-hidden group lg:col-span-1">
-            <h3 className="font-display font-extrabold text-xl flex items-center gap-2 text-slate-900 dark:text-white">
-               <Database className="text-indigo-500" /> Fujishka ERP Hub
-            </h3>
-            
-            <div className="border-2 border-dashed border-indigo-200 dark:border-indigo-500/30 rounded-2xl p-8 flex flex-col items-center justify-center text-center gap-3 bg-indigo-50/50 dark:bg-indigo-500/5 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 transition-colors cursor-pointer">
-               <UploadCloud size={40} className="text-indigo-400 mb-2" />
-               <p className="font-bold text-sm text-indigo-900 dark:text-indigo-300">Drop Fujishka ERP Daily CSV Here</p>
-               <p className="text-xs font-medium text-indigo-500/80 dark:text-indigo-400/80">Auto-reconcile transactions in one click.</p>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-3 mt-auto">
-               <button className="flex items-center justify-center gap-2 py-3 bg-slate-900 text-white rounded-xl font-bold text-sm hover:bg-slate-800 transition shadow-md dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200">
-                  <FileDown size={16} /> ZATCA Tax Report
-               </button>
-               <button className="flex items-center justify-center gap-2 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition shadow-md shadow-indigo-500/20">
-                  <RefreshCw size={16} /> Sync to Fujishka
-               </button>
-            </div>
-         </div>
+        {/* Trend Predictor */}
+        <div className="bg-white rounded-3xl shadow-sm ring-1 ring-slate-900/5 p-6 dark:bg-[#121620] dark:ring-white/10 flex flex-col gap-5">
+          <h3 className="font-display font-extrabold text-xl flex items-center gap-2 text-slate-900 dark:text-white">
+            <TrendingUp className="text-emerald-500" /> Trend Predictor
+          </h3>
+          <div className="flex flex-col gap-4">
+            {aiInsights ? (
+              (aiInsights.trends || []).map((trend, i) => (
+                <div
+                  key={i}
+                  className="border-l-4 p-4 rounded-r-xl bg-emerald-50 border-emerald-500 dark:bg-emerald-500/10"
+                >
+                  <p className="text-sm font-semibold">
+                    <span className="font-extrabold">{trend.highlight}:</span> {trend.message}
+                  </p>
+                </div>
+              ))
+            ) : (
+              <div className="flex items-center justify-center h-24 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-xl">
+                <p className="text-sm font-bold text-slate-400">Run audit to reveal trends</p>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -1985,26 +5981,313 @@ function NaumanAiView({ txns }: { txns: Txn[] }) {
 
 export default function Page() {
   const [dark, setDark] = useState(false);
-  const [tab, setTab] = useState<TabId>("register"); // Default to JCT Flagship Daily Hub
-  const [txns] = useState<Txn[]>(SEED_TXNS);
+  const [tab, setTab] = useState<TabId>("register");
+
+  // Lifted Daily Register State (Persists across tab switches & powers live cross-module sync)
+  const [trackingMode, setTrackingMode] = useState<TrackingMode>("hub");
+  const [wizardStep, setWizardStep] = useState<WizardStep>(1);
+
+  const [preLoggedBankInvoices, setPreLoggedBankInvoices] = useState<PreLoggedBankInvoice[]>([
+    { invoiceNo: "30065", amount: 2150, paymentMode: "BANK_TRANSFER", time: "10:12" },
+    { invoiceNo: "30063", amount: 1450, paymentMode: "POS_SWIPE", posTerminal: "SAB", time: "09:18" },
+    { invoiceNo: "30068", amount: 3820, paymentMode: "POS_SWIPE", posTerminal: "AL_RAJHI", time: "11:42" },
+    { invoiceNo: "30074", amount: 960, paymentMode: "POS_SWIPE", posTerminal: "SAB", time: "14:05" },
+  ]);
+
+  const [preLoggedEntries, setPreLoggedEntries] = useState<PreLoggedEntry[]>([
+    {
+      id: "ple-food",
+      type: "EXPENSE",
+      expenseCategory: "Food",
+      title: "Food",
+      amount: 24,
+      time: "12:30",
+    },
+    {
+      id: "ple-water",
+      type: "EXPENSE",
+      expenseCategory: "Water",
+      title: "Water",
+      amount: 150,
+      time: "13:45",
+    },
+    {
+      id: "ple-chicago",
+      type: "CREDIT_RECD",
+      customerName: "Chicago Credit Recd",
+      followUpDate: "2026-09-20",
+      receiptNo: "RCP-1042",
+      title: "Chicago Credit Recd",
+      amount: 12428,
+      time: "15:10",
+    },
+  ]);
+
+  const [erpInvoices, setErpInvoices] = useState<ErpInvoiceItem[]>([]);
+  const [openingBalance, setOpeningBalance] = useState<number>(2634);
+  const [completedDaysLog, setCompletedDaysLog] = useState<CompletedDaySummary[]>([
+    {
+      date: "11-09-2026",
+      branch: "Jubail - Main Branch",
+      totalCashSales: 28450,
+      totalBankSwipe: 13530,
+      totalPosFees: 108.24,
+      totalExpenses: 4120,
+      closingBalance: 4500,
+      status: "AUDITED",
+    },
+    {
+      date: "10-09-2026",
+      branch: "Jubail - Main Branch",
+      totalCashSales: 31900,
+      totalBankSwipe: 9840,
+      totalPosFees: 78.72,
+      totalExpenses: 2890,
+      closingBalance: 4500,
+      status: "LOCKED",
+    },
+  ]);
+
+  // Lifted Cross-Module State: Credit Radar Customers & Suppliers/Payables
+  const [creditCustomers, setCreditCustomers] = useState<ContractorAccount[]>(INITIAL_CONTRACTORS);
+  const [supplierBrands, setSupplierBrands] =
+    useState<SupplierPayableBrand[]>(INITIAL_SUPPLIER_BRANDS);
+  const [supplierBills, setSupplierBills] = useState<SupplierBillItem[]>(INITIAL_SUPPLIER_BILLS);
 
   useEffect(() => {
     if (dark) document.documentElement.classList.add("dark");
     else document.documentElement.classList.remove("dark");
   }, [dark]);
 
+  // Cross-Module Sync 1: Credit Purchase / Supplier Purchase -> Suppliers & Payables
+  const handleSyncCreditPurchase = (
+    supplierName: string,
+    amount: number,
+    dueDate: string,
+    category: "Credit Purchase" | "Cash Purchase" | "Bank Purchase" | "Return"
+  ) => {
+    const cleanName = supplierName.trim() || "Jotun";
+    const newBill: SupplierBillItem = {
+      id: `sb-${Date.now()}`,
+      supplierName: cleanName,
+      amount,
+      dueDate: dueDate || "2026-09-25",
+      category,
+      createdAt: "12-09-2026",
+      source: "Daily Register",
+    };
+    setSupplierBills((prev) => [newBill, ...prev]);
+
+    setSupplierBrands((prev) => {
+      const idx = prev.findIndex(
+        (b) =>
+          b.brand.toLowerCase().includes(cleanName.toLowerCase()) ||
+          cleanName.toLowerCase().includes(b.brand.toLowerCase())
+      );
+      if (idx !== -1) {
+        const updated = [...prev];
+        const target = updated[idx];
+        updated[idx] = {
+          ...target,
+          pendingBills:
+            category === "Credit Purchase"
+              ? r2(target.pendingBills + amount)
+              : category === "Return"
+              ? Math.max(0, r2(target.pendingBills - amount))
+              : target.pendingBills,
+          amountPaid:
+            category === "Cash Purchase" || category === "Bank Purchase"
+              ? r2(target.amountPaid + amount)
+              : target.amountPaid,
+        };
+        return updated;
+      }
+      return [
+        ...prev,
+        {
+          id: Date.now(),
+          brand: cleanName,
+          amountPaid: category === "Cash Purchase" || category === "Bank Purchase" ? amount : 0,
+          pendingBills: category === "Credit Purchase" ? amount : 0,
+          color: "purple",
+        },
+      ];
+    });
+  };
+
+  // Cross-Module Sync 2: Credit Sale / Credit Sale Amt Recd -> Credit Radar
+  const handleSyncCreditCustomer = (
+    customerName: string,
+    amount: number,
+    followUpDate: string,
+    receiptNo?: string,
+    mode: "CREDIT_RECD" | "CREDIT_SALE" = "CREDIT_RECD"
+  ) => {
+    const cleanCust = customerName.trim();
+    if (!cleanCust) return;
+
+    const cleanDigits = receiptNo
+      ? receiptNo.trim().replace(/^#/i, "").replace(/^inv[-_\s#]*/i, "").trim()
+      : "";
+    const formattedInvNo = cleanDigits
+      ? `#${cleanDigits}`
+      : receiptNo?.trim() || `#30064`;
+
+    setCreditCustomers((prev) => {
+      const idx = prev.findIndex(
+        (c) =>
+          c.name.toLowerCase().includes(cleanCust.toLowerCase()) ||
+          cleanCust.toLowerCase().includes(c.name.toLowerCase())
+      );
+      const historyItem: ContractorHistoryItem = {
+        id:
+          formattedInvNo ||
+          (mode === "CREDIT_SALE"
+            ? `CR-SALE-${Date.now().toString().slice(-3)}`
+            : `RCP-${Date.now().toString().slice(-3)}`),
+        amount,
+        date: `2026-09-12 (🔔 Reminder: ${followUpDate} · Inv ${formattedInvNo})`,
+        status: "paid_on_time",
+      };
+
+      if (idx !== -1) {
+        const updated = [...prev];
+        const existing = updated[idx];
+        const nextOutstanding =
+          mode === "CREDIT_SALE"
+            ? r2(existing.outstanding + amount)
+            : Math.max(0, r2(existing.outstanding - amount));
+        const updatedAccount: ContractorAccount = {
+          ...existing,
+          outstanding: nextOutstanding,
+          dueDate: followUpDate || existing.dueDate,
+          followUpDate: followUpDate || existing.followUpDate || existing.dueDate,
+          latestInvoiceNo: formattedInvNo || existing.latestInvoiceNo,
+          latestInvoiceAmount: amount,
+          status: "due_soon",
+          clearedInvoices:
+            mode === "CREDIT_RECD" ? existing.clearedInvoices + 1 : existing.clearedInvoices,
+          history: [historyItem, ...existing.history],
+          syncedFromRegister: true,
+        };
+        updated.splice(idx, 1);
+        return [updatedAccount, ...updated];
+      }
+
+      const newContractor: ContractorAccount = {
+        id: `c-${Date.now().toString().slice(-4)}`,
+        name: cleanCust,
+        outstanding: amount,
+        dueDate: followUpDate || "2026-09-20",
+        followUpDate: followUpDate || "2026-09-20",
+        latestInvoiceNo: formattedInvNo,
+        latestInvoiceAmount: amount,
+        status: "due_soon",
+        riskLevel: "Low",
+        avgPaymentTime: "Synced Today",
+        clearedInvoices: mode === "CREDIT_RECD" ? 1 : 0,
+        history: [historyItem],
+        syncedFromRegister: true,
+      };
+      return [newContractor, ...prev];
+    });
+  };
+
+  // Compute Live Cross-Module Totals for Financial Pulse, Branch Consolidation & Nauman AI
+  const activeErpForMetrics: ErpInvoiceItem[] =
+    erpInvoices.length > 0
+      ? erpInvoices
+      : JUBAIL_ERP_18_SEED.map((inv) => {
+          const matched = preLoggedBankInvoices.find((b) => b.invoiceNo === inv.invoiceNo);
+          const isCreditSale = preLoggedEntries.some(
+            (e) =>
+              e.type === "CREDIT_SALE" &&
+              e.receiptNo &&
+              e.receiptNo.replace(/^#/i, "").trim() === inv.invoiceNo
+          );
+          return {
+            ...inv,
+            paymentMode: isCreditSale
+              ? "CREDIT_SALE"
+              : matched
+              ? matched.paymentMode
+              : "CASH",
+            posTerminal: matched?.posTerminal || (inv.invoiceNo === "30068" ? "AL_RAJHI" : "SAB"),
+            autoMatched: Boolean(matched) || isCreditSale,
+          };
+        });
+
+  const todayCashSales = r2(
+    activeErpForMetrics
+      .filter((i) => i.paymentMode === "CASH" || i.paymentMode === "OTHER_RECD")
+      .reduce((a, b) => a + b.amount, 0)
+  );
+  const bankInvoicesForMetrics = activeErpForMetrics.filter(
+    (i) => i.paymentMode === "BANK_TRANSFER" || i.paymentMode === "POS_SWIPE"
+  );
+  const todayBankGross = r2(bankInvoicesForMetrics.reduce((a, b) => a + b.amount, 0));
+  const todayPosFees = r2(bankInvoicesForMetrics.reduce((a, b) => a + calcInvoicePosFee(b), 0));
+  const todayBankNet = r2(todayBankGross - todayPosFees);
+
+  const todayInflows = r2(
+    preLoggedEntries
+      .filter((e) => e.type !== "EXPENSE" && e.type !== "CREDIT_SALE")
+      .reduce((a, b) => a + b.amount, 0)
+  );
+  const todayExpenses = r2(
+    preLoggedEntries.filter((e) => e.type === "EXPENSE").reduce((a, b) => a + b.amount, 0)
+  );
+  const closingDrawerBalance = r2(
+    openingBalance + todayCashSales + todayInflows - todayExpenses
+  );
+
+  const totalCreditOutstanding = r2(
+    creditCustomers.reduce((a, b) => a + b.outstanding, 0)
+  );
+  const totalSupplierPayables = r2(
+    supplierBrands.reduce((a, b) => a + b.pendingBills, 0)
+  );
+
+  const liveMetrics: LiveCrossModuleMetrics = {
+    todayCashSales,
+    todayBankNet,
+    todayPosFees,
+    todayExpenses,
+    closingDrawerBalance,
+    totalCreditOutstanding,
+    totalSupplierPayables,
+  };
+
+  const liveAiTxns: Txn[] = [
+    ...SEED_TXNS,
+    ...preLoggedEntries.map((e) => ({
+      id: e.id,
+      flow: (e.type === "EXPENSE" ? "out" : "in") as "in" | "out",
+      kind: (e.type === "EXPENSE" ? "misc_expense" : "credit_received") as Kind,
+      amount: e.amount,
+      title: e.title,
+      time: e.time,
+    })),
+  ];
+
   return (
-    <div className={`flex h-screen w-full bg-slate-50 text-slate-900 antialiased overflow-hidden dark:bg-[#0B0E14] dark:text-slate-100 ${dark ? "dark" : ""}`}>
+    <div
+      className={`flex h-screen w-full bg-slate-50 text-slate-900 antialiased overflow-hidden dark:bg-[#0B0E14] dark:text-slate-100 ${
+        dark ? "dark" : ""
+      }`}
+    >
       <Sidebar tab={tab} setTab={setTab} />
 
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Top Header */}
         <header className="flex shrink-0 flex-wrap items-center justify-between gap-4 border-b border-slate-200 bg-white/50 px-6 py-4 backdrop-blur-xl dark:border-white/5 dark:bg-[#0B0E14]/50 z-20">
           <div className="flex items-center gap-4">
-            <h1 className="font-display text-xl font-extrabold tracking-tight hidden sm:block">Good afternoon, Fahad</h1>
+            <h1 className="font-display text-xl font-extrabold tracking-tight hidden sm:block">
+              Good afternoon, Fahad
+            </h1>
             <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 hidden sm:block"></div>
             <div className="flex items-center gap-2 text-sm font-bold text-slate-500">
-               <CalendarDays size={16} /> 12-09-2026
+              <CalendarDays size={16} /> 12-09-2026
             </div>
             <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 hidden sm:block"></div>
             <Dropdown.Root>
@@ -2015,7 +6298,7 @@ export default function Page() {
               </Dropdown.Trigger>
             </Dropdown.Root>
           </div>
-          
+
           <div className="flex items-center gap-4">
             <ThemeToggle dark={dark} onToggle={() => setDark(!dark)} />
           </div>
@@ -2026,26 +6309,43 @@ export default function Page() {
           {/* Center Canvas */}
           <main className="flex-1 overflow-hidden flex flex-col relative z-10">
             {tab === "register" ? (
-              <DailyRegisterView />
+              <DailyRegisterView
+                trackingMode={trackingMode}
+                setTrackingMode={setTrackingMode}
+                wizardStep={wizardStep}
+                setWizardStep={setWizardStep}
+                preLoggedBankInvoices={preLoggedBankInvoices}
+                setPreLoggedBankInvoices={setPreLoggedBankInvoices}
+                preLoggedEntries={preLoggedEntries}
+                setPreLoggedEntries={setPreLoggedEntries}
+                erpInvoices={erpInvoices}
+                setErpInvoices={setErpInvoices}
+                openingBalance={openingBalance}
+                setOpeningBalance={setOpeningBalance}
+                completedDaysLog={completedDaysLog}
+                setCompletedDaysLog={setCompletedDaysLog}
+                onSyncCreditPurchase={handleSyncCreditPurchase}
+                onSyncCreditCustomer={handleSyncCreditCustomer}
+                onSwitchTab={setTab}
+              />
             ) : tab === "radar" ? (
-              <CreditRadarView />
+              <CreditRadarView
+                customers={creditCustomers}
+                onIssueCredit={handleSyncCreditCustomer}
+              />
             ) : tab === "suppliers" ? (
-              <SupplierHubView />
+              <SupplierHubView
+                supplierBrands={supplierBrands}
+                supplierBills={supplierBills}
+                onLogSupplierPurchase={handleSyncCreditPurchase}
+              />
             ) : tab === "ai" ? (
-              <NaumanAiView txns={txns} />
+              <NaumanAiView txns={liveAiTxns} />
             ) : tab === "consolidation" ? (
-              <BranchConsolidationView />
+              <BranchConsolidationView metrics={liveMetrics} />
             ) : tab === "pulse" ? (
-              <FinancialPulseView />
-            ) : (
-              <div className="flex h-full flex-col items-center justify-center text-center p-6">
-                <div className="mb-6 rounded-full bg-slate-200 p-6 dark:bg-white/5">
-                  <Activity size={48} className="text-slate-400 dark:text-slate-500" />
-                </div>
-                <h2 className="font-display text-2xl font-extrabold">Module in Development</h2>
-                <p className="mt-2 text-slate-500 dark:text-slate-400">This section is currently being built.</p>
-              </div>
-            )}
+              <FinancialPulseView metrics={liveMetrics} />
+            ) : null}
           </main>
         </div>
       </div>
