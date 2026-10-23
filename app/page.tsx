@@ -4658,149 +4658,158 @@ function DailyRegisterView({
              ────────────────────────────────────────────────────────────── */}
           {wizardStep === 5 && (
             <div className="flex flex-col gap-6 pb-8">
-              {/* Step 5 Audit Settlement Mode Toggle Bar + Informational MDR & VAT Banner */}
-              <div className="flex flex-col gap-3 rounded-2xl border border-[#00BAC7]/25 bg-gradient-to-b from-[#0B1C1E]/80 to-[#061113]/90 px-5 py-4 backdrop-blur-2xl">
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <span className="text-xs sm:text-sm font-extrabold text-white">
-                      Bank Settlement Mode:
-                    </span>
-                    <div className="inline-flex flex-wrap rounded-xl bg-black/50 p-1 border border-white/15 gap-1">
-                      <button
-                        type="button"
-                        onClick={() => setBankSettlementMode("GROSS")}
-                        className={`rounded-lg px-3.5 py-2 text-xs font-extrabold transition ${
-                          bankSettlementMode === "GROSS"
-                            ? "bg-[#FFD200] text-black font-black shadow-sm"
-                            : "text-white/65 hover:text-white"
-                        }`}
-                      >
-                        Gross Face Value (Default)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setBankSettlementMode("NET")}
-                        className={`rounded-lg px-3.5 py-2 text-xs font-extrabold transition ${
-                          bankSettlementMode === "NET"
-                            ? "bg-gradient-to-r from-[#00A8B5] to-[#0284C7] text-white font-bold shadow-[0_0_15px_rgba(0,168,181,0.3)]"
-                            : "text-white/65 hover:text-white"
-                        }`}
-                      >
-                        Net Settlement (Deduct Bank Fees &amp; VAT)
-                      </button>
-                    </div>
-                  </div>
-
-                  <span className="text-xs text-white/55">
-                    {bankSettlementMode === "GROSS"
-                      ? "Card swipes & bank transfers settle at 100% ERP invoice face value."
-                      : "Deducts SAMA mada (0.80%, cap SAR 40) & Credit Card (2.20%) MDR + 15% ZATCA VAT."}
+              {/* 1. Consolidated Settlement & Merchant Fee Header Strip */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 rounded-2xl border border-[#00BAC7]/25 bg-gradient-to-r from-[#0B1C1E]/80 to-[#061113]/90 px-5 py-3.5 backdrop-blur-2xl">
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                    Audit Settlement Mode:
                   </span>
+                  <div className="inline-flex rounded-xl bg-[#040D0E] p-1 border border-white/10 gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setBankSettlementMode("GROSS")}
+                      className={`rounded-lg px-3 py-1.5 text-xs transition ${
+                        bankSettlementMode === "GROSS"
+                          ? "bg-[#FFD200] text-black font-bold shadow-sm"
+                          : "text-slate-400 hover:text-white font-medium"
+                      }`}
+                    >
+                      Gross Face Value
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBankSettlementMode("NET")}
+                      className={`rounded-lg px-3 py-1.5 text-xs transition ${
+                        bankSettlementMode === "NET"
+                          ? "bg-[#FFD200] text-black font-bold shadow-sm"
+                          : "text-slate-400 hover:text-white font-medium"
+                      }`}
+                    >
+                      Net Bank (Deduct Fees &amp; VAT)
+                    </button>
+                  </div>
                 </div>
 
-                {/* Informational Audit Banner */}
-                <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#FFD200]/30 bg-[#FFD200]/10 px-4 py-2.5 text-xs font-mono font-bold text-[#FFD200]">
-                  <span>
-                    ℹ️ Est. Merchant Fees (MDR + 15% VAT):{" "}
-                    <strong className="text-rose-300">-SAR {fmt(totalPosFees)}</strong>{" "}
-                    <span className="text-white/75">
-                      (mada: SAR {fmt(totalMadaFees)}, Credit Card: SAR {fmt(totalCcFees)})
-                    </span>
-                  </span>
-                  <span className="text-[11px] font-sans font-semibold text-white/60">
-                    {bankSettlementMode === "GROSS"
-                      ? "Informational only · Not deducted from Gross Bank total"
-                      : `Active · Net Bank Settlement: SAR ${fmt(bankSwipeNetTotal)}`}
-                  </span>
+                <div className="flex items-center">
+                  {bankSettlementMode === "GROSS" ? (
+                    <div className="inline-flex items-center gap-1.5 text-xs text-amber-300/80 bg-amber-400/10 border border-amber-400/20 px-3 py-1.5 rounded-lg">
+                      <span>ℹ️ Est. Merchant Fees: <strong className="text-amber-200 font-mono">-SAR {fmt(totalPosFees)}</strong> (mada: SAR {fmt(totalMadaFees)} · CC: SAR {fmt(totalCcFees)}) · Informational</span>
+                    </div>
+                  ) : (
+                    <div className="inline-flex items-center gap-1.5 text-xs text-teal-300 bg-teal-500/10 border border-teal-500/20 px-3 py-1.5 rounded-lg">
+                      <span>✅ Net Settlement Active: <strong className="text-teal-200 font-mono">SAR {fmt(totalPosFees)}</strong> deducted from bank total</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {/* 1. Dedicated Flagship Hero Header Banner for Physical Cash Drawer Closing Balance */}
-              <div className="relative overflow-hidden rounded-3xl border border-[#FFD200]/50 bg-gradient-to-br from-[#0B1C1E]/95 via-[#061113]/95 to-[#041012]/95 p-6 sm:p-8 backdrop-blur-2xl ring-2 ring-[#FFD200]/40 shadow-[0_0_30px_rgba(255,210,0,0.25)]">
-                {/* Ambient Golden-Amber & Emerald Glows */}
-                <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-[#FFD200]/20 blur-3xl" />
-                <div className="pointer-events-none absolute -bottom-16 -left-16 h-64 w-64 rounded-full bg-[#00BAC7]/20 blur-3xl" />
+              {/* 2. Streamlined Hero Drawer Closing Card */}
+              <div className="relative overflow-hidden rounded-2xl border border-[#00BAC7]/35 bg-gradient-to-r from-[#0B2023]/90 via-[#071719]/95 to-[#040E10] p-6 shadow-[0_0_30px_rgba(0,186,199,0.12)]">
+                {/* Ambient Subtle Cyan & Yellow Glows */}
+                <div className="pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-[#00BAC7]/10 blur-3xl" />
+                <div className="pointer-events-none absolute -bottom-20 -left-20 h-56 w-56 rounded-full bg-[#FFD200]/10 blur-3xl" />
 
-                <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-                  <div className="space-y-2.5">
-                    <div className="inline-flex items-center gap-2.5 rounded-full border border-[#FFD200]/40 bg-[#FFD200]/15 px-3.5 py-1.5 text-xs font-extrabold tracking-wider text-[#FFD200] shadow-sm">
-                      <Wallet size={15} className="text-[#FFD200]" />
-                      <span>PHYSICAL CASH DRAWER CLOSING BALANCE</span>
+                <div className="relative z-10 flex flex-col gap-5">
+                  {/* Top Row: Title Badge + Grand Total */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <div className="inline-flex items-center gap-2 rounded-lg border border-[#00BAC7]/30 bg-[#00BAC7]/10 px-3 py-1 text-xs font-bold text-[#22D3EE] tracking-wide">
+                        <Wallet size={14} className="text-[#22D3EE]" />
+                        <span>💵 PHYSICAL CASH DRAWER CLOSING BALANCE</span>
+                      </div>
+                      <p className="mt-1.5 text-xs sm:text-sm text-slate-300">
+                        Count physical cash in register before locking.
+                      </p>
                     </div>
-                    <p className="text-sm sm:text-base text-white/75">
-                      Count this exact cash amount in your register before locking the drawer for the night.
-                    </p>
-                  </div>
 
-                  <div className="flex flex-col lg:items-end gap-2.5">
-                    <div className="flex items-center gap-3">
-                      <span className="inline-flex h-3 w-3 rounded-full bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.9)] animate-pulse" />
-                      <span className="text-3xl lg:text-4xl font-extrabold tracking-tight text-[#FFD200] font-mono whitespace-nowrap drop-shadow-[0_0_15px_rgba(255,210,0,0.3)]">
+                    <div className="flex items-baseline sm:text-right gap-1.5">
+                      <span className="text-3xl font-black text-[#FFD200] tracking-tight drop-shadow-[0_0_15px_rgba(255,210,0,0.3)]">
                         SAR {fmt(calculatedClosingBalance)}
                       </span>
                     </div>
+                  </div>
 
-                    {/* Live Visual Formula Tag directly under the Hero Number */}
-                    <div className="inline-flex flex-wrap items-center gap-2 rounded-xl border border-[#FFD200]/30 bg-black/45 px-3.5 py-2 text-xs font-mono text-white/80 shadow-inner">
-                      <span>
-                        Opening Cash (<strong className="text-white">SAR {fmt(openingBalance)}</strong>)
-                      </span>
-                      <span className="text-[#FFD200] font-bold">+</span>
-                      <span>
-                        Cash Inflows (<strong className="text-emerald-300">SAR {fmt(totalCashInSalesAndReceipts)}</strong>)
-                      </span>
-                      <span className="text-[#FFD200] font-bold">-</span>
-                      <span>
-                        Cash Outflows (<strong className="text-rose-300">SAR {fmt(totalMoneyOutDrawer)}</strong>)
-                      </span>
-                      <span className="text-[#FFD200] font-bold">=</span>
-                      <span className="rounded bg-[#FFD200]/20 px-2 py-0.5 font-extrabold text-[#FFD200]">
-                        Final Drawer Cash (SAR {fmt(calculatedClosingBalance)})
-                      </span>
-                    </div>
+                  {/* Bottom Row: The Formula Strip */}
+                  <div className="flex flex-wrap items-center gap-2.5 rounded-xl border border-white/10 bg-[#040D0E]/80 px-4 py-2.5 text-xs font-mono text-slate-300">
+                    <span className="text-slate-400">
+                      Opening <strong className="text-white">SAR {fmt(openingBalance)}</strong>
+                    </span>
+                    <span className="text-emerald-400 font-bold">+</span>
+                    <span className="text-slate-400">
+                      Cash In <strong className="text-emerald-300">SAR {fmt(totalCashInSalesAndReceipts)}</strong>
+                    </span>
+                    <span className="text-rose-400 font-bold">−</span>
+                    <span className="text-slate-400">
+                      Outflows <strong className="text-rose-300">SAR {fmt(totalMoneyOutDrawer)}</strong>
+                    </span>
+                    <span className="text-[#FFD200] font-bold">=</span>
+                    <span className="rounded-lg bg-[#FFD200]/15 border border-[#FFD200]/30 px-2.5 py-1 font-extrabold text-[#FFD200]">
+                      Net Cash SAR {fmt(calculatedClosingBalance)}
+                    </span>
                   </div>
                 </div>
               </div>
 
-              {/* 2. Secondary Muted Summary Row — 3 Supporting Stats */}
+              {/* 3. The 3 Financial Pillars Grid (Inflows · Bank/Swipes · Outflows) */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="rounded-2xl border border-white/10 bg-white/[0.025] px-5 py-4 backdrop-blur-xl">
-                  <span className="block text-xs font-medium text-white/45">
-                    Total Inflows (Sales + Receipts)
-                  </span>
-                  <span className="mt-1 block font-mono text-lg font-bold text-white/85 whitespace-nowrap">
-                    SAR {fmt(totalCashInSalesAndReceipts)}
-                  </span>
-                  <span className="mt-0.5 block text-[11px] text-white/35">
-                    + Opening Float: SAR {fmt(openingBalance)}
-                  </span>
-                </div>
-
-                <div className="rounded-2xl border border-white/10 bg-white/[0.025] px-5 py-4 backdrop-blur-xl">
-                  <span className="block text-xs font-medium text-white/45">
-                    {bankSettlementMode === "NET"
-                      ? "To Bank / Card Swipes (Net Settlement)"
-                      : "To Bank / Card Swipes"}
-                  </span>
-                  <span className="mt-1 block font-mono text-lg font-bold text-white/85 whitespace-nowrap">
-                    SAR {fmt(activeBankSettlementTotal)}
-                  </span>
-                  <span className="mt-0.5 block text-[11px] text-white/35">
-                    {bankSettlementMode === "NET"
-                      ? `Gross: SAR ${fmt(bankSwipeGrossTotal)} · Fees & VAT: -SAR ${fmt(totalPosFees)}`
-                      : `100% Gross Face Value (${bankSwipeInvoices.length} Invoices)`}
+                {/* Card 1: Cash Inflows */}
+                <div className="rounded-2xl border border-emerald-500/25 bg-gradient-to-b from-[#0A1A18]/80 to-[#040E0D]/90 p-5 backdrop-blur-xl flex flex-col justify-between gap-3 shadow-[0_0_20px_rgba(16,185,129,0.06)]">
+                  <div>
+                    <span className="block text-xs font-semibold text-emerald-400 uppercase tracking-wider">
+                      Cash Inflows (Sales &amp; Receipts)
+                    </span>
+                    <span className="mt-2 block font-mono text-2xl font-black text-white whitespace-nowrap">
+                      SAR {fmt(totalCashInSalesAndReceipts)}
+                    </span>
+                  </div>
+                  <span className="block text-xs text-slate-400 border-t border-emerald-500/15 pt-2">
+                    + Opening Float <strong className="text-slate-200">SAR {fmt(openingBalance)}</strong>
                   </span>
                 </div>
 
-                <div className="rounded-2xl border border-white/10 bg-white/[0.025] px-5 py-4 backdrop-blur-xl">
-                  <span className="block text-xs font-medium text-white/45">
-                    Total Outflows (Expenses &amp; Purchases)
-                  </span>
-                  <span className="mt-1 block font-mono text-lg font-bold text-white/85 whitespace-nowrap">
-                    SAR {fmt(totalMoneyOutDrawer)}
-                  </span>
-                  <span className="mt-0.5 block text-[11px] text-white/35">
-                    {expenseEntries.length} Recorded shop outflows
+                {/* Card 2: Bank / Card Swipes */}
+                <div className="rounded-2xl border border-[#00BAC7]/25 bg-gradient-to-b from-[#0B1E21]/80 to-[#040E10]/90 p-5 backdrop-blur-xl flex flex-col justify-between gap-3 shadow-[0_0_20px_rgba(0,186,199,0.06)]">
+                  <div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="block text-xs font-semibold text-[#22D3EE] uppercase tracking-wider">
+                        Bank &amp; Card Swipes
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedAuditBox(expandedAuditBox === "BANK_POS" ? "NONE" : "BANK_POS")
+                        }
+                        className="text-[11px] font-bold text-[#FFD200] hover:underline hover:text-[#FFE04D] transition"
+                      >
+                        {expandedAuditBox === "BANK_POS" ? "[Collapse]" : "[View Details]"}
+                      </button>
+                    </div>
+                    <span className="mt-2 block font-mono text-2xl font-black text-white whitespace-nowrap">
+                      SAR {fmt(activeBankSettlementTotal)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-slate-400 border-t border-[#00BAC7]/15 pt-2">
+                    <span>
+                      {bankSwipeInvoices.length} Invoices settled to bank
+                    </span>
+                    <span className="text-[11px] text-[#22D3EE]/80">
+                      {bankSettlementMode === "NET" ? "Net of fees" : "Gross"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Card 3: Cash Outflows */}
+                <div className="rounded-2xl border border-rose-500/25 bg-gradient-to-b from-[#1C0F12]/80 to-[#0D0507]/90 p-5 backdrop-blur-xl flex flex-col justify-between gap-3 shadow-[0_0_20px_rgba(244,63,94,0.06)]">
+                  <div>
+                    <span className="block text-xs font-semibold text-rose-400 uppercase tracking-wider">
+                      Cash Outflows (Shop Expenses)
+                    </span>
+                    <span className="mt-2 block font-mono text-2xl font-black text-white whitespace-nowrap">
+                      SAR {fmt(totalMoneyOutDrawer)}
+                    </span>
+                  </div>
+                  <span className="block text-xs text-slate-400 border-t border-rose-500/15 pt-2">
+                    {expenseEntries.length} Recorded shop expenses
                   </span>
                 </div>
               </div>
@@ -5575,32 +5584,18 @@ function DailyRegisterView({
                 )}
               </div>
 
-              {/* Sticky Bottom Action Bar */}
-              <div className="sticky bottom-4 z-20 flex flex-col lg:flex-row lg:items-center justify-between gap-4 rounded-2xl border border-[#00BAC7]/30 bg-[#061113]/95 px-6 py-4 backdrop-blur-2xl shadow-[0_10px_40px_rgba(0,0,0,0.6)]">
-                <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm font-medium text-white/65">
-                  <span>Opening <strong className="text-white/90">SAR {fmt(openingBalance)}</strong></span>
-                  <span className="text-white/35">+</span>
-                  <span>Cash In <strong className="text-emerald-300/90">SAR {fmt(totalCashInSalesAndReceipts)}</strong></span>
-                  <span className="text-white/35">−</span>
-                  <span>Cash Out <strong className="text-rose-300/90">SAR {fmt(totalMoneyOutDrawer)}</strong></span>
+              {/* 4. Clean Footer Bar */}
+              <div className="sticky bottom-4 z-20 flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-[#00BAC7]/30 bg-[#061113]/95 px-6 py-4 backdrop-blur-2xl shadow-[0_10px_40px_rgba(0,0,0,0.6)]">
+                <div className="flex items-center gap-2.5 text-xs sm:text-sm font-medium text-slate-300">
+                  <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+                  <span>Ready to lock register for Jubail - Main Branch · 12-09-2026</span>
                 </div>
 
-                <div className="flex flex-wrap items-center justify-between lg:justify-end gap-3.5">
-                  {/* Mirrored Highlighted Expected Drawer Cash Badge with Glowing Pulse */}
-                  <div className="inline-flex items-center gap-2.5 rounded-xl border border-[#FFD200]/50 bg-gradient-to-r from-emerald-500/15 to-[#FFD200]/20 px-4 py-2.5 ring-1 ring-[#FFD200]/30 shadow-[0_0_20px_rgba(255,210,0,0.2)]">
-                    <span className="inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.9)] animate-pulse" />
-                    <span className="text-xs sm:text-sm font-bold text-amber-100 whitespace-nowrap">
-                      Expected Drawer Cash:{" "}
-                      <strong className="font-mono text-base sm:text-lg font-extrabold text-[#FFD200]">
-                        [SAR {fmt(calculatedClosingBalance)}]
-                      </strong>
-                    </span>
-                  </div>
-
+                <div className="flex items-center justify-end">
                   <button
                     type="button"
                     onClick={handleLockAndSaveDay}
-                    className="flex items-center justify-center gap-2.5 rounded-xl bg-gradient-to-r from-[#FFD200] via-[#FACC15] to-[#00BAC7] px-7 py-3.5 text-sm sm:text-base font-black text-black shadow-[0_0_30px_rgba(255,210,0,0.35)] transition hover:scale-[1.01] whitespace-nowrap"
+                    className="flex items-center justify-center gap-2.5 rounded-xl bg-gradient-to-r from-[#FFD200] via-[#FACC15] to-[#00BAC7] hover:brightness-110 text-black font-black text-sm px-8 py-3.5 rounded-xl shadow-[0_0_25px_rgba(255,210,0,0.35)] transition-all whitespace-nowrap"
                   >
                     <Lock size={18} className="text-black" />
                     <span>🔒 Confirm Drawer Cash &amp; Lock Register</span>
