@@ -550,6 +550,11 @@ export interface ErpInvoiceItem {
   splitBankMethod: "BANK_TRANSFER" | "POS_SWIPE";
   splitPosTerminal?: PosTerminalBank;
   otherNote?: string;
+  creditDownAmount?: number;
+  creditDownMethod?: "CASH" | "POS_SWIPE";
+  creditDownTerminal?: PosTerminalBank;
+  creditBalance?: number;
+  creditFollowUpDate?: string;
   autoMatched: boolean;
   time: string;
 }
@@ -1039,16 +1044,28 @@ export const calcAmountPosFeeBreakdown = (
 export const calcInvoiceCashPortion = (inv: ErpInvoiceItem): number => {
   if (inv.paymentMode === "CASH" || inv.paymentMode === "OTHER_RECD") return inv.amount;
   if (inv.paymentMode === "SPLIT") return r2(inv.splitCashAmount || 0);
+  if (inv.paymentMode === "CREDIT_SALE" && inv.creditDownMethod === "CASH") {
+    return r2(inv.creditDownAmount || 0);
+  }
   return 0;
 };
 
 export const calcInvoiceBankGrossPortion = (inv: ErpInvoiceItem): number => {
   if (inv.paymentMode === "BANK_TRANSFER" || inv.paymentMode === "POS_SWIPE") return inv.amount;
   if (inv.paymentMode === "SPLIT") return r2(inv.splitBankAmount || 0);
+  if (inv.paymentMode === "CREDIT_SALE" && inv.creditDownMethod === "POS_SWIPE") {
+    return r2(inv.creditDownAmount || 0);
+  }
   return 0;
 };
 
 export const calcInvoiceFeeBreakdown = (inv: ErpInvoiceItem): PosFeeBreakdown => {
+  if (inv.paymentMode === "CREDIT_SALE" && inv.creditDownMethod === "POS_SWIPE") {
+    return calcAmountPosFeeBreakdown(
+      inv.creditDownAmount || 0,
+      inv.creditDownTerminal || inv.posTerminal || "SAB"
+    );
+  }
   if (inv.paymentMode === "POS_SWIPE") {
     return calcAmountPosFeeBreakdown(inv.amount, inv.posTerminal || "SAB");
   }
@@ -1166,6 +1183,191 @@ export const parseErpCsvText = (
   return parsedRows.length > 0 ? parsedRows : fallbackList;
 };
 
+interface CreditSaleModalConfig {
+  settlement: "FULL" | "PARTIAL";
+  downAmount: number;
+  downMethod: "CASH" | "POS_SWIPE";
+  terminal: PosTerminalBank;
+  followUpDate: string;
+}
+
+function CreditSaleModal({
+  invoice,
+  onClose,
+  onSave,
+}: {
+  invoice: ErpInvoiceItem;
+  onClose: () => void;
+  onSave: (cfg: CreditSaleModalConfig) => void;
+}) {
+  const existingDown = invoice.creditDownAmount || 0;
+  const [settlement, setSettlement] = useState<"FULL" | "PARTIAL">(
+    existingDown > 0 ? "PARTIAL" : "FULL"
+  );
+  const [downAmount, setDownAmount] = useState(existingDown > 0 ? String(existingDown) : "");
+  const [downMethod, setDownMethod] = useState<"CASH" | "POS_SWIPE">(
+    invoice.creditDownMethod || "CASH"
+  );
+  const [terminal, setTerminal] = useState<PosTerminalBank>(
+    invoice.creditDownTerminal || "SAB"
+  );
+  const [followUpDate, setFollowUpDate] = useState(
+    invoice.creditFollowUpDate || "2026-09-20"
+  );
+
+  const downVal = Math.max(0, parseFloat(downAmount) || 0);
+  const downInvalid =
+    settlement === "PARTIAL" && (downVal <= 0 || downVal >= invoice.amount);
+  const creditPreview =
+    settlement === "FULL" ? invoice.amount : r2(invoice.amount - Math.min(downVal, invoice.amount));
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-lg rounded-3xl border border-indigo-400/40 bg-[#140b24] p-6 shadow-[0_0_60px_rgba(99,102,241,0.3)] space-y-4 max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3 border-b border-white/10 pb-3">
+          <div>
+            <h3 className="font-display text-lg font-extrabold text-white">
+              Credit Sale Setup · Inv #{invoice.invoiceNo}
+            </h3>
+            <p className="mt-0.5 text-xs text-white/60">
+              {invoice.customer} ·{" "}
+              <strong className="text-indigo-200">SAR {fmt(invoice.amount)}</strong>
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg bg-white/10 px-2.5 py-1 text-xs font-bold text-white/70 hover:text-white"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="space-y-2">
+          <span className="block text-xs font-bold text-white/70">Settlement Method</span>
+          <div className="grid grid-cols-1 gap-2">
+            {(
+              [
+                ["FULL", "Full Credit (100% Receivable)"],
+                ["PARTIAL", "Partial Down Payment (Cash / Swipe + Balance on Credit)"],
+              ] as const
+            ).map(([val, label]) => (
+              <button
+                key={val}
+                type="button"
+                onClick={() => setSettlement(val)}
+                className={`rounded-xl border px-4 py-2.5 text-left text-xs font-bold transition ${
+                  settlement === val
+                    ? "border-indigo-300 bg-indigo-500/25 text-indigo-100"
+                    : "border-white/15 bg-white/5 text-white/70 hover:bg-white/10"
+                }`}
+              >
+                {settlement === val ? "● " : "○ "}
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {settlement === "PARTIAL" && (
+          <div className="space-y-3 rounded-2xl border border-amber-400/35 bg-amber-500/10 p-3.5">
+            <div className="space-y-1.5">
+              <label className="block text-[11px] font-bold text-amber-200">
+                Down Payment Amount (SAR)
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                value={downAmount}
+                onChange={(e) => setDownAmount(e.target.value)}
+                placeholder={`Less than ${fmt(invoice.amount)}`}
+                className="w-full rounded-xl border border-amber-400/40 bg-black/50 px-3.5 py-2.5 font-mono text-sm font-extrabold text-white outline-none focus:border-amber-300"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <span className="block text-[11px] font-bold text-amber-200">Paid By</span>
+              <div className="inline-flex flex-wrap rounded-xl bg-black/60 p-1 border border-white/15 gap-1">
+                <button
+                  type="button"
+                  onClick={() => setDownMethod("CASH")}
+                  className={`rounded-lg px-3 py-1.5 text-[11px] font-extrabold transition ${
+                    downMethod === "CASH"
+                      ? "bg-emerald-400 text-slate-950"
+                      : "text-white/65 hover:text-white"
+                  }`}
+                >
+                  Cash
+                </button>
+                {(["SAB", "AL_RAJHI", "VISA_MC"] as PosTerminalBank[]).map((term) => (
+                  <button
+                    key={term}
+                    type="button"
+                    onClick={() => {
+                      setDownMethod("POS_SWIPE");
+                      setTerminal(term);
+                    }}
+                    className={`rounded-lg px-3 py-1.5 text-[11px] font-extrabold transition ${
+                      downMethod === "POS_SWIPE" && terminal === term
+                        ? "bg-amber-400 text-slate-950"
+                        : "text-white/65 hover:text-white"
+                    }`}
+                  >
+                    Swipe: {POS_TERMINAL_META[term].badgeTag}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="space-y-1.5">
+          <label className="block text-xs font-bold text-emerald-300">
+            Follow-up Reminder Date (Credit Radar)
+          </label>
+          <input
+            type="date"
+            value={followUpDate}
+            onChange={(e) => setFollowUpDate(e.target.value)}
+            className="w-full rounded-xl border border-emerald-400/35 bg-emerald-500/10 px-4 py-2.5 text-sm font-bold text-white outline-none focus:border-emerald-400"
+          />
+        </div>
+
+        <div className="flex items-center justify-between rounded-xl border border-indigo-400/30 bg-black/40 px-4 py-2 font-mono text-xs font-bold">
+          <span className="text-indigo-200">Credit Receivable: SAR {fmt(creditPreview)}</span>
+          {settlement === "PARTIAL" && !downInvalid && (
+            <span className="text-emerald-300">
+              Down: SAR {fmt(downVal)} → {downMethod === "CASH" ? "Drawer" : "Bank"}
+            </span>
+          )}
+        </div>
+
+        <button
+          type="button"
+          disabled={downInvalid || !followUpDate}
+          onClick={() =>
+            onSave({
+              settlement,
+              downAmount: downVal,
+              downMethod,
+              terminal,
+              followUpDate,
+            })
+          }
+          className="w-full rounded-xl bg-indigo-400 hover:bg-indigo-300 disabled:opacity-40 disabled:cursor-not-allowed px-6 py-3.5 text-sm font-extrabold text-slate-950 transition"
+        >
+          Save &amp; Sync to Credit Radar
+        </button>
+      </div>
+    </div>
+  );
+}
+
 interface DailyRegisterViewProps {
   trackingMode: TrackingMode;
   setTrackingMode: React.Dispatch<React.SetStateAction<TrackingMode>>;
@@ -1220,6 +1422,7 @@ function DailyRegisterView({
   const [showRecordedFeed, setShowRecordedFeed] = useState(true);
   const [trackPosFees, setTrackPosFees] = useState(false);
   const [bankSettlementMode, setBankSettlementMode] = useState<"GROSS" | "NET">("GROSS");
+  const [creditModalInvNo, setCreditModalInvNo] = useState<string | null>(null);
   const [justCompletedToast, setJustCompletedToast] = useState<string | null>(null);
   const [syncBannerMsg, setSyncBannerMsg] = useState<{
     text: string;
@@ -1257,7 +1460,8 @@ function DailyRegisterView({
   // Step 3 (Credit & Cash Inflows & Split Payments) 2-Panel State
   const [step3Kind, setStep3Kind] = useState<
     "CREDIT_RECD" | "CREDIT_SALE" | "SPLIT_SALE" | "LOAN_IN" | "OTHER_IN"
-  >("CREDIT_SALE");
+  >("CREDIT_RECD");
+  const [step3SplitEnabled, setStep3SplitEnabled] = useState(false);
   const [step3Title, setStep3Title] = useState("");
   const [step3FollowUpDate, setStep3FollowUpDate] = useState("2026-09-20");
   const [step3ReceiptNo, setStep3ReceiptNo] = useState("");
@@ -1537,7 +1741,7 @@ function DailyRegisterView({
   const handleStep3TotalAmountChange = (rawVal: string) => {
     setStep3Amount(rawVal);
     const total = parseFloat(rawVal);
-    if (!Number.isNaN(total) && total > 0 && step3Kind === "SPLIT_SALE") {
+    if (!Number.isNaN(total) && total > 0 && step3SplitEnabled) {
       const cash = r2(total / 2);
       const card = r2(total - cash);
       setStep3SplitCash(String(cash));
@@ -1612,6 +1816,18 @@ function DailyRegisterView({
   };
 
   const handleSetInvoiceMode = (invoiceNo: string, mode: InvoicePaymentMode) => {
+    // Switching away from a Credit Sale clears its Credit Radar entry in the recorded list
+    setPreLoggedEntries((prev) =>
+      prev.filter(
+        (e) =>
+          !(
+            e.type === "CREDIT_SALE" &&
+            e.receiptNo &&
+            cleanErpInvNo(e.receiptNo) === invoiceNo &&
+            mode !== "CREDIT_SALE"
+          )
+      )
+    );
     setErpInvoices((prev) => {
       const base = prev.length > 0 ? prev : buildMatchedErpList();
       return base.map((inv) => {
@@ -1630,9 +1846,83 @@ function DailyRegisterView({
           splitBankMethod: inv.splitBankMethod || "POS_SWIPE",
           splitPosTerminal: inv.splitPosTerminal || inv.posTerminal || "SAB",
           posTerminal: inv.posTerminal || "SAB",
+          creditDownAmount: undefined,
+          creditDownMethod: undefined,
+          creditDownTerminal: undefined,
+          creditBalance: undefined,
+          creditFollowUpDate: undefined,
         };
       });
     });
+  };
+
+  // Step 2: Save Credit Sale (Full Credit or Partial Down Payment + Balance on Credit)
+  const handleSaveCreditSale = (
+    invoiceNo: string,
+    cfg: {
+      settlement: "FULL" | "PARTIAL";
+      downAmount: number;
+      downMethod: "CASH" | "POS_SWIPE";
+      terminal: PosTerminalBank;
+      followUpDate: string;
+    }
+  ) => {
+    const base = erpInvoices.length > 0 ? erpInvoices : buildMatchedErpList();
+    const target = base.find((i) => i.invoiceNo === invoiceNo);
+    if (!target) return;
+
+    const down =
+      cfg.settlement === "PARTIAL"
+        ? Math.min(target.amount, Math.max(0, r2(cfg.downAmount)))
+        : 0;
+    const creditBalance = r2(target.amount - down);
+    const hasDown = down > 0;
+
+    setErpInvoices(
+      base.map((inv) =>
+        inv.invoiceNo === invoiceNo
+          ? {
+              ...inv,
+              paymentMode: "CREDIT_SALE",
+              isSplit: false,
+              creditDownAmount: hasDown ? down : 0,
+              creditDownMethod: hasDown ? cfg.downMethod : undefined,
+              creditDownTerminal: hasDown && cfg.downMethod === "POS_SWIPE" ? cfg.terminal : undefined,
+              posTerminal:
+                hasDown && cfg.downMethod === "POS_SWIPE" ? cfg.terminal : inv.posTerminal,
+              creditBalance,
+              creditFollowUpDate: cfg.followUpDate,
+              autoMatched: true,
+            }
+          : inv
+      )
+    );
+
+    const receiptNo = `#${invoiceNo}`;
+    upsertEntry({
+      id: `ple-credit_sale-${invoiceNo}`,
+      type: "CREDIT_SALE",
+      customerName: target.customer,
+      followUpDate: cfg.followUpDate,
+      receiptNo,
+      title: target.customer,
+      amount: creditBalance,
+      time: nowHHMM(),
+    });
+
+    onSyncCreditCustomer(target.customer, creditBalance, cfg.followUpDate, receiptNo, "CREDIT_SALE");
+    setSyncBannerMsg({
+      text: `${target.customer} (Inv ${receiptNo}) · Credit SAR ${fmt(creditBalance)}${
+        hasDown
+          ? ` · Down payment SAR ${fmt(down)} via ${
+              cfg.downMethod === "CASH" ? "Cash" : POS_TERMINAL_META[cfg.terminal].badgeTag
+            }`
+          : ""
+      } · Reminder ${cfg.followUpDate} synced to Credit Radar`,
+      targetTab: "radar",
+      targetLabel: "View in Credit Radar →",
+    });
+    setCreditModalInvNo(null);
   };
 
   const handleSetInvoiceSplitAmounts = (
@@ -1967,7 +2257,7 @@ function DailyRegisterView({
   const handleAddStep3Receipt = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (step3Kind === "SPLIT_SALE") {
+    if (step3SplitEnabled) {
       const cashVal = Math.max(0, parseFloat(step3SplitCash) || 0);
       const cardVal = Math.max(0, parseFloat(step3SplitCard) || 0);
       const totalVal = r2(parseFloat(step3Amount) || cashVal + cardVal);
@@ -2295,14 +2585,20 @@ function DailyRegisterView({
     (i) =>
       i.paymentMode === "CASH" ||
       i.paymentMode === "OTHER_RECD" ||
-      (i.paymentMode === "SPLIT" && i.splitCashAmount > 0)
+      (i.paymentMode === "SPLIT" && i.splitCashAmount > 0) ||
+      (i.paymentMode === "CREDIT_SALE" &&
+        i.creditDownMethod === "CASH" &&
+        (i.creditDownAmount || 0) > 0)
   );
   // Bank / POS Invoices include "BANK_TRANSFER", "POS_SWIPE", and the Bank/Card Share of "SPLIT" invoices
   const bankSwipeInvoices = activeErpList.filter(
     (i) =>
       i.paymentMode === "BANK_TRANSFER" ||
       i.paymentMode === "POS_SWIPE" ||
-      (i.paymentMode === "SPLIT" && i.splitBankAmount > 0)
+      (i.paymentMode === "SPLIT" && i.splitBankAmount > 0) ||
+      (i.paymentMode === "CREDIT_SALE" &&
+        i.creditDownMethod === "POS_SWIPE" &&
+        (i.creditDownAmount || 0) > 0)
   );
 
   const cashSalesTotal = r2(
@@ -3177,6 +3473,21 @@ function DailyRegisterView({
         </div>
       )}
 
+      {/* Credit Sale Setup Popup Modal (Step 2) */}
+      {creditModalInvNo &&
+        (() => {
+          const modalInv = activeErpList.find((i) => i.invoiceNo === creditModalInvNo);
+          if (!modalInv) return null;
+          return (
+            <CreditSaleModal
+              key={modalInv.invoiceNo}
+              invoice={modalInv}
+              onClose={() => setCreditModalInvNo(null)}
+              onSave={(cfg) => handleSaveCreditSale(modalInv.invoiceNo, cfg)}
+            />
+          );
+        })()}
+
       {/* Shared Datalist of Today's 18 ERP Invoices (30062 to 30079) for Instant Auto-Lookup */}
       <datalist id="erp-invoices-datalist">
         {activeErpList.map((inv) => (
@@ -3491,14 +3802,14 @@ function DailyRegisterView({
                             </button>
                             <button
                               type="button"
-                              onClick={() => handleSetInvoiceMode(inv.invoiceNo, "OTHER_RECD")}
+                              onClick={() => setCreditModalInvNo(inv.invoiceNo)}
                               className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${
-                                inv.paymentMode === "OTHER_RECD"
-                                  ? "bg-purple-400 text-slate-950 font-extrabold"
-                                  : "text-white/55 hover:text-white"
+                                inv.paymentMode === "CREDIT_SALE"
+                                  ? "bg-indigo-400 text-slate-950 font-extrabold"
+                                  : "text-indigo-300/90 hover:text-indigo-200"
                               }`}
                             >
-                              Other Amt Recd
+                              Credit Sale (New Credit)
                             </button>
                           </div>
                         </div>
@@ -3645,6 +3956,44 @@ function DailyRegisterView({
                         </div>
                       )}
 
+                      {/* Credit Sale Summary Sub-Row (edit via popup modal) */}
+                      {isCreditSaleInv && (
+                        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-indigo-400/30 bg-black/40 px-4 py-2 text-xs">
+                          <div className="flex flex-wrap items-center gap-2 font-mono font-bold">
+                            <span className="text-indigo-200">
+                              Credit Balance: SAR {fmt(inv.creditBalance ?? inv.amount)}
+                            </span>
+                            {(inv.creditDownAmount || 0) > 0 && (
+                              <>
+                                <span className="text-white/30">|</span>
+                                <span className="text-emerald-300">
+                                  Down Payment: SAR {fmt(inv.creditDownAmount || 0)} (
+                                  {inv.creditDownMethod === "CASH"
+                                    ? "Cash to Drawer"
+                                    : POS_TERMINAL_META[inv.creditDownTerminal || "SAB"].badgeTag}
+                                  )
+                                </span>
+                              </>
+                            )}
+                            {inv.creditFollowUpDate && (
+                              <>
+                                <span className="text-white/30">|</span>
+                                <span className="text-white/60">
+                                  🔔 Follow-up: {inv.creditFollowUpDate}
+                                </span>
+                              </>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setCreditModalInvNo(inv.invoiceNo)}
+                            className="rounded bg-white/10 px-2 py-0.5 text-[10px] font-bold text-white/75 hover:bg-white/20 hover:text-white"
+                          >
+                            Edit
+                          </button>
+                        </div>
+                      )}
+
                       {/* Conditional Sub-Row for Bank Transfer (0% Fee) */}
                       {inv.paymentMode === "BANK_TRANSFER" && (
                         <div className="flex items-center justify-between rounded-xl border border-sky-400/25 bg-black/40 px-4 py-1.5 text-xs">
@@ -3786,16 +4135,14 @@ function DailyRegisterView({
                         }
                         className="w-full rounded-xl border border-white/15 bg-[#160f26] px-3.5 py-3 text-sm font-bold text-white outline-none focus:border-amber-400"
                       >
-                        <option value="CREDIT_SALE">Credit Sale (New Credit)</option>
                         <option value="CREDIT_RECD">Credit Sale Amt Recd</option>
                         <option value="LOAN_IN">Loan In</option>
                         <option value="OTHER_IN">Other Amt Recd</option>
-                        <option value="SPLIT_SALE">⚡ Split Payment</option>
                       </select>
                     </div>
 
-                    {/* 2. ERP Invoice / Reference Input (with dynamic auto-fill datalist / quick ERP invoice chips when Credit Sale or Split Payment is selected) */}
-                    {step3Kind === "CREDIT_SALE" || step3Kind === "SPLIT_SALE" ? (
+                    {/* 2. ERP Invoice / Reference Input (ERP invoice lookup + quick chips appear when Split Tender is toggled ON) */}
+                    {step3SplitEnabled ? (
                       <div className="space-y-2">
                         <label className="block text-xs font-bold text-amber-200/90">
                           ERP Invoice Number
@@ -3857,9 +4204,7 @@ function DailyRegisterView({
                     {/* 3. Customer / Contractor Name */}
                     <div className="space-y-1.5">
                       <label className="block text-xs font-bold text-white/70">
-                        {step3Kind === "CREDIT_RECD" ||
-                        step3Kind === "CREDIT_SALE" ||
-                        step3Kind === "SPLIT_SALE"
+                        {step3Kind === "CREDIT_RECD" || step3SplitEnabled
                           ? "Customer / Contractor Name"
                           : "Source or Note"}
                       </label>
@@ -3868,9 +4213,7 @@ function DailyRegisterView({
                         value={step3Title}
                         onChange={(e) => setStep3Title(e.target.value)}
                         placeholder={
-                          step3Kind === "CREDIT_RECD" ||
-                          step3Kind === "CREDIT_SALE" ||
-                          step3Kind === "SPLIT_SALE"
+                          step3Kind === "CREDIT_RECD" || step3SplitEnabled
                             ? "Customer Name (auto-populates from ERP)"
                             : "Source or Note"
                         }
@@ -3878,8 +4221,52 @@ function DailyRegisterView({
                       />
                     </div>
 
-                    {/* Split Payment Allocation Fields in Step 3 */}
-                    {step3Kind === "SPLIT_SALE" && (
+                    {/* 4. Follow-up Reminder Date */}
+                    {step3Kind === "CREDIT_RECD" && !step3SplitEnabled && (
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-bold text-emerald-300">
+                          Follow-up Reminder Date (Credit Radar)
+                        </label>
+                        <input
+                          type="date"
+                          value={step3FollowUpDate}
+                          onChange={(e) => setStep3FollowUpDate(e.target.value)}
+                          className="w-full rounded-xl border border-emerald-400/35 bg-emerald-500/10 px-4 py-2.5 text-sm font-bold text-white outline-none focus:border-emerald-400"
+                        />
+                      </div>
+                    )}
+
+                    {/* 5. Amount (SAR) + Split Tender Toggle */}
+                    <div className="space-y-2">
+                      <label className="block text-xs font-bold text-white/70">
+                        Amount (SAR)
+                      </label>
+                      <div className="flex items-center gap-2.5">
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={step3Amount}
+                          onChange={(e) => handleStep3TotalAmountChange(e.target.value)}
+                          placeholder={step3SplitEnabled ? "Total Amount (SAR)" : "Amount (SAR)"}
+                          className="flex-1 min-w-0 rounded-xl border border-white/15 bg-black/40 px-4 py-3 font-display text-lg font-extrabold text-white placeholder:text-white/30 outline-none focus:border-emerald-400"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setStep3SplitEnabled((prev) => !prev)}
+                          aria-pressed={step3SplitEnabled}
+                          className={`shrink-0 rounded-xl border px-3.5 py-3 text-xs font-extrabold transition whitespace-nowrap ${
+                            step3SplitEnabled
+                              ? "border-amber-300 bg-gradient-to-r from-amber-400 to-emerald-400 text-slate-950 shadow-[0_0_15px_rgba(245,158,11,0.3)]"
+                              : "border-amber-400/40 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20"
+                          }`}
+                        >
+                          ⚡ Split Tender (Cash + Card)
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Split Payment Allocation Fields in Step 3 (revealed under Amount when toggled ON) */}
+                    {step3SplitEnabled && (
                       <div className="space-y-2.5 rounded-2xl border border-amber-400/40 bg-amber-500/10 p-3.5">
                         <div className="grid grid-cols-2 gap-2.5">
                           <div>
@@ -3945,38 +4332,6 @@ function DailyRegisterView({
                         </div>
                       </div>
                     )}
-
-                    {/* 4. Follow-up Reminder Date */}
-                    {(step3Kind === "CREDIT_RECD" || step3Kind === "CREDIT_SALE") && (
-                      <div className="space-y-1.5">
-                        <label className="block text-xs font-bold text-emerald-300">
-                          Follow-up Reminder Date (Credit Radar)
-                        </label>
-                        <input
-                          type="date"
-                          value={step3FollowUpDate}
-                          onChange={(e) => setStep3FollowUpDate(e.target.value)}
-                          className="w-full rounded-xl border border-emerald-400/35 bg-emerald-500/10 px-4 py-2.5 text-sm font-bold text-white outline-none focus:border-emerald-400"
-                        />
-                      </div>
-                    )}
-
-                    {/* 5. Amount (SAR) */}
-                    <div className="space-y-1.5">
-                      <label className="block text-xs font-bold text-white/70">
-                        Amount (SAR)
-                      </label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={step3Amount}
-                        onChange={(e) => handleStep3TotalAmountChange(e.target.value)}
-                        placeholder={
-                          step3Kind === "SPLIT_SALE" ? "Total Amount (SAR)" : "Amount (SAR)"
-                        }
-                        className="w-full rounded-xl border border-white/15 bg-black/40 px-4 py-3 font-display text-lg font-extrabold text-white placeholder:text-white/30 outline-none focus:border-emerald-400"
-                      />
-                    </div>
 
                     {/* 6. Full-Width [+ Save & Sync] Button */}
                     <button
