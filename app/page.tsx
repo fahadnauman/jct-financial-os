@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import * as Dropdown from "@radix-ui/react-dropdown-menu";
 import {
   Activity, Building2, CalendarDays, Check, ChevronDown, 
-  CreditCard, FileSpreadsheet, Lock, LockOpen, Moon, 
+  FileSpreadsheet, Lock, LockOpen, Moon, 
   Package, Sparkles, Store, Sun, TrendingUp, 
   Wallet, Plus, Target, AlertTriangle, Mail, Bell,
   UploadCloud, Zap, ArrowLeft, ArrowRight, BarChart2, Eye, ArrowRightLeft, Trash2, Maximize2, Minimize2
@@ -152,17 +152,11 @@ function ThemeToggle({ dark, onToggle }: { dark: boolean; onToggle: () => void }
   return (
     <button
       onClick={onToggle}
-      role="switch"
-      aria-checked={dark}
-      className="relative flex h-10 w-[72px] shrink-0 items-center rounded-full bg-slate-100 px-1 shadow-inner ring-1 ring-slate-900/5 transition-colors dark:bg-[#171b28] dark:ring-white/10"
+      type="button"
+      title="Toggle Theme"
+      className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#00BAC7]/20 bg-[#0B1E21] text-slate-400 hover:text-white transition-colors"
     >
-      <span className="absolute left-2.5 text-slate-400"><Sun size={14} /></span>
-      <span className="absolute right-2.5 text-slate-400"><Moon size={14} /></span>
-      <span
-        className={`relative z-10 flex h-8 w-8 items-center justify-center rounded-full bg-white text-slate-800 shadow-sm transition-transform duration-500 ease-[cubic-bezier(0.34,1.4,0.5,1)] dark:bg-slate-800 dark:text-white ${dark ? "translate-x-[32px]" : "translate-x-0"}`}
-      >
-        {dark ? <Moon size={14} /> : <Sun size={14} />}
-      </span>
+      {dark ? <Moon size={15} /> : <Sun size={15} />}
     </button>
   );
 }
@@ -1419,7 +1413,6 @@ function DailyRegisterView({
   onSwitchTab,
 }: DailyRegisterViewProps) {
   const [activeLoggerTab, setActiveLoggerTab] = useState<"bank" | "expense">("bank");
-  const [showRecordedFeed, setShowRecordedFeed] = useState(true);
   const [trackPosFees, setTrackPosFees] = useState(false);
   const [bankSettlementMode, setBankSettlementMode] = useState<"GROSS" | "NET">("GROSS");
   const [creditModalInvNo, setCreditModalInvNo] = useState<string | null>(null);
@@ -2911,157 +2904,138 @@ function DailyRegisterView({
             </div>
           )}
 
-          {/* Header & Stat Pills + Optional MDR Toggle */}
+          {/* Header Section */}
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div>
-              <h1 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
+              <h1 className="text-2xl font-bold text-white tracking-tight">
                 Jubail Corp Daily Hub
               </h1>
-              <p className="mt-1 text-sm text-white/60">
-                Log daytime SAB / Al Rajhi swipes and cash movements, or start your end-of-day reconciliation.
+              <p className="text-xs text-slate-400 mt-0.5">
+                Log daytime swipes and cash movements, or start your end-of-day reconciliation.
               </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2.5">
-              {/* Optional POS Merchant Fee (MDR) Toggle — Default OFF */}
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Discreet POS Fee Toggle */}
               <button
                 type="button"
                 role="switch"
                 aria-checked={trackPosFees}
                 onClick={() => setTrackPosFees((prev) => !prev)}
-                className={`inline-flex items-center gap-2.5 rounded-full border px-3.5 py-1.5 text-xs font-bold transition backdrop-blur-md whitespace-nowrap ${
+                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition backdrop-blur-md whitespace-nowrap ${
                   trackPosFees
-                    ? "border-[#FFD200]/50 bg-[#FFD200]/15 text-[#FFD200]"
-                    : "border-white/15 bg-white/[0.04] text-white/65 hover:text-white"
+                    ? "border-[#FFD200]/40 bg-[#FFD200]/10 text-[#FFD200]"
+                    : "border-white/10 bg-white/[0.03] text-slate-400 hover:text-white"
                 }`}
               >
-                <span>Estimate POS Merchant Fees (MDR)</span>
+                <span>POS Fees (MDR)</span>
                 <span
-                  className={`inline-flex h-4 w-7 items-center rounded-full p-0.5 transition-colors ${
+                  className={`inline-flex h-3.5 w-6 items-center rounded-full p-0.5 transition-colors ${
                     trackPosFees ? "bg-[#FFD200]" : "bg-white/20"
                   }`}
                 >
                   <span
-                    className={`h-3 w-3 rounded-full bg-slate-950 transition-transform ${
-                      trackPosFees ? "translate-x-3" : "translate-x-0"
+                    className={`h-2.5 w-2.5 rounded-full bg-slate-950 transition-transform ${
+                      trackPosFees ? "translate-x-2.5" : "translate-x-0"
                     }`}
                   />
                 </span>
-                <span className="text-[10px] font-extrabold uppercase tracking-wider text-white/50">
-                  {trackPosFees ? "ON" : "OFF"}
-                </span>
               </button>
 
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-[#00BAC7]/40 bg-[#00BAC7]/10 px-4 py-1.5 text-xs font-bold text-[#22D3EE] backdrop-blur-md whitespace-nowrap">
-                <CreditCard size={13} className="text-[#00BAC7]" />
-                {preLoggedBankInvoices.length} Bank Invoices Queued
-              </span>
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/30 bg-emerald-500/10 px-4 py-1.5 text-xs font-bold text-emerald-300 backdrop-blur-md whitespace-nowrap">
-                SAR {fmt(totalPreLoggedInflows)} Inflows
-              </span>
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-400/30 bg-rose-500/10 px-4 py-1.5 text-xs font-bold text-rose-300 backdrop-blur-md whitespace-nowrap">
-                SAR {fmt(totalPreLoggedExpenses)} Expenses
-              </span>
-            </div>
-          </div>
-
-          {/* Spacious Hero Card */}
-          <div className="relative overflow-hidden rounded-3xl p-[1.5px] bg-gradient-to-r from-[#FFD200]/70 via-[#00BAC7]/70 to-[#FFD200]/70 shadow-[0_0_55px_rgba(0,186,199,0.25)]">
-            <div className="relative overflow-hidden rounded-[22.5px] bg-gradient-to-br from-[#0B1C1E]/95 via-[#061113]/95 to-[#041012]/95 border border-[#00BAC7]/30 px-8 py-9 backdrop-blur-2xl">
-              <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-[#FFD200]/15 blur-3xl" />
-              <div className="pointer-events-none absolute -bottom-20 left-1/3 h-64 w-64 rounded-full bg-[#00BAC7]/15 blur-3xl" />
-
-              <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-                <div className="max-w-2xl space-y-2">
-                  <h2 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
-                    End-of-Day Reconciliation
-                  </h2>
-                  <p className="text-sm sm:text-base text-white/65 leading-relaxed">
-                    Match ERP sales, calculate SAB &amp; Al Rajhi POS terminal fees, and close today&apos;s drawer in 5 guided steps.
-                  </p>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-3.5 shrink-0">
-                  <button
-                    onClick={handleStartWizard}
-                    className="group flex items-center gap-2.5 rounded-2xl bg-gradient-to-r from-[#FFD200] via-[#FACC15] to-[#00BAC7] px-7 py-4 text-sm sm:text-base font-black text-black shadow-[0_0_30px_rgba(255,210,0,0.4)] transition-all duration-300 hover:scale-[1.02]"
-                  >
-                    <Sparkles size={18} className="text-black" />
-                    <span>✨ Start Guided Tracking</span>
-                    <ArrowRight size={16} className="text-black/80 transition-transform group-hover:translate-x-0.5" />
-                  </button>
-
-                  <button
-                    onClick={() => setTrackingMode("datasheet")}
-                    className="flex items-center gap-2 rounded-2xl border border-[#00BAC7]/30 bg-white/5 px-6 py-4 text-sm sm:text-base font-bold text-white backdrop-blur-xl transition-all hover:bg-white/10"
-                  >
-                    <FileSpreadsheet size={18} className="text-[#FFD200]" />
-                    <span>📋 Classic Data Sheet</span>
-                  </button>
-                </div>
+              {/* Consolidated KPI Ribbon */}
+              <div className="text-xs text-slate-300 bg-[#091A1C] border border-[#00BAC7]/20 px-3.5 py-1.5 rounded-full whitespace-nowrap font-medium flex items-center gap-1.5 shadow-sm">
+                <span>{preLoggedBankInvoices.length} Swipes Queued</span>
+                <span className="text-[#00BAC7]/40">·</span>
+                <span className="text-emerald-300">SAR {fmt(totalPreLoggedInflows)} Inflows</span>
+                <span className="text-[#00BAC7]/40">·</span>
+                <span className="text-rose-300">SAR {fmt(totalPreLoggedExpenses)} Expenses</span>
               </div>
             </div>
           </div>
 
-          {/* Unified Daytime Quick-Logger */}
-          <div className="rounded-3xl border border-[#00BAC7]/25 bg-gradient-to-b from-[#0B1C1E]/80 to-[#061113]/90 p-6 sm:p-8 backdrop-blur-2xl shadow-2xl">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-white/10">
-              <div className="inline-flex rounded-2xl bg-black/50 p-1.5 border border-[#00BAC7]/20">
+          {/* End-of-Day Hero Card */}
+          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#081F22]/90 via-[#07191B]/95 to-[#040D0E] border border-[#00BAC7]/30 shadow-[0_0_25px_rgba(0,186,199,0.08)] p-6 backdrop-blur-xl">
+            <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-[#FFD200]/10 blur-3xl" />
+            <div className="pointer-events-none absolute -bottom-16 left-1/3 h-48 w-48 rounded-full bg-[#00BAC7]/10 blur-3xl" />
+
+            <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+              <div className="max-w-2xl space-y-1.5">
+                <h2 className="font-display text-xl sm:text-2xl font-bold tracking-tight text-white">
+                  End-of-Day Reconciliation
+                </h2>
+                <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
+                  Match ERP sales, calculate SAB &amp; Al Rajhi POS terminal fees, and close today&apos;s drawer in 5 guided steps.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleStartWizard}
+                  className="bg-gradient-to-r from-[#FFD200] to-[#F59E0B] hover:brightness-110 text-black font-extrabold px-6 py-3 rounded-xl shadow-[0_0_20px_rgba(255,210,0,0.3)] transition-all flex items-center gap-2 text-sm whitespace-nowrap"
+                >
+                  <Sparkles size={16} className="text-black" />
+                  <span>Start Guided Tracking</span>
+                  <ArrowRight size={14} className="text-black/80" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setTrackingMode("datasheet")}
+                  className="bg-white/[0.03] hover:bg-white/[0.08] text-slate-300 border border-white/10 px-5 py-3 rounded-xl transition-all flex items-center gap-2 text-sm whitespace-nowrap"
+                >
+                  <FileSpreadsheet size={16} className="text-[#FFD200]" />
+                  <span>Classic Data Sheet</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Minimalist Daytime Quick-Logger Box */}
+          <div className="rounded-2xl border border-[#00BAC7]/20 bg-[#071719]/90 p-5 sm:p-6 backdrop-blur-xl shadow-lg flex flex-col gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/5">
+              <div className="inline-flex rounded-xl bg-[#040D0E] p-1 border border-white/5">
                 <button
                   type="button"
                   onClick={() => setActiveLoggerTab("bank")}
-                  className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs sm:text-sm font-bold transition-all ${
+                  className={`rounded-lg px-4 py-2 text-xs font-bold transition-all ${
                     activeLoggerTab === "bank"
-                      ? "bg-gradient-to-r from-[#FFD200] to-[#FACC15] text-black font-extrabold shadow-md"
-                      : "text-white/65 hover:text-white"
+                      ? "bg-[#FFD200] text-black font-bold shadow-sm"
+                      : "text-slate-400 hover:text-white"
                   }`}
                 >
-                  <span>💳 Log Bank / POS Invoice #</span>
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold ${
-                      activeLoggerTab === "bank" ? "bg-black/20 text-black" : "bg-white/10 text-[#FFD200]"
-                    }`}
-                  >
-                    {preLoggedBankInvoices.length}
-                  </span>
+                  💳 Bank / POS Swipes ({preLoggedBankInvoices.length})
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setActiveLoggerTab("expense")}
-                  className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs sm:text-sm font-bold transition-all ${
+                  className={`rounded-lg px-4 py-2 text-xs font-bold transition-all ${
                     activeLoggerTab === "expense"
-                      ? "bg-gradient-to-r from-[#00A8B5] to-[#0284C7] text-white font-extrabold shadow-[0_0_15px_rgba(0,168,181,0.3)]"
-                      : "text-white/65 hover:text-white"
+                      ? "bg-[#FFD200] text-black font-bold shadow-sm"
+                      : "text-slate-400 hover:text-white"
                   }`}
                 >
-                  <span>⚡ Quick Expense &amp; Cash-In</span>
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold ${
-                      activeLoggerTab === "expense" ? "bg-white/20 text-white" : "bg-white/10 text-[#22D3EE]"
-                    }`}
-                  >
-                    {preLoggedEntries.length}
-                  </span>
+                  ⚡ Expenses &amp; Cash-In ({preLoggedEntries.length})
                 </button>
               </div>
 
-              <span className="text-xs font-medium text-white/45">
+              <span className="text-xs text-slate-400">
                 {activeLoggerTab === "bank"
-                  ? "Pre-tag invoices with mada · SAB (0.80%), mada · Al Rajhi (0.80%), Visa / Mastercard (2.20%), or Bank Transfer (0%)"
-                  : "Credit Purchases sync to Suppliers & Payables · Credit Sales/Receipts sync to Credit Radar"}
+                  ? "Pre-tag invoices with mada · SAB, mada · Al Rajhi, Visa / MC, or Bank Transfer (0%)"
+                  : "Credit purchases and sales auto-sync to Suppliers and Credit Radar"}
               </span>
             </div>
 
             {activeLoggerTab === "bank" ? (
-              <div className="pt-5 space-y-4">
-                <form onSubmit={handleLogBankInvoice} className="flex flex-wrap items-center gap-3">
+              <div className="space-y-3">
+                <form onSubmit={handleLogBankInvoice} className="flex flex-wrap items-center gap-2.5">
                   <input
                     type="text"
                     value={bankInvoiceInput}
                     onChange={(e) => setBankInvoiceInput(e.target.value)}
                     placeholder="Invoice No. (e.g. 30065)"
-                    className="flex-1 min-w-[160px] rounded-xl border border-white/15 bg-black/35 px-4 py-3 text-sm font-semibold text-white placeholder:text-white/35 outline-none focus:border-amber-400/70"
+                    className="flex-1 min-w-[150px] bg-[#061416] border border-[#00BAC7]/20 focus:border-[#00BAC7] text-white text-sm rounded-xl px-3 py-2.5 placeholder:text-slate-500 outline-none transition"
                   />
                   <input
                     type="number"
@@ -3069,29 +3043,29 @@ function DailyRegisterView({
                     value={bankAmountInput}
                     onChange={(e) => setBankAmountInput(e.target.value)}
                     placeholder="Optional SAR"
-                    className="w-36 rounded-xl border border-white/15 bg-black/35 px-4 py-3 text-sm font-semibold text-white placeholder:text-white/35 outline-none focus:border-amber-400/70"
+                    className="w-32 bg-[#061416] border border-[#00BAC7]/20 focus:border-[#00BAC7] text-white text-sm rounded-xl px-3 py-2.5 placeholder:text-slate-500 outline-none transition"
                   />
 
                   <select
                     value={bankModeInput}
                     onChange={(e) => setBankModeInput(e.target.value as "POS_SWIPE" | "BANK_TRANSFER")}
-                    className="rounded-xl border border-[#00BAC7]/30 bg-[#061113] px-3.5 py-3 text-xs sm:text-sm font-bold text-white outline-none"
+                    className="bg-[#061416] border border-[#00BAC7]/20 focus:border-[#00BAC7] text-white text-xs font-semibold rounded-xl px-3 py-2.5 outline-none transition"
                   >
                     <option value="POS_SWIPE">Swipe (POS)</option>
-                    <option value="BANK_TRANSFER">Bank Transfer (0% Fee)</option>
+                    <option value="BANK_TRANSFER">Bank (0%)</option>
                   </select>
 
                   {bankModeInput === "POS_SWIPE" && (
-                    <div className="inline-flex flex-wrap rounded-xl bg-black/50 p-1 border border-[#FFD200]/30 gap-0.5">
+                    <div className="inline-flex rounded-xl bg-[#040D0E] p-1 border border-white/5 gap-1">
                       {(["SAB", "AL_RAJHI", "VISA_MC"] as PosTerminalBank[]).map((term) => (
                         <button
                           key={term}
                           type="button"
                           onClick={() => setBankTerminalInput(term)}
-                          className={`rounded-lg px-3 py-2 text-xs font-extrabold transition ${
+                          className={`rounded-lg px-2.5 py-1.5 text-xs font-bold transition ${
                             bankTerminalInput === term
-                              ? "bg-[#FFD200] text-black"
-                              : "text-white/65 hover:text-white"
+                              ? "bg-[#FFD200] text-black shadow-sm"
+                              : "text-slate-400 hover:text-white"
                           }`}
                         >
                           {POS_TERMINAL_META[term].badgeTag}
@@ -3102,48 +3076,51 @@ function DailyRegisterView({
 
                   <button
                     type="submit"
-                    className="flex items-center justify-center gap-2 rounded-xl bg-[#FFD200] hover:bg-yellow-300 px-6 py-3 text-sm font-extrabold text-black transition shrink-0 whitespace-nowrap shadow-sm"
+                    className="flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#FFD200] to-[#F59E0B] text-black font-bold text-sm px-4 py-2.5 hover:brightness-105 shadow-sm transition shrink-0 whitespace-nowrap"
                   >
-                    <Plus size={16} strokeWidth={2.5} />
+                    <Plus size={15} strokeWidth={2.5} />
                     <span>+ Add Invoice</span>
                   </button>
                 </form>
 
-                <div className="flex flex-wrap items-center gap-2 pt-1">
-                  {preLoggedBankInvoices.map((inv) => (
-                    <div
-                      key={inv.invoiceNo}
-                      className="inline-flex items-center gap-2 rounded-xl border border-amber-400/30 bg-amber-500/10 px-3.5 py-1.5 text-xs font-bold text-white"
-                    >
-                      <span className="font-mono font-extrabold text-amber-300">#{inv.invoiceNo}</span>
-                      <span className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-extrabold text-teal-200">
-                        {inv.paymentMode === "BANK_TRANSFER"
-                          ? "Bank Transfer (0%)"
-                          : `${POS_TERMINAL_META[inv.posTerminal || "SAB"].shortLabel} (${POS_TERMINAL_META[inv.posTerminal || "SAB"].feePctLabel})`}
-                      </span>
-                      {inv.amount !== undefined && (
-                        <span className="text-white/75">SAR {fmt(inv.amount)}</span>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveBankInvoice(inv.invoiceNo)}
-                        className="text-white/35 hover:text-rose-400 transition"
-                        title="Remove invoice"
+                {/* Queued Transaction Chips */}
+                {preLoggedBankInvoices.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-white/5">
+                    {preLoggedBankInvoices.map((inv) => (
+                      <div
+                        key={inv.invoiceNo}
+                        className="inline-flex items-center gap-2 rounded-lg border border-[#00BAC7]/25 bg-[#091A1C] px-3 py-1.5 text-xs text-slate-300"
                       >
-                        <Trash2 size={12} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
+                        <span className="font-mono font-bold text-[#FFD200]">#{inv.invoiceNo}</span>
+                        <span className="rounded bg-black/40 px-1.5 py-0.5 text-[10px] font-bold text-[#22D3EE]">
+                          {inv.paymentMode === "BANK_TRANSFER"
+                            ? "Bank (0%)"
+                            : POS_TERMINAL_META[inv.posTerminal || "SAB"].shortLabel}
+                        </span>
+                        {inv.amount !== undefined && (
+                          <span className="font-semibold text-white">SAR {fmt(inv.amount)}</span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveBankInvoice(inv.invoiceNo)}
+                          className="text-slate-500 hover:text-rose-400 transition ml-0.5"
+                          title="Remove invoice"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ) : (
-              <div className="pt-5 space-y-4">
+              <div className="space-y-3">
                 <form onSubmit={handleQuickRecord} className="space-y-3">
-                  <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-2.5">
                     <select
                       value={entryType}
                       onChange={(e) => setEntryType(e.target.value as PreLoggedEntryType)}
-                      className="rounded-xl border border-[#00BAC7]/30 bg-[#061113] px-4 py-3 text-sm font-bold text-white outline-none"
+                      className="bg-[#061416] border border-[#00BAC7]/20 focus:border-[#00BAC7] text-white text-xs font-semibold rounded-xl px-3 py-2.5 outline-none transition"
                     >
                       <option value="EXPENSE">Expense / Purchase</option>
                       <option value="SPLIT_SALE">⚡ Split Payment (Cash + Card)</option>
@@ -3158,7 +3135,7 @@ function DailyRegisterView({
                         <select
                           value={hubExpenseCat}
                           onChange={(e) => setHubExpenseCat(e.target.value as StrictExpenseCategory)}
-                          className="rounded-xl border border-[#FFD200]/40 bg-[#061113] px-4 py-3 text-sm font-extrabold text-[#FFD200] outline-none"
+                          className="bg-[#061416] border border-[#FFD200]/40 focus:border-[#FFD200] text-[#FFD200] text-xs font-bold rounded-xl px-3 py-2.5 outline-none transition"
                         >
                           {STRICT_EXPENSE_CATEGORIES.map((cat) => (
                             <option key={cat} value={cat}>
@@ -3175,8 +3152,8 @@ function DailyRegisterView({
                             list="hub-suppliers-list"
                             value={hubSupplierName}
                             onChange={(e) => setHubSupplierName(e.target.value)}
-                            placeholder="Supplier Name (e.g. Jotun, Hempel)"
-                            className="flex-1 min-w-[180px] rounded-xl border border-[#00BAC7]/40 bg-black/40 px-4 py-3 text-sm font-bold text-white placeholder:text-white/40 outline-none"
+                            placeholder="Supplier Name (e.g. Jotun)"
+                            className="flex-1 min-w-[150px] bg-[#061416] border border-[#00BAC7]/20 focus:border-[#00BAC7] text-white text-sm rounded-xl px-3 py-2.5 placeholder:text-slate-500 outline-none transition"
                           />
                         )}
                         <datalist id="hub-suppliers-list">
@@ -3186,8 +3163,8 @@ function DailyRegisterView({
                         </datalist>
 
                         {hubExpenseCat === "Credit Purchase" && (
-                          <div className="flex items-center gap-2 rounded-xl border border-amber-400/40 bg-black/40 px-3 py-2">
-                            <span className="text-[11px] font-bold text-amber-300 whitespace-nowrap">Due Date:</span>
+                          <div className="flex items-center gap-1.5 rounded-xl border border-[#FFD200]/30 bg-[#061416] px-2.5 py-2">
+                            <span className="text-[10px] font-bold text-[#FFD200] whitespace-nowrap">Due:</span>
                             <input
                               type="date"
                               value={hubDueDate}
@@ -3202,7 +3179,7 @@ function DailyRegisterView({
                           value={entryTitle}
                           onChange={(e) => setEntryTitle(e.target.value)}
                           placeholder="Optional note / details..."
-                          className="flex-1 min-w-[160px] rounded-xl border border-white/15 bg-black/35 px-4 py-3 text-sm font-semibold text-white placeholder:text-white/35 outline-none"
+                          className="flex-1 min-w-[150px] bg-[#061416] border border-[#00BAC7]/20 focus:border-[#00BAC7] text-white text-sm rounded-xl px-3 py-2.5 placeholder:text-slate-500 outline-none transition"
                         />
                       </>
                     ) : entryType === "SPLIT_SALE" ? (
@@ -3213,14 +3190,14 @@ function DailyRegisterView({
                           value={hubReceiptNo}
                           onChange={(e) => handleHubInvoiceInput(e.target.value)}
                           placeholder="Invoice # (e.g. 30072)"
-                          className="w-40 rounded-xl border border-amber-400/50 bg-black/50 px-3.5 py-3 font-mono text-sm font-extrabold text-amber-300 placeholder:font-sans placeholder:text-white/40 outline-none focus:border-amber-300"
+                          className="w-36 bg-[#061416] border border-[#FFD200]/40 focus:border-[#FFD200] font-mono text-sm font-bold text-[#FFD200] rounded-xl px-3 py-2.5 placeholder:font-sans placeholder:text-slate-500 outline-none transition"
                         />
                         <input
                           type="text"
                           value={hubCustomerName}
                           onChange={(e) => setHubCustomerName(e.target.value)}
-                          placeholder="Customer Name (auto-fills from ERP #)"
-                          className="flex-1 min-w-[180px] rounded-xl border border-amber-400/40 bg-black/40 px-4 py-3 text-sm font-bold text-white placeholder:text-white/40 outline-none"
+                          placeholder="Customer Name (auto-fills)"
+                          className="flex-1 min-w-[150px] bg-[#061416] border border-[#00BAC7]/20 focus:border-[#00BAC7] text-white text-sm rounded-xl px-3 py-2.5 placeholder:text-slate-500 outline-none transition"
                         />
                       </>
                     ) : entryType === "CREDIT_RECD" || entryType === "CREDIT_SALE" ? (
@@ -3233,20 +3210,20 @@ function DailyRegisterView({
                           placeholder={
                             entryType === "CREDIT_SALE"
                               ? "Invoice # (e.g. 30064)"
-                              : "Receipt / Inv # (opt)"
+                              : "Receipt # (opt)"
                           }
-                          className="w-44 rounded-xl border border-amber-400/50 bg-black/50 px-3.5 py-3 font-mono text-sm font-extrabold text-amber-300 placeholder:font-sans placeholder:text-white/40 outline-none focus:border-amber-300"
+                          className="w-36 bg-[#061416] border border-[#FFD200]/40 focus:border-[#FFD200] font-mono text-sm font-bold text-[#FFD200] rounded-xl px-3 py-2.5 placeholder:font-sans placeholder:text-slate-500 outline-none transition"
                         />
                         <input
                           type="text"
                           value={hubCustomerName}
                           onChange={(e) => setHubCustomerName(e.target.value)}
-                          placeholder="Customer Name (auto-fills from ERP #)"
-                          className="flex-1 min-w-[200px] rounded-xl border border-emerald-400/40 bg-black/40 px-4 py-3 text-sm font-bold text-white placeholder:text-white/40 outline-none"
+                          placeholder="Customer Name (auto-fills)"
+                          className="flex-1 min-w-[150px] bg-[#061416] border border-[#00BAC7]/20 focus:border-[#00BAC7] text-white text-sm rounded-xl px-3 py-2.5 placeholder:text-slate-500 outline-none transition"
                         />
-                        <div className="flex items-center gap-2 rounded-xl border border-emerald-400/40 bg-black/40 px-3 py-2">
-                          <span className="text-[11px] font-bold text-emerald-300 whitespace-nowrap">
-                            Follow-up Date:
+                        <div className="flex items-center gap-1.5 rounded-xl border border-emerald-400/30 bg-[#061416] px-2.5 py-2">
+                          <span className="text-[10px] font-bold text-emerald-300 whitespace-nowrap">
+                            Follow-up:
                           </span>
                           <input
                             type="date"
@@ -3262,7 +3239,7 @@ function DailyRegisterView({
                         value={entryTitle}
                         onChange={(e) => setEntryTitle(e.target.value)}
                         placeholder="Source / Note for this amount..."
-                        className="flex-1 min-w-[200px] rounded-xl border border-white/15 bg-black/35 px-4 py-3 text-sm font-semibold text-white placeholder:text-white/35 outline-none"
+                        className="flex-1 min-w-[160px] bg-[#061416] border border-[#00BAC7]/20 focus:border-[#00BAC7] text-white text-sm rounded-xl px-3 py-2.5 placeholder:text-slate-500 outline-none transition"
                       />
                     )}
 
@@ -3271,50 +3248,50 @@ function DailyRegisterView({
                       step="0.01"
                       value={entryAmount}
                       onChange={(e) => handleHubTotalAmountChange(e.target.value)}
-                      placeholder={entryType === "SPLIT_SALE" ? "Total Amount (SAR)" : "Amount (SAR)"}
-                      className="w-44 rounded-xl border border-white/15 bg-black/35 px-4 py-3 text-sm font-extrabold text-white placeholder:text-white/35 outline-none"
+                      placeholder={entryType === "SPLIT_SALE" ? "Total SAR" : "Amount (SAR)"}
+                      className="w-32 bg-[#061416] border border-[#00BAC7]/20 focus:border-[#00BAC7] text-white text-sm rounded-xl px-3 py-2.5 placeholder:text-slate-500 outline-none transition"
                     />
 
                     <button
                       type="submit"
-                      className="flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#00A8B5] to-[#0284C7] hover:brightness-110 px-6 py-3 text-sm font-extrabold text-white transition shrink-0 whitespace-nowrap shadow-[0_0_15px_rgba(0,168,181,0.35)]"
+                      className="flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#FFD200] to-[#F59E0B] text-black font-bold text-sm px-4 py-2.5 hover:brightness-105 shadow-sm transition shrink-0 whitespace-nowrap"
                     >
-                      <Plus size={16} strokeWidth={2.5} />
+                      <Plus size={15} strokeWidth={2.5} />
                       <span>+ Record</span>
                     </button>
                   </div>
 
                   {/* Inline Split Payment Allocation Card inside Daytime Quick-Logger */}
                   {entryType === "SPLIT_SALE" && (
-                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-400/40 bg-amber-500/10 p-3.5 text-xs">
-                      <div className="flex flex-wrap items-center gap-3">
-                        <span className="rounded-lg bg-amber-400 px-2.5 py-1 font-extrabold text-slate-950">
-                          ⚡ Split Tender Allocation
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#FFD200]/30 bg-[#040D0E] p-3 text-xs">
+                      <div className="flex flex-wrap items-center gap-2.5">
+                        <span className="rounded-md bg-[#FFD200] px-2 py-0.5 font-bold text-black text-[11px]">
+                          ⚡ Split Tender
                         </span>
 
-                        <div className="flex items-center gap-1.5 rounded-xl border border-emerald-400/40 bg-black/50 px-3 py-1.5">
-                          <span className="font-bold text-emerald-300">Cash Portion (SAR):</span>
+                        <div className="flex items-center gap-1.5 rounded-lg border border-emerald-400/40 bg-black/50 px-2.5 py-1">
+                          <span className="font-semibold text-emerald-300 text-[11px]">Cash (SAR):</span>
                           <input
                             type="number"
                             step="0.01"
                             value={hubSplitCashInput}
                             onChange={(e) => handleHubSplitCashChange(e.target.value)}
-                            className="w-24 bg-transparent font-mono text-sm font-extrabold text-white outline-none"
+                            className="w-20 bg-transparent font-mono text-xs font-bold text-white outline-none"
                           />
                         </div>
 
-                        <div className="flex items-center gap-1.5 rounded-xl border border-amber-400/40 bg-black/50 px-3 py-1.5">
-                          <span className="font-bold text-amber-300">Card Portion (SAR):</span>
+                        <div className="flex items-center gap-1.5 rounded-lg border border-[#FFD200]/40 bg-black/50 px-2.5 py-1">
+                          <span className="font-semibold text-[#FFD200] text-[11px]">Card (SAR):</span>
                           <input
                             type="number"
                             step="0.01"
                             value={hubSplitCardInput}
                             onChange={(e) => handleHubSplitCardChange(e.target.value)}
-                            className="w-24 bg-transparent font-mono text-sm font-extrabold text-white outline-none"
+                            className="w-20 bg-transparent font-mono text-xs font-bold text-white outline-none"
                           />
                         </div>
 
-                        <div className="inline-flex flex-wrap rounded-xl bg-black/60 p-1 border border-white/15 gap-1">
+                        <div className="inline-flex rounded-lg bg-black/60 p-0.5 border border-white/10 gap-0.5">
                           {(["SAB", "AL_RAJHI", "VISA_MC"] as PosTerminalBank[]).map((term) => (
                             <button
                               key={term}
@@ -3323,10 +3300,10 @@ function DailyRegisterView({
                                 setHubSplitMethod("POS_SWIPE");
                                 setHubSplitTerminal(term);
                               }}
-                              className={`rounded-lg px-2.5 py-1 text-[11px] font-extrabold transition ${
+                              className={`rounded px-2 py-0.5 text-[10px] font-bold transition ${
                                 hubSplitMethod === "POS_SWIPE" && hubSplitTerminal === term
-                                  ? "bg-amber-400 text-slate-950"
-                                  : "text-white/65 hover:text-white"
+                                  ? "bg-[#FFD200] text-black"
+                                  : "text-slate-400 hover:text-white"
                               }`}
                             >
                               {POS_TERMINAL_META[term].badgeTag}
@@ -3335,118 +3312,69 @@ function DailyRegisterView({
                           <button
                             type="button"
                             onClick={() => setHubSplitMethod("BANK_TRANSFER")}
-                            className={`rounded-lg px-2.5 py-1 text-[11px] font-extrabold transition ${
+                            className={`rounded px-2 py-0.5 text-[10px] font-bold transition ${
                               hubSplitMethod === "BANK_TRANSFER"
                                 ? "bg-sky-400 text-slate-950"
-                                : "text-white/65 hover:text-white"
+                                : "text-slate-400 hover:text-white"
                             }`}
                           >
-                            Bank Transfer (0%)
+                            Bank (0%)
                           </button>
                         </div>
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-2 font-mono text-xs font-bold text-amber-200">
-                        {(() => {
-                          const cashVal = parseFloat(hubSplitCashInput) || 0;
-                          const cardVal = parseFloat(hubSplitCardInput) || 0;
-                          const fb =
-                            hubSplitMethod === "POS_SWIPE"
-                              ? calcAmountPosFeeBreakdown(cardVal, hubSplitTerminal)
-                              : { totalFee: 0, mdrBase: 0, vatOnFee: 0 };
-                          return (
-                            <>
-                              <span>
-                                Cash to Drawer: SAR {fmt(cashVal)} | Card to Bank: SAR {fmt(cardVal)}
-                              </span>
-                              {trackPosFees && fb.totalFee > 0 && (
-                                <span className="text-[11px] font-normal text-white/45">
-                                  (Est. {POS_TERMINAL_META[hubSplitTerminal].shortLabel} fee incl. 15% VAT: SAR {fmt(fb.totalFee)})
-                                </span>
-                              )}
-                            </>
-                          );
-                        })()}
                       </div>
                     </div>
                   )}
 
-                  {/* Glowing ERP Match Pill inside Daytime Quick-Logger */}
+                  {/* Clean Matched Banner */}
                   {(entryType === "CREDIT_SALE" ||
                     entryType === "CREDIT_RECD" ||
                     entryType === "SPLIT_SALE") &&
                     matchedHubInvoice && (
-                      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#00BAC7]/50 bg-gradient-to-r from-[#00A8B5]/20 via-[#FFD200]/20 to-[#00A8B5]/20 px-4 py-2.5 text-xs font-extrabold text-[#FFD200] shadow-[0_0_25px_rgba(0,168,181,0.25)]">
+                      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#00BAC7]/30 bg-[#091A1C] px-3.5 py-2 text-xs font-semibold text-[#FFD200]">
                         <span>
-                          ✨ ERP Invoice #{matchedHubInvoice.invoiceNo} Matched:{" "}
+                          ✨ Matched #{matchedHubInvoice.invoiceNo}:{" "}
                           <strong className="text-white">{matchedHubInvoice.customer}</strong> — SAR{" "}
                           {fmt(matchedHubInvoice.amount)}
-                        </span>
-                        <span className="rounded-full bg-black/40 border border-white/15 px-2.5 py-0.5 text-[10px] font-bold text-emerald-300">
-                          {entryType === "SPLIT_SALE"
-                            ? "Auto-filled Gross SAR & Split Shares"
-                            : "Auto-filled Customer & SAR · Reclassifies as Credit Sale"}
                         </span>
                       </div>
                     )}
                 </form>
 
-                <div className="pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setShowRecordedFeed(!showRecordedFeed)}
-                    className="text-xs font-bold text-white/55 hover:text-white transition"
-                  >
-                    {showRecordedFeed ? "▾" : "▸"} Today&apos;s Recorded Items ({preLoggedEntries.length})
-                  </button>
-
-                  {showRecordedFeed && (
-                    <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2.5">
-                      {preLoggedEntries.map((entry) => {
-                        const meta = entryTypeMeta[entry.type];
-                        return (
-                          <div
-                            key={entry.id}
-                            className="flex items-center justify-between rounded-xl border border-white/10 bg-black/30 px-3.5 py-2.5 text-xs"
+                {/* Queued Recorded Feed */}
+                {preLoggedEntries.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-white/5">
+                    {preLoggedEntries.map((entry) => {
+                      const meta = entryTypeMeta[entry.type];
+                      return (
+                        <div
+                          key={entry.id}
+                          className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-[#091A1C] px-3 py-1.5 text-xs text-slate-300"
+                        >
+                          <span className={`rounded border px-1.5 py-0.5 text-[10px] font-bold ${meta.badgeClass}`}>
+                            {entry.expenseCategory || meta.label}
+                          </span>
+                          {entry.receiptNo && (
+                            <span className="font-mono text-[11px] font-bold text-[#FFD200]">
+                              #{entry.receiptNo}
+                            </span>
+                          )}
+                          <span className="font-medium text-white truncate max-w-[140px]">{entry.title}</span>
+                          <span className={`font-mono font-bold ${meta.isOutflow ? "text-rose-400" : "text-emerald-400"}`}>
+                            {meta.isOutflow ? "-" : "+"}SAR {fmt(entry.amount)}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveEntry(entry.id)}
+                            className="text-slate-500 hover:text-rose-400 transition ml-0.5"
+                            title="Delete entry"
                           >
-                            <div className="flex flex-col min-w-0 pr-2">
-                              <div className="flex items-center gap-2 min-w-0">
-                                <span className={`rounded border px-1.5 py-0.5 text-[10px] font-bold shrink-0 ${meta.badgeClass}`}>
-                                  {entry.expenseCategory || meta.label}
-                                </span>
-                                {entry.receiptNo && (
-                                  <span className="font-mono text-[11px] font-extrabold text-amber-300 shrink-0">
-                                    {entry.receiptNo}
-                                  </span>
-                                )}
-                                <span className="font-bold text-white truncate">{entry.title}</span>
-                              </div>
-                              {(entry.dueDate || entry.followUpDate) && (
-                                <span className="text-[10px] text-amber-300/80 mt-0.5">
-                                  {entry.dueDate
-                                    ? `Due: ${entry.dueDate}`
-                                    : `🔔 Reminder: ${entry.followUpDate}${entry.receiptNo ? ` · Inv ${entry.receiptNo}` : ""}`}
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2.5 shrink-0">
-                              <span className={`font-display font-extrabold whitespace-nowrap ${meta.isOutflow ? "text-rose-400" : entry.type === "CREDIT_SALE" ? "text-indigo-300" : entry.type === "SPLIT_SALE" ? "text-amber-300" : "text-emerald-400"}`}>
-                                {meta.isOutflow ? "-" : entry.type === "CREDIT_SALE" ? "" : "+"}SAR {fmt(entry.amount)}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveEntry(entry.id)}
-                                className="text-white/35 hover:text-rose-400"
-                              >
-                                <Trash2 size={12} />
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -7588,7 +7516,7 @@ function NaumanAiView({ txns }: { txns: Txn[] }) {
 }
 
 export default function Page() {
-  const [dark, setDark] = useState(false);
+  const [dark, setDark] = useState(true);
   const [tab, setTab] = useState<TabId>("register");
 
   // Lifted Daily Register State (Persists across tab switches & powers live cross-module sync)
@@ -7904,7 +7832,7 @@ export default function Page() {
 
   return (
     <div
-      className={`flex h-screen w-full bg-slate-50 text-slate-900 antialiased overflow-hidden dark:bg-[#041012] dark:text-slate-100 ${
+      className={`flex h-screen w-full bg-[#041012] text-slate-100 antialiased overflow-hidden ${
         dark ? "dark" : ""
       }`}
     >
@@ -7912,21 +7840,21 @@ export default function Page() {
 
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Top Header */}
-        <header className="flex shrink-0 flex-wrap items-center justify-between gap-4 border-b border-slate-200 bg-white/50 px-6 py-4 backdrop-blur-xl dark:border-[#00BAC7]/20 dark:bg-gradient-to-r dark:from-[#041012] dark:via-[#051719] dark:to-[#010405] z-20">
+        <header className="flex shrink-0 flex-wrap items-center justify-between gap-4 border-b border-[#00BAC7]/15 bg-[#060F11]/90 px-6 py-4 backdrop-blur-md z-20">
           <div className="flex items-center gap-4">
-            <h1 className="font-display text-xl font-extrabold tracking-tight text-white hidden sm:block">
+            <h1 className="text-white font-semibold text-base hidden sm:block">
               Good afternoon, Fahad
             </h1>
-            <div className="h-6 w-px bg-slate-200 dark:bg-[#00BAC7]/20 hidden sm:block"></div>
-            <div className="flex items-center gap-2 text-sm font-bold text-white/80">
-              <CalendarDays size={16} className="text-[#00BAC7]" /> 12-09-2026
+            <div className="h-4 w-px bg-[#00BAC7]/20 hidden sm:block"></div>
+            <div className="flex items-center gap-2 bg-[#0B1E21] border border-[#00BAC7]/25 text-[#22D3EE] text-xs font-medium px-3 py-1.5 rounded-lg">
+              <CalendarDays size={14} className="text-[#00BAC7]" /> 12-09-2026
             </div>
-            <div className="h-6 w-px bg-slate-200 dark:bg-[#00BAC7]/20 hidden sm:block"></div>
+            <div className="h-4 w-px bg-[#00BAC7]/20 hidden sm:block"></div>
             <Dropdown.Root>
-              <Dropdown.Trigger className="flex h-10 items-center gap-2 rounded-lg bg-slate-100 px-3 text-sm font-bold hover:bg-slate-200 dark:bg-[#061113] dark:border dark:border-[#00BAC7]/30 dark:text-white dark:hover:border-[#00BAC7]/60 outline-none transition">
-                <Store size={16} className="text-[#00BAC7]" />
+              <Dropdown.Trigger className="flex items-center gap-2 bg-[#0B1E21] border border-[#00BAC7]/25 text-[#22D3EE] text-xs font-medium px-3 py-1.5 rounded-lg outline-none transition hover:border-[#00BAC7]/50">
+                <Store size={14} className="text-[#00BAC7]" />
                 Jubail - Main Branch
-                <ChevronDown size={14} className="text-[#00BAC7]/70" />
+                <ChevronDown size={12} className="text-[#00BAC7]/70" />
               </Dropdown.Trigger>
             </Dropdown.Root>
           </div>
