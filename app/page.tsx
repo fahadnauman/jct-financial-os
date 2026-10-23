@@ -3764,47 +3764,9 @@ function DailyRegisterView({
 
               {/* 2-Panel Layout */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                {/* Left Panel (5 cols): Clean Vertical Form Flow (space-y-4, pb-6) */}
-                <div className="lg:col-span-5 rounded-2xl border border-white/10 bg-black/30 p-5 pb-6 flex flex-col gap-4">
-                  <div className="space-y-2">
-                    <span className="block text-xs font-bold text-white/60">
-                      Quick Presets
-                    </span>
-                    <div className="flex flex-wrap gap-2">
-                      {[
-                        { kind: "CREDIT_SALE" as const, title: "Retail · Jotashield Exterior", amt: "2300", rcp: "30064", date: "2026-09-20", label: "Inv #30064 (Credit Sale)" },
-                        { kind: "CREDIT_RECD" as const, title: "Chicago Credit Recd", amt: "12428", rcp: "RCP-1042", date: "2026-09-20", label: "Chicago Credit Recd" },
-                        { kind: "CREDIT_RECD" as const, title: "Al-Futtaim Contractors", amt: "15000", rcp: "RCP-1045", date: "2026-09-22", label: "Al-Futtaim Contractors" },
-                        { kind: "CREDIT_SALE" as const, title: "Eastern Paint Bros", amt: "6500", rcp: "30075", date: "2026-09-25", label: "Eastern Paint Bros" },
-                        { kind: "LOAN_IN" as const, title: "Shadab Loan In", amt: "2000", rcp: "", date: "2026-09-20", label: "Shadab Loan In" },
-                        { kind: "OTHER_IN" as const, title: "Return / From Bank", amt: "1000", rcp: "", date: "2026-09-20", label: "Return / From Bank" },
-                      ].map((preset) => {
-                        const active = step3Title === preset.title && step3Kind === preset.kind;
-                        return (
-                          <button
-                            key={preset.label}
-                            type="button"
-                            onClick={() => {
-                              setStep3Kind(preset.kind);
-                              setStep3Title(preset.title);
-                              setStep3Amount(preset.amt);
-                              setStep3FollowUpDate(preset.date);
-                              handleStep3InvoiceInput(preset.rcp);
-                            }}
-                            className={`rounded-xl px-3 py-1.5 text-xs font-bold transition ${
-                              active
-                                ? "bg-emerald-400 text-slate-950 font-extrabold"
-                                : "border border-white/15 bg-white/5 text-white hover:bg-white/10"
-                            }`}
-                          >
-                            {preset.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <form onSubmit={handleAddStep3Receipt} className="space-y-4 pt-1">
+                {/* Left Panel (5 cols): Streamlined Vertical Form Flow (space-y-4, p-6) */}
+                <div className="lg:col-span-5 rounded-2xl border border-white/10 bg-black/30 p-6 flex flex-col">
+                  <form onSubmit={handleAddStep3Receipt} className="space-y-4">
                     {/* 1. Transaction Type */}
                     <div className="space-y-1.5">
                       <label className="block text-xs font-bold text-white/70">
@@ -3828,11 +3790,11 @@ function DailyRegisterView({
                         <option value="CREDIT_RECD">Credit Sale Amt Recd</option>
                         <option value="LOAN_IN">Loan In</option>
                         <option value="OTHER_IN">Other Amt Recd</option>
-                        <option value="SPLIT_SALE">⚡ Split Payment (Cash + Card)</option>
+                        <option value="SPLIT_SALE">⚡ Split Payment</option>
                       </select>
                     </div>
 
-                    {/* 2. ERP Invoice Number + Quick Chips (or Receipt # for non-invoice inflows) */}
+                    {/* 2. ERP Invoice / Reference Input (with dynamic auto-fill datalist / quick ERP invoice chips when Credit Sale or Split Payment is selected) */}
                     {step3Kind === "CREDIT_SALE" || step3Kind === "SPLIT_SALE" ? (
                       <div className="space-y-2">
                         <label className="block text-xs font-bold text-amber-200/90">
@@ -3892,13 +3854,13 @@ function DailyRegisterView({
                       </div>
                     )}
 
-                    {/* 3. Customer Name / Source */}
+                    {/* 3. Customer / Contractor Name */}
                     <div className="space-y-1.5">
                       <label className="block text-xs font-bold text-white/70">
                         {step3Kind === "CREDIT_RECD" ||
                         step3Kind === "CREDIT_SALE" ||
                         step3Kind === "SPLIT_SALE"
-                          ? "Customer Name"
+                          ? "Customer / Contractor Name"
                           : "Source or Note"}
                       </label>
                       <input
@@ -3984,11 +3946,11 @@ function DailyRegisterView({
                       </div>
                     )}
 
-                    {/* 4. Follow-up Date (Credit Radar) */}
+                    {/* 4. Follow-up Reminder Date */}
                     {(step3Kind === "CREDIT_RECD" || step3Kind === "CREDIT_SALE") && (
                       <div className="space-y-1.5">
                         <label className="block text-xs font-bold text-emerald-300">
-                          Follow-up Date (Credit Radar)
+                          Follow-up Reminder Date (Credit Radar)
                         </label>
                         <input
                           type="date"
@@ -4016,12 +3978,12 @@ function DailyRegisterView({
                       />
                     </div>
 
-                    {/* 6. Full-Width Action Button */}
+                    {/* 6. Full-Width [+ Save & Sync] Button */}
                     <button
                       type="submit"
                       className="w-full rounded-xl bg-emerald-400 hover:bg-emerald-300 px-6 py-3.5 text-sm font-extrabold text-slate-950 shadow-[0_0_20px_rgba(52,211,153,0.25)] transition"
                     >
-                      + Save &amp; Sync to Credit Radar
+                      + Save &amp; Sync
                     </button>
                   </form>
                 </div>
