@@ -3686,7 +3686,7 @@ function DailyRegisterView({
               </div>
 
               {/* Clean Table of 18 Invoices with 5 Payment Options (including [⚡ Split / Partial]) */}
-              <div className="divide-y divide-white/10 rounded-2xl border border-white/10 bg-black/30 overflow-hidden">
+              <div className="flex flex-col gap-3">
                 {activeErpList.map((inv) => {
                   const isBankOrPos =
                     inv.paymentMode === "BANK_TRANSFER" || inv.paymentMode === "POS_SWIPE";
@@ -3699,20 +3699,24 @@ function DailyRegisterView({
                   const splitTermMeta =
                     POS_TERMINAL_META[inv.splitPosTerminal || inv.posTerminal || "SAB"];
 
+                  // Dynamic color-coded ambient outline per payment mode
+                  const rowOutline =
+                    inv.paymentMode === "CASH"
+                      ? "border-emerald-500/50 ring-1 ring-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.15)] bg-emerald-500/[0.04]"
+                      : inv.paymentMode === "BANK_TRANSFER"
+                      ? "border-violet-500/50 ring-1 ring-violet-500/30 shadow-[0_0_15px_rgba(139,92,246,0.15)] bg-violet-500/[0.04]"
+                      : inv.paymentMode === "POS_SWIPE"
+                      ? "border-amber-400/50 ring-1 ring-amber-400/30 shadow-[0_0_15px_rgba(245,158,11,0.15)] bg-amber-500/[0.04]"
+                      : inv.paymentMode === "CREDIT_SALE"
+                      ? "border-blue-500/50 ring-1 ring-blue-500/30 shadow-[0_0_15px_rgba(59,130,246,0.15)] bg-blue-500/[0.04]"
+                      : inv.paymentMode === "SPLIT"
+                      ? "border-rose-500/50 ring-1 ring-rose-500/30 shadow-[0_0_15px_rgba(244,63,94,0.18)] bg-rose-500/[0.04]"
+                      : "border-white/5 hover:border-white/10 bg-black/30";
+
                   return (
                     <div
                       key={inv.invoiceNo}
-                      className={`flex flex-col gap-2.5 px-5 py-3.5 transition ${
-                        isSplitMode
-                          ? "bg-gradient-to-r from-amber-500/[0.12] via-purple-500/[0.08] to-emerald-500/[0.08]"
-                          : isBankOrPos
-                          ? "bg-amber-500/[0.07]"
-                          : isCreditSaleInv
-                          ? "bg-indigo-500/[0.10]"
-                          : isOtherRecd
-                          ? "bg-purple-500/[0.08]"
-                          : "hover:bg-white/[0.03]"
-                      }`}
+                      className={`flex flex-col gap-2.5 rounded-2xl border px-5 py-3.5 transition-all duration-200 ease-in-out ${rowOutline}`}
                     >
                       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
                         <div className="flex flex-wrap items-center gap-2.5 min-w-0">
@@ -3742,10 +3746,14 @@ function DailyRegisterView({
                         <div className="flex flex-wrap items-center justify-between lg:justify-end gap-4 shrink-0">
                           <span
                             className={`font-display text-sm font-extrabold w-28 text-right whitespace-nowrap ${
-                              isSplitMode || isBankOrPos
+                              isSplitMode
+                                ? "text-rose-300"
+                                : inv.paymentMode === "BANK_TRANSFER"
+                                ? "text-violet-300"
+                                : isBankOrPos
                                 ? "text-amber-300"
                                 : isCreditSaleInv
-                                ? "text-indigo-300"
+                                ? "text-blue-300"
                                 : isOtherRecd
                                 ? "text-purple-300"
                                 : "text-emerald-300"
@@ -3770,9 +3778,9 @@ function DailyRegisterView({
                             <button
                               type="button"
                               onClick={() => handleSetInvoiceMode(inv.invoiceNo, "BANK_TRANSFER")}
-                              className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${
+                              className={`rounded-lg px-2.5 py-1 text-xs font-bold transition-all duration-200 ${
                                 inv.paymentMode === "BANK_TRANSFER"
-                                  ? "bg-sky-400 text-slate-950 font-extrabold"
+                                  ? "bg-violet-500 text-white font-extrabold"
                                   : "text-white/55 hover:text-white"
                               }`}
                             >
@@ -3792,10 +3800,10 @@ function DailyRegisterView({
                             <button
                               type="button"
                               onClick={() => handleSetInvoiceMode(inv.invoiceNo, "SPLIT")}
-                              className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${
+                              className={`rounded-lg px-2.5 py-1 text-xs font-bold transition-all duration-200 ${
                                 inv.paymentMode === "SPLIT"
-                                  ? "bg-gradient-to-r from-amber-400 to-emerald-400 text-slate-950 font-extrabold shadow-sm"
-                                  : "text-amber-300/80 hover:text-amber-200"
+                                  ? "bg-rose-500 text-white font-extrabold shadow-sm"
+                                  : "text-rose-300/80 hover:text-rose-200"
                               }`}
                             >
                               ⚡ Split / Partial
@@ -3803,10 +3811,10 @@ function DailyRegisterView({
                             <button
                               type="button"
                               onClick={() => setCreditModalInvNo(inv.invoiceNo)}
-                              className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${
+                              className={`rounded-lg px-2.5 py-1 text-xs font-bold transition-all duration-200 ${
                                 inv.paymentMode === "CREDIT_SALE"
-                                  ? "bg-indigo-400 text-slate-950 font-extrabold"
-                                  : "text-indigo-300/90 hover:text-indigo-200"
+                                  ? "bg-blue-500 text-white font-extrabold"
+                                  : "text-blue-300/90 hover:text-blue-200"
                               }`}
                             >
                               Credit Sale (New Credit)
