@@ -438,10 +438,22 @@ function CrystalCanvas() {
    ════════════════════════════════════════════════════════════════════════ */
 
 export type TrackingMode = "hub" | "wizard" | "datasheet";
-export type PreLoggedEntryType = "EXPENSE" | "CREDIT_RECD" | "CREDIT_SALE" | "LOAN_IN" | "OTHER_IN";
+export type PreLoggedEntryType =
+  | "EXPENSE"
+  | "CREDIT_RECD"
+  | "CREDIT_SALE"
+  | "SPLIT_SALE"
+  | "LOAN_IN"
+  | "OTHER_IN";
 export type WizardStep = 1 | 2 | 3 | 4 | 5;
-export type InvoicePaymentMode = "CASH" | "BANK_TRANSFER" | "POS_SWIPE" | "OTHER_RECD" | "CREDIT_SALE";
-export type PosTerminalBank = "SAB" | "AL_RAJHI";
+export type InvoicePaymentMode =
+  | "CASH"
+  | "BANK_TRANSFER"
+  | "POS_SWIPE"
+  | "SPLIT"
+  | "OTHER_RECD"
+  | "CREDIT_SALE";
+export type PosTerminalBank = "SAB" | "AL_RAJHI" | "VISA_MC";
 
 export const STRICT_EXPENSE_CATEGORIES = [
   "Food",
@@ -457,19 +469,42 @@ export type StrictExpenseCategory = (typeof STRICT_EXPENSE_CATEGORIES)[number];
 
 export const POS_TERMINAL_META: Record<
   PosTerminalBank,
-  { label: string; shortLabel: string; feeRate: number; feePctLabel: string }
+  {
+    label: string;
+    shortLabel: string;
+    badgeTag: string;
+    feeRate: number;
+    feePctLabel: string;
+    samaCap?: number;
+    isMada: boolean;
+  }
 > = {
   SAB: {
-    label: "SAB (Saudi Awwal Bank)",
-    shortLabel: "SAB",
-    feeRate: 0.0085,
-    feePctLabel: "0.85%",
+    label: "mada · SAB",
+    shortLabel: "mada · SAB",
+    badgeTag: "mada · SAB",
+    feeRate: 0.008,
+    feePctLabel: "0.80% fee, SAMA cap SAR 40",
+    samaCap: 40,
+    isMada: true,
   },
   AL_RAJHI: {
-    label: "Al Rajhi Bank",
-    shortLabel: "Al Rajhi",
+    label: "mada · Al Rajhi",
+    shortLabel: "mada · Al Rajhi",
+    badgeTag: "mada · Al Rajhi",
     feeRate: 0.008,
-    feePctLabel: "0.80%",
+    feePctLabel: "0.80% fee, SAMA cap SAR 40",
+    samaCap: 40,
+    isMada: true,
+  },
+  VISA_MC: {
+    label: "Visa / Mastercard",
+    shortLabel: "Visa / Mastercard",
+    badgeTag: "💳 Visa / MC",
+    feeRate: 0.022,
+    feePctLabel: "2.20% credit card MDR",
+    samaCap: undefined,
+    isMada: false,
   },
 };
 
@@ -494,6 +529,11 @@ export interface PreLoggedEntry {
   note?: string;
   amount: number;
   originalAmount?: number;
+  isSplit?: boolean;
+  splitCashAmount?: number;
+  splitBankAmount?: number;
+  splitBankMethod?: "BANK_TRANSFER" | "POS_SWIPE";
+  splitPosTerminal?: PosTerminalBank;
   time: string;
 }
 
@@ -504,6 +544,11 @@ export interface ErpInvoiceItem {
   originalAmount?: number;
   paymentMode: InvoicePaymentMode;
   posTerminal: PosTerminalBank;
+  isSplit?: boolean;
+  splitCashAmount: number;
+  splitBankAmount: number;
+  splitBankMethod: "BANK_TRANSFER" | "POS_SWIPE";
+  splitPosTerminal?: PosTerminalBank;
   otherNote?: string;
   autoMatched: boolean;
   time: string;
@@ -520,10 +565,19 @@ export interface CompletedDaySummary {
   status: "LOCKED" | "AUDITED";
 }
 
-export const JUBAIL_ERP_18_SEED: Omit<
-  ErpInvoiceItem,
-  "paymentMode" | "posTerminal" | "autoMatched"
->[] = [
+export interface ErpSeedItem {
+  invoiceNo: string;
+  customer: string;
+  amount: number;
+  time: string;
+  isSplit?: boolean;
+  splitCashAmount?: number;
+  splitBankAmount?: number;
+  splitBankMethod?: "BANK_TRANSFER" | "POS_SWIPE";
+  splitPosTerminal?: PosTerminalBank;
+}
+
+export const JUBAIL_ERP_18_SEED: ErpSeedItem[] = [
   { invoiceNo: "30062", customer: "Walk-in · Jotun Fenomastic Matt", amount: 1840, time: "08:35" },
   { invoiceNo: "30063", customer: "Al-Noor Contracting · POS Swipe", amount: 1450, time: "09:18" },
   { invoiceNo: "30064", customer: "Retail · Jotashield Exterior", amount: 2300, time: "09:45" },
@@ -532,9 +586,29 @@ export const JUBAIL_ERP_18_SEED: Omit<
   { invoiceNo: "30067", customer: "Gulf Industrial Coatings", amount: 4600, time: "11:05" },
   { invoiceNo: "30068", customer: "Jubail Port Logistics · POS Swipe", amount: 3820, time: "11:42" },
   { invoiceNo: "30069", customer: "Walk-in · Sigma Wood Varnish", amount: 920, time: "12:15" },
-  { invoiceNo: "30070", customer: "Royal Commission Site Contractor", amount: 5750, time: "13:10" },
+  {
+    invoiceNo: "30070",
+    customer: "Royal Commission Site Contractor · Split Tender",
+    amount: 5750,
+    time: "13:10",
+    isSplit: true,
+    splitCashAmount: 2750,
+    splitBankAmount: 3000,
+    splitBankMethod: "POS_SWIPE",
+    splitPosTerminal: "AL_RAJHI",
+  },
   { invoiceNo: "30071", customer: "Walk-in · Hardware Rollers & Brushes", amount: 690, time: "13:35" },
-  { invoiceNo: "30072", customer: "Al-Futtaim Site Batch", amount: 6325, time: "14:00" },
+  {
+    invoiceNo: "30072",
+    customer: "Al-Futtaim Site Batch · Split Tender",
+    amount: 2000,
+    time: "14:00",
+    isSplit: true,
+    splitCashAmount: 1000,
+    splitBankAmount: 1000,
+    splitBankMethod: "POS_SWIPE",
+    splitPosTerminal: "SAB",
+  },
   { invoiceNo: "30073", customer: "Walk-in · Industrial Thinner 200L", amount: 1725, time: "14:22" },
   { invoiceNo: "30074", customer: "SAB POS Terminal Customer", amount: 960, time: "14:50" },
   { invoiceNo: "30075", customer: "Eastern Paint Bros Cash Order", amount: 3450, time: "15:30" },
@@ -932,16 +1006,164 @@ export const INITIAL_DATASHEET_ROWS: DataSheetRow[] = [
   },
 ];
 
+export interface PosFeeBreakdown {
+  gross: number;
+  mdrBase: number;
+  vatOnFee: number;
+  totalFee: number;
+  net: number;
+  isMada: boolean;
+}
+
+export const calcAmountPosFeeBreakdown = (
+  amount: number,
+  terminal: PosTerminalBank
+): PosFeeBreakdown => {
+  const gross = r2(Math.max(0, amount));
+  const meta = POS_TERMINAL_META[terminal || "SAB"];
+  const rawMdr = gross * meta.feeRate;
+  const mdrBase = r2(meta.samaCap !== undefined ? Math.min(rawMdr, meta.samaCap) : rawMdr);
+  const vatOnFee = r2(mdrBase * 0.15);
+  const totalFee = r2(mdrBase + vatOnFee);
+  const net = r2(gross - totalFee);
+  return {
+    gross,
+    mdrBase,
+    vatOnFee,
+    totalFee,
+    net,
+    isMada: meta.isMada,
+  };
+};
+
+export const calcInvoiceCashPortion = (inv: ErpInvoiceItem): number => {
+  if (inv.paymentMode === "CASH" || inv.paymentMode === "OTHER_RECD") return inv.amount;
+  if (inv.paymentMode === "SPLIT") return r2(inv.splitCashAmount || 0);
+  return 0;
+};
+
+export const calcInvoiceBankGrossPortion = (inv: ErpInvoiceItem): number => {
+  if (inv.paymentMode === "BANK_TRANSFER" || inv.paymentMode === "POS_SWIPE") return inv.amount;
+  if (inv.paymentMode === "SPLIT") return r2(inv.splitBankAmount || 0);
+  return 0;
+};
+
+export const calcInvoiceFeeBreakdown = (inv: ErpInvoiceItem): PosFeeBreakdown => {
+  if (inv.paymentMode === "POS_SWIPE") {
+    return calcAmountPosFeeBreakdown(inv.amount, inv.posTerminal || "SAB");
+  }
+  if (inv.paymentMode === "SPLIT" && inv.splitBankMethod === "POS_SWIPE") {
+    const term = inv.splitPosTerminal || inv.posTerminal || "SAB";
+    return calcAmountPosFeeBreakdown(inv.splitBankAmount || 0, term);
+  }
+  const gross = calcInvoiceBankGrossPortion(inv);
+  return {
+    gross,
+    mdrBase: 0,
+    vatOnFee: 0,
+    totalFee: 0,
+    net: gross,
+    isMada: false,
+  };
+};
+
 export const calcInvoicePosFee = (inv: ErpInvoiceItem): number => {
-  if (inv.paymentMode !== "POS_SWIPE") return 0;
-  const rate = POS_TERMINAL_META[inv.posTerminal || "SAB"].feeRate;
-  return r2(inv.amount * rate);
+  return calcInvoiceFeeBreakdown(inv).totalFee;
 };
 
 export const calcInvoiceNetBank = (inv: ErpInvoiceItem): number => {
-  if (inv.paymentMode === "BANK_TRANSFER") return inv.amount;
-  if (inv.paymentMode === "POS_SWIPE") return r2(inv.amount - calcInvoicePosFee(inv));
-  return 0;
+  return calcInvoiceFeeBreakdown(inv).net;
+};
+
+export const parseErpCsvText = (
+  csvText: string,
+  fallbackList: ErpInvoiceItem[]
+): ErpInvoiceItem[] => {
+  const lines = csvText
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  if (lines.length < 2) return fallbackList;
+
+  const parsedRows: ErpInvoiceItem[] = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(",").map((c) => c.trim().replace(/^"|"$/g, ""));
+    if (cols.length < 3) continue;
+    const invoiceNo = cols[0].replace(/^#/i, "").trim();
+    const customer = cols[1] || "Walk-in Customer";
+    const grossAmt = parseFloat(cols[2]) || 0;
+    const rawType = (cols[3] || "").toUpperCase();
+    const cashCol = parseFloat(cols[4] || "");
+    const bankCol = parseFloat(cols[5] || "");
+    const terminalCol = (cols[6] || "").toUpperCase();
+
+    if (!invoiceNo || grossAmt <= 0) continue;
+
+    const hasDualTenderValues =
+      !Number.isNaN(cashCol) && cashCol > 0 && !Number.isNaN(bankCol) && bankCol > 0;
+    const isSplitType =
+      rawType.includes("SPLIT") ||
+      rawType.includes("PARTIAL") ||
+      rawType.includes("CASH/BANK") ||
+      rawType.includes("CASH+BANK") ||
+      rawType.includes("CASH/CARD") ||
+      hasDualTenderValues;
+
+    const terminal: PosTerminalBank =
+      terminalCol.includes("VISA") ||
+      terminalCol.includes("MASTER") ||
+      terminalCol.includes("MC") ||
+      terminalCol.includes("CREDIT")
+        ? "VISA_MC"
+        : terminalCol.includes("RAJHI")
+        ? "AL_RAJHI"
+        : "SAB";
+
+    if (isSplitType) {
+      const cashShare = !Number.isNaN(cashCol) && cashCol > 0 ? cashCol : r2(grossAmt / 2);
+      const bankShare =
+        !Number.isNaN(bankCol) && bankCol > 0 ? bankCol : Math.max(0, r2(grossAmt - cashShare));
+      parsedRows.push({
+        invoiceNo,
+        customer,
+        amount: grossAmt,
+        paymentMode: "SPLIT",
+        posTerminal: terminal,
+        isSplit: true,
+        splitCashAmount: cashShare,
+        splitBankAmount: bankShare,
+        splitBankMethod: rawType.includes("TRANSFER") ? "BANK_TRANSFER" : "POS_SWIPE",
+        splitPosTerminal: terminal,
+        autoMatched: true,
+        time: nowHHMM(),
+      });
+    } else {
+      const mode: InvoicePaymentMode = rawType.includes("TRANSFER")
+        ? "BANK_TRANSFER"
+        : rawType.includes("SWIPE") || rawType.includes("POS")
+        ? "POS_SWIPE"
+        : rawType.includes("CREDIT")
+        ? "CREDIT_SALE"
+        : "CASH";
+      parsedRows.push({
+        invoiceNo,
+        customer,
+        amount: grossAmt,
+        paymentMode: mode,
+        posTerminal: terminal,
+        isSplit: false,
+        splitCashAmount: mode === "CASH" ? grossAmt : r2(grossAmt / 2),
+        splitBankAmount:
+          mode === "BANK_TRANSFER" || mode === "POS_SWIPE" ? grossAmt : r2(grossAmt / 2),
+        splitBankMethod: mode === "BANK_TRANSFER" ? "BANK_TRANSFER" : "POS_SWIPE",
+        splitPosTerminal: terminal,
+        autoMatched: mode !== "CASH",
+        time: nowHHMM(),
+      });
+    }
+  }
+
+  return parsedRows.length > 0 ? parsedRows : fallbackList;
 };
 
 interface DailyRegisterViewProps {
@@ -996,6 +1218,8 @@ function DailyRegisterView({
 }: DailyRegisterViewProps) {
   const [activeLoggerTab, setActiveLoggerTab] = useState<"bank" | "expense">("bank");
   const [showRecordedFeed, setShowRecordedFeed] = useState(true);
+  const [trackPosFees, setTrackPosFees] = useState(false);
+  const [bankSettlementMode, setBankSettlementMode] = useState<"GROSS" | "NET">("GROSS");
   const [justCompletedToast, setJustCompletedToast] = useState<string | null>(null);
   const [syncBannerMsg, setSyncBannerMsg] = useState<{
     text: string;
@@ -1009,7 +1233,7 @@ function DailyRegisterView({
   const [bankModeInput, setBankModeInput] = useState<"POS_SWIPE" | "BANK_TRANSFER">("POS_SWIPE");
   const [bankTerminalInput, setBankTerminalInput] = useState<PosTerminalBank>("SAB");
 
-  // Hub Quick-Logger Form State (Expenses & Cash-In)
+  // Hub Quick-Logger Form State (Expenses & Cash-In & Split Payment)
   const [entryType, setEntryType] = useState<PreLoggedEntryType>("EXPENSE");
   const [hubExpenseCat, setHubExpenseCat] = useState<StrictExpenseCategory>("Food");
   const [entryTitle, setEntryTitle] = useState("");
@@ -1019,6 +1243,10 @@ function DailyRegisterView({
   const [hubCustomerName, setHubCustomerName] = useState("");
   const [hubReceiptNo, setHubReceiptNo] = useState("");
   const [hubFollowUpDate, setHubFollowUpDate] = useState("2026-09-20");
+  const [hubSplitCashInput, setHubSplitCashInput] = useState("1000");
+  const [hubSplitCardInput, setHubSplitCardInput] = useState("1000");
+  const [hubSplitMethod, setHubSplitMethod] = useState<"POS_SWIPE" | "BANK_TRANSFER">("POS_SWIPE");
+  const [hubSplitTerminal, setHubSplitTerminal] = useState<PosTerminalBank>("SAB");
 
   // Wizard State
   const [csvLoadedBanner, setCsvLoadedBanner] = useState(false);
@@ -1026,12 +1254,20 @@ function DailyRegisterView({
   const [editingOpening, setEditingOpening] = useState(false);
   const [openingEditInput, setOpeningEditInput] = useState(String(openingBalance));
 
-  // Step 3 (Credit & Cash Inflows) 2-Panel State
-  const [step3Kind, setStep3Kind] = useState<"CREDIT_RECD" | "CREDIT_SALE" | "LOAN_IN" | "OTHER_IN">("CREDIT_SALE");
+  // Step 3 (Credit & Cash Inflows & Split Payments) 2-Panel State
+  const [step3Kind, setStep3Kind] = useState<
+    "CREDIT_RECD" | "CREDIT_SALE" | "SPLIT_SALE" | "LOAN_IN" | "OTHER_IN"
+  >("CREDIT_SALE");
   const [step3Title, setStep3Title] = useState("");
   const [step3FollowUpDate, setStep3FollowUpDate] = useState("2026-09-20");
   const [step3ReceiptNo, setStep3ReceiptNo] = useState("");
   const [step3Amount, setStep3Amount] = useState("");
+  const [step3SplitCash, setStep3SplitCash] = useState("1000");
+  const [step3SplitCard, setStep3SplitCard] = useState("1000");
+  const [step3SplitMethod, setStep3SplitMethod] = useState<"POS_SWIPE" | "BANK_TRANSFER">(
+    "POS_SWIPE"
+  );
+  const [step3SplitTerminal, setStep3SplitTerminal] = useState<PosTerminalBank>("SAB");
 
   // Step 4 (Expenses & Purchases — Strict 7 Categories) State
   const [step4Category, setStep4Category] = useState<StrictExpenseCategory>("Food");
@@ -1151,6 +1387,11 @@ function DailyRegisterView({
           followUpDate: newEntry.followUpDate || existing.followUpDate,
           receiptNo: newEntry.receiptNo || existing.receiptNo,
           note: newEntry.note || existing.note,
+          isSplit: newEntry.isSplit ?? existing.isSplit,
+          splitCashAmount: newEntry.splitCashAmount ?? existing.splitCashAmount,
+          splitBankAmount: newEntry.splitBankAmount ?? existing.splitBankAmount,
+          splitBankMethod: newEntry.splitBankMethod ?? existing.splitBankMethod,
+          splitPosTerminal: newEntry.splitPosTerminal ?? existing.splitPosTerminal,
           time: newEntry.time,
         };
         return updated;
@@ -1164,27 +1405,52 @@ function DailyRegisterView({
     preLoggedBankInvoices.forEach((b) => bankMap.set(b.invoiceNo.trim(), b));
 
     const creditSaleInvSet = new Set<string>();
+    const splitSaleMap = new Map<string, PreLoggedEntry>();
     preLoggedEntries.forEach((entry) => {
       if (entry.type === "CREDIT_SALE" && entry.receiptNo) {
         const cleaned = cleanErpInvNo(entry.receiptNo);
         if (cleaned) creditSaleInvSet.add(cleaned);
+      } else if (entry.type === "SPLIT_SALE" && entry.receiptNo) {
+        const cleaned = cleanErpInvNo(entry.receiptNo);
+        if (cleaned) splitSaleMap.set(cleaned, entry);
       }
     });
 
     return JUBAIL_ERP_18_SEED.map((inv) => {
       const matchedInfo = bankMap.get(inv.invoiceNo);
       const isCreditSale = creditSaleInvSet.has(inv.invoiceNo);
+      const splitEntry = splitSaleMap.get(inv.invoiceNo);
       const defaultTerminal: PosTerminalBank =
-        inv.invoiceNo === "30068" ? "AL_RAJHI" : "SAB";
+        inv.splitPosTerminal || (inv.invoiceNo === "30068" ? "AL_RAJHI" : "SAB");
+
+      const isSplitRow = Boolean(splitEntry) || Boolean(inv.isSplit);
+      const halfGross = r2(inv.amount / 2);
+      const resolvedCash = splitEntry?.splitCashAmount ?? inv.splitCashAmount ?? halfGross;
+      const resolvedBank =
+        splitEntry?.splitBankAmount ?? inv.splitBankAmount ?? r2(inv.amount - resolvedCash);
+      const resolvedSplitMethod =
+        splitEntry?.splitBankMethod ?? inv.splitBankMethod ?? "POS_SWIPE";
+      const resolvedSplitTerm =
+        splitEntry?.splitPosTerminal ?? inv.splitPosTerminal ?? defaultTerminal;
+
+      const resolvedMode: InvoicePaymentMode = isCreditSale
+        ? "CREDIT_SALE"
+        : isSplitRow
+        ? "SPLIT"
+        : matchedInfo
+        ? matchedInfo.paymentMode
+        : "CASH";
+
       return {
         ...inv,
-        paymentMode: isCreditSale
-          ? "CREDIT_SALE"
-          : matchedInfo
-          ? matchedInfo.paymentMode
-          : "CASH",
-        posTerminal: matchedInfo?.posTerminal || defaultTerminal,
-        autoMatched: Boolean(matchedInfo) || isCreditSale,
+        paymentMode: resolvedMode,
+        posTerminal: matchedInfo?.posTerminal || resolvedSplitTerm,
+        isSplit: resolvedMode === "SPLIT",
+        splitCashAmount: resolvedCash,
+        splitBankAmount: resolvedBank,
+        splitBankMethod: resolvedSplitMethod,
+        splitPosTerminal: resolvedSplitTerm,
+        autoMatched: Boolean(matchedInfo) || isCreditSale || isSplitRow,
       };
     });
   };
@@ -1206,6 +1472,13 @@ function DailyRegisterView({
     if (match) {
       setStep3Title(match.customer);
       setStep3Amount(String(match.amount));
+      const cashHalf = match.isSplit ? match.splitCashAmount : r2(match.amount / 2);
+      const cardHalf = match.isSplit ? match.splitBankAmount : r2(match.amount - cashHalf);
+      setStep3SplitCash(String(cashHalf));
+      setStep3SplitCard(String(cardHalf));
+      if (match.splitPosTerminal || match.posTerminal) {
+        setStep3SplitTerminal(match.splitPosTerminal || match.posTerminal);
+      }
     }
   };
 
@@ -1214,7 +1487,85 @@ function DailyRegisterView({
     const match = findErpInvoiceMatch(rawVal);
     if (match) {
       setHubCustomerName(match.customer);
+      setEntryTitle(match.customer);
       setEntryAmount(String(match.amount));
+      const cashHalf = match.isSplit ? match.splitCashAmount : r2(match.amount / 2);
+      const cardHalf = match.isSplit ? match.splitBankAmount : r2(match.amount - cashHalf);
+      setHubSplitCashInput(String(cashHalf));
+      setHubSplitCardInput(String(cardHalf));
+      if (match.splitPosTerminal || match.posTerminal) {
+        setHubSplitTerminal(match.splitPosTerminal || match.posTerminal);
+      }
+    }
+  };
+
+  const handleHubTotalAmountChange = (rawVal: string) => {
+    setEntryAmount(rawVal);
+    const total = parseFloat(rawVal);
+    if (!Number.isNaN(total) && total > 0 && entryType === "SPLIT_SALE") {
+      const cash = r2(total / 2);
+      const card = r2(total - cash);
+      setHubSplitCashInput(String(cash));
+      setHubSplitCardInput(String(card));
+    }
+  };
+
+  const handleHubSplitCashChange = (rawVal: string) => {
+    setHubSplitCashInput(rawVal);
+    const total = parseFloat(entryAmount) || 0;
+    const cash = Math.max(0, parseFloat(rawVal) || 0);
+    if (total > 0) {
+      setHubSplitCardInput(String(Math.max(0, r2(total - cash))));
+    } else {
+      const card = parseFloat(hubSplitCardInput) || 0;
+      setEntryAmount(String(r2(cash + card)));
+    }
+  };
+
+  const handleHubSplitCardChange = (rawVal: string) => {
+    setHubSplitCardInput(rawVal);
+    const total = parseFloat(entryAmount) || 0;
+    const card = Math.max(0, parseFloat(rawVal) || 0);
+    if (total > 0) {
+      setHubSplitCashInput(String(Math.max(0, r2(total - card))));
+    } else {
+      const cash = parseFloat(hubSplitCashInput) || 0;
+      setEntryAmount(String(r2(cash + card)));
+    }
+  };
+
+  const handleStep3TotalAmountChange = (rawVal: string) => {
+    setStep3Amount(rawVal);
+    const total = parseFloat(rawVal);
+    if (!Number.isNaN(total) && total > 0 && step3Kind === "SPLIT_SALE") {
+      const cash = r2(total / 2);
+      const card = r2(total - cash);
+      setStep3SplitCash(String(cash));
+      setStep3SplitCard(String(card));
+    }
+  };
+
+  const handleStep3SplitCashChange = (rawVal: string) => {
+    setStep3SplitCash(rawVal);
+    const total = parseFloat(step3Amount) || 0;
+    const cash = Math.max(0, parseFloat(rawVal) || 0);
+    if (total > 0) {
+      setStep3SplitCard(String(Math.max(0, r2(total - cash))));
+    } else {
+      const card = parseFloat(step3SplitCard) || 0;
+      setStep3Amount(String(r2(cash + card)));
+    }
+  };
+
+  const handleStep3SplitCardChange = (rawVal: string) => {
+    setStep3SplitCard(rawVal);
+    const total = parseFloat(step3Amount) || 0;
+    const card = Math.max(0, parseFloat(rawVal) || 0);
+    if (total > 0) {
+      setStep3SplitCash(String(Math.max(0, r2(total - card))));
+    } else {
+      const cash = parseFloat(step3SplitCash) || 0;
+      setStep3Amount(String(r2(cash + card)));
     }
   };
 
@@ -1237,18 +1588,96 @@ function DailyRegisterView({
     }, 650);
   };
 
+  const handleCsvFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) {
+      handleSimulateCsvUpload();
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = typeof reader.result === "string" ? reader.result : "";
+      const fallback = buildMatchedErpList();
+      const parsed = parseErpCsvText(text, fallback);
+      setErpInvoices(parsed);
+      setCsvLoadedBanner(true);
+      setTimeout(() => {
+        setWizardStep(2);
+      }, 650);
+    };
+    reader.onerror = () => {
+      handleSimulateCsvUpload();
+    };
+    reader.readAsText(file);
+  };
+
   const handleSetInvoiceMode = (invoiceNo: string, mode: InvoicePaymentMode) => {
     setErpInvoices((prev) => {
       const base = prev.length > 0 ? prev : buildMatchedErpList();
-      return base.map((inv) =>
-        inv.invoiceNo === invoiceNo
-          ? {
-              ...inv,
-              paymentMode: mode,
-              posTerminal: inv.posTerminal || "SAB",
-            }
-          : inv
-      );
+      return base.map((inv) => {
+        if (inv.invoiceNo !== invoiceNo) return inv;
+        const defaultCash =
+          inv.splitCashAmount > 0 && inv.splitCashAmount < inv.amount
+            ? inv.splitCashAmount
+            : r2(inv.amount / 2);
+        const defaultBank = r2(inv.amount - defaultCash);
+        return {
+          ...inv,
+          paymentMode: mode,
+          isSplit: mode === "SPLIT",
+          splitCashAmount: mode === "SPLIT" ? defaultCash : inv.splitCashAmount,
+          splitBankAmount: mode === "SPLIT" ? defaultBank : inv.splitBankAmount,
+          splitBankMethod: inv.splitBankMethod || "POS_SWIPE",
+          splitPosTerminal: inv.splitPosTerminal || inv.posTerminal || "SAB",
+          posTerminal: inv.posTerminal || "SAB",
+        };
+      });
+    });
+  };
+
+  const handleSetInvoiceSplitAmounts = (
+    invoiceNo: string,
+    editedField: "cash" | "bank",
+    rawValue: string
+  ) => {
+    const parsed = Math.max(0, parseFloat(rawValue) || 0);
+    setErpInvoices((prev) => {
+      const base = prev.length > 0 ? prev : buildMatchedErpList();
+      return base.map((inv) => {
+        if (inv.invoiceNo !== invoiceNo) return inv;
+        const clamped = Math.min(inv.amount, r2(parsed));
+        const cashShare = editedField === "cash" ? clamped : r2(inv.amount - clamped);
+        const bankShare = editedField === "bank" ? clamped : r2(inv.amount - clamped);
+        return {
+          ...inv,
+          paymentMode: "SPLIT",
+          isSplit: true,
+          splitCashAmount: cashShare,
+          splitBankAmount: bankShare,
+        };
+      });
+    });
+  };
+
+  const handleSetInvoiceSplitMethod = (
+    invoiceNo: string,
+    method: "BANK_TRANSFER" | "POS_SWIPE",
+    terminal?: PosTerminalBank
+  ) => {
+    setErpInvoices((prev) => {
+      const base = prev.length > 0 ? prev : buildMatchedErpList();
+      return base.map((inv) => {
+        if (inv.invoiceNo !== invoiceNo) return inv;
+        const nextTerm = terminal || inv.splitPosTerminal || inv.posTerminal || "SAB";
+        return {
+          ...inv,
+          paymentMode: "SPLIT",
+          isSplit: true,
+          splitBankMethod: method,
+          splitPosTerminal: nextTerm,
+          posTerminal: nextTerm,
+        };
+      });
     });
   };
 
@@ -1257,7 +1686,13 @@ function DailyRegisterView({
       const base = prev.length > 0 ? prev : buildMatchedErpList();
       return base.map((inv) =>
         inv.invoiceNo === invoiceNo
-          ? { ...inv, paymentMode: "POS_SWIPE", posTerminal: terminal }
+          ? {
+              ...inv,
+              paymentMode: inv.paymentMode === "SPLIT" ? "SPLIT" : "POS_SWIPE",
+              posTerminal: terminal,
+              splitPosTerminal: terminal,
+              splitBankMethod: inv.paymentMode === "SPLIT" ? "POS_SWIPE" : inv.splitBankMethod,
+            }
           : inv
       );
     });
@@ -1311,6 +1746,104 @@ function DailyRegisterView({
 
   const handleQuickRecord = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (entryType === "SPLIT_SALE") {
+      const cashVal = Math.max(0, parseFloat(hubSplitCashInput) || 0);
+      const cardVal = Math.max(0, parseFloat(hubSplitCardInput) || 0);
+      const totalVal = r2(parseFloat(entryAmount) || cashVal + cardVal);
+      if (totalVal <= 0) return;
+
+      const cleanInv = cleanErpInvNo(hubReceiptNo);
+      const invNumber = cleanInv || `30080`;
+      const formattedInv = `#${invNumber}`;
+      const custName = (
+        hubCustomerName.trim() ||
+        entryTitle.trim() ||
+        matchedHubInvoice?.customer ||
+        `Split Sale Customer`
+      ).trim();
+
+      upsertEntry({
+        id: `ple-split-${invNumber}`,
+        type: "SPLIT_SALE",
+        customerName: custName,
+        receiptNo: formattedInv,
+        title: `${custName} (Cash: SAR ${fmt(cashVal)} + ${
+          hubSplitMethod === "BANK_TRANSFER"
+            ? "Bank"
+            : POS_TERMINAL_META[hubSplitTerminal].shortLabel
+        }: SAR ${fmt(cardVal)})`,
+        amount: totalVal,
+        isSplit: true,
+        splitCashAmount: cashVal,
+        splitBankAmount: cardVal,
+        splitBankMethod: hubSplitMethod,
+        splitPosTerminal: hubSplitTerminal,
+        time: nowHHMM(),
+      });
+
+      setErpInvoices((prev) => {
+        const base = prev.length > 0 ? prev : buildMatchedErpList();
+        const exists = base.some((inv) => inv.invoiceNo === invNumber);
+        if (exists) {
+          return base.map((inv) =>
+            inv.invoiceNo === invNumber
+              ? {
+                  ...inv,
+                  customer: custName,
+                  amount: totalVal,
+                  paymentMode: "SPLIT",
+                  isSplit: true,
+                  splitCashAmount: cashVal,
+                  splitBankAmount: cardVal,
+                  splitBankMethod: hubSplitMethod,
+                  splitPosTerminal: hubSplitTerminal,
+                  posTerminal: hubSplitTerminal,
+                  autoMatched: true,
+                }
+              : inv
+          );
+        }
+        return [
+          {
+            invoiceNo: invNumber,
+            customer: custName,
+            amount: totalVal,
+            paymentMode: "SPLIT",
+            posTerminal: hubSplitTerminal,
+            isSplit: true,
+            splitCashAmount: cashVal,
+            splitBankAmount: cardVal,
+            splitBankMethod: hubSplitMethod,
+            splitPosTerminal: hubSplitTerminal,
+            autoMatched: true,
+            time: nowHHMM(),
+          },
+          ...base,
+        ];
+      });
+
+      const feeAmt =
+        hubSplitMethod === "POS_SWIPE"
+          ? r2(cardVal * POS_TERMINAL_META[hubSplitTerminal].feeRate)
+          : 0;
+      setSyncBannerMsg({
+        text: `⚡ Split Tender ${formattedInv} (${custName}): Cash SAR ${fmt(cashVal)} -> Drawer | Card SAR ${fmt(cardVal)} (${
+          hubSplitMethod === "BANK_TRANSFER"
+            ? "0% Bank"
+            : `${POS_TERMINAL_META[hubSplitTerminal].shortLabel} Fee -SAR ${fmt(feeAmt)}`
+        }) -> Bank`,
+        targetTab: "pulse",
+        targetLabel: "View Financial Pulse →",
+      });
+
+      setEntryTitle("");
+      setHubCustomerName("");
+      setHubReceiptNo("");
+      setEntryAmount("");
+      return;
+    }
+
     const val = parseFloat(entryAmount);
     if (Number.isNaN(val) || val <= 0) return;
 
@@ -1391,6 +1924,7 @@ function DailyRegisterView({
                 customer: custName,
                 amount: val,
                 paymentMode: "CREDIT_SALE",
+                isSplit: false,
                 autoMatched: true,
               }
             : inv
@@ -1432,6 +1966,102 @@ function DailyRegisterView({
 
   const handleAddStep3Receipt = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (step3Kind === "SPLIT_SALE") {
+      const cashVal = Math.max(0, parseFloat(step3SplitCash) || 0);
+      const cardVal = Math.max(0, parseFloat(step3SplitCard) || 0);
+      const totalVal = r2(parseFloat(step3Amount) || cashVal + cardVal);
+      if (totalVal <= 0) return;
+
+      const cleanInv = cleanErpInvNo(step3ReceiptNo);
+      const invNumber = cleanInv || "30072";
+      const formattedReceiptNo = `#${invNumber}`;
+      const cleanCustomer = (
+        step3Title.trim() ||
+        matchedStep3Invoice?.customer ||
+        `Inv ${formattedReceiptNo} Split Sale`
+      ).trim();
+
+      upsertEntry({
+        id: `ple-split-${invNumber}`,
+        type: "SPLIT_SALE",
+        customerName: cleanCustomer,
+        receiptNo: formattedReceiptNo,
+        title: `${cleanCustomer} (Cash: SAR ${fmt(cashVal)} + ${
+          step3SplitMethod === "BANK_TRANSFER"
+            ? "Bank"
+            : POS_TERMINAL_META[step3SplitTerminal].shortLabel
+        }: SAR ${fmt(cardVal)})`,
+        amount: totalVal,
+        isSplit: true,
+        splitCashAmount: cashVal,
+        splitBankAmount: cardVal,
+        splitBankMethod: step3SplitMethod,
+        splitPosTerminal: step3SplitTerminal,
+        time: nowHHMM(),
+      });
+
+      setErpInvoices((prev) => {
+        const base = prev.length > 0 ? prev : buildMatchedErpList();
+        const exists = base.some((inv) => inv.invoiceNo === invNumber);
+        if (exists) {
+          return base.map((inv) =>
+            inv.invoiceNo === invNumber
+              ? {
+                  ...inv,
+                  customer: cleanCustomer,
+                  amount: totalVal,
+                  paymentMode: "SPLIT",
+                  isSplit: true,
+                  splitCashAmount: cashVal,
+                  splitBankAmount: cardVal,
+                  splitBankMethod: step3SplitMethod,
+                  splitPosTerminal: step3SplitTerminal,
+                  posTerminal: step3SplitTerminal,
+                  autoMatched: true,
+                }
+              : inv
+          );
+        }
+        return [
+          {
+            invoiceNo: invNumber,
+            customer: cleanCustomer,
+            amount: totalVal,
+            paymentMode: "SPLIT",
+            posTerminal: step3SplitTerminal,
+            isSplit: true,
+            splitCashAmount: cashVal,
+            splitBankAmount: cardVal,
+            splitBankMethod: step3SplitMethod,
+            splitPosTerminal: step3SplitTerminal,
+            autoMatched: true,
+            time: nowHHMM(),
+          },
+          ...base,
+        ];
+      });
+
+      const feeAmt =
+        step3SplitMethod === "POS_SWIPE"
+          ? r2(cardVal * POS_TERMINAL_META[step3SplitTerminal].feeRate)
+          : 0;
+      setSyncBannerMsg({
+        text: `⚡ Split Tender ${formattedReceiptNo} (${cleanCustomer}): Cash Share SAR ${fmt(cashVal)} + Card Share SAR ${fmt(cardVal)} (${
+          step3SplitMethod === "BANK_TRANSFER"
+            ? "0% Bank"
+            : `${POS_TERMINAL_META[step3SplitTerminal].shortLabel} Fee: -SAR ${fmt(feeAmt)}`
+        })`,
+        targetTab: "pulse",
+        targetLabel: "View Financial Pulse →",
+      });
+
+      setStep3Title("");
+      setStep3ReceiptNo("");
+      setStep3Amount("");
+      return;
+    }
+
     const val = parseFloat(step3Amount);
     const cleanCustomer = (step3Title.trim() || matchedStep3Invoice?.customer || "").trim();
     if (!cleanCustomer || Number.isNaN(val) || val <= 0) return;
@@ -1466,6 +2096,7 @@ function DailyRegisterView({
                 customer: cleanCustomer,
                 amount: val,
                 paymentMode: "CREDIT_SALE",
+                isSplit: false,
                 autoMatched: true,
               }
             : inv
@@ -1549,7 +2180,41 @@ function DailyRegisterView({
       setEditingRowId(null);
       return;
     }
-    if (rowKey.startsWith("erp-")) {
+    if (rowKey.startsWith("erp-cash-")) {
+      const invNo = rowKey.replace("erp-cash-", "");
+      setErpInvoices((prev) => {
+        const base = prev.length > 0 ? prev : buildMatchedErpList();
+        return base.map((inv) => {
+          if (inv.invoiceNo !== invNo) return inv;
+          if (inv.paymentMode === "SPLIT") {
+            const nextCash = Math.min(inv.amount, r2(val));
+            return {
+              ...inv,
+              splitCashAmount: nextCash,
+              splitBankAmount: r2(inv.amount - nextCash),
+            };
+          }
+          return { ...inv, originalAmount: inv.originalAmount ?? inv.amount, amount: val };
+        });
+      });
+    } else if (rowKey.startsWith("erp-bank-")) {
+      const invNo = rowKey.replace("erp-bank-", "");
+      setErpInvoices((prev) => {
+        const base = prev.length > 0 ? prev : buildMatchedErpList();
+        return base.map((inv) => {
+          if (inv.invoiceNo !== invNo) return inv;
+          if (inv.paymentMode === "SPLIT") {
+            const nextBank = Math.min(inv.amount, r2(val));
+            return {
+              ...inv,
+              splitBankAmount: nextBank,
+              splitCashAmount: r2(inv.amount - nextBank),
+            };
+          }
+          return { ...inv, originalAmount: inv.originalAmount ?? inv.amount, amount: val };
+        });
+      });
+    } else if (rowKey.startsWith("erp-")) {
       const invNo = rowKey.replace("erp-", "");
       setErpInvoices((prev) => {
         const base = prev.length > 0 ? prev : buildMatchedErpList();
@@ -1623,26 +2288,52 @@ function DailyRegisterView({
     setMissingExpenseAmt("");
   };
 
-  // Live Derived Totals
+  // Live Derived Totals (with Full Split / Partial Tender Support)
   const activeErpList = erpInvoices.length > 0 ? erpInvoices : buildMatchedErpList();
-  // Cash Drawer Sales include "CASH" and "OTHER_RECD" (excludes "CREDIT_SALE", "BANK_TRANSFER", "POS_SWIPE")
+  // Cash Drawer Sales include "CASH", "OTHER_RECD", and the Cash Share of "SPLIT" invoices
   const cashSaleInvoices = activeErpList.filter(
-    (i) => i.paymentMode === "CASH" || i.paymentMode === "OTHER_RECD"
+    (i) =>
+      i.paymentMode === "CASH" ||
+      i.paymentMode === "OTHER_RECD" ||
+      (i.paymentMode === "SPLIT" && i.splitCashAmount > 0)
   );
-  // Bank / POS Invoices include "BANK_TRANSFER" and "POS_SWIPE"
+  // Bank / POS Invoices include "BANK_TRANSFER", "POS_SWIPE", and the Bank/Card Share of "SPLIT" invoices
   const bankSwipeInvoices = activeErpList.filter(
-    (i) => i.paymentMode === "BANK_TRANSFER" || i.paymentMode === "POS_SWIPE"
+    (i) =>
+      i.paymentMode === "BANK_TRANSFER" ||
+      i.paymentMode === "POS_SWIPE" ||
+      (i.paymentMode === "SPLIT" && i.splitBankAmount > 0)
   );
 
-  const cashSalesTotal = r2(cashSaleInvoices.reduce((a, b) => a + b.amount, 0));
-  const bankSwipeGrossTotal = r2(bankSwipeInvoices.reduce((a, b) => a + b.amount, 0));
-  const totalPosFees = r2(bankSwipeInvoices.reduce((a, b) => a + calcInvoicePosFee(b), 0));
+  const cashSalesTotal = r2(
+    activeErpList.reduce((sum, inv) => sum + calcInvoiceCashPortion(inv), 0)
+  );
+  const bankSwipeGrossTotal = r2(
+    activeErpList.reduce((sum, inv) => sum + calcInvoiceBankGrossPortion(inv), 0)
+  );
+  const totalMadaFees = r2(
+    activeErpList.reduce((sum, inv) => {
+      const fb = calcInvoiceFeeBreakdown(inv);
+      return sum + (fb.isMada ? fb.totalFee : 0);
+    }, 0)
+  );
+  const totalCcFees = r2(
+    activeErpList.reduce((sum, inv) => {
+      const fb = calcInvoiceFeeBreakdown(inv);
+      return sum + (!fb.isMada && fb.totalFee > 0 ? fb.totalFee : 0);
+    }, 0)
+  );
+  const totalPosFees = r2(totalMadaFees + totalCcFees);
   const bankSwipeNetTotal = r2(bankSwipeGrossTotal - totalPosFees);
+  const activeBankSettlementTotal =
+    bankSettlementMode === "NET" ? bankSwipeNetTotal : bankSwipeGrossTotal;
 
-  // Inflows in drawer (exclude CREDIT_SALE since a new credit sale is not cash received yet, unless CREDIT_RECD)
+  // Inflows in drawer (exclude CREDIT_SALE and SPLIT_SALE since SPLIT_SALE cash portion is already counted in cashSalesTotal via activeErpList)
   const inflowEntries = preLoggedEntries.filter((e) => e.type !== "EXPENSE");
   const creditSaleEntries = inflowEntries.filter((e) => e.type === "CREDIT_SALE");
-  const cashInflowEntries = inflowEntries.filter((e) => e.type !== "CREDIT_SALE");
+  const cashInflowEntries = inflowEntries.filter(
+    (e) => e.type !== "CREDIT_SALE" && e.type !== "SPLIT_SALE"
+  );
   const expenseEntries = preLoggedEntries.filter((e) => e.type === "EXPENSE");
 
   const totalCreditInvAmount = r2(creditSaleEntries.reduce((a, b) => a + b.amount, 0));
@@ -1659,15 +2350,15 @@ function DailyRegisterView({
       date: "12-09-2026",
       branch: "Jubail - Main Branch",
       totalCashSales: cashSalesTotal,
-      totalBankSwipe: bankSwipeNetTotal,
-      totalPosFees,
+      totalBankSwipe: activeBankSettlementTotal,
+      totalPosFees: bankSettlementMode === "NET" || trackPosFees ? totalPosFees : 0,
       totalExpenses: totalPreLoggedExpenses,
       closingBalance: calculatedClosingBalance,
       status: "LOCKED",
     };
     setCompletedDaysLog((prev) => [newSummary, ...prev.filter((d) => d.date !== "12-09-2026")]);
     setJustCompletedToast(
-      `Daily Register Closed — Closing Balance: SAR ${fmt(calculatedClosingBalance)} | Net Bank Settlement: SAR ${fmt(bankSwipeNetTotal)}`
+      `Daily Register Closed — Closing Balance: SAR ${fmt(calculatedClosingBalance)} | Bank / POS Swipes (To Bank): SAR ${fmt(activeBankSettlementTotal)}`
     );
     setTrackingMode("hub");
     setWizardStep(1);
@@ -1722,8 +2413,11 @@ function DailyRegisterView({
     const syncedRows: DataSheetRow[] = INITIAL_DATASHEET_ROWS.map((baseRow, idx) => {
       const matchedErp = activeErpList.find((inv) => inv.invoiceNo === baseRow.invoiceNo);
       const isCreditSale = matchedErp?.paymentMode === "CREDIT_SALE";
+      const isSplit = matchedErp?.paymentMode === "SPLIT";
       const isBankOrPos =
-        matchedErp?.paymentMode === "BANK_TRANSFER" || matchedErp?.paymentMode === "POS_SWIPE";
+        matchedErp?.paymentMode === "BANK_TRANSFER" ||
+        matchedErp?.paymentMode === "POS_SWIPE" ||
+        isSplit;
 
       const expEntry = expenseEntries[idx];
       const crRecdEntry = cashInflowEntries.find((e) => e.type === "CREDIT_RECD");
@@ -1739,14 +2433,27 @@ function DailyRegisterView({
         creditInvAmt: isCreditSale
           ? String(matchedErp?.amount || baseRow.creditInvAmt)
           : baseRow.creditInvAmt,
-        amtCashSale: isCreditSale ? "" : baseRow.amtCashSale,
+        amtCashSale: isCreditSale
+          ? ""
+          : isSplit
+          ? String(matchedErp?.splitCashAmount || baseRow.amtCashSale)
+          : baseRow.amtCashSale,
         expenseLabel: expEntry
           ? expEntry.expenseCategory || expEntry.title
           : baseRow.expenseLabel,
         expenseAmt: expEntry ? String(expEntry.amount) : baseRow.expenseAmt,
-        toBankLabel: isBankOrPos
+        toBankLabel: isSplit
+          ? `Split ${
+              matchedErp?.splitBankMethod === "BANK_TRANSFER"
+                ? "Bank"
+                : POS_TERMINAL_META[matchedErp?.splitPosTerminal || "SAB"].shortLabel
+            } #${baseRow.invoiceNo}`
+          : isBankOrPos
           ? `${matchedErp?.paymentMode === "BANK_TRANSFER" ? "Bank" : POS_TERMINAL_META[matchedErp?.posTerminal || "SAB"].shortLabel} #${baseRow.invoiceNo}`
           : baseRow.toBankLabel,
+        toBankAmt: isSplit
+          ? String(matchedErp?.splitBankAmount || "")
+          : baseRow.toBankAmt,
       };
     });
     setSheetRows(syncedRows);
@@ -1830,6 +2537,11 @@ function DailyRegisterView({
       badgeClass: "bg-indigo-500/20 text-indigo-300 border-indigo-500/30",
       isOutflow: false,
     },
+    SPLIT_SALE: {
+      label: "⚡ Split Payment",
+      badgeClass: "bg-amber-500/20 text-amber-300 border-amber-400/40",
+      isOutflow: false,
+    },
     LOAN_IN: {
       label: "Loan In",
       badgeClass: "bg-amber-500/20 text-amber-300 border-amber-500/30",
@@ -1903,8 +2615,8 @@ function DailyRegisterView({
             </div>
           )}
 
-          {/* Header & 3 Stat Pills */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          {/* Header & Stat Pills + Optional MDR Toggle */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div>
               <h1 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
                 Jubail Corp Daily Hub
@@ -1915,6 +2627,35 @@ function DailyRegisterView({
             </div>
 
             <div className="flex flex-wrap items-center gap-2.5">
+              {/* Optional POS Merchant Fee (MDR) Toggle — Default OFF */}
+              <button
+                type="button"
+                role="switch"
+                aria-checked={trackPosFees}
+                onClick={() => setTrackPosFees((prev) => !prev)}
+                className={`inline-flex items-center gap-2.5 rounded-full border px-3.5 py-1.5 text-xs font-bold transition backdrop-blur-md whitespace-nowrap ${
+                  trackPosFees
+                    ? "border-amber-400/50 bg-amber-500/15 text-amber-200"
+                    : "border-white/15 bg-white/[0.04] text-white/65 hover:text-white"
+                }`}
+              >
+                <span>Estimate POS Merchant Fees (MDR)</span>
+                <span
+                  className={`inline-flex h-4 w-7 items-center rounded-full p-0.5 transition-colors ${
+                    trackPosFees ? "bg-amber-400" : "bg-white/20"
+                  }`}
+                >
+                  <span
+                    className={`h-3 w-3 rounded-full bg-slate-950 transition-transform ${
+                      trackPosFees ? "translate-x-3" : "translate-x-0"
+                    }`}
+                  />
+                </span>
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-white/50">
+                  {trackPosFees ? "ON" : "OFF"}
+                </span>
+              </button>
+
               <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-400/30 bg-amber-500/10 px-4 py-1.5 text-xs font-bold text-amber-300 backdrop-blur-md whitespace-nowrap">
                 <CreditCard size={13} className="text-amber-400" />
                 {preLoggedBankInvoices.length} Bank Invoices Queued
@@ -2011,7 +2752,7 @@ function DailyRegisterView({
 
               <span className="text-xs font-medium text-white/45">
                 {activeLoggerTab === "bank"
-                  ? "Pre-tag invoices with SAB (0.85%), Al Rajhi (0.80%), or Bank Transfer (0%)"
+                  ? "Pre-tag invoices with mada · SAB (0.80%), mada · Al Rajhi (0.80%), Visa / Mastercard (2.20%), or Bank Transfer (0%)"
                   : "Credit Purchases sync to Suppliers & Payables · Credit Sales/Receipts sync to Credit Radar"}
               </span>
             </div>
@@ -2045,8 +2786,8 @@ function DailyRegisterView({
                   </select>
 
                   {bankModeInput === "POS_SWIPE" && (
-                    <div className="inline-flex rounded-xl bg-black/50 p-1 border border-amber-400/30">
-                      {(["SAB", "AL_RAJHI"] as PosTerminalBank[]).map((term) => (
+                    <div className="inline-flex flex-wrap rounded-xl bg-black/50 p-1 border border-amber-400/30 gap-0.5">
+                      {(["SAB", "AL_RAJHI", "VISA_MC"] as PosTerminalBank[]).map((term) => (
                         <button
                           key={term}
                           type="button"
@@ -2057,7 +2798,7 @@ function DailyRegisterView({
                               : "text-white/65 hover:text-white"
                           }`}
                         >
-                          {POS_TERMINAL_META[term].shortLabel} ({POS_TERMINAL_META[term].feePctLabel})
+                          {POS_TERMINAL_META[term].badgeTag}
                         </button>
                       ))}
                     </div>
@@ -2109,6 +2850,7 @@ function DailyRegisterView({
                       className="rounded-xl border border-white/15 bg-[#160f26] px-4 py-3 text-sm font-bold text-white outline-none"
                     >
                       <option value="EXPENSE">Expense / Purchase</option>
+                      <option value="SPLIT_SALE">⚡ Split Payment (Cash + Card)</option>
                       <option value="CREDIT_RECD">Credit Sale Amt Recd</option>
                       <option value="CREDIT_SALE">Credit Sale (New Customer Credit)</option>
                       <option value="LOAN_IN">Loan In</option>
@@ -2167,6 +2909,24 @@ function DailyRegisterView({
                           className="flex-1 min-w-[160px] rounded-xl border border-white/15 bg-black/35 px-4 py-3 text-sm font-semibold text-white placeholder:text-white/35 outline-none"
                         />
                       </>
+                    ) : entryType === "SPLIT_SALE" ? (
+                      <>
+                        <input
+                          type="text"
+                          list="erp-invoices-datalist"
+                          value={hubReceiptNo}
+                          onChange={(e) => handleHubInvoiceInput(e.target.value)}
+                          placeholder="Invoice # (e.g. 30072)"
+                          className="w-40 rounded-xl border border-amber-400/50 bg-black/50 px-3.5 py-3 font-mono text-sm font-extrabold text-amber-300 placeholder:font-sans placeholder:text-white/40 outline-none focus:border-amber-300"
+                        />
+                        <input
+                          type="text"
+                          value={hubCustomerName}
+                          onChange={(e) => setHubCustomerName(e.target.value)}
+                          placeholder="Customer Name (auto-fills from ERP #)"
+                          className="flex-1 min-w-[180px] rounded-xl border border-amber-400/40 bg-black/40 px-4 py-3 text-sm font-bold text-white placeholder:text-white/40 outline-none"
+                        />
+                      </>
                     ) : entryType === "CREDIT_RECD" || entryType === "CREDIT_SALE" ? (
                       <>
                         <input
@@ -2214,9 +2974,9 @@ function DailyRegisterView({
                       type="number"
                       step="0.01"
                       value={entryAmount}
-                      onChange={(e) => setEntryAmount(e.target.value)}
-                      placeholder="Amount (SAR)"
-                      className="w-40 rounded-xl border border-white/15 bg-black/35 px-4 py-3 text-sm font-extrabold text-white placeholder:text-white/35 outline-none"
+                      onChange={(e) => handleHubTotalAmountChange(e.target.value)}
+                      placeholder={entryType === "SPLIT_SALE" ? "Total Amount (SAR)" : "Amount (SAR)"}
+                      className="w-44 rounded-xl border border-white/15 bg-black/35 px-4 py-3 text-sm font-extrabold text-white placeholder:text-white/35 outline-none"
                     />
 
                     <button
@@ -2228,8 +2988,97 @@ function DailyRegisterView({
                     </button>
                   </div>
 
+                  {/* Inline Split Payment Allocation Card inside Daytime Quick-Logger */}
+                  {entryType === "SPLIT_SALE" && (
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-400/40 bg-amber-500/10 p-3.5 text-xs">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <span className="rounded-lg bg-amber-400 px-2.5 py-1 font-extrabold text-slate-950">
+                          ⚡ Split Tender Allocation
+                        </span>
+
+                        <div className="flex items-center gap-1.5 rounded-xl border border-emerald-400/40 bg-black/50 px-3 py-1.5">
+                          <span className="font-bold text-emerald-300">Cash Portion (SAR):</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={hubSplitCashInput}
+                            onChange={(e) => handleHubSplitCashChange(e.target.value)}
+                            className="w-24 bg-transparent font-mono text-sm font-extrabold text-white outline-none"
+                          />
+                        </div>
+
+                        <div className="flex items-center gap-1.5 rounded-xl border border-amber-400/40 bg-black/50 px-3 py-1.5">
+                          <span className="font-bold text-amber-300">Card Portion (SAR):</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={hubSplitCardInput}
+                            onChange={(e) => handleHubSplitCardChange(e.target.value)}
+                            className="w-24 bg-transparent font-mono text-sm font-extrabold text-white outline-none"
+                          />
+                        </div>
+
+                        <div className="inline-flex flex-wrap rounded-xl bg-black/60 p-1 border border-white/15 gap-1">
+                          {(["SAB", "AL_RAJHI", "VISA_MC"] as PosTerminalBank[]).map((term) => (
+                            <button
+                              key={term}
+                              type="button"
+                              onClick={() => {
+                                setHubSplitMethod("POS_SWIPE");
+                                setHubSplitTerminal(term);
+                              }}
+                              className={`rounded-lg px-2.5 py-1 text-[11px] font-extrabold transition ${
+                                hubSplitMethod === "POS_SWIPE" && hubSplitTerminal === term
+                                  ? "bg-amber-400 text-slate-950"
+                                  : "text-white/65 hover:text-white"
+                              }`}
+                            >
+                              {POS_TERMINAL_META[term].badgeTag}
+                            </button>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={() => setHubSplitMethod("BANK_TRANSFER")}
+                            className={`rounded-lg px-2.5 py-1 text-[11px] font-extrabold transition ${
+                              hubSplitMethod === "BANK_TRANSFER"
+                                ? "bg-sky-400 text-slate-950"
+                                : "text-white/65 hover:text-white"
+                            }`}
+                          >
+                            Bank Transfer (0%)
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2 font-mono text-xs font-bold text-amber-200">
+                        {(() => {
+                          const cashVal = parseFloat(hubSplitCashInput) || 0;
+                          const cardVal = parseFloat(hubSplitCardInput) || 0;
+                          const fb =
+                            hubSplitMethod === "POS_SWIPE"
+                              ? calcAmountPosFeeBreakdown(cardVal, hubSplitTerminal)
+                              : { totalFee: 0, mdrBase: 0, vatOnFee: 0 };
+                          return (
+                            <>
+                              <span>
+                                Cash to Drawer: SAR {fmt(cashVal)} | Card to Bank: SAR {fmt(cardVal)}
+                              </span>
+                              {trackPosFees && fb.totalFee > 0 && (
+                                <span className="text-[11px] font-normal text-white/45">
+                                  (Est. {POS_TERMINAL_META[hubSplitTerminal].shortLabel} fee incl. 15% VAT: SAR {fmt(fb.totalFee)})
+                                </span>
+                              )}
+                            </>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Glowing ERP Match Pill inside Daytime Quick-Logger */}
-                  {(entryType === "CREDIT_SALE" || entryType === "CREDIT_RECD") &&
+                  {(entryType === "CREDIT_SALE" ||
+                    entryType === "CREDIT_RECD" ||
+                    entryType === "SPLIT_SALE") &&
                     matchedHubInvoice && (
                       <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-400/50 bg-gradient-to-r from-amber-500/20 via-purple-500/20 to-emerald-500/20 px-4 py-2.5 text-xs font-extrabold text-amber-200 shadow-[0_0_25px_rgba(245,158,11,0.2)]">
                         <span>
@@ -2238,7 +3087,9 @@ function DailyRegisterView({
                           {fmt(matchedHubInvoice.amount)}
                         </span>
                         <span className="rounded-full bg-black/40 border border-white/15 px-2.5 py-0.5 text-[10px] font-bold text-emerald-300">
-                          Auto-filled Customer &amp; SAR · Reclassifies as Credit Sale
+                          {entryType === "SPLIT_SALE"
+                            ? "Auto-filled Gross SAR & Split Shares"
+                            : "Auto-filled Customer & SAR · Reclassifies as Credit Sale"}
                         </span>
                       </div>
                     )}
@@ -2283,7 +3134,7 @@ function DailyRegisterView({
                               )}
                             </div>
                             <div className="flex items-center gap-2.5 shrink-0">
-                              <span className={`font-display font-extrabold whitespace-nowrap ${meta.isOutflow ? "text-rose-400" : entry.type === "CREDIT_SALE" ? "text-indigo-300" : "text-emerald-400"}`}>
+                              <span className={`font-display font-extrabold whitespace-nowrap ${meta.isOutflow ? "text-rose-400" : entry.type === "CREDIT_SALE" ? "text-indigo-300" : entry.type === "SPLIT_SALE" ? "text-amber-300" : "text-emerald-400"}`}>
                                 {meta.isOutflow ? "-" : entry.type === "CREDIT_SALE" ? "" : "+"}SAR {fmt(entry.amount)}
                               </span>
                               <button
@@ -2409,7 +3260,7 @@ function DailyRegisterView({
                 Import Today&apos;s ERP Sales
               </h2>
               <p className="mt-2 text-sm text-white/60">
-                Drop your daily CSV export or load today&apos;s 18 Jubail invoices in one click.
+                Drop your daily CSV export or load today&apos;s 18 Jubail invoices (auto-detects `PARTIAL`, `SPLIT`, `CASH/BANK` dual tenders).
               </p>
 
               <label className="mt-7 flex w-full cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-white/20 bg-black/25 px-6 py-10 transition hover:border-amber-400/60 hover:bg-white/[0.04]">
@@ -2420,7 +3271,7 @@ function DailyRegisterView({
                 <input
                   type="file"
                   accept=".csv"
-                  onChange={handleSimulateCsvUpload}
+                  onChange={handleCsvFileUpload}
                   className="hidden"
                 />
               </label>
@@ -2431,87 +3282,119 @@ function DailyRegisterView({
                 className="mt-6 flex items-center gap-2.5 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-500 to-purple-600 px-7 py-4 text-sm sm:text-base font-extrabold text-slate-950 shadow-[0_0_30px_rgba(245,158,11,0.4)] transition hover:scale-[1.02]"
               >
                 <Zap size={18} className="text-slate-950" />
-                <span>⚡ Load Today&apos;s ERP Batch (18 Invoices)</span>
+                <span>⚡ Load Today&apos;s ERP Batch (18 Invoices · Split Tenders Auto-Detected)</span>
               </button>
 
               {csvLoadedBanner && (
                 <div className="mt-5 inline-flex items-center gap-2 rounded-xl border border-emerald-400/40 bg-emerald-500/20 px-4 py-2 text-xs font-bold text-emerald-200">
                   <Check size={15} className="text-emerald-300" />
-                  <span>18 ERP Invoices Loaded (SAR 44,909.00)</span>
+                  <span>
+                    18 ERP Invoices Loaded · 2 Split Tenders Auto-Detected (#30070 &amp; #30072)
+                  </span>
                 </div>
               )}
             </div>
           )}
 
           {/* ──────────────────────────────────────────────────────────────
-              STEP 2: VERIFY BANK SWIPES (SAB / AL RAJHI POS FEES) & CASH SALES
+              STEP 2: VERIFY BANK SWIPES (SAB / AL RAJHI), SPLIT TENDERS & CASH SALES
              ────────────────────────────────────────────────────────────── */}
           {wizardStep === 2 && (
             <div className="flex flex-col gap-5 rounded-3xl border border-white/15 bg-white/[0.04] p-6 sm:p-8 backdrop-blur-2xl shadow-2xl">
-              {/* Header + 3-Card Summary Header */}
+              {/* Header + Optional MDR Toggle + Summary Cards */}
               <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 pb-5 border-b border-white/10">
-                <div>
+                <div className="space-y-2.5">
                   <h2 className="font-display text-2xl font-extrabold text-white">
-                    Verify Bank Swipes &amp; Cash Sales
+                    Verify Bank Swipes, Split Tenders &amp; Cash Sales
                   </h2>
-                  <p className="mt-1 text-sm text-white/60">
-                    Choose Cash Sale, Bank Transfer (0%), Swipe (POS: SAB 0.85% / Al Rajhi 0.80%), or Other Amt Recd.
+                  <p className="text-sm text-white/60">
+                    Reconciles 100% gross ERP invoice face value by default. Choose Cash Sale, Bank Transfer, Swipe (SAB / Al Rajhi), ⚡ Split / Partial, or Other Amt Recd.
                   </p>
+                  {/* Clean Optional Toggle Switch: Estimate POS Merchant Fees (MDR) */}
+                  <div className="pt-0.5">
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={trackPosFees}
+                      onClick={() => setTrackPosFees((prev) => !prev)}
+                      className={`inline-flex items-center gap-2.5 rounded-full border px-3.5 py-1.5 text-xs font-bold transition ${
+                        trackPosFees
+                          ? "border-amber-400/50 bg-amber-500/15 text-amber-200"
+                          : "border-white/15 bg-black/35 text-white/65 hover:text-white"
+                      }`}
+                    >
+                      <span>Estimate POS Merchant Fees (MDR)</span>
+                      <span
+                        className={`inline-flex h-4 w-7 items-center rounded-full p-0.5 transition-colors ${
+                          trackPosFees ? "bg-amber-400" : "bg-white/20"
+                        }`}
+                      >
+                        <span
+                          className={`h-3 w-3 rounded-full bg-slate-950 transition-transform ${
+                            trackPosFees ? "translate-x-3" : "translate-x-0"
+                          }`}
+                        />
+                      </span>
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-white/50">
+                        {trackPosFees ? "ON" : "OFF"}
+                      </span>
+                    </button>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 shrink-0">
-                  <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 shrink-0">
+                  <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-5 py-3.5">
                     <span className="block text-xs font-semibold text-emerald-200/80">
                       Cash Drawer Sales ({cashSaleInvoices.length})
                     </span>
-                    <span className="font-display text-lg font-extrabold text-emerald-300 whitespace-nowrap">
+                    <span className="font-display text-xl font-extrabold text-emerald-300 whitespace-nowrap">
                       SAR {fmt(cashSalesTotal)}
                     </span>
-                  </div>
-
-                  <div className="rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3">
-                    <span className="block text-xs font-semibold text-rose-200/80">
-                      Total POS Terminal Fees
-                    </span>
-                    <span className="font-display text-lg font-extrabold text-rose-300 whitespace-nowrap">
-                      -SAR {fmt(totalPosFees)}
-                    </span>
-                    <span className="block text-[10px] text-rose-200/60">
-                      SAB (0.85%) &amp; Al Rajhi (0.80%)
+                    <span className="block text-[10px] text-emerald-200/60">
+                      Includes Cash Share of Split Sales
                     </span>
                   </div>
 
-                  <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 px-4 py-3">
+                  <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 px-5 py-3.5">
                     <span className="block text-xs font-semibold text-amber-200/80">
-                      Net Bank Settlement ({bankSwipeInvoices.length})
+                      Bank / POS Swipes (To Bank) ({bankSwipeInvoices.length})
                     </span>
-                    <span className="font-display text-lg font-extrabold text-amber-300 whitespace-nowrap">
-                      SAR {fmt(bankSwipeNetTotal)}
+                    <span className="font-display text-xl font-extrabold text-amber-300 whitespace-nowrap">
+                      SAR {fmt(bankSwipeGrossTotal)}
                     </span>
                     <span className="block text-[10px] text-amber-200/60">
-                      Gross: SAR {fmt(bankSwipeGrossTotal)}
+                      100% Gross Face Value Settlement
                     </span>
+                    {trackPosFees && (
+                      <span className="mt-0.5 block text-[10px] text-white/45">
+                        Est. MDR fee (audit only): SAR {fmt(totalPosFees)}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
 
-              {/* Clean Table of 18 Invoices with 4 Payment Options + SAB / Al Rajhi Fee Breakdown */}
+              {/* Clean Table of 18 Invoices with 5 Payment Options (including [⚡ Split / Partial]) */}
               <div className="divide-y divide-white/10 rounded-2xl border border-white/10 bg-black/30 overflow-hidden">
                 {activeErpList.map((inv) => {
                   const isBankOrPos =
                     inv.paymentMode === "BANK_TRANSFER" || inv.paymentMode === "POS_SWIPE";
                   const isPosSwipe = inv.paymentMode === "POS_SWIPE";
+                  const isSplitMode = inv.paymentMode === "SPLIT";
                   const isOtherRecd = inv.paymentMode === "OTHER_RECD";
                   const isCreditSaleInv = inv.paymentMode === "CREDIT_SALE";
                   const posFee = calcInvoicePosFee(inv);
-                  const netBank = calcInvoiceNetBank(inv);
                   const termMeta = POS_TERMINAL_META[inv.posTerminal || "SAB"];
+                  const splitTermMeta =
+                    POS_TERMINAL_META[inv.splitPosTerminal || inv.posTerminal || "SAB"];
 
                   return (
                     <div
                       key={inv.invoiceNo}
                       className={`flex flex-col gap-2.5 px-5 py-3.5 transition ${
-                        isBankOrPos
+                        isSplitMode
+                          ? "bg-gradient-to-r from-amber-500/[0.12] via-purple-500/[0.08] to-emerald-500/[0.08]"
+                          : isBankOrPos
                           ? "bg-amber-500/[0.07]"
                           : isCreditSaleInv
                           ? "bg-indigo-500/[0.10]"
@@ -2521,13 +3404,18 @@ function DailyRegisterView({
                       }`}
                     >
                       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-                        <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2.5 min-w-0">
                           <span className="font-mono text-sm font-extrabold text-amber-300 w-16 shrink-0">
                             #{inv.invoiceNo}
                           </span>
                           <span className="text-sm font-semibold text-white truncate">
                             {inv.customer}
                           </span>
+                          {isSplitMode && (
+                            <span className="rounded-full bg-amber-400/25 border border-amber-300/60 px-2.5 py-0.5 text-[10px] font-extrabold text-amber-200 shrink-0 shadow-[0_0_15px_rgba(245,158,11,0.25)]">
+                              ⚡ Split Tender (Cash + Bank/Swipe)
+                            </span>
+                          )}
                           {inv.autoMatched && isBankOrPos && (
                             <span className="rounded-full bg-amber-400/20 border border-amber-300/40 px-2.5 py-0.5 text-[10px] font-bold text-amber-200 shrink-0">
                               ✓ Auto-Matched
@@ -2543,7 +3431,7 @@ function DailyRegisterView({
                         <div className="flex flex-wrap items-center justify-between lg:justify-end gap-4 shrink-0">
                           <span
                             className={`font-display text-sm font-extrabold w-28 text-right whitespace-nowrap ${
-                              isBankOrPos
+                              isSplitMode || isBankOrPos
                                 ? "text-amber-300"
                                 : isCreditSaleInv
                                 ? "text-indigo-300"
@@ -2555,7 +3443,7 @@ function DailyRegisterView({
                             SAR {fmt(inv.amount)}
                           </span>
 
-                          {/* 4-Option Payment Method Selector */}
+                          {/* 5-Option Payment Method Selector including [⚡ Split / Partial] */}
                           <div className="inline-flex flex-wrap rounded-xl bg-black/50 p-1 border border-white/10 gap-0.5">
                             <button
                               type="button"
@@ -2592,6 +3480,17 @@ function DailyRegisterView({
                             </button>
                             <button
                               type="button"
+                              onClick={() => handleSetInvoiceMode(inv.invoiceNo, "SPLIT")}
+                              className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${
+                                inv.paymentMode === "SPLIT"
+                                  ? "bg-gradient-to-r from-amber-400 to-emerald-400 text-slate-950 font-extrabold shadow-sm"
+                                  : "text-amber-300/80 hover:text-amber-200"
+                              }`}
+                            >
+                              ⚡ Split / Partial
+                            </button>
+                            <button
+                              type="button"
                               onClick={() => handleSetInvoiceMode(inv.invoiceNo, "OTHER_RECD")}
                               className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${
                                 inv.paymentMode === "OTHER_RECD"
@@ -2605,13 +3504,115 @@ function DailyRegisterView({
                         </div>
                       </div>
 
-                      {/* Conditional Sub-Row for Swipe (POS): SAB vs Al Rajhi + Live POS Fee Breakdown */}
+                      {/* Conditional Sub-Row for ⚡ Split / Partial Allocation Card */}
+                      {isSplitMode && (
+                        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 rounded-2xl border border-amber-400/40 bg-black/55 px-4 py-3 text-xs shadow-inner">
+                          <div className="flex flex-wrap items-center gap-3">
+                            {/* Cash Portion Input */}
+                            <div className="flex items-center gap-2 rounded-xl border border-emerald-400/40 bg-emerald-500/10 px-3 py-1.5">
+                              <span className="font-bold text-emerald-300 whitespace-nowrap">
+                                Cash Portion (SAR):
+                              </span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={inv.splitCashAmount}
+                                onChange={(e) =>
+                                  handleSetInvoiceSplitAmounts(
+                                    inv.invoiceNo,
+                                    "cash",
+                                    e.target.value
+                                  )
+                                }
+                                className="w-24 rounded-lg bg-black/60 px-2 py-1 font-mono text-xs font-extrabold text-emerald-200 outline-none border border-emerald-400/30 focus:border-emerald-300"
+                              />
+                            </div>
+
+                            {/* Bank / Swipe Portion Input */}
+                            <div className="flex items-center gap-2 rounded-xl border border-amber-400/40 bg-amber-500/10 px-3 py-1.5">
+                              <span className="font-bold text-amber-300 whitespace-nowrap">
+                                Bank / Swipe Portion (SAR):
+                              </span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={inv.splitBankAmount}
+                                onChange={(e) =>
+                                  handleSetInvoiceSplitAmounts(
+                                    inv.invoiceNo,
+                                    "bank",
+                                    e.target.value
+                                  )
+                                }
+                                className="w-24 rounded-lg bg-black/60 px-2 py-1 font-mono text-xs font-extrabold text-amber-200 outline-none border border-amber-400/30 focus:border-amber-300"
+                              />
+                            </div>
+
+                            {/* Segmented Toggle for Method of Bank Portion */}
+                            <div className="inline-flex flex-wrap rounded-xl bg-black/70 p-1 border border-white/15 gap-1">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleSetInvoiceSplitMethod(inv.invoiceNo, "BANK_TRANSFER")
+                                }
+                                className={`rounded-lg px-2.5 py-1 text-[11px] font-extrabold transition ${
+                                  inv.splitBankMethod === "BANK_TRANSFER"
+                                    ? "bg-sky-400 text-slate-950"
+                                    : "text-white/60 hover:text-white"
+                                }`}
+                              >
+                                Bank Transfer (0%)
+                              </button>
+                              {(["SAB", "AL_RAJHI", "VISA_MC"] as PosTerminalBank[]).map((term) => (
+                                <button
+                                  key={term}
+                                  type="button"
+                                  onClick={() =>
+                                    handleSetInvoiceSplitMethod(inv.invoiceNo, "POS_SWIPE", term)
+                                  }
+                                  className={`rounded-lg px-2.5 py-1 text-[11px] font-extrabold transition ${
+                                    inv.splitBankMethod === "POS_SWIPE" &&
+                                    (inv.splitPosTerminal || inv.posTerminal) === term
+                                      ? "bg-amber-400 text-slate-950"
+                                      : "text-white/60 hover:text-white"
+                                  }`}
+                                >
+                                  {POS_TERMINAL_META[term].badgeTag}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Clean Split Row Summary (100% Gross Face Value by Default) */}
+                          <div className="flex flex-col items-end gap-0.5 font-mono text-xs">
+                            <div className="flex flex-wrap items-center gap-2 rounded-xl bg-white/[0.04] border border-white/10 px-3 py-1.5">
+                              <span className="font-extrabold text-emerald-300">
+                                Cash to Drawer: SAR {fmt(inv.splitCashAmount)}
+                              </span>
+                              <span className="text-white/30">|</span>
+                              <span className="font-extrabold text-amber-300">
+                                Card to Bank: SAR {fmt(inv.splitBankAmount)}
+                              </span>
+                            </div>
+                            {trackPosFees && inv.splitBankMethod === "POS_SWIPE" && posFee > 0 && (
+                              <span className="text-[11px] text-white/45">
+                                {(() => {
+                                  const fb = calcInvoiceFeeBreakdown(inv);
+                                  return `Est. ${splitTermMeta.shortLabel} fee: -SAR ${fmt(fb.totalFee)} (MDR: SAR ${fmt(fb.mdrBase)} + 15% VAT: SAR ${fmt(fb.vatOnFee)})`;
+                                })()}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Conditional Sub-Row for Swipe (POS): mada · SAB, mada · Al Rajhi, Visa / Mastercard */}
                       {isPosSwipe && (
                         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-400/25 bg-black/40 px-4 py-2 text-xs">
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-amber-200/80">Card Machine:</span>
-                            <div className="inline-flex rounded-lg bg-black/60 p-0.5 border border-white/10">
-                              {(["SAB", "AL_RAJHI"] as PosTerminalBank[]).map((term) => (
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-bold text-amber-200/80">Card Method:</span>
+                            <div className="inline-flex flex-wrap rounded-lg bg-black/60 p-0.5 border border-white/10 gap-0.5">
+                              {(["SAB", "AL_RAJHI", "VISA_MC"] as PosTerminalBank[]).map((term) => (
                                 <button
                                   key={term}
                                   type="button"
@@ -2622,24 +3623,24 @@ function DailyRegisterView({
                                       : "text-white/60 hover:text-white"
                                   }`}
                                 >
-                                  {POS_TERMINAL_META[term].label} ({POS_TERMINAL_META[term].feePctLabel})
+                                  {POS_TERMINAL_META[term].badgeTag} ({POS_TERMINAL_META[term].feePctLabel})
                                 </button>
                               ))}
                             </div>
                           </div>
 
-                          <div className="flex flex-wrap items-center gap-2 font-mono text-xs">
-                            <span className="text-white/75">
-                              Gross: <strong className="text-white">SAR {fmt(inv.amount)}</strong>
+                          <div className="flex flex-col items-end gap-0.5 font-mono text-xs">
+                            <span className="rounded bg-amber-400/15 border border-amber-400/30 px-2.5 py-0.5 font-extrabold text-amber-300">
+                              [{termMeta.badgeTag}]: SAR {fmt(inv.amount)}
                             </span>
-                            <span className="text-white/30">|</span>
-                            <span className="text-rose-300">
-                              POS Fee ({termMeta.feePctLabel}): <strong>-SAR {fmt(posFee)}</strong>
-                            </span>
-                            <span className="text-white/30">|</span>
-                            <span className="rounded bg-amber-400/15 border border-amber-400/30 px-2 py-0.5 font-extrabold text-amber-300">
-                              Net to Bank: SAR {fmt(netBank)}
-                            </span>
+                            {trackPosFees && posFee > 0 && (
+                              <span className="text-[11px] text-white/45">
+                                {(() => {
+                                  const fb = calcInvoiceFeeBreakdown(inv);
+                                  return `MDR: -SAR ${fmt(fb.mdrBase)} | 15% VAT: -SAR ${fmt(fb.vatOnFee)} | Net: SAR ${fmt(fb.net)}`;
+                                })()}
+                              </span>
+                            )}
                           </div>
                         </div>
                       )}
@@ -2648,10 +3649,10 @@ function DailyRegisterView({
                       {inv.paymentMode === "BANK_TRANSFER" && (
                         <div className="flex items-center justify-between rounded-xl border border-sky-400/25 bg-black/40 px-4 py-1.5 text-xs">
                           <span className="font-semibold text-sky-300">
-                            Direct Bank Transfer · 0% POS Terminal Fee
+                            Direct Bank Transfer
                           </span>
                           <span className="font-mono font-extrabold text-sky-200">
-                            Gross: SAR {fmt(inv.amount)} | POS Fee: SAR 0.00 | Net to Bank: SAR {fmt(inv.amount)}
+                            Bank Transfer: SAR {fmt(inv.amount)}
                           </span>
                         </div>
                       )}
@@ -2697,17 +3698,17 @@ function DailyRegisterView({
           )}
 
           {/* ──────────────────────────────────────────────────────────────
-              STEP 3: CREDIT & CASH INFLOWS (AUTO ERP INVOICE LOOKUP + CREDIT RADAR REMINDER SYNC)
+              STEP 3: CREDIT & CASH INFLOWS + MANUAL SPLIT PAYMENT ENTRY
              ────────────────────────────────────────────────────────────── */}
           {wizardStep === 3 && (
             <div className="flex flex-col gap-6 rounded-3xl border border-white/15 bg-white/[0.04] p-6 sm:p-8 backdrop-blur-2xl shadow-2xl">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-5">
                 <div>
                   <h2 className="font-display text-2xl font-extrabold text-white">
-                    Credit Sales, Receipts &amp; Opening Balance
+                    Credit Sales, Split Payments, Receipts &amp; Opening Balance
                   </h2>
                   <p className="mt-1 text-sm text-white/60">
-                    Type an ERP Invoice # (e.g. 30064) on a Credit Sale to auto-fill Customer &amp; SAR and push a collection reminder to Credit Radar.
+                    Log Credit Sales, Split Payments (Cash + Card), or Cash Receipts. Type an ERP Invoice # (e.g. 30064 or 30072) to auto-fill details.
                   </p>
                 </div>
 
@@ -2763,99 +3764,91 @@ function DailyRegisterView({
 
               {/* 2-Panel Layout */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                {/* Left Panel (5 cols): Quick-Select Category Pills + ERP Invoice Auto-Lookup + Customer & Follow-up Date Inputs */}
-                <div className="lg:col-span-5 rounded-2xl border border-white/10 bg-black/30 p-5 flex flex-col gap-4">
-                  <span className="text-xs font-bold text-white/60">
-                    1. Quick-Select Source or ERP Credit Invoice
-                  </span>
-                  <div className="flex flex-wrap gap-2">
-                    {[
-                      { kind: "CREDIT_SALE" as const, title: "Retail · Jotashield Exterior", amt: "2300", rcp: "30064", date: "2026-09-20", label: "Inv #30064 (Credit Sale)" },
-                      { kind: "CREDIT_RECD" as const, title: "Chicago Credit Recd", amt: "12428", rcp: "RCP-1042", date: "2026-09-20", label: "Chicago Credit Recd" },
-                      { kind: "CREDIT_RECD" as const, title: "Al-Futtaim Contractors", amt: "15000", rcp: "RCP-1045", date: "2026-09-22", label: "Al-Futtaim Contractors" },
-                      { kind: "CREDIT_SALE" as const, title: "Eastern Paint Bros", amt: "6500", rcp: "30075", date: "2026-09-25", label: "Eastern Paint Bros" },
-                      { kind: "LOAN_IN" as const, title: "Shadab Loan In", amt: "2000", rcp: "", date: "2026-09-20", label: "Shadab Loan In" },
-                      { kind: "OTHER_IN" as const, title: "Return / From Bank", amt: "1000", rcp: "", date: "2026-09-20", label: "Return / From Bank" },
-                    ].map((preset) => {
-                      const active = step3Title === preset.title;
-                      return (
-                        <button
-                          key={preset.label}
-                          type="button"
-                          onClick={() => {
-                            setStep3Kind(preset.kind);
-                            setStep3Title(preset.title);
-                            setStep3Amount(preset.amt);
-                            setStep3FollowUpDate(preset.date);
-                            handleStep3InvoiceInput(preset.rcp);
-                          }}
-                          className={`rounded-xl px-3.5 py-2 text-xs font-bold transition ${
-                            active
-                              ? "bg-emerald-400 text-slate-950 font-extrabold"
-                              : "border border-white/15 bg-white/5 text-white hover:bg-white/10"
-                          }`}
-                        >
-                          {preset.label}
-                        </button>
-                      );
-                    })}
+                {/* Left Panel (5 cols): Clean Vertical Form Flow (space-y-4, pb-6) */}
+                <div className="lg:col-span-5 rounded-2xl border border-white/10 bg-black/30 p-5 pb-6 flex flex-col gap-4">
+                  <div className="space-y-2">
+                    <span className="block text-xs font-bold text-white/60">
+                      Quick Presets
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { kind: "CREDIT_SALE" as const, title: "Retail · Jotashield Exterior", amt: "2300", rcp: "30064", date: "2026-09-20", label: "Inv #30064 (Credit Sale)" },
+                        { kind: "CREDIT_RECD" as const, title: "Chicago Credit Recd", amt: "12428", rcp: "RCP-1042", date: "2026-09-20", label: "Chicago Credit Recd" },
+                        { kind: "CREDIT_RECD" as const, title: "Al-Futtaim Contractors", amt: "15000", rcp: "RCP-1045", date: "2026-09-22", label: "Al-Futtaim Contractors" },
+                        { kind: "CREDIT_SALE" as const, title: "Eastern Paint Bros", amt: "6500", rcp: "30075", date: "2026-09-25", label: "Eastern Paint Bros" },
+                        { kind: "LOAN_IN" as const, title: "Shadab Loan In", amt: "2000", rcp: "", date: "2026-09-20", label: "Shadab Loan In" },
+                        { kind: "OTHER_IN" as const, title: "Return / From Bank", amt: "1000", rcp: "", date: "2026-09-20", label: "Return / From Bank" },
+                      ].map((preset) => {
+                        const active = step3Title === preset.title && step3Kind === preset.kind;
+                        return (
+                          <button
+                            key={preset.label}
+                            type="button"
+                            onClick={() => {
+                              setStep3Kind(preset.kind);
+                              setStep3Title(preset.title);
+                              setStep3Amount(preset.amt);
+                              setStep3FollowUpDate(preset.date);
+                              handleStep3InvoiceInput(preset.rcp);
+                            }}
+                            className={`rounded-xl px-3 py-1.5 text-xs font-bold transition ${
+                              active
+                                ? "bg-emerald-400 text-slate-950 font-extrabold"
+                                : "border border-white/15 bg-white/5 text-white hover:bg-white/10"
+                            }`}
+                          >
+                            {preset.label}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
 
-                  <form onSubmit={handleAddStep3Receipt} className="space-y-3 pt-2">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <form onSubmit={handleAddStep3Receipt} className="space-y-4 pt-1">
+                    {/* 1. Transaction Type */}
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-bold text-white/70">
+                        Transaction Type
+                      </label>
                       <select
                         value={step3Kind}
                         onChange={(e) =>
                           setStep3Kind(
-                            e.target.value as "CREDIT_RECD" | "CREDIT_SALE" | "LOAN_IN" | "OTHER_IN"
+                            e.target.value as
+                              | "CREDIT_RECD"
+                              | "CREDIT_SALE"
+                              | "SPLIT_SALE"
+                              | "LOAN_IN"
+                              | "OTHER_IN"
                           )
                         }
-                        className="rounded-xl border border-white/15 bg-[#160f26] px-3 py-2.5 text-xs font-bold text-white outline-none"
+                        className="w-full rounded-xl border border-white/15 bg-[#160f26] px-3.5 py-3 text-sm font-bold text-white outline-none focus:border-amber-400"
                       >
                         <option value="CREDIT_SALE">Credit Sale (New Credit)</option>
                         <option value="CREDIT_RECD">Credit Sale Amt Recd</option>
                         <option value="LOAN_IN">Loan In</option>
                         <option value="OTHER_IN">Other Amt Recd</option>
+                        <option value="SPLIT_SALE">⚡ Split Payment (Cash + Card)</option>
                       </select>
-
-                      <input
-                        type="text"
-                        list="erp-invoices-datalist"
-                        value={step3ReceiptNo}
-                        onChange={(e) => handleStep3InvoiceInput(e.target.value)}
-                        placeholder={
-                          step3Kind === "CREDIT_SALE"
-                            ? "Invoice # (e.g. 30064)"
-                            : "Receipt # (opt)"
-                        }
-                        className="rounded-xl border border-amber-400/50 bg-black/50 px-3 py-2.5 font-mono text-xs font-extrabold text-amber-300 placeholder:font-sans placeholder:text-white/40 outline-none focus:border-amber-300"
-                      />
                     </div>
 
-                    {/* Clickable ERP Invoice Selector Dropdown & Quick Pills when Credit Sale is active */}
-                    {step3Kind === "CREDIT_SALE" && (
-                      <div className="space-y-2 rounded-2xl border border-white/10 bg-black/40 p-3">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-[11px] font-bold text-amber-200/90">
-                            Quick-Pick Today&apos;s ERP Invoice (30062–30079):
-                          </span>
-                          <select
-                            value={cleanErpInvNo(step3ReceiptNo)}
-                            onChange={(e) => {
-                              if (e.target.value) handleStep3InvoiceInput(e.target.value);
-                            }}
-                            className="rounded-lg border border-amber-400/40 bg-[#160f26] px-2.5 py-1 text-[11px] font-bold text-amber-300 outline-none"
-                          >
-                            <option value="">Select ERP Invoice #...</option>
-                            {activeErpList.map((inv) => (
-                              <option key={inv.invoiceNo} value={inv.invoiceNo}>
-                                #{inv.invoiceNo} — {inv.customer} (SAR {fmt(inv.amount)})
-                              </option>
-                            ))}
-                          </select>
-                        </div>
+                    {/* 2. ERP Invoice Number + Quick Chips (or Receipt # for non-invoice inflows) */}
+                    {step3Kind === "CREDIT_SALE" || step3Kind === "SPLIT_SALE" ? (
+                      <div className="space-y-2">
+                        <label className="block text-xs font-bold text-amber-200/90">
+                          ERP Invoice Number
+                        </label>
+                        <input
+                          type="text"
+                          list="erp-invoices-datalist"
+                          value={step3ReceiptNo}
+                          onChange={(e) => handleStep3InvoiceInput(e.target.value)}
+                          placeholder="Enter or select invoice # (e.g. 30064)..."
+                          className="w-full rounded-xl border border-amber-400/50 bg-black/50 px-3.5 py-3 font-mono text-sm font-extrabold text-amber-300 placeholder:font-sans placeholder:text-white/40 outline-none focus:border-amber-300"
+                        />
 
-                        <div className="flex flex-wrap gap-1.5">
+                        {/* Clean Horizontal Row of Quick-Select Chips */}
+                        <div className="flex flex-wrap gap-2 pt-0.5">
                           {["30064", "30067", "30070", "30072", "30075", "30077"].map((invNo) => {
                             const isSelected = cleanErpInvNo(step3ReceiptNo) === invNo;
                             return (
@@ -2863,10 +3856,10 @@ function DailyRegisterView({
                                 key={invNo}
                                 type="button"
                                 onClick={() => handleStep3InvoiceInput(invNo)}
-                                className={`rounded-lg px-2.5 py-1 font-mono text-[11px] font-extrabold transition ${
+                                className={`rounded-lg px-2.5 py-1 font-mono text-xs font-extrabold transition ${
                                   isSelected
                                     ? "bg-amber-400 text-slate-950 shadow-sm"
-                                    : "border border-white/10 bg-white/5 text-amber-300 hover:bg-white/10"
+                                    : "border border-white/15 bg-white/5 text-amber-300 hover:bg-white/10"
                                 }`}
                               >
                                 #{invNo}
@@ -2874,64 +3867,166 @@ function DailyRegisterView({
                             );
                           })}
                         </div>
+
+                        {/* Single-Line Clean Match Confirmation Pill */}
+                        {matchedStep3Invoice && (
+                          <div className="rounded-xl border border-amber-400/50 bg-gradient-to-r from-amber-500/20 via-purple-500/20 to-emerald-500/20 px-3.5 py-2 text-xs font-extrabold text-amber-200 shadow-[0_0_20px_rgba(245,158,11,0.2)] truncate">
+                            ✨ Matched:{" "}
+                            <span className="text-white">{matchedStep3Invoice.customer}</span> · SAR{" "}
+                            {fmt(matchedStep3Invoice.amount)}
+                          </div>
+                        )}
                       </div>
-                    )}
-
-                    {/* Sleek Glowing ERP Invoice Match Pill */}
-                    {matchedStep3Invoice && (
-                      <div className="rounded-xl border border-amber-400/50 bg-gradient-to-r from-amber-500/20 via-purple-500/20 to-emerald-500/20 px-3.5 py-2.5 text-xs font-extrabold text-amber-200 shadow-[0_0_25px_rgba(245,158,11,0.25)]">
-                        ✨ ERP Invoice #{matchedStep3Invoice.invoiceNo} Matched:{" "}
-                        <span className="text-white">{matchedStep3Invoice.customer}</span> — SAR{" "}
-                        {fmt(matchedStep3Invoice.amount)}
-                      </div>
-                    )}
-
-                    <input
-                      type="text"
-                      value={step3Title}
-                      onChange={(e) => setStep3Title(e.target.value)}
-                      placeholder={
-                        step3Kind === "CREDIT_RECD" || step3Kind === "CREDIT_SALE"
-                          ? "Customer Name (auto-populates from ERP Invoice #)"
-                          : "Source or Note"
-                      }
-                      className="w-full rounded-xl border border-white/15 bg-black/40 px-4 py-3 text-sm font-semibold text-white placeholder:text-white/35 outline-none"
-                    />
-
-                    {(step3Kind === "CREDIT_RECD" || step3Kind === "CREDIT_SALE") && (
-                      <div className="flex items-center justify-between gap-3 rounded-xl border border-emerald-400/35 bg-emerald-500/10 px-4 py-2.5">
-                        <span className="text-xs font-bold text-emerald-200">
-                          Follow-up Reminder Date (Credit Radar):
-                        </span>
+                    ) : (
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-bold text-white/70">
+                          Receipt / Reference Number (Optional)
+                        </label>
                         <input
-                          type="date"
-                          value={step3FollowUpDate}
-                          onChange={(e) => setStep3FollowUpDate(e.target.value)}
-                          className="rounded-lg bg-black/40 px-3 py-1.5 text-xs font-bold text-white outline-none border border-white/15"
+                          type="text"
+                          value={step3ReceiptNo}
+                          onChange={(e) => handleStep3InvoiceInput(e.target.value)}
+                          placeholder="Receipt # (e.g. RCP-1042)..."
+                          className="w-full rounded-xl border border-white/15 bg-black/40 px-3.5 py-3 font-mono text-sm font-bold text-white placeholder:font-sans placeholder:text-white/35 outline-none focus:border-amber-400"
                         />
                       </div>
                     )}
 
-                    <div className="flex gap-3">
+                    {/* 3. Customer Name / Source */}
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-bold text-white/70">
+                        {step3Kind === "CREDIT_RECD" ||
+                        step3Kind === "CREDIT_SALE" ||
+                        step3Kind === "SPLIT_SALE"
+                          ? "Customer Name"
+                          : "Source or Note"}
+                      </label>
+                      <input
+                        type="text"
+                        value={step3Title}
+                        onChange={(e) => setStep3Title(e.target.value)}
+                        placeholder={
+                          step3Kind === "CREDIT_RECD" ||
+                          step3Kind === "CREDIT_SALE" ||
+                          step3Kind === "SPLIT_SALE"
+                            ? "Customer Name (auto-populates from ERP)"
+                            : "Source or Note"
+                        }
+                        className="w-full rounded-xl border border-white/15 bg-black/40 px-4 py-3 text-sm font-semibold text-white placeholder:text-white/35 outline-none focus:border-amber-400"
+                      />
+                    </div>
+
+                    {/* Split Payment Allocation Fields in Step 3 */}
+                    {step3Kind === "SPLIT_SALE" && (
+                      <div className="space-y-2.5 rounded-2xl border border-amber-400/40 bg-amber-500/10 p-3.5">
+                        <div className="grid grid-cols-2 gap-2.5">
+                          <div>
+                            <label className="block text-[10px] font-bold text-emerald-300 mb-1">
+                              Cash Portion (SAR)
+                            </label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={step3SplitCash}
+                              onChange={(e) => handleStep3SplitCashChange(e.target.value)}
+                              className="w-full rounded-xl border border-emerald-400/40 bg-black/60 px-3 py-2 font-mono text-sm font-extrabold text-emerald-300 outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-amber-300 mb-1">
+                              Card / Bank Portion (SAR)
+                            </label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={step3SplitCard}
+                              onChange={(e) => handleStep3SplitCardChange(e.target.value)}
+                              className="w-full rounded-xl border border-amber-400/40 bg-black/60 px-3 py-2 font-mono text-sm font-extrabold text-amber-300 outline-none"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                          <span className="text-[11px] font-bold text-amber-200">
+                            Card Terminal:
+                          </span>
+                          <div className="inline-flex flex-wrap rounded-xl bg-black/60 p-1 border border-white/15 gap-1">
+                            {(["SAB", "AL_RAJHI", "VISA_MC"] as PosTerminalBank[]).map((term) => (
+                              <button
+                                key={term}
+                                type="button"
+                                onClick={() => {
+                                  setStep3SplitMethod("POS_SWIPE");
+                                  setStep3SplitTerminal(term);
+                                }}
+                                className={`rounded-lg px-2.5 py-1 text-[10px] font-extrabold transition ${
+                                  step3SplitMethod === "POS_SWIPE" && step3SplitTerminal === term
+                                    ? "bg-amber-400 text-slate-950"
+                                    : "text-white/65 hover:text-white"
+                                }`}
+                              >
+                                {POS_TERMINAL_META[term].badgeTag}
+                              </button>
+                            ))}
+                            <button
+                              type="button"
+                              onClick={() => setStep3SplitMethod("BANK_TRANSFER")}
+                              className={`rounded-lg px-2.5 py-1 text-[10px] font-extrabold transition ${
+                                step3SplitMethod === "BANK_TRANSFER"
+                                  ? "bg-sky-400 text-slate-950"
+                                  : "text-white/65 hover:text-white"
+                              }`}
+                            >
+                              Bank (0%)
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 4. Follow-up Date (Credit Radar) */}
+                    {(step3Kind === "CREDIT_RECD" || step3Kind === "CREDIT_SALE") && (
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-bold text-emerald-300">
+                          Follow-up Date (Credit Radar)
+                        </label>
+                        <input
+                          type="date"
+                          value={step3FollowUpDate}
+                          onChange={(e) => setStep3FollowUpDate(e.target.value)}
+                          className="w-full rounded-xl border border-emerald-400/35 bg-emerald-500/10 px-4 py-2.5 text-sm font-bold text-white outline-none focus:border-emerald-400"
+                        />
+                      </div>
+                    )}
+
+                    {/* 5. Amount (SAR) */}
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-bold text-white/70">
+                        Amount (SAR)
+                      </label>
                       <input
                         type="number"
                         step="0.01"
                         value={step3Amount}
-                        onChange={(e) => setStep3Amount(e.target.value)}
-                        placeholder="Amount (SAR)"
-                        className="flex-1 rounded-xl border border-white/15 bg-black/40 px-4 py-3.5 font-display text-lg font-extrabold text-white placeholder:text-white/30 outline-none focus:border-emerald-400"
+                        onChange={(e) => handleStep3TotalAmountChange(e.target.value)}
+                        placeholder={
+                          step3Kind === "SPLIT_SALE" ? "Total Amount (SAR)" : "Amount (SAR)"
+                        }
+                        className="w-full rounded-xl border border-white/15 bg-black/40 px-4 py-3 font-display text-lg font-extrabold text-white placeholder:text-white/30 outline-none focus:border-emerald-400"
                       />
-                      <button
-                        type="submit"
-                        className="rounded-xl bg-emerald-400 hover:bg-emerald-300 px-6 py-3.5 text-sm font-extrabold text-slate-950 transition shrink-0"
-                      >
-                        + Save &amp; Sync
-                      </button>
                     </div>
+
+                    {/* 6. Full-Width Action Button */}
+                    <button
+                      type="submit"
+                      className="w-full rounded-xl bg-emerald-400 hover:bg-emerald-300 px-6 py-3.5 text-sm font-extrabold text-slate-950 shadow-[0_0_20px_rgba(52,211,153,0.25)] transition"
+                    >
+                      + Save &amp; Sync to Credit Radar
+                    </button>
                   </form>
                 </div>
 
-                {/* Right Panel (7 cols): Live Table of Added Inflows & Reclassified Credit Sales */}
+                {/* Right Panel (7 cols): Live Table of Added Inflows, Split Sales & Reclassified Credit Sales */}
                 <div className="lg:col-span-7 rounded-2xl border border-white/10 bg-black/30 p-5 flex flex-col justify-between">
                   <div>
                     <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-white/10">
@@ -2952,6 +4047,7 @@ function DailyRegisterView({
                       {inflowEntries.map((item) => {
                         const isEditing = editingRowId === item.id;
                         const isCreditSaleRow = item.type === "CREDIT_SALE";
+                        const isSplitSaleRow = item.type === "SPLIT_SALE";
                         return (
                           <div key={item.id} className="flex items-center justify-between gap-3 py-3">
                             <div className="min-w-0">
@@ -2965,6 +4061,11 @@ function DailyRegisterView({
                                 {isCreditSaleRow && (
                                   <span className="rounded bg-indigo-500/25 border border-indigo-400/40 px-2 py-0.5 text-[10px] font-extrabold text-indigo-200">
                                     CREDIT INV. AMOUNT
+                                  </span>
+                                )}
+                                {isSplitSaleRow && (
+                                  <span className="rounded bg-amber-500/25 border border-amber-400/40 px-2 py-0.5 text-[10px] font-extrabold text-amber-200">
+                                    ⚡ SPLIT TENDER (Cash: SAR {fmt(item.splitCashAmount || 0)} · Card: SAR {fmt(item.splitBankAmount || 0)})
                                   </span>
                                 )}
                                 {item.followUpDate && (
@@ -3304,53 +4405,149 @@ function DailyRegisterView({
              ────────────────────────────────────────────────────────────── */}
           {wizardStep === 5 && (
             <div className="flex flex-col gap-6 pb-8">
-              {/* Top Row — 4 Full-Width KPI Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="rounded-2xl border border-white/12 bg-white/[0.04] p-5 backdrop-blur-2xl">
-                  <span className="block text-xs font-semibold text-white/55">
-                    Total Cash In (Sales + Receipts)
+              {/* Step 5 Audit Settlement Mode Toggle Bar + Informational MDR & VAT Banner */}
+              <div className="flex flex-col gap-3 rounded-2xl border border-white/15 bg-white/[0.04] px-5 py-4 backdrop-blur-2xl">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="text-xs sm:text-sm font-extrabold text-white">
+                      Bank Settlement Mode:
+                    </span>
+                    <div className="inline-flex flex-wrap rounded-xl bg-black/50 p-1 border border-white/15 gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setBankSettlementMode("GROSS")}
+                        className={`rounded-lg px-3.5 py-2 text-xs font-extrabold transition ${
+                          bankSettlementMode === "GROSS"
+                            ? "bg-amber-400 text-slate-950 shadow-sm"
+                            : "text-white/65 hover:text-white"
+                        }`}
+                      >
+                        Gross Face Value (Default)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBankSettlementMode("NET")}
+                        className={`rounded-lg px-3.5 py-2 text-xs font-extrabold transition ${
+                          bankSettlementMode === "NET"
+                            ? "bg-gradient-to-r from-amber-400 to-purple-400 text-slate-950 shadow-sm"
+                            : "text-white/65 hover:text-white"
+                        }`}
+                      >
+                        Net Settlement (Deduct Bank Fees &amp; VAT)
+                      </button>
+                    </div>
+                  </div>
+
+                  <span className="text-xs text-white/55">
+                    {bankSettlementMode === "GROSS"
+                      ? "Card swipes & bank transfers settle at 100% ERP invoice face value."
+                      : "Deducts SAMA mada (0.80%, cap SAR 40) & Credit Card (2.20%) MDR + 15% ZATCA VAT."}
                   </span>
-                  <span className="mt-1.5 block font-display text-2xl font-extrabold text-emerald-400 whitespace-nowrap">
+                </div>
+
+                {/* Informational Audit Banner */}
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-2.5 text-xs font-mono font-bold text-amber-200">
+                  <span>
+                    ℹ️ Est. Merchant Fees (MDR + 15% VAT):{" "}
+                    <strong className="text-rose-300">-SAR {fmt(totalPosFees)}</strong>{" "}
+                    <span className="text-white/75">
+                      (mada: SAR {fmt(totalMadaFees)}, Credit Card: SAR {fmt(totalCcFees)})
+                    </span>
+                  </span>
+                  <span className="text-[11px] font-sans font-semibold text-white/60">
+                    {bankSettlementMode === "GROSS"
+                      ? "Informational only · Not deducted from Gross Bank total"
+                      : `Active · Net Bank Settlement: SAR ${fmt(bankSwipeNetTotal)}`}
+                  </span>
+                </div>
+              </div>
+
+              {/* 1. Dedicated Flagship Hero Header Banner for Physical Cash Drawer Closing Balance */}
+              <div className="relative overflow-hidden rounded-3xl border border-amber-400/50 bg-gradient-to-br from-[#1f162c]/95 via-[#181c24]/95 to-[#1c1528]/95 p-6 sm:p-8 backdrop-blur-2xl ring-2 ring-amber-400/40 shadow-[0_0_30px_rgba(245,158,11,0.25)]">
+                {/* Ambient Golden-Amber & Emerald Glows */}
+                <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-amber-400/20 blur-3xl" />
+                <div className="pointer-events-none absolute -bottom-16 -left-16 h-64 w-64 rounded-full bg-emerald-400/15 blur-3xl" />
+
+                <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                  <div className="space-y-2.5">
+                    <div className="inline-flex items-center gap-2.5 rounded-full border border-amber-400/40 bg-amber-500/15 px-3.5 py-1.5 text-xs font-extrabold tracking-wider text-amber-200 shadow-sm">
+                      <Wallet size={15} className="text-amber-300" />
+                      <span>PHYSICAL CASH DRAWER CLOSING BALANCE</span>
+                    </div>
+                    <p className="text-sm sm:text-base text-white/75">
+                      Count this exact cash amount in your register before locking the drawer for the night.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col lg:items-end gap-2.5">
+                    <div className="flex items-center gap-3">
+                      <span className="inline-flex h-3 w-3 rounded-full bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.9)] animate-pulse" />
+                      <span className="text-3xl lg:text-4xl font-extrabold tracking-tight text-amber-300 font-mono whitespace-nowrap">
+                        SAR {fmt(calculatedClosingBalance)}
+                      </span>
+                    </div>
+
+                    {/* Live Visual Formula Tag directly under the Hero Number */}
+                    <div className="inline-flex flex-wrap items-center gap-2 rounded-xl border border-amber-400/30 bg-black/45 px-3.5 py-2 text-xs font-mono text-white/80 shadow-inner">
+                      <span>
+                        Opening Cash (<strong className="text-white">SAR {fmt(openingBalance)}</strong>)
+                      </span>
+                      <span className="text-amber-300 font-bold">+</span>
+                      <span>
+                        Cash Inflows (<strong className="text-emerald-300">SAR {fmt(totalCashInSalesAndReceipts)}</strong>)
+                      </span>
+                      <span className="text-amber-300 font-bold">-</span>
+                      <span>
+                        Cash Outflows (<strong className="text-rose-300">SAR {fmt(totalMoneyOutDrawer)}</strong>)
+                      </span>
+                      <span className="text-amber-300 font-bold">=</span>
+                      <span className="rounded bg-amber-400/20 px-2 py-0.5 font-extrabold text-amber-300">
+                        Final Drawer Cash (SAR {fmt(calculatedClosingBalance)})
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. Secondary Muted Summary Row — 3 Supporting Stats */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="rounded-2xl border border-white/10 bg-white/[0.025] px-5 py-4 backdrop-blur-xl">
+                  <span className="block text-xs font-medium text-white/45">
+                    Total Inflows (Sales + Receipts)
+                  </span>
+                  <span className="mt-1 block font-mono text-lg font-bold text-white/85 whitespace-nowrap">
                     SAR {fmt(totalCashInSalesAndReceipts)}
                   </span>
-                  <span className="mt-1 block text-[11px] text-white/40">
+                  <span className="mt-0.5 block text-[11px] text-white/35">
                     + Opening Float: SAR {fmt(openingBalance)}
                   </span>
                 </div>
 
-                <div className="rounded-2xl border border-white/12 bg-white/[0.04] p-5 backdrop-blur-2xl">
-                  <span className="block text-xs font-semibold text-white/55">
-                    Net Bank / POS Settlement
+                <div className="rounded-2xl border border-white/10 bg-white/[0.025] px-5 py-4 backdrop-blur-xl">
+                  <span className="block text-xs font-medium text-white/45">
+                    {bankSettlementMode === "NET"
+                      ? "To Bank / Card Swipes (Net Settlement)"
+                      : "To Bank / Card Swipes"}
                   </span>
-                  <span className="mt-1.5 block font-display text-2xl font-extrabold text-amber-300 whitespace-nowrap">
-                    SAR {fmt(bankSwipeNetTotal)}
+                  <span className="mt-1 block font-mono text-lg font-bold text-white/85 whitespace-nowrap">
+                    SAR {fmt(activeBankSettlementTotal)}
                   </span>
-                  <span className="mt-1 block text-[11px] text-rose-300/80">
-                    Gross: SAR {fmt(bankSwipeGrossTotal)} · POS Fees: -SAR {fmt(totalPosFees)}
+                  <span className="mt-0.5 block text-[11px] text-white/35">
+                    {bankSettlementMode === "NET"
+                      ? `Gross: SAR ${fmt(bankSwipeGrossTotal)} · Fees & VAT: -SAR ${fmt(totalPosFees)}`
+                      : `100% Gross Face Value (${bankSwipeInvoices.length} Invoices)`}
                   </span>
                 </div>
 
-                <div className="rounded-2xl border border-white/12 bg-white/[0.04] p-5 backdrop-blur-2xl">
-                  <span className="block text-xs font-semibold text-white/55">
+                <div className="rounded-2xl border border-white/10 bg-white/[0.025] px-5 py-4 backdrop-blur-xl">
+                  <span className="block text-xs font-medium text-white/45">
                     Total Outflows (Expenses &amp; Purchases)
                   </span>
-                  <span className="mt-1.5 block font-display text-2xl font-extrabold text-rose-400 whitespace-nowrap">
+                  <span className="mt-1 block font-mono text-lg font-bold text-white/85 whitespace-nowrap">
                     SAR {fmt(totalMoneyOutDrawer)}
                   </span>
-                  <span className="mt-1 block text-[11px] text-white/40">
+                  <span className="mt-0.5 block text-[11px] text-white/35">
                     {expenseEntries.length} Recorded shop outflows
-                  </span>
-                </div>
-
-                <div className="rounded-2xl border border-amber-400/50 bg-gradient-to-br from-amber-500/20 via-purple-500/20 to-indigo-500/20 p-5 backdrop-blur-2xl shadow-[0_0_30px_rgba(245,158,11,0.18)]">
-                  <span className="block text-xs font-bold text-amber-300">
-                    Closing Drawer Balance
-                  </span>
-                  <span className="mt-1.5 block font-display text-2xl font-extrabold text-white whitespace-nowrap">
-                    SAR {fmt(calculatedClosingBalance)}
-                  </span>
-                  <span className="mt-1 block text-[11px] text-amber-200/70">
-                    Ready for final sign-off
                   </span>
                 </div>
               </div>
@@ -3446,23 +4643,36 @@ function DailyRegisterView({
                         </span>
                       </div>
 
-                      {/* All Cash Sale & Other Amt Recd Invoices */}
+                      {/* All Cash Sale, Split Cash Share & Other Amt Recd Invoices */}
                       {cashSaleInvoices.map((inv) => {
-                        const rowKey = `erp-${inv.invoiceNo}`;
+                        const isSplitRow = inv.paymentMode === "SPLIT";
+                        const cashAmt = calcInvoiceCashPortion(inv);
+                        const rowKey = isSplitRow
+                          ? `erp-cash-${inv.invoiceNo}`
+                          : `erp-${inv.invoiceNo}`;
                         const isEditing = editingRowId === rowKey;
-                        const netExclVat = inv.amount / 1.15;
+                        const netExclVat = cashAmt / 1.15;
                         return (
                           <div
-                            key={inv.invoiceNo}
-                            className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-4 py-2.5 hover:bg-white/[0.02] transition"
+                            key={`cash-${inv.invoiceNo}`}
+                            className={`flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-4 py-2.5 transition ${
+                              isSplitRow
+                                ? "bg-amber-500/[0.06] hover:bg-amber-500/[0.10]"
+                                : "hover:bg-white/[0.02]"
+                            }`}
                           >
-                            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2.5 min-w-0 flex-1">
                               <span className="font-mono text-xs font-extrabold text-emerald-300 w-16 shrink-0">
                                 #{inv.invoiceNo}
                               </span>
                               <span className="text-xs font-semibold text-white truncate">
                                 {inv.customer}
                               </span>
+                              {isSplitRow && (
+                                <span className="rounded bg-amber-400/20 border border-amber-400/40 px-2 py-0.5 text-[10px] font-extrabold text-amber-200 shrink-0">
+                                  Split (Cash Share: SAR {fmt(cashAmt)})
+                                </span>
+                              )}
                               {inv.paymentMode === "OTHER_RECD" && (
                                 <span className="rounded bg-purple-500/20 border border-purple-400/40 px-2 py-0.5 text-[10px] font-bold text-purple-200 shrink-0">
                                   Other Recd{inv.otherNote ? `: ${inv.otherNote}` : ""}
@@ -3486,13 +4696,15 @@ function DailyRegisterView({
                                   placeholder="Note / Cause..."
                                   className="w-40 rounded-lg border border-white/15 bg-black/50 px-2.5 py-1 text-xs text-white placeholder:text-white/30 outline-none"
                                 />
-                                <button
-                                  type="button"
-                                  onClick={() => handleSetInvoiceMode(inv.invoiceNo, "POS_SWIPE")}
-                                  className="rounded-lg border border-amber-400/30 bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold text-amber-300 hover:bg-amber-500/20"
-                                >
-                                  Move to POS Swipe →
-                                </button>
+                                {!isSplitRow && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSetInvoiceMode(inv.invoiceNo, "POS_SWIPE")}
+                                    className="rounded-lg border border-amber-400/30 bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold text-amber-300 hover:bg-amber-500/20"
+                                  >
+                                    Move to POS Swipe →
+                                  </button>
+                                )}
                               </div>
                             )}
 
@@ -3522,13 +4734,13 @@ function DailyRegisterView({
                               ) : (
                                 <>
                                   <span className="font-display text-xs font-extrabold text-emerald-400 w-24 text-right whitespace-nowrap">
-                                    +SAR {fmt(inv.amount)}
+                                    +SAR {fmt(cashAmt)}
                                   </span>
                                   <button
                                     type="button"
                                     onClick={() => {
                                       setEditingRowId(rowKey);
-                                      setEditingRowVal(String(inv.amount));
+                                      setEditingRowVal(String(cashAmt));
                                     }}
                                     className="rounded bg-white/10 px-2 py-0.5 text-[10px] font-bold text-white/75 hover:bg-white/20 hover:text-white"
                                   >
@@ -3866,7 +5078,7 @@ function DailyRegisterView({
                     )}
 
                     {/* ══════════════════════════════════════════════════════
-                        BOX 3: Bank / POS Transfers (SAB / Al Rajhi / Bank)
+                        BOX 3: Bank / POS Transfers (mada · SAB / mada · Al Rajhi / Visa-MC / Bank)
                        ══════════════════════════════════════════════════════ */}
                     {(expandedAuditBox === "NONE" || expandedAuditBox === "BANK_POS") && (
                       <div className="rounded-3xl border border-white/15 bg-white/[0.04] p-6 backdrop-blur-2xl shadow-xl flex flex-col gap-4">
@@ -3876,16 +5088,21 @@ function DailyRegisterView({
                               Bank / POS Transfers ({bankSwipeInvoices.length})
                             </h3>
                             <p className="text-xs text-white/50">
-                              SAB (0.85%) &amp; Al Rajhi (0.80%) POS fees deducted from net settlement
+                              {bankSettlementMode === "NET"
+                                ? "Net bank settlement after SAMA mada / Credit Card MDR & 15% ZATCA VAT"
+                                : "100% gross face value reconciled · Expand to inspect MDR + 15% VAT breakdown"}
                             </p>
                           </div>
                           <div className="flex items-center gap-3 shrink-0">
                             <div className="text-right">
                               <span className="block font-display text-base font-extrabold text-amber-300 whitespace-nowrap">
-                                Net: SAR {fmt(bankSwipeNetTotal)}
+                                {bankSettlementMode === "NET" ? "Net: " : ""}SAR{" "}
+                                {fmt(activeBankSettlementTotal)}
                               </span>
-                              <span className="block text-[10px] font-bold text-rose-300/80">
-                                POS Fees: -SAR {fmt(totalPosFees)}
+                              <span className="block text-[10px] font-medium text-white/45">
+                                {bankSettlementMode === "NET"
+                                  ? `Gross: SAR ${fmt(bankSwipeGrossTotal)} · Fees: -SAR ${fmt(totalPosFees)}`
+                                  : `Est. MDR + VAT: -SAR ${fmt(totalPosFees)}`}
                               </span>
                             </div>
                             <button
@@ -3914,130 +5131,187 @@ function DailyRegisterView({
 
                         <div className="divide-y divide-white/10 rounded-2xl border border-amber-400/20 bg-amber-500/[0.04] overflow-hidden">
                           {bankSwipeInvoices.map((inv) => {
-                            const rowKey = `erp-${inv.invoiceNo}`;
+                            const isSplitRow = inv.paymentMode === "SPLIT";
+                            const bankGross = calcInvoiceBankGrossPortion(inv);
+                            const rowKey = isSplitRow
+                              ? `erp-bank-${inv.invoiceNo}`
+                              : `erp-${inv.invoiceNo}`;
                             const isEditing = editingRowId === rowKey;
-                            const posFee = calcInvoicePosFee(inv);
-                            const netBank = calcInvoiceNetBank(inv);
-                            const termMeta = POS_TERMINAL_META[inv.posTerminal || "SAB"];
+                            const fb = calcInvoiceFeeBreakdown(inv);
+                            const activeTerm: PosTerminalBank = isSplitRow
+                              ? inv.splitPosTerminal || inv.posTerminal || "SAB"
+                              : inv.posTerminal || "SAB";
+                            const termMeta = POS_TERMINAL_META[activeTerm];
+                            const isBankTransferRow = isSplitRow
+                              ? inv.splitBankMethod === "BANK_TRANSFER"
+                              : inv.paymentMode === "BANK_TRANSFER";
+                            const showExpandedFeeBreakdown =
+                              expandedAuditBox === "BANK_POS" ||
+                              bankSettlementMode === "NET" ||
+                              trackPosFees;
 
                             return (
                               <div
-                                key={inv.invoiceNo}
-                                className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 px-4 py-3 hover:bg-white/[0.02] transition"
+                                key={`bank-${inv.invoiceNo}`}
+                                className="flex flex-col gap-2 px-4 py-3 hover:bg-white/[0.02] transition"
                               >
-                                <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                                  <span className="font-mono text-xs font-extrabold text-amber-300 w-14 shrink-0">
-                                    #{inv.invoiceNo}
-                                  </span>
-                                  <span className="text-xs font-semibold text-white truncate">
-                                    {inv.customer}
-                                  </span>
-                                  <span className="rounded bg-amber-400/15 border border-amber-400/30 px-2 py-0.5 text-[10px] font-extrabold text-amber-200 shrink-0">
-                                    {inv.paymentMode === "BANK_TRANSFER"
-                                      ? "Bank (0%)"
-                                      : `${termMeta.shortLabel} (${termMeta.feePctLabel})`}
-                                  </span>
-                                  {inv.originalAmount !== undefined && (
-                                    <span className="rounded bg-amber-500/20 border border-amber-400/40 px-1.5 py-0.5 text-[10px] font-bold text-amber-300 shrink-0">
-                                      Orig: SAR {fmt(inv.originalAmount)}
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                                  <div className="flex flex-wrap items-center gap-2.5 min-w-0 flex-1">
+                                    <span className="font-mono text-xs font-extrabold text-amber-300 w-14 shrink-0">
+                                      #{inv.invoiceNo}
                                     </span>
-                                  )}
-                                </div>
+                                    <span className="text-xs font-semibold text-white truncate">
+                                      {inv.customer}
+                                    </span>
 
-                                {/* Terminal Switcher Pill (Always comfortable in Expanded Mode, compact in normal) */}
-                                <div className="flex flex-wrap items-center gap-2 shrink-0">
-                                  <div className="inline-flex rounded-lg bg-black/50 p-0.5 border border-white/10">
-                                    <button
-                                      type="button"
-                                      onClick={() => handleSetInvoiceTerminal(inv.invoiceNo, "SAB")}
-                                      className={`rounded px-2 py-0.5 text-[10px] font-extrabold transition ${
-                                        inv.paymentMode === "POS_SWIPE" && inv.posTerminal === "SAB"
-                                          ? "bg-amber-400 text-slate-950"
-                                          : "text-white/55 hover:text-white"
+                                    {/* Card Type Tag: [mada · SAB], [mada · Al Rajhi], [💳 Visa / MC], or [Bank Transfer] */}
+                                    <span
+                                      className={`rounded px-2 py-0.5 font-mono text-[10px] font-extrabold shrink-0 border ${
+                                        isBankTransferRow
+                                          ? "bg-sky-400/15 border-sky-400/35 text-sky-200"
+                                          : activeTerm === "VISA_MC"
+                                          ? "bg-purple-500/20 border-purple-400/40 text-purple-200"
+                                          : "bg-amber-400/15 border-amber-400/35 text-amber-200"
                                       }`}
                                     >
-                                      SAB
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        handleSetInvoiceTerminal(inv.invoiceNo, "AL_RAJHI")
-                                      }
-                                      className={`rounded px-2 py-0.5 text-[10px] font-extrabold transition ${
-                                        inv.paymentMode === "POS_SWIPE" &&
-                                        inv.posTerminal === "AL_RAJHI"
-                                          ? "bg-amber-400 text-slate-950"
-                                          : "text-white/55 hover:text-white"
-                                      }`}
-                                    >
-                                      Al Rajhi
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        handleSetInvoiceMode(inv.invoiceNo, "BANK_TRANSFER")
-                                      }
-                                      className={`rounded px-2 py-0.5 text-[10px] font-extrabold transition ${
-                                        inv.paymentMode === "BANK_TRANSFER"
-                                          ? "bg-sky-400 text-slate-950"
-                                          : "text-white/55 hover:text-white"
-                                      }`}
-                                    >
-                                      0% Bank
-                                    </button>
+                                      [
+                                      {isBankTransferRow
+                                        ? "Bank Transfer"
+                                        : termMeta.badgeTag}
+                                      ]
+                                    </span>
+
+                                    {isSplitRow && (
+                                      <span className="rounded bg-emerald-400/15 border border-emerald-400/30 px-2 py-0.5 text-[10px] font-extrabold text-emerald-200 shrink-0">
+                                        Split Card Share: SAR {fmt(bankGross)}
+                                      </span>
+                                    )}
+                                    {inv.originalAmount !== undefined && (
+                                      <span className="rounded bg-amber-500/20 border border-amber-400/40 px-1.5 py-0.5 text-[10px] font-bold text-amber-300 shrink-0">
+                                        Orig: SAR {fmt(inv.originalAmount)}
+                                      </span>
+                                    )}
                                   </div>
 
-                                  {isEditing ? (
-                                    <div className="flex items-center gap-1.5">
-                                      <input
-                                        type="number"
-                                        step="0.01"
-                                        value={editingRowVal}
-                                        onChange={(e) => setEditingRowVal(e.target.value)}
-                                        className="w-24 rounded-lg border border-amber-400 bg-black/70 px-2 py-1 text-right text-xs font-extrabold text-white outline-none"
-                                        autoFocus
-                                      />
+                                  {/* Terminal Switcher Pill (mada · SAB, mada · Al Rajhi, 💳 Visa / MC, Bank) */}
+                                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                                    <div className="inline-flex flex-wrap rounded-lg bg-black/50 p-0.5 border border-white/10 gap-0.5">
+                                      {(["SAB", "AL_RAJHI", "VISA_MC"] as PosTerminalBank[]).map(
+                                        (term) => (
+                                          <button
+                                            key={term}
+                                            type="button"
+                                            onClick={() =>
+                                              isSplitRow
+                                                ? handleSetInvoiceSplitMethod(
+                                                    inv.invoiceNo,
+                                                    "POS_SWIPE",
+                                                    term
+                                                  )
+                                                : handleSetInvoiceTerminal(inv.invoiceNo, term)
+                                            }
+                                            className={`rounded px-2 py-0.5 text-[10px] font-extrabold transition ${
+                                              (isSplitRow
+                                                ? inv.splitBankMethod === "POS_SWIPE" &&
+                                                  activeTerm === term
+                                                : inv.paymentMode === "POS_SWIPE" &&
+                                                  inv.posTerminal === term)
+                                                ? "bg-amber-400 text-slate-950"
+                                                : "text-white/55 hover:text-white"
+                                            }`}
+                                          >
+                                            {POS_TERMINAL_META[term].badgeTag}
+                                          </button>
+                                        )
+                                      )}
                                       <button
                                         type="button"
-                                        onClick={() => handleSaveInlineEdit(rowKey)}
-                                        className="rounded-lg bg-emerald-400 px-2 py-1 text-[10px] font-extrabold text-slate-950"
+                                        onClick={() =>
+                                          isSplitRow
+                                            ? handleSetInvoiceSplitMethod(
+                                                inv.invoiceNo,
+                                                "BANK_TRANSFER"
+                                              )
+                                            : handleSetInvoiceMode(inv.invoiceNo, "BANK_TRANSFER")
+                                        }
+                                        className={`rounded px-2 py-0.5 text-[10px] font-extrabold transition ${
+                                          isBankTransferRow
+                                            ? "bg-sky-400 text-slate-950"
+                                            : "text-white/55 hover:text-white"
+                                        }`}
                                       >
-                                        Save
+                                        Bank
                                       </button>
                                     </div>
-                                  ) : (
-                                    <>
-                                      <div className="text-right">
-                                        <span className="block font-display text-xs font-extrabold text-amber-300 whitespace-nowrap">
-                                          Net: SAR {fmt(netBank)}
-                                        </span>
-                                        {posFee > 0 && (
-                                          <span className="block text-[10px] text-rose-300/80 whitespace-nowrap">
-                                            Gross {fmt(inv.amount)} · Fee -{fmt(posFee)}
-                                          </span>
-                                        )}
+
+                                    {isEditing ? (
+                                      <div className="flex items-center gap-1.5">
+                                        <input
+                                          type="number"
+                                          step="0.01"
+                                          value={editingRowVal}
+                                          onChange={(e) => setEditingRowVal(e.target.value)}
+                                          className="w-24 rounded-lg border border-amber-400 bg-black/70 px-2 py-1 text-right text-xs font-extrabold text-white outline-none"
+                                          autoFocus
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => handleSaveInlineEdit(rowKey)}
+                                          className="rounded-lg bg-emerald-400 px-2 py-1 text-[10px] font-extrabold text-slate-950"
+                                        >
+                                          Save
+                                        </button>
                                       </div>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setEditingRowId(rowKey);
-                                          setEditingRowVal(String(inv.amount));
-                                        }}
-                                        className="rounded bg-white/10 px-2 py-0.5 text-[10px] font-bold text-white/75 hover:bg-white/20 hover:text-white"
-                                      >
-                                        Edit
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleRemoveErpInvoice(inv.invoiceNo)}
-                                        className="text-white/35 hover:text-rose-400 text-xs font-bold px-1"
-                                        title="Remove invoice"
-                                      >
-                                        ×
-                                      </button>
-                                    </>
-                                  )}
+                                    ) : (
+                                      <>
+                                        <div className="text-right">
+                                          <span className="block font-display text-xs font-extrabold text-amber-300 whitespace-nowrap">
+                                            SAR{" "}
+                                            {fmt(
+                                              bankSettlementMode === "NET" ? fb.net : bankGross
+                                            )}
+                                          </span>
+                                        </div>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setEditingRowId(rowKey);
+                                            setEditingRowVal(String(bankGross));
+                                          }}
+                                          className="rounded bg-white/10 px-2 py-0.5 text-[10px] font-bold text-white/75 hover:bg-white/20 hover:text-white"
+                                        >
+                                          Edit
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRemoveErpInvoice(inv.invoiceNo)}
+                                          className="text-white/35 hover:text-rose-400 text-xs font-bold px-1"
+                                          title="Remove invoice"
+                                        >
+                                          ×
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
                                 </div>
+
+                                {/* Detailed SAMA & ZATCA Fee Breakdown when Audit Details are Expanded */}
+                                {showExpandedFeeBreakdown && (
+                                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-black/40 px-3 py-1.5 font-mono text-[11px] text-white/75">
+                                    <span className="text-white/55">
+                                      {isBankTransferRow
+                                        ? "0% Direct Bank Transfer"
+                                        : `${termMeta.label} (${termMeta.feePctLabel})`}
+                                    </span>
+                                    <span>
+                                      Gross: <strong className="text-white">SAR {fmt(fb.gross)}</strong>{" "}
+                                      | MDR: <strong className="text-rose-300">-SAR {fmt(fb.mdrBase)}</strong>{" "}
+                                      | 15% VAT:{" "}
+                                      <strong className="text-rose-300">-SAR {fmt(fb.vatOnFee)}</strong>{" "}
+                                      | Net: <strong className="text-amber-300">SAR {fmt(fb.net)}</strong>
+                                    </span>
+                                  </div>
+                                )}
                               </div>
                             );
                           })}
@@ -4049,27 +5323,36 @@ function DailyRegisterView({
               </div>
 
               {/* Sticky Bottom Action Bar */}
-              <div className="sticky bottom-4 z-20 flex flex-col md:flex-row md:items-center justify-between gap-4 rounded-2xl border border-amber-400/40 bg-[#140b24]/95 px-6 py-4 backdrop-blur-2xl shadow-[0_10px_40px_rgba(0,0,0,0.6)]">
-                <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm font-semibold text-white/80">
-                  <span>Opening <strong className="text-white">SAR {fmt(openingBalance)}</strong></span>
-                  <span className="text-white/40">+</span>
-                  <span>Cash In <strong className="text-emerald-400">SAR {fmt(totalCashInSalesAndReceipts)}</strong></span>
-                  <span className="text-white/40">−</span>
-                  <span>Cash Out <strong className="text-rose-400">SAR {fmt(totalMoneyOutDrawer)}</strong></span>
-                  <span className="text-white/40">=</span>
-                  <span className="rounded-lg bg-amber-400/20 border border-amber-400/40 px-3 py-1 font-display font-extrabold text-amber-300 whitespace-nowrap">
-                    Closing Balance: SAR {fmt(calculatedClosingBalance)}
-                  </span>
+              <div className="sticky bottom-4 z-20 flex flex-col lg:flex-row lg:items-center justify-between gap-4 rounded-2xl border border-amber-400/40 bg-[#140b24]/95 px-6 py-4 backdrop-blur-2xl shadow-[0_10px_40px_rgba(0,0,0,0.6)]">
+                <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm font-medium text-white/65">
+                  <span>Opening <strong className="text-white/90">SAR {fmt(openingBalance)}</strong></span>
+                  <span className="text-white/35">+</span>
+                  <span>Cash In <strong className="text-emerald-300/90">SAR {fmt(totalCashInSalesAndReceipts)}</strong></span>
+                  <span className="text-white/35">−</span>
+                  <span>Cash Out <strong className="text-rose-300/90">SAR {fmt(totalMoneyOutDrawer)}</strong></span>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={handleLockAndSaveDay}
-                  className="flex items-center justify-center gap-2.5 rounded-xl bg-gradient-to-r from-emerald-400 via-amber-400 to-purple-500 px-7 py-3.5 text-sm sm:text-base font-extrabold text-slate-950 shadow-[0_0_30px_rgba(16,185,129,0.35)] transition hover:scale-[1.01] whitespace-nowrap"
-                >
-                  <Lock size={18} className="text-slate-950" />
-                  <span>🔒 Confirm &amp; Close Today&apos;s Register</span>
-                </button>
+                <div className="flex flex-wrap items-center justify-between lg:justify-end gap-3.5">
+                  {/* Mirrored Highlighted Expected Drawer Cash Badge with Glowing Pulse */}
+                  <div className="inline-flex items-center gap-2.5 rounded-xl border border-amber-400/50 bg-gradient-to-r from-emerald-500/15 to-amber-500/20 px-4 py-2.5 ring-1 ring-amber-400/30 shadow-[0_0_20px_rgba(245,158,11,0.2)]">
+                    <span className="inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.9)] animate-pulse" />
+                    <span className="text-xs sm:text-sm font-bold text-amber-100 whitespace-nowrap">
+                      Expected Drawer Cash:{" "}
+                      <strong className="font-mono text-base sm:text-lg font-extrabold text-amber-300">
+                        [SAR {fmt(calculatedClosingBalance)}]
+                      </strong>
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleLockAndSaveDay}
+                    className="flex items-center justify-center gap-2.5 rounded-xl bg-gradient-to-r from-emerald-400 via-amber-400 to-purple-500 px-7 py-3.5 text-sm sm:text-base font-extrabold text-slate-950 shadow-[0_0_30px_rgba(16,185,129,0.35)] transition hover:scale-[1.01] whitespace-nowrap"
+                  >
+                    <Lock size={18} className="text-slate-950" />
+                    <span>🔒 Confirm Drawer Cash &amp; Lock Register</span>
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -5991,7 +7274,7 @@ export default function Page() {
     { invoiceNo: "30065", amount: 2150, paymentMode: "BANK_TRANSFER", time: "10:12" },
     { invoiceNo: "30063", amount: 1450, paymentMode: "POS_SWIPE", posTerminal: "SAB", time: "09:18" },
     { invoiceNo: "30068", amount: 3820, paymentMode: "POS_SWIPE", posTerminal: "AL_RAJHI", time: "11:42" },
-    { invoiceNo: "30074", amount: 960, paymentMode: "POS_SWIPE", posTerminal: "SAB", time: "14:05" },
+    { invoiceNo: "30074", amount: 960, paymentMode: "POS_SWIPE", posTerminal: "VISA_MC", time: "14:05" },
   ]);
 
   const [preLoggedEntries, setPreLoggedEntries] = useState<PreLoggedEntry[]>([
@@ -6205,33 +7488,57 @@ export default function Page() {
               e.receiptNo &&
               e.receiptNo.replace(/^#/i, "").trim() === inv.invoiceNo
           );
+          const splitEntry = preLoggedEntries.find(
+            (e) =>
+              e.type === "SPLIT_SALE" &&
+              e.receiptNo &&
+              e.receiptNo.replace(/^#/i, "").trim() === inv.invoiceNo
+          );
+          const isSplitRow = Boolean(splitEntry) || Boolean(inv.isSplit);
+          const halfGross = r2(inv.amount / 2);
+          const resolvedCash = splitEntry?.splitCashAmount ?? inv.splitCashAmount ?? halfGross;
+          const resolvedBank =
+            splitEntry?.splitBankAmount ?? inv.splitBankAmount ?? r2(inv.amount - resolvedCash);
+          const defaultTerm: PosTerminalBank =
+            inv.splitPosTerminal || (inv.invoiceNo === "30068" ? "AL_RAJHI" : "SAB");
+          const resolvedTerm =
+            splitEntry?.splitPosTerminal ?? inv.splitPosTerminal ?? defaultTerm;
+          const resolvedMode: InvoicePaymentMode = isCreditSale
+            ? "CREDIT_SALE"
+            : isSplitRow
+            ? "SPLIT"
+            : matched
+            ? matched.paymentMode
+            : "CASH";
+
           return {
             ...inv,
-            paymentMode: isCreditSale
-              ? "CREDIT_SALE"
-              : matched
-              ? matched.paymentMode
-              : "CASH",
-            posTerminal: matched?.posTerminal || (inv.invoiceNo === "30068" ? "AL_RAJHI" : "SAB"),
-            autoMatched: Boolean(matched) || isCreditSale,
+            paymentMode: resolvedMode,
+            posTerminal: matched?.posTerminal || resolvedTerm,
+            isSplit: resolvedMode === "SPLIT",
+            splitCashAmount: resolvedCash,
+            splitBankAmount: resolvedBank,
+            splitBankMethod: splitEntry?.splitBankMethod ?? inv.splitBankMethod ?? "POS_SWIPE",
+            splitPosTerminal: resolvedTerm,
+            autoMatched: Boolean(matched) || isCreditSale || isSplitRow,
           };
         });
 
   const todayCashSales = r2(
-    activeErpForMetrics
-      .filter((i) => i.paymentMode === "CASH" || i.paymentMode === "OTHER_RECD")
-      .reduce((a, b) => a + b.amount, 0)
+    activeErpForMetrics.reduce((sum, inv) => sum + calcInvoiceCashPortion(inv), 0)
   );
-  const bankInvoicesForMetrics = activeErpForMetrics.filter(
-    (i) => i.paymentMode === "BANK_TRANSFER" || i.paymentMode === "POS_SWIPE"
+  const todayBankGross = r2(
+    activeErpForMetrics.reduce((sum, inv) => sum + calcInvoiceBankGrossPortion(inv), 0)
   );
-  const todayBankGross = r2(bankInvoicesForMetrics.reduce((a, b) => a + b.amount, 0));
-  const todayPosFees = r2(bankInvoicesForMetrics.reduce((a, b) => a + calcInvoicePosFee(b), 0));
-  const todayBankNet = r2(todayBankGross - todayPosFees);
+  const todayPosFees = r2(
+    activeErpForMetrics.reduce((sum, inv) => sum + calcInvoicePosFee(inv), 0)
+  );
+  // Default to 100% Gross Face Value reconciliation for Bank / POS Swipes
+  const todayBankNet = todayBankGross;
 
   const todayInflows = r2(
     preLoggedEntries
-      .filter((e) => e.type !== "EXPENSE" && e.type !== "CREDIT_SALE")
+      .filter((e) => e.type !== "EXPENSE" && e.type !== "CREDIT_SALE" && e.type !== "SPLIT_SALE")
       .reduce((a, b) => a + b.amount, 0)
   );
   const todayExpenses = r2(
