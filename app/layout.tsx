@@ -32,7 +32,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />
       </head>
-      <body className="min-h-full bg-[#071314] text-white selection:bg-teal-500 selection:text-slate-950">{children}</body>
+      <body className="min-h-full bg-[#041012] text-white selection:bg-[#00BAC7] selection:text-black">{children}</body>
     </html>
   );
 }

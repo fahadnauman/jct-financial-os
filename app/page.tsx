@@ -177,19 +177,19 @@ function Sidebar({ tab, setTab }: { tab: TabId; setTab: (t: TabId) => void }) {
     { id: "ai" as TabId, label: "Nauman AI", icon: Sparkles },
   ];
   return (
-    <aside className="hidden w-64 shrink-0 flex-col overflow-hidden bg-[#0D2322] border-r border-teal-900/40 p-5 text-white lg:flex relative z-40">
+    <aside className="hidden w-64 shrink-0 flex-col overflow-hidden bg-[#050F11] border-r border-[#00BAC7]/20 p-5 text-white lg:flex relative z-40">
       <div className="relative flex items-center gap-3 px-1 pb-8 pt-1">
-        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-teal-500/20 font-display text-base font-extrabold tracking-tight text-teal-300 shadow-sm ring-1 ring-teal-400/30 backdrop-blur-md">
+        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-[#FFD200] to-[#FACC15] font-display text-base font-black tracking-tight text-black shadow-[0_0_20px_rgba(255,210,0,0.35)] ring-1 ring-white/30">
           JCT
         </div>
         <div className="leading-tight">
-          <p className="font-display text-[15px] font-extrabold tracking-tight text-teal-300">JCT Financial OS</p>
-          <p className="text-[11px] text-teal-100/70">Jubail Corp. Trading Est.</p>
+          <p className="font-display text-[15px] font-extrabold tracking-tight text-[#22D3EE]">JCT Financial OS</p>
+          <p className="text-[11px] text-white/70">Jubail Corp. Trading Est.</p>
         </div>
       </div>
 
       <nav className="flex flex-col gap-2 flex-1">
-        <p className="px-3 pb-2 text-[10px] font-bold uppercase tracking-[0.15em] text-teal-300/60">Modules</p>
+        <p className="px-3 pb-2 text-[10px] font-bold uppercase tracking-[0.15em] text-[#00BAC7]/70">Modules</p>
         {nav.map(({ id, label, icon: Icon }) => {
           const active = tab === id;
           return (
@@ -198,11 +198,11 @@ function Sidebar({ tab, setTab }: { tab: TabId; setTab: (t: TabId) => void }) {
               onClick={() => setTab(id)}
               className={`group relative flex w-full items-center gap-3 rounded-xl px-3.5 py-3 text-left text-[14px] font-semibold transition-all ${
                 active
-                  ? "border border-teal-400/40 bg-teal-500/20 text-teal-300 shadow-[0_0_15px_rgba(45,212,191,0.25)] backdrop-blur-md"
-                  : "border border-transparent text-teal-100/70 hover:bg-teal-900/30 hover:text-white"
+                  ? "bg-gradient-to-r from-[#00A8B5]/25 to-[#00A8B5]/5 border border-[#00BAC7]/50 text-[#22D3EE] shadow-[0_0_15px_rgba(0,168,181,0.2)] backdrop-blur-md"
+                  : "border border-transparent text-white/70 hover:bg-[#00BAC7]/10 hover:text-white"
               }`}
             >
-              <Icon size={18} strokeWidth={active ? 2.2 : 1.8} className={id === "ai" && active ? "text-amber-300 drop-shadow-[0_0_8px_rgba(252,211,77,0.8)]" : active ? "text-teal-300" : ""} />
+              <Icon size={18} strokeWidth={active ? 2.2 : 1.8} className={id === "ai" && active ? "text-[#FFD200] drop-shadow-[0_0_8px_rgba(255,210,0,0.8)]" : active ? "text-[#22D3EE]" : ""} />
               <span className="flex-1">{label}</span>
             </button>
           );
@@ -210,9 +210,9 @@ function Sidebar({ tab, setTab }: { tab: TabId; setTab: (t: TabId) => void }) {
       </nav>
       
       <div className="mt-auto space-y-3">
-        <div className="rounded-xl bg-[#0F2927] p-4 border border-teal-800/40 backdrop-blur-md">
-          <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-teal-300/60">Drawer Status</p>
-          <div className="mt-1.5 flex items-center gap-2 text-sm font-semibold text-teal-100">
+        <div className="rounded-xl bg-gradient-to-b from-[#0B1C1E]/80 to-[#061113]/90 p-4 border border-[#00BAC7]/20 backdrop-blur-md">
+          <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#00BAC7]/70">Drawer Status</p>
+          <div className="mt-1.5 flex items-center gap-2 text-sm font-semibold text-white">
             <span className="relative flex h-2.5 w-2.5">
               <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping"></span>
               <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
@@ -279,7 +279,7 @@ function CrystalCanvas() {
     window.addEventListener("mousemove", handleMouseMove);
     window.addEventListener("mouseleave", handleMouseLeave);
 
-    const palette = ["#2dd4bf", "#f59e0b", "#ffffff", "#14b8a6", "#fbbf24"];
+    const palette = ["#00BAC7", "#FFD200", "#FFFFFF", "#38BDF8", "#FACC15", "#22D3EE"];
     const shapes: ("diamond" | "hex" | "spark")[] = ["diamond", "hex", "spark"];
     const count = 72;
 
@@ -1223,21 +1223,21 @@ function CreditSaleModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg rounded-3xl border border-teal-500/40 bg-[#0F2927] p-6 shadow-[0_0_60px_rgba(45,212,191,0.25)] space-y-4 max-h-[90vh] overflow-y-auto"
+        className="w-full max-w-lg rounded-3xl border border-[#00BAC7]/40 bg-gradient-to-b from-[#0B1C1E] to-[#061113] p-6 shadow-[0_0_60px_rgba(0,168,181,0.25)] space-y-4 max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between gap-3 border-b border-teal-900/50 pb-3">
+        <div className="flex items-start justify-between gap-3 border-b border-[#00BAC7]/20 pb-3">
           <div>
             <h3 className="font-display text-lg font-extrabold text-white">
               Credit Sale Setup · Inv #{invoice.invoiceNo}
             </h3>
             <p className="mt-0.5 text-xs text-white/60">
               {invoice.customer} ·{" "}
-              <strong className="text-teal-300">SAR {fmt(invoice.amount)}</strong>
+              <strong className="text-[#22D3EE]">SAR {fmt(invoice.amount)}</strong>
             </p>
           </div>
           <button
@@ -1264,7 +1264,7 @@ function CreditSaleModal({
                 onClick={() => setSettlement(val)}
                 className={`rounded-xl border px-4 py-2.5 text-left text-xs font-bold transition ${
                   settlement === val
-                    ? "border-teal-400 bg-teal-500/20 text-teal-200"
+                    ? "border-[#00BAC7] bg-[#00BAC7]/20 text-[#22D3EE]"
                     : "border-white/15 bg-white/5 text-white/70 hover:bg-white/10"
                 }`}
               >
@@ -1276,9 +1276,9 @@ function CreditSaleModal({
         </div>
 
         {settlement === "PARTIAL" && (
-          <div className="space-y-3 rounded-2xl border border-amber-400/35 bg-amber-500/10 p-3.5">
+          <div className="space-y-3 rounded-2xl border border-[#FFD200]/40 bg-[#FFD200]/10 p-3.5">
             <div className="space-y-1.5">
-              <label className="block text-[11px] font-bold text-amber-200">
+              <label className="block text-[11px] font-bold text-[#FFD200]">
                 Down Payment Amount (SAR)
               </label>
               <input
@@ -1287,11 +1287,11 @@ function CreditSaleModal({
                 value={downAmount}
                 onChange={(e) => setDownAmount(e.target.value)}
                 placeholder={`Less than ${fmt(invoice.amount)}`}
-                className="w-full rounded-xl border border-amber-400/40 bg-black/50 px-3.5 py-2.5 font-mono text-sm font-extrabold text-white outline-none focus:border-amber-300"
+                className="w-full rounded-xl border border-[#FFD200]/40 bg-black/60 px-3.5 py-2.5 font-mono text-sm font-extrabold text-white outline-none focus:border-[#FFD200]"
               />
             </div>
             <div className="space-y-1.5">
-              <span className="block text-[11px] font-bold text-amber-200">Paid By</span>
+              <span className="block text-[11px] font-bold text-[#FFD200]">Paid By</span>
               <div className="inline-flex flex-wrap rounded-xl bg-black/60 p-1 border border-white/15 gap-1">
                 <button
                   type="button"
@@ -1314,7 +1314,7 @@ function CreditSaleModal({
                     }}
                     className={`rounded-lg px-3 py-1.5 text-[11px] font-extrabold transition ${
                       downMethod === "POS_SWIPE" && terminal === term
-                        ? "bg-amber-400 text-slate-950"
+                        ? "bg-[#FFD200] text-black"
                         : "text-white/65 hover:text-white"
                     }`}
                   >
@@ -1338,8 +1338,8 @@ function CreditSaleModal({
           />
         </div>
 
-        <div className="flex items-center justify-between rounded-xl border border-teal-500/30 bg-black/40 px-4 py-2 font-mono text-xs font-bold">
-          <span className="text-teal-200">Credit Receivable: SAR {fmt(creditPreview)}</span>
+        <div className="flex items-center justify-between rounded-xl border border-[#00BAC7]/30 bg-black/50 px-4 py-2 font-mono text-xs font-bold">
+          <span className="text-[#22D3EE]">Credit Receivable: SAR {fmt(creditPreview)}</span>
           {settlement === "PARTIAL" && !downInvalid && (
             <span className="text-emerald-300">
               Down: SAR {fmt(downVal)} → {downMethod === "CASH" ? "Drawer" : "Bank"}
@@ -1359,7 +1359,7 @@ function CreditSaleModal({
               followUpDate,
             })
           }
-          className="w-full rounded-xl bg-teal-400 hover:bg-teal-300 disabled:opacity-40 disabled:cursor-not-allowed px-6 py-3.5 text-sm font-extrabold text-slate-950 transition"
+          className="w-full rounded-xl bg-gradient-to-r from-[#00A8B5] to-[#0284C7] hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed px-6 py-3.5 text-sm font-extrabold text-white shadow-[0_0_20px_rgba(0,168,181,0.35)] transition"
         >
           Save &amp; Sync to Credit Radar
         </button>
@@ -2851,18 +2851,18 @@ function DailyRegisterView({
   };
 
   return (
-    <div className="relative flex-1 h-full w-full overflow-y-auto bg-[#071314] text-white select-none">
+    <div className="relative flex-1 h-full w-full overflow-y-auto bg-gradient-to-br from-[#041012] via-[#051719] to-[#010405] text-white select-none">
       {/* Interactive Antigravity Crystal Particle Canvas */}
       <CrystalCanvas />
 
       {/* Subtle Ambient Cosmic Glows */}
-      <div className="pointer-events-none absolute -top-28 left-1/4 h-96 w-96 rounded-full bg-teal-500/10 blur-[130px]" />
-      <div className="pointer-events-none absolute bottom-0 right-1/4 h-96 w-96 rounded-full bg-amber-500/10 blur-[140px]" />
+      <div className="pointer-events-none absolute -top-28 left-1/4 h-96 w-96 rounded-full bg-[#00BAC7]/10 blur-[130px]" />
+      <div className="pointer-events-none absolute bottom-0 right-1/4 h-96 w-96 rounded-full bg-[#FFD200]/10 blur-[140px]" />
 
       {/* Live Cross-Module Sync Toast Banner */}
       {syncBannerMsg && (
         <div className="relative z-30 max-w-7xl w-full mx-auto px-6 pt-5">
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-teal-400/40 bg-teal-500/15 px-5 py-3 text-xs sm:text-sm font-bold text-teal-100 backdrop-blur-xl shadow-lg">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#00BAC7]/40 bg-[#00BAC7]/15 px-5 py-3 text-xs sm:text-sm font-bold text-[#22D3EE] backdrop-blur-xl shadow-lg">
             <div className="flex items-center gap-2.5">
               <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-400 text-slate-950">
                 <Check size={12} strokeWidth={3} />
@@ -2873,7 +2873,7 @@ function DailyRegisterView({
               <button
                 type="button"
                 onClick={() => onSwitchTab(syncBannerMsg.targetTab)}
-                className="rounded-lg bg-amber-400 px-3 py-1 text-xs font-extrabold text-slate-950 hover:bg-amber-300 transition"
+                className="rounded-lg bg-[#FFD200] px-3 py-1 text-xs font-extrabold text-black hover:bg-yellow-300 transition"
               >
                 {syncBannerMsg.targetLabel}
               </button>
@@ -2931,14 +2931,14 @@ function DailyRegisterView({
                 onClick={() => setTrackPosFees((prev) => !prev)}
                 className={`inline-flex items-center gap-2.5 rounded-full border px-3.5 py-1.5 text-xs font-bold transition backdrop-blur-md whitespace-nowrap ${
                   trackPosFees
-                    ? "border-amber-400/50 bg-amber-500/15 text-amber-200"
+                    ? "border-[#FFD200]/50 bg-[#FFD200]/15 text-[#FFD200]"
                     : "border-white/15 bg-white/[0.04] text-white/65 hover:text-white"
                 }`}
               >
                 <span>Estimate POS Merchant Fees (MDR)</span>
                 <span
                   className={`inline-flex h-4 w-7 items-center rounded-full p-0.5 transition-colors ${
-                    trackPosFees ? "bg-amber-400" : "bg-white/20"
+                    trackPosFees ? "bg-[#FFD200]" : "bg-white/20"
                   }`}
                 >
                   <span
@@ -2952,8 +2952,8 @@ function DailyRegisterView({
                 </span>
               </button>
 
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-400/30 bg-amber-500/10 px-4 py-1.5 text-xs font-bold text-amber-300 backdrop-blur-md whitespace-nowrap">
-                <CreditCard size={13} className="text-amber-400" />
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-[#00BAC7]/40 bg-[#00BAC7]/10 px-4 py-1.5 text-xs font-bold text-[#22D3EE] backdrop-blur-md whitespace-nowrap">
+                <CreditCard size={13} className="text-[#00BAC7]" />
                 {preLoggedBankInvoices.length} Bank Invoices Queued
               </span>
               <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/30 bg-emerald-500/10 px-4 py-1.5 text-xs font-bold text-emerald-300 backdrop-blur-md whitespace-nowrap">
@@ -2966,10 +2966,10 @@ function DailyRegisterView({
           </div>
 
           {/* Spacious Hero Card */}
-          <div className="relative overflow-hidden rounded-3xl p-[1.5px] bg-gradient-to-r from-amber-400/70 via-teal-400/70 to-amber-500/70 shadow-[0_0_55px_rgba(45,212,191,0.2)]">
-            <div className="relative overflow-hidden rounded-[22.5px] bg-gradient-to-br from-[#0F2927]/95 via-[#0D2322]/95 to-[#132F2D]/95 border border-teal-800/40 px-8 py-9 backdrop-blur-2xl">
-              <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-amber-400/15 blur-3xl" />
-              <div className="pointer-events-none absolute -bottom-20 left-1/3 h-64 w-64 rounded-full bg-teal-400/15 blur-3xl" />
+          <div className="relative overflow-hidden rounded-3xl p-[1.5px] bg-gradient-to-r from-[#FFD200]/70 via-[#00BAC7]/70 to-[#FFD200]/70 shadow-[0_0_55px_rgba(0,186,199,0.25)]">
+            <div className="relative overflow-hidden rounded-[22.5px] bg-gradient-to-br from-[#0B1C1E]/95 via-[#061113]/95 to-[#041012]/95 border border-[#00BAC7]/30 px-8 py-9 backdrop-blur-2xl">
+              <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-[#FFD200]/15 blur-3xl" />
+              <div className="pointer-events-none absolute -bottom-20 left-1/3 h-64 w-64 rounded-full bg-[#00BAC7]/15 blur-3xl" />
 
               <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
                 <div className="max-w-2xl space-y-2">
@@ -2984,18 +2984,18 @@ function DailyRegisterView({
                 <div className="flex flex-wrap items-center gap-3.5 shrink-0">
                   <button
                     onClick={handleStartWizard}
-                    className="group flex items-center gap-2.5 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-300 to-teal-300 px-7 py-4 text-sm sm:text-base font-extrabold text-slate-950 shadow-[0_0_30px_rgba(245,158,11,0.35)] transition-all duration-300 hover:scale-[1.02]"
+                    className="group flex items-center gap-2.5 rounded-2xl bg-gradient-to-r from-[#FFD200] via-[#FACC15] to-[#00BAC7] px-7 py-4 text-sm sm:text-base font-black text-black shadow-[0_0_30px_rgba(255,210,0,0.4)] transition-all duration-300 hover:scale-[1.02]"
                   >
-                    <Sparkles size={18} className="text-slate-950" />
+                    <Sparkles size={18} className="text-black" />
                     <span>✨ Start Guided Tracking</span>
-                    <ArrowRight size={16} className="text-slate-950/80 transition-transform group-hover:translate-x-0.5" />
+                    <ArrowRight size={16} className="text-black/80 transition-transform group-hover:translate-x-0.5" />
                   </button>
 
                   <button
                     onClick={() => setTrackingMode("datasheet")}
-                    className="flex items-center gap-2 rounded-2xl border border-white/20 bg-white/10 px-6 py-4 text-sm sm:text-base font-bold text-white backdrop-blur-xl transition-all hover:bg-white/15"
+                    className="flex items-center gap-2 rounded-2xl border border-[#00BAC7]/30 bg-white/5 px-6 py-4 text-sm sm:text-base font-bold text-white backdrop-blur-xl transition-all hover:bg-white/10"
                   >
-                    <FileSpreadsheet size={18} className="text-amber-300" />
+                    <FileSpreadsheet size={18} className="text-[#FFD200]" />
                     <span>📋 Classic Data Sheet</span>
                   </button>
                 </div>
@@ -3004,22 +3004,22 @@ function DailyRegisterView({
           </div>
 
           {/* Unified Daytime Quick-Logger */}
-          <div className="rounded-3xl border border-teal-800/30 bg-[#0F2927]/60 p-6 sm:p-8 backdrop-blur-2xl shadow-2xl">
+          <div className="rounded-3xl border border-[#00BAC7]/25 bg-gradient-to-b from-[#0B1C1E]/80 to-[#061113]/90 p-6 sm:p-8 backdrop-blur-2xl shadow-2xl">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-white/10">
-              <div className="inline-flex rounded-2xl bg-black/40 p-1.5 border border-white/10">
+              <div className="inline-flex rounded-2xl bg-black/50 p-1.5 border border-[#00BAC7]/20">
                 <button
                   type="button"
                   onClick={() => setActiveLoggerTab("bank")}
                   className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs sm:text-sm font-bold transition-all ${
                     activeLoggerTab === "bank"
-                      ? "bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 shadow-md"
+                      ? "bg-gradient-to-r from-[#FFD200] to-[#FACC15] text-black font-extrabold shadow-md"
                       : "text-white/65 hover:text-white"
                   }`}
                 >
                   <span>💳 Log Bank / POS Invoice #</span>
                   <span
                     className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold ${
-                      activeLoggerTab === "bank" ? "bg-slate-950/20 text-slate-950" : "bg-white/10 text-amber-300"
+                      activeLoggerTab === "bank" ? "bg-black/20 text-black" : "bg-white/10 text-[#FFD200]"
                     }`}
                   >
                     {preLoggedBankInvoices.length}
@@ -3031,14 +3031,14 @@ function DailyRegisterView({
                   onClick={() => setActiveLoggerTab("expense")}
                   className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs sm:text-sm font-bold transition-all ${
                     activeLoggerTab === "expense"
-                      ? "bg-gradient-to-r from-teal-500 to-amber-500 text-slate-950 shadow-md"
+                      ? "bg-gradient-to-r from-[#00A8B5] to-[#0284C7] text-white font-extrabold shadow-[0_0_15px_rgba(0,168,181,0.3)]"
                       : "text-white/65 hover:text-white"
                   }`}
                 >
                   <span>⚡ Quick Expense &amp; Cash-In</span>
                   <span
                     className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold ${
-                      activeLoggerTab === "expense" ? "bg-slate-950/20 text-slate-950" : "bg-white/10 text-teal-300"
+                      activeLoggerTab === "expense" ? "bg-white/20 text-white" : "bg-white/10 text-[#22D3EE]"
                     }`}
                   >
                     {preLoggedEntries.length}
@@ -3075,14 +3075,14 @@ function DailyRegisterView({
                   <select
                     value={bankModeInput}
                     onChange={(e) => setBankModeInput(e.target.value as "POS_SWIPE" | "BANK_TRANSFER")}
-                    className="rounded-xl border border-teal-800/40 bg-[#0D2322] px-3.5 py-3 text-xs sm:text-sm font-bold text-white outline-none"
+                    className="rounded-xl border border-[#00BAC7]/30 bg-[#061113] px-3.5 py-3 text-xs sm:text-sm font-bold text-white outline-none"
                   >
                     <option value="POS_SWIPE">Swipe (POS)</option>
                     <option value="BANK_TRANSFER">Bank Transfer (0% Fee)</option>
                   </select>
 
                   {bankModeInput === "POS_SWIPE" && (
-                    <div className="inline-flex flex-wrap rounded-xl bg-black/50 p-1 border border-amber-400/30 gap-0.5">
+                    <div className="inline-flex flex-wrap rounded-xl bg-black/50 p-1 border border-[#FFD200]/30 gap-0.5">
                       {(["SAB", "AL_RAJHI", "VISA_MC"] as PosTerminalBank[]).map((term) => (
                         <button
                           key={term}
@@ -3090,7 +3090,7 @@ function DailyRegisterView({
                           onClick={() => setBankTerminalInput(term)}
                           className={`rounded-lg px-3 py-2 text-xs font-extrabold transition ${
                             bankTerminalInput === term
-                              ? "bg-amber-400 text-slate-950"
+                              ? "bg-[#FFD200] text-black"
                               : "text-white/65 hover:text-white"
                           }`}
                         >
@@ -3102,7 +3102,7 @@ function DailyRegisterView({
 
                   <button
                     type="submit"
-                    className="flex items-center justify-center gap-2 rounded-xl bg-amber-400 hover:bg-amber-300 px-6 py-3 text-sm font-extrabold text-slate-950 transition shrink-0 whitespace-nowrap"
+                    className="flex items-center justify-center gap-2 rounded-xl bg-[#FFD200] hover:bg-yellow-300 px-6 py-3 text-sm font-extrabold text-black transition shrink-0 whitespace-nowrap shadow-sm"
                   >
                     <Plus size={16} strokeWidth={2.5} />
                     <span>+ Add Invoice</span>
@@ -3143,7 +3143,7 @@ function DailyRegisterView({
                     <select
                       value={entryType}
                       onChange={(e) => setEntryType(e.target.value as PreLoggedEntryType)}
-                      className="rounded-xl border border-teal-800/40 bg-[#0D2322] px-4 py-3 text-sm font-bold text-white outline-none"
+                      className="rounded-xl border border-[#00BAC7]/30 bg-[#061113] px-4 py-3 text-sm font-bold text-white outline-none"
                     >
                       <option value="EXPENSE">Expense / Purchase</option>
                       <option value="SPLIT_SALE">⚡ Split Payment (Cash + Card)</option>
@@ -3158,7 +3158,7 @@ function DailyRegisterView({
                         <select
                           value={hubExpenseCat}
                           onChange={(e) => setHubExpenseCat(e.target.value as StrictExpenseCategory)}
-                          className="rounded-xl border border-amber-400/40 bg-[#0D2322] px-4 py-3 text-sm font-extrabold text-amber-300 outline-none"
+                          className="rounded-xl border border-[#FFD200]/40 bg-[#061113] px-4 py-3 text-sm font-extrabold text-[#FFD200] outline-none"
                         >
                           {STRICT_EXPENSE_CATEGORIES.map((cat) => (
                             <option key={cat} value={cat}>
@@ -3176,7 +3176,7 @@ function DailyRegisterView({
                             value={hubSupplierName}
                             onChange={(e) => setHubSupplierName(e.target.value)}
                             placeholder="Supplier Name (e.g. Jotun, Hempel)"
-                            className="flex-1 min-w-[180px] rounded-xl border border-teal-400/40 bg-black/40 px-4 py-3 text-sm font-bold text-white placeholder:text-white/40 outline-none"
+                            className="flex-1 min-w-[180px] rounded-xl border border-[#00BAC7]/40 bg-black/40 px-4 py-3 text-sm font-bold text-white placeholder:text-white/40 outline-none"
                           />
                         )}
                         <datalist id="hub-suppliers-list">
@@ -3277,7 +3277,7 @@ function DailyRegisterView({
 
                     <button
                       type="submit"
-                      className="flex items-center justify-center gap-1.5 rounded-xl bg-teal-500 hover:bg-teal-400 px-6 py-3 text-sm font-extrabold text-slate-950 transition shrink-0 whitespace-nowrap"
+                      className="flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#00A8B5] to-[#0284C7] hover:brightness-110 px-6 py-3 text-sm font-extrabold text-white transition shrink-0 whitespace-nowrap shadow-[0_0_15px_rgba(0,168,181,0.35)]"
                     >
                       <Plus size={16} strokeWidth={2.5} />
                       <span>+ Record</span>
@@ -3376,7 +3376,7 @@ function DailyRegisterView({
                     entryType === "CREDIT_RECD" ||
                     entryType === "SPLIT_SALE") &&
                     matchedHubInvoice && (
-                      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-teal-400/50 bg-gradient-to-r from-teal-500/20 via-amber-500/20 to-teal-500/20 px-4 py-2.5 text-xs font-extrabold text-amber-200 shadow-[0_0_25px_rgba(45,212,191,0.2)]">
+                      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#00BAC7]/50 bg-gradient-to-r from-[#00A8B5]/20 via-[#FFD200]/20 to-[#00A8B5]/20 px-4 py-2.5 text-xs font-extrabold text-[#FFD200] shadow-[0_0_25px_rgba(0,168,181,0.25)]">
                         <span>
                           ✨ ERP Invoice #{matchedHubInvoice.invoiceNo} Matched:{" "}
                           <strong className="text-white">{matchedHubInvoice.customer}</strong> — SAR{" "}
@@ -3505,11 +3505,11 @@ function DailyRegisterView({
       {trackingMode === "wizard" && (
         <div className="relative z-10 max-w-7xl w-full mx-auto px-6 py-6 lg:py-8 flex flex-col gap-6">
           {/* Calm Top Step Navigation Bar */}
-          <div className="rounded-2xl border border-teal-800/30 bg-[#0F2927]/70 px-5 py-4 backdrop-blur-2xl shadow-xl">
+          <div className="rounded-2xl border border-[#00BAC7]/25 bg-gradient-to-b from-[#0B1C1E]/85 to-[#061113]/90 px-5 py-4 backdrop-blur-2xl shadow-xl">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <button
                 onClick={() => setTrackingMode("hub")}
-                className="flex items-center gap-2 rounded-xl border border-teal-800/40 bg-white/5 px-3.5 py-2 text-xs sm:text-sm font-bold text-white transition hover:bg-white/10"
+                className="flex items-center gap-2 rounded-xl border border-[#00BAC7]/30 bg-white/5 px-3.5 py-2 text-xs sm:text-sm font-bold text-white transition hover:bg-white/10"
               >
                 <ArrowLeft size={15} />
                 <span>Daily Hub</span>
@@ -3537,10 +3537,10 @@ function DailyRegisterView({
                       }}
                       className={`rounded-xl px-3.5 py-2 text-xs font-bold transition-all ${
                         active
-                          ? "bg-amber-400 text-slate-950 font-extrabold shadow-md"
+                          ? "bg-gradient-to-r from-[#FFD200] to-[#F59E0B] text-black font-extrabold shadow-[0_0_15px_rgba(255,210,0,0.3)]"
                           : done
-                          ? "bg-teal-950/80 text-teal-400 border border-teal-500/30"
-                          : "bg-[#0B1A19] text-slate-400 border border-teal-900/30 hover:text-white"
+                          ? "bg-[#00383D]/60 text-[#22D3EE] border border-[#00A8B5]/40"
+                          : "bg-[#0B1C1E]/60 text-slate-400 border border-[#00BAC7]/15 hover:text-white"
                       }`}
                     >
                       {done ? `✓ ${labels[s]}` : labels[s]}
@@ -3552,7 +3552,7 @@ function DailyRegisterView({
 
             <div className="mt-3.5 h-1 w-full overflow-hidden rounded-full bg-white/10">
               <div
-                className="h-full rounded-full bg-gradient-to-r from-[#2DD4BF] to-[#F59E0B] transition-all duration-500"
+                className="h-full rounded-full bg-gradient-to-r from-[#00BAC7] to-[#FFD200] transition-all duration-500"
                 style={{ width: `${(wizardStep / 5) * 100}%` }}
               />
             </div>
@@ -3562,8 +3562,8 @@ function DailyRegisterView({
               STEP 1: IMPORT TODAY'S ERP SALES (CALM & CENTERED)
              ────────────────────────────────────────────────────────────── */}
           {wizardStep === 1 && (
-            <div className="mx-auto my-6 flex w-full max-w-2xl flex-col items-center justify-center rounded-3xl border border-teal-800/30 bg-[#0F2927]/60 p-10 sm:p-14 text-center backdrop-blur-2xl shadow-2xl">
-              <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400/20 to-teal-500/20 border border-amber-400/40 text-amber-300">
+            <div className="mx-auto my-6 flex w-full max-w-2xl flex-col items-center justify-center rounded-3xl border border-[#00BAC7]/25 bg-gradient-to-b from-[#0B1C1E]/80 to-[#061113]/90 p-10 sm:p-14 text-center backdrop-blur-2xl shadow-2xl">
+              <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-[#FFD200]/20 to-[#00BAC7]/20 border border-[#FFD200]/40 text-[#FFD200]">
                 <UploadCloud size={34} />
               </div>
 
@@ -3574,8 +3574,8 @@ function DailyRegisterView({
                 Drop your daily CSV export or load today&apos;s 18 Jubail invoices (auto-detects `PARTIAL`, `SPLIT`, `CASH/BANK` dual tenders).
               </p>
 
-              <label className="mt-7 flex w-full cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-teal-800/50 bg-black/25 px-6 py-10 transition hover:border-amber-400/60 hover:bg-white/[0.04]">
-                <UploadCloud size={28} className="text-amber-300 mb-2.5" />
+              <label className="mt-7 flex w-full cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#00BAC7]/30 bg-black/40 px-6 py-10 transition hover:border-[#FFD200]/60 hover:bg-white/[0.04]">
+                <UploadCloud size={28} className="text-[#FFD200] mb-2.5" />
                 <span className="text-sm font-bold text-white">
                   Drop ERP `.csv` file here or click to browse
                 </span>
@@ -3590,9 +3590,9 @@ function DailyRegisterView({
               <button
                 type="button"
                 onClick={handleSimulateCsvUpload}
-                className="mt-6 flex items-center gap-2.5 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-300 to-teal-300 px-7 py-4 text-sm sm:text-base font-extrabold text-slate-950 shadow-[0_0_30px_rgba(245,158,11,0.35)] transition hover:scale-[1.02]"
+                className="mt-6 flex items-center gap-2.5 rounded-2xl bg-gradient-to-r from-[#FFD200] via-[#FACC15] to-[#00BAC7] px-7 py-4 text-sm sm:text-base font-black text-black shadow-[0_0_30px_rgba(255,210,0,0.35)] transition hover:scale-[1.02]"
               >
-                <Zap size={18} className="text-slate-950" />
+                <Zap size={18} className="text-black" />
                 <span>⚡ Load Today&apos;s ERP Batch (18 Invoices · Split Tenders Auto-Detected)</span>
               </button>
 
@@ -3611,7 +3611,7 @@ function DailyRegisterView({
               STEP 2: VERIFY BANK SWIPES (SAB / AL RAJHI), SPLIT TENDERS & CASH SALES
              ────────────────────────────────────────────────────────────── */}
           {wizardStep === 2 && (
-            <div className="flex flex-col gap-5 rounded-3xl border border-teal-800/30 bg-[#0F2927]/60 p-6 sm:p-8 backdrop-blur-2xl shadow-2xl">
+            <div className="flex flex-col gap-5 rounded-3xl border border-[#00BAC7]/25 bg-gradient-to-b from-[#0B1C1E]/80 to-[#061113]/90 p-6 sm:p-8 backdrop-blur-2xl shadow-2xl">
               {/* Header + Optional MDR Toggle + Summary Cards */}
               <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 pb-5 border-b border-white/10">
                 <div className="space-y-2.5">
@@ -3630,14 +3630,14 @@ function DailyRegisterView({
                       onClick={() => setTrackPosFees((prev) => !prev)}
                       className={`inline-flex items-center gap-2.5 rounded-full border px-3.5 py-1.5 text-xs font-bold transition ${
                         trackPosFees
-                          ? "border-amber-400/50 bg-amber-500/15 text-amber-200"
+                          ? "border-[#FFD200]/50 bg-[#FFD200]/15 text-[#FFD200]"
                           : "border-white/15 bg-black/35 text-white/65 hover:text-white"
                       }`}
                     >
                       <span>Estimate POS Merchant Fees (MDR)</span>
                       <span
                         className={`inline-flex h-4 w-7 items-center rounded-full p-0.5 transition-colors ${
-                          trackPosFees ? "bg-amber-400" : "bg-white/20"
+                          trackPosFees ? "bg-[#FFD200]" : "bg-white/20"
                         }`}
                       >
                         <span
@@ -3666,14 +3666,14 @@ function DailyRegisterView({
                     </span>
                   </div>
 
-                  <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 px-5 py-3.5">
-                    <span className="block text-xs font-semibold text-amber-200/80">
+                  <div className="rounded-2xl border border-[#00BAC7]/40 bg-[#00BAC7]/10 px-5 py-3.5">
+                    <span className="block text-xs font-semibold text-[#22D3EE]/90">
                       Bank / POS Swipes (To Bank) ({bankSwipeInvoices.length})
                     </span>
-                    <span className="font-display text-xl font-extrabold text-amber-300 whitespace-nowrap">
+                    <span className="font-display text-xl font-extrabold text-[#22D3EE] whitespace-nowrap">
                       SAR {fmt(bankSwipeGrossTotal)}
                     </span>
-                    <span className="block text-[10px] text-amber-200/60">
+                    <span className="block text-[10px] text-white/60">
                       100% Gross Face Value Settlement
                     </span>
                     {trackPosFees && (
@@ -3702,15 +3702,15 @@ function DailyRegisterView({
                   // Dynamic color-coded ambient outline per payment mode (functional clarity)
                   const rowOutline =
                     inv.paymentMode === "CASH"
-                      ? "border-emerald-500/40 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.12)] bg-emerald-500/[0.04]"
+                      ? "border-emerald-400/50 text-emerald-300 shadow-[0_0_12px_rgba(52,211,153,0.15)] bg-emerald-500/[0.04]"
                       : inv.paymentMode === "BANK_TRANSFER"
-                      ? "border-cyan-500/40 text-cyan-300 shadow-[0_0_12px_rgba(6,182,212,0.12)] bg-cyan-500/[0.04]"
+                      ? "border-[#00BAC7]/60 text-[#22D3EE] shadow-[0_0_12px_rgba(0,168,181,0.18)] bg-[#00BAC7]/[0.05]"
                       : inv.paymentMode === "POS_SWIPE"
-                      ? "border-amber-400/40 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.15)] bg-amber-500/[0.04]"
+                      ? "border-[#FFD200]/60 text-[#FFD200] shadow-[0_0_12px_rgba(255,210,0,0.18)] bg-[#FFD200]/[0.05]"
                       : inv.paymentMode === "CREDIT_SALE"
-                      ? "border-blue-500/40 text-blue-300 shadow-[0_0_12px_rgba(59,130,246,0.12)] bg-blue-500/[0.04]"
+                      ? "border-blue-500/50 text-blue-300 shadow-[0_0_12px_rgba(59,130,246,0.15)] bg-blue-500/[0.04]"
                       : inv.paymentMode === "SPLIT"
-                      ? "border-rose-500/40 text-rose-300 shadow-[0_0_12px_rgba(244,63,94,0.15)] bg-rose-500/[0.04]"
+                      ? "border-rose-500/40 text-rose-300 shadow-[0_0_12px_rgba(244,63,94,0.18)] bg-rose-500/[0.04]"
                       : "border-white/5 hover:border-white/10 bg-black/30";
 
                   return (
@@ -3720,19 +3720,19 @@ function DailyRegisterView({
                     >
                       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
                         <div className="flex flex-wrap items-center gap-2.5 min-w-0">
-                          <span className="font-mono text-sm font-extrabold text-amber-300 w-16 shrink-0">
+                          <span className="font-mono text-sm font-extrabold text-[#FFD200] w-16 shrink-0">
                             #{inv.invoiceNo}
                           </span>
                           <span className="text-sm font-semibold text-white truncate">
                             {inv.customer}
                           </span>
                           {isSplitMode && (
-                            <span className="rounded-full bg-amber-400/25 border border-amber-300/60 px-2.5 py-0.5 text-[10px] font-extrabold text-amber-200 shrink-0 shadow-[0_0_15px_rgba(245,158,11,0.25)]">
+                            <span className="rounded-full bg-[#FFD200]/25 border border-[#FFD200]/60 px-2.5 py-0.5 text-[10px] font-extrabold text-[#FFD200] shrink-0 shadow-[0_0_15px_rgba(255,210,0,0.25)]">
                               ⚡ Split Tender (Cash + Bank/Swipe)
                             </span>
                           )}
                           {inv.autoMatched && isBankOrPos && (
-                            <span className="rounded-full bg-amber-400/20 border border-amber-300/40 px-2.5 py-0.5 text-[10px] font-bold text-amber-200 shrink-0">
+                            <span className="rounded-full bg-[#00BAC7]/20 border border-[#00BAC7]/40 px-2.5 py-0.5 text-[10px] font-bold text-[#22D3EE] shrink-0">
                               ✓ Auto-Matched
                             </span>
                           )}
@@ -3749,13 +3749,13 @@ function DailyRegisterView({
                               isSplitMode
                                 ? "text-rose-300"
                                 : inv.paymentMode === "BANK_TRANSFER"
-                                ? "text-cyan-300"
+                                ? "text-[#22D3EE]"
                                 : isBankOrPos
-                                ? "text-amber-300"
+                                ? "text-[#FFD200]"
                                 : isCreditSaleInv
                                 ? "text-blue-300"
                                 : isOtherRecd
-                                ? "text-teal-300"
+                                ? "text-[#22D3EE]"
                                 : "text-emerald-300"
                             }`}
                           >
@@ -3780,7 +3780,7 @@ function DailyRegisterView({
                               onClick={() => handleSetInvoiceMode(inv.invoiceNo, "BANK_TRANSFER")}
                               className={`rounded-lg px-2.5 py-1 text-xs font-bold transition-all duration-200 ${
                                 inv.paymentMode === "BANK_TRANSFER"
-                                  ? "bg-cyan-500 text-slate-950 font-extrabold"
+                                  ? "bg-[#00BAC7] text-black font-extrabold"
                                   : "text-white/55 hover:text-white"
                               }`}
                             >
@@ -3791,7 +3791,7 @@ function DailyRegisterView({
                               onClick={() => handleSetInvoiceMode(inv.invoiceNo, "POS_SWIPE")}
                               className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${
                                 inv.paymentMode === "POS_SWIPE"
-                                  ? "bg-amber-400 text-slate-950 font-extrabold"
+                                  ? "bg-[#FFD200] text-black font-extrabold"
                                   : "text-white/55 hover:text-white"
                               }`}
                             >
@@ -4045,7 +4045,7 @@ function DailyRegisterView({
                 <button
                   type="button"
                   onClick={() => setWizardStep(3)}
-                  className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-400 via-amber-300 to-teal-300 px-6 py-3 text-sm font-extrabold text-slate-950 shadow-lg transition hover:brightness-110"
+                  className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#FFD200] via-[#FACC15] to-[#00BAC7] px-6 py-3 text-sm font-black text-black shadow-[0_0_25px_rgba(255,210,0,0.35)] transition hover:brightness-110"
                 >
                   <span>Continue to Cash Inflows</span>
                   <ArrowRight size={16} />
@@ -4058,7 +4058,7 @@ function DailyRegisterView({
               STEP 3: CREDIT & CASH INFLOWS + MANUAL SPLIT PAYMENT ENTRY
              ────────────────────────────────────────────────────────────── */}
           {wizardStep === 3 && (
-            <div className="flex flex-col gap-6 rounded-3xl border border-teal-800/30 bg-[#0F2927]/60 p-6 sm:p-8 backdrop-blur-2xl shadow-2xl">
+            <div className="flex flex-col gap-6 rounded-3xl border border-[#00BAC7]/25 bg-gradient-to-b from-[#0B1C1E]/80 to-[#061113]/90 p-6 sm:p-8 backdrop-blur-2xl shadow-2xl">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-5">
                 <div>
                   <h2 className="font-display text-2xl font-extrabold text-white">
@@ -4069,9 +4069,9 @@ function DailyRegisterView({
                   </p>
                 </div>
 
-                <div className="flex items-center gap-3 rounded-2xl border border-amber-400/35 bg-amber-500/10 px-5 py-3 shrink-0">
+                <div className="flex items-center gap-3 rounded-2xl border border-[#FFD200]/40 bg-[#FFD200]/10 px-5 py-3 shrink-0">
                   <div>
-                    <span className="block text-xs font-semibold text-amber-200/80">
+                    <span className="block text-xs font-semibold text-[#FFD200]/80">
                       Opening Drawer Balance
                     </span>
                     {editingOpening ? (
@@ -4080,7 +4080,7 @@ function DailyRegisterView({
                           type="number"
                           value={openingEditInput}
                           onChange={(e) => setOpeningEditInput(e.target.value)}
-                          className="w-28 rounded-lg border border-amber-300 bg-black/50 px-2.5 py-1 text-sm font-extrabold text-white outline-none"
+                          className="w-28 rounded-lg border border-[#FFD200] bg-black/50 px-2.5 py-1 text-sm font-extrabold text-white outline-none"
                           autoFocus
                         />
                         <button
@@ -4109,7 +4109,7 @@ function DailyRegisterView({
                             setOpeningEditInput(String(openingBalance));
                             setEditingOpening(true);
                           }}
-                          className="rounded-lg bg-white/10 px-2.5 py-1 text-xs font-bold text-amber-300 hover:bg-white/20"
+                          className="rounded-lg bg-white/10 px-2.5 py-1 text-xs font-bold text-[#FFD200] hover:bg-white/20"
                         >
                           Edit
                         </button>
@@ -4141,7 +4141,7 @@ function DailyRegisterView({
                               | "OTHER_IN"
                           )
                         }
-                        className="w-full rounded-xl border border-teal-800/40 bg-[#0D2322] px-3.5 py-3 text-sm font-bold text-white outline-none focus:border-amber-400"
+                        className="w-full rounded-xl border border-[#00BAC7]/30 bg-[#061113] px-3.5 py-3 text-sm font-bold text-white outline-none focus:border-[#FFD200]"
                       >
                         <option value="CREDIT_RECD">Credit Sale Amt Recd</option>
                         <option value="LOAN_IN">Loan In</option>
@@ -4152,7 +4152,7 @@ function DailyRegisterView({
                     {/* 2. ERP Invoice / Reference Input (ERP invoice lookup + quick chips appear when Split Tender is toggled ON) */}
                     {step3SplitEnabled ? (
                       <div className="space-y-2">
-                        <label className="block text-xs font-bold text-amber-200/90">
+                        <label className="block text-xs font-bold text-[#FFD200]">
                           ERP Invoice Number
                         </label>
                         <input
@@ -4161,7 +4161,7 @@ function DailyRegisterView({
                           value={step3ReceiptNo}
                           onChange={(e) => handleStep3InvoiceInput(e.target.value)}
                           placeholder="Enter or select invoice # (e.g. 30064)..."
-                          className="w-full rounded-xl border border-amber-400/50 bg-black/50 px-3.5 py-3 font-mono text-sm font-extrabold text-amber-300 placeholder:font-sans placeholder:text-white/40 outline-none focus:border-amber-300"
+                          className="w-full rounded-xl border border-[#FFD200]/50 bg-black/50 px-3.5 py-3 font-mono text-sm font-extrabold text-[#FFD200] placeholder:font-sans placeholder:text-white/40 outline-none focus:border-[#FFD200]"
                         />
 
                         {/* Clean Horizontal Row of Quick-Select Chips */}
@@ -4175,8 +4175,8 @@ function DailyRegisterView({
                                 onClick={() => handleStep3InvoiceInput(invNo)}
                                 className={`rounded-lg px-2.5 py-1 font-mono text-xs font-extrabold transition ${
                                   isSelected
-                                    ? "bg-amber-400 text-slate-950 shadow-sm"
-                                    : "border border-white/15 bg-white/5 text-amber-300 hover:bg-white/10"
+                                    ? "bg-[#FFD200] text-black shadow-sm font-black"
+                                    : "border border-[#FFD200]/30 bg-[#FFD200]/10 text-[#FFD200] hover:bg-[#FFD200]/20"
                                 }`}
                               >
                                 #{invNo}
@@ -4187,7 +4187,7 @@ function DailyRegisterView({
 
                         {/* Single-Line Clean Match Confirmation Pill */}
                         {matchedStep3Invoice && (
-                          <div className="rounded-xl border border-teal-400/50 bg-gradient-to-r from-teal-500/20 via-amber-500/20 to-teal-500/20 px-3.5 py-2 text-xs font-extrabold text-amber-200 shadow-[0_0_20px_rgba(45,212,191,0.2)] truncate">
+                          <div className="rounded-xl border border-[#00BAC7]/50 bg-gradient-to-r from-[#00A8B5]/20 via-[#FFD200]/20 to-[#00A8B5]/20 px-3.5 py-2 text-xs font-extrabold text-[#FFD200] shadow-[0_0_20px_rgba(0,168,181,0.25)] truncate">
                             ✨ Matched:{" "}
                             <span className="text-white">{matchedStep3Invoice.customer}</span> · SAR{" "}
                             {fmt(matchedStep3Invoice.amount)}
@@ -4204,7 +4204,7 @@ function DailyRegisterView({
                           value={step3ReceiptNo}
                           onChange={(e) => handleStep3InvoiceInput(e.target.value)}
                           placeholder="Receipt # (e.g. RCP-1042)..."
-                          className="w-full rounded-xl border border-white/15 bg-black/40 px-3.5 py-3 font-mono text-sm font-bold text-white placeholder:font-sans placeholder:text-white/35 outline-none focus:border-amber-400"
+                          className="w-full rounded-xl border border-white/15 bg-black/40 px-3.5 py-3 font-mono text-sm font-bold text-white placeholder:font-sans placeholder:text-white/35 outline-none focus:border-[#FFD200]"
                         />
                       </div>
                     )}
@@ -4225,7 +4225,7 @@ function DailyRegisterView({
                             ? "Customer Name (auto-populates from ERP)"
                             : "Source or Note"
                         }
-                        className="w-full rounded-xl border border-white/15 bg-black/40 px-4 py-3 text-sm font-semibold text-white placeholder:text-white/35 outline-none focus:border-amber-400"
+                        className="w-full rounded-xl border border-white/15 bg-black/40 px-4 py-3 text-sm font-semibold text-white placeholder:text-white/35 outline-none focus:border-[#FFD200]"
                       />
                     </div>
 
@@ -4264,8 +4264,8 @@ function DailyRegisterView({
                           aria-pressed={step3SplitEnabled}
                           className={`shrink-0 rounded-xl border px-3.5 py-3 text-xs font-extrabold transition whitespace-nowrap ${
                             step3SplitEnabled
-                              ? "border-amber-300 bg-gradient-to-r from-amber-400 to-emerald-400 text-slate-950 shadow-[0_0_15px_rgba(245,158,11,0.3)]"
-                              : "border-amber-400/40 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20"
+                              ? "border-[#FFD200] bg-gradient-to-r from-[#FFD200] to-[#00BAC7] text-black font-black shadow-[0_0_15px_rgba(255,210,0,0.3)]"
+                              : "border-[#FFD200]/40 bg-[#FFD200]/10 text-[#FFD200] hover:bg-[#FFD200]/20"
                           }`}
                         >
                           ⚡ Split Tender (Cash + Card)
@@ -4275,7 +4275,7 @@ function DailyRegisterView({
 
                     {/* Split Payment Allocation Fields in Step 3 (revealed under Amount when toggled ON) */}
                     {step3SplitEnabled && (
-                      <div className="space-y-2.5 rounded-2xl border border-amber-400/40 bg-amber-500/10 p-3.5">
+                      <div className="space-y-2.5 rounded-2xl border border-[#FFD200]/40 bg-[#FFD200]/10 p-3.5">
                         <div className="grid grid-cols-2 gap-2.5">
                           <div>
                             <label className="block text-[10px] font-bold text-emerald-300 mb-1">
@@ -4290,7 +4290,7 @@ function DailyRegisterView({
                             />
                           </div>
                           <div>
-                            <label className="block text-[10px] font-bold text-amber-300 mb-1">
+                            <label className="block text-[10px] font-bold text-[#FFD200] mb-1">
                               Card / Bank Portion (SAR)
                             </label>
                             <input
@@ -4298,13 +4298,13 @@ function DailyRegisterView({
                               step="0.01"
                               value={step3SplitCard}
                               onChange={(e) => handleStep3SplitCardChange(e.target.value)}
-                              className="w-full rounded-xl border border-amber-400/40 bg-black/60 px-3 py-2 font-mono text-sm font-extrabold text-amber-300 outline-none"
+                              className="w-full rounded-xl border border-[#FFD200]/40 bg-black/60 px-3 py-2 font-mono text-sm font-extrabold text-[#FFD200] outline-none"
                             />
                           </div>
                         </div>
 
                         <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                          <span className="text-[11px] font-bold text-amber-200">
+                          <span className="text-[11px] font-bold text-[#FFD200]">
                             Card Terminal:
                           </span>
                           <div className="inline-flex flex-wrap rounded-xl bg-black/60 p-1 border border-white/15 gap-1">
@@ -4318,7 +4318,7 @@ function DailyRegisterView({
                                 }}
                                 className={`rounded-lg px-2.5 py-1 text-[10px] font-extrabold transition ${
                                   step3SplitMethod === "POS_SWIPE" && step3SplitTerminal === term
-                                    ? "bg-amber-400 text-slate-950"
+                                    ? "bg-[#FFD200] text-black font-black"
                                     : "text-white/65 hover:text-white"
                                 }`}
                               >
@@ -4344,7 +4344,7 @@ function DailyRegisterView({
                     {/* 6. Full-Width [+ Save & Sync] Button */}
                     <button
                       type="submit"
-                      className="w-full rounded-xl bg-emerald-400 hover:bg-emerald-300 px-6 py-3.5 text-sm font-extrabold text-slate-950 shadow-[0_0_20px_rgba(52,211,153,0.25)] transition"
+                      className="w-full rounded-xl bg-gradient-to-r from-[#00A8B5] to-[#0284C7] hover:brightness-110 px-6 py-3.5 text-sm font-black text-white shadow-[0_0_20px_rgba(0,168,181,0.35)] transition"
                     >
                       + Save &amp; Sync
                     </button>
@@ -4378,7 +4378,7 @@ function DailyRegisterView({
                             <div className="min-w-0">
                               <div className="flex flex-wrap items-center gap-2">
                                 {item.receiptNo && (
-                                  <span className="font-mono text-xs font-extrabold text-amber-300">
+                                  <span className="font-mono text-xs font-extrabold text-[#FFD200]">
                                     {item.receiptNo}
                                   </span>
                                 )}
@@ -4389,7 +4389,7 @@ function DailyRegisterView({
                                   </span>
                                 )}
                                 {isSplitSaleRow && (
-                                  <span className="rounded bg-amber-500/25 border border-amber-400/40 px-2 py-0.5 text-[10px] font-extrabold text-amber-200">
+                                  <span className="rounded bg-[#FFD200]/25 border border-[#FFD200]/40 px-2 py-0.5 text-[10px] font-extrabold text-[#FFD200]">
                                     ⚡ SPLIT TENDER (Cash: SAR {fmt(item.splitCashAmount || 0)} · Card: SAR {fmt(item.splitBankAmount || 0)})
                                   </span>
                                 )}
@@ -4415,7 +4415,7 @@ function DailyRegisterView({
                                     step="0.01"
                                     value={editingRowVal}
                                     onChange={(e) => setEditingRowVal(e.target.value)}
-                                    className="w-28 rounded-lg border border-amber-400 bg-black/60 px-2.5 py-1 text-right text-sm font-extrabold text-white outline-none"
+                                    className="w-28 rounded-lg border border-[#FFD200] bg-black/60 px-2.5 py-1 text-right text-sm font-extrabold text-white outline-none"
                                     autoFocus
                                   />
                                   <button
@@ -4474,7 +4474,7 @@ function DailyRegisterView({
                 <button
                   type="button"
                   onClick={() => setWizardStep(4)}
-                  className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-400 via-amber-300 to-teal-300 px-6 py-3 text-sm font-extrabold text-slate-950 shadow-lg transition hover:brightness-110"
+                  className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#FFD200] via-[#FACC15] to-[#00BAC7] px-6 py-3 text-sm font-black text-black shadow-[0_0_25px_rgba(255,210,0,0.35)] transition hover:brightness-110"
                 >
                   <span>Continue to Expenses &amp; Purchases</span>
                   <ArrowRight size={16} />
@@ -4487,7 +4487,7 @@ function DailyRegisterView({
               STEP 4: EXPENSES & SUPPLIER PURCHASES (STRICT 7 CATEGORIES + SUPPLIER SYNC)
              ────────────────────────────────────────────────────────────── */}
           {wizardStep === 4 && (
-            <div className="flex flex-col gap-6 rounded-3xl border border-teal-800/30 bg-[#0F2927]/60 p-6 sm:p-8 backdrop-blur-2xl shadow-2xl">
+            <div className="flex flex-col gap-6 rounded-3xl border border-[#00BAC7]/25 bg-gradient-to-b from-[#0B1C1E]/80 to-[#061113]/90 p-6 sm:p-8 backdrop-blur-2xl shadow-2xl">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-5">
                 <div>
                   <h2 className="font-display text-2xl font-extrabold text-white">
@@ -4538,7 +4538,7 @@ function DailyRegisterView({
                           }}
                           className={`rounded-xl px-3.5 py-2 text-xs font-bold transition ${
                             active
-                              ? "bg-amber-400 text-slate-950 font-extrabold shadow-md"
+                              ? "bg-[#FFD200] text-black font-black shadow-md"
                               : existing
                               ? "border border-emerald-400/40 bg-emerald-500/10 text-emerald-200"
                               : "border border-white/15 bg-white/5 text-white hover:bg-white/10"
@@ -4555,9 +4555,9 @@ function DailyRegisterView({
                     {(step4Category === "Credit Purchase" ||
                       step4Category === "Cash Purchase" ||
                       step4Category === "Bank Purchase") && (
-                      <div className="space-y-2.5 rounded-2xl border border-teal-400/35 bg-teal-500/10 p-3.5">
+                      <div className="space-y-2.5 rounded-2xl border border-[#00BAC7]/35 bg-[#00BAC7]/10 p-3.5">
                         <div>
-                          <label className="block text-[11px] font-bold text-teal-200 mb-1">
+                          <label className="block text-[11px] font-bold text-[#22D3EE] mb-1">
                             Supplier Name (Syncs to Suppliers &amp; Payables)
                           </label>
                           <input
@@ -4566,7 +4566,7 @@ function DailyRegisterView({
                             value={step4SupplierName}
                             onChange={(e) => setStep4SupplierName(e.target.value)}
                             placeholder="e.g. Jotun, Hempel, Sigma..."
-                            className="w-full rounded-xl border border-white/15 bg-black/50 px-3.5 py-2.5 text-sm font-bold text-white placeholder:text-white/35 outline-none focus:border-amber-400"
+                            className="w-full rounded-xl border border-white/15 bg-black/50 px-3.5 py-2.5 text-sm font-bold text-white placeholder:text-white/35 outline-none focus:border-[#FFD200]"
                           />
                           <datalist id="step4-suppliers-list">
                             <option value="Jotun" />
@@ -4577,14 +4577,14 @@ function DailyRegisterView({
 
                         {step4Category === "Credit Purchase" && (
                           <div className="flex items-center justify-between gap-3 pt-1">
-                            <span className="text-xs font-bold text-amber-300">
+                            <span className="text-xs font-bold text-[#FFD200]">
                               Payment Due Date:
                             </span>
                             <input
                               type="date"
                               value={step4DueDate}
                               onChange={(e) => setStep4DueDate(e.target.value)}
-                              className="rounded-lg border border-amber-400/40 bg-black/50 px-3 py-1.5 text-xs font-bold text-white outline-none"
+                              className="rounded-lg border border-[#FFD200]/40 bg-black/50 px-3 py-1.5 text-xs font-bold text-white outline-none"
                             />
                           </div>
                         )}
@@ -4606,7 +4606,7 @@ function DailyRegisterView({
                         value={step4Amount}
                         onChange={(e) => setStep4Amount(e.target.value)}
                         placeholder="Amount (SAR)"
-                        className="flex-1 rounded-xl border border-white/15 bg-black/40 px-4 py-3.5 font-display text-lg font-extrabold text-white placeholder:text-white/30 outline-none focus:border-amber-400"
+                        className="flex-1 rounded-xl border border-white/15 bg-black/40 px-4 py-3.5 font-display text-lg font-extrabold text-white placeholder:text-white/30 outline-none focus:border-[#FFD200]"
                       />
                       <button
                         type="submit"
@@ -4642,7 +4642,7 @@ function DailyRegisterView({
                                 </span>
                                 <p className="text-sm font-bold text-white truncate">{item.title}</p>
                                 {item.dueDate && (
-                                  <span className="rounded bg-amber-500/20 border border-amber-400/40 px-2 py-0.5 text-[10px] font-bold text-amber-300">
+                                  <span className="rounded bg-[#FFD200]/20 border border-[#FFD200]/40 px-2 py-0.5 text-[10px] font-bold text-[#FFD200]">
                                     Due: {item.dueDate}
                                   </span>
                                 )}
@@ -4661,7 +4661,7 @@ function DailyRegisterView({
                                     step="0.01"
                                     value={editingRowVal}
                                     onChange={(e) => setEditingRowVal(e.target.value)}
-                                    className="w-28 rounded-lg border border-amber-400 bg-black/60 px-2.5 py-1 text-right text-sm font-extrabold text-white outline-none"
+                                    className="w-28 rounded-lg border border-[#FFD200] bg-black/60 px-2.5 py-1 text-right text-sm font-extrabold text-white outline-none"
                                     autoFocus
                                   />
                                   <button
@@ -4716,7 +4716,7 @@ function DailyRegisterView({
                 <button
                   type="button"
                   onClick={() => setWizardStep(5)}
-                  className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-400 via-amber-300 to-teal-300 px-6 py-3 text-sm font-extrabold text-slate-950 shadow-lg transition hover:brightness-110"
+                  className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#FFD200] via-[#FACC15] to-[#00BAC7] px-6 py-3 text-sm font-black text-black shadow-[0_0_25px_rgba(255,210,0,0.35)] transition hover:brightness-110"
                 >
                   <span>Open Final Audit Workbench</span>
                   <ArrowRight size={16} />
@@ -4731,7 +4731,7 @@ function DailyRegisterView({
           {wizardStep === 5 && (
             <div className="flex flex-col gap-6 pb-8">
               {/* Step 5 Audit Settlement Mode Toggle Bar + Informational MDR & VAT Banner */}
-              <div className="flex flex-col gap-3 rounded-2xl border border-teal-800/30 bg-[#0F2927]/60 px-5 py-4 backdrop-blur-2xl">
+              <div className="flex flex-col gap-3 rounded-2xl border border-[#00BAC7]/25 bg-gradient-to-b from-[#0B1C1E]/80 to-[#061113]/90 px-5 py-4 backdrop-blur-2xl">
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
                   <div className="flex flex-wrap items-center gap-3">
                     <span className="text-xs sm:text-sm font-extrabold text-white">
@@ -4743,7 +4743,7 @@ function DailyRegisterView({
                         onClick={() => setBankSettlementMode("GROSS")}
                         className={`rounded-lg px-3.5 py-2 text-xs font-extrabold transition ${
                           bankSettlementMode === "GROSS"
-                            ? "bg-amber-400 text-slate-950 shadow-sm"
+                            ? "bg-[#FFD200] text-black font-black shadow-sm"
                             : "text-white/65 hover:text-white"
                         }`}
                       >
@@ -4754,7 +4754,7 @@ function DailyRegisterView({
                         onClick={() => setBankSettlementMode("NET")}
                         className={`rounded-lg px-3.5 py-2 text-xs font-extrabold transition ${
                           bankSettlementMode === "NET"
-                            ? "bg-gradient-to-r from-amber-400 to-teal-400 text-slate-950 shadow-sm"
+                            ? "bg-gradient-to-r from-[#00A8B5] to-[#0284C7] text-white font-bold shadow-[0_0_15px_rgba(0,168,181,0.3)]"
                             : "text-white/65 hover:text-white"
                         }`}
                       >
@@ -4771,7 +4771,7 @@ function DailyRegisterView({
                 </div>
 
                 {/* Informational Audit Banner */}
-                <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-2.5 text-xs font-mono font-bold text-amber-200">
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#FFD200]/30 bg-[#FFD200]/10 px-4 py-2.5 text-xs font-mono font-bold text-[#FFD200]">
                   <span>
                     ℹ️ Est. Merchant Fees (MDR + 15% VAT):{" "}
                     <strong className="text-rose-300">-SAR {fmt(totalPosFees)}</strong>{" "}
@@ -4788,15 +4788,15 @@ function DailyRegisterView({
               </div>
 
               {/* 1. Dedicated Flagship Hero Header Banner for Physical Cash Drawer Closing Balance */}
-              <div className="relative overflow-hidden rounded-3xl border border-amber-400/50 bg-gradient-to-br from-[#0F2927]/95 via-[#0D2322]/95 to-[#132F2D]/95 p-6 sm:p-8 backdrop-blur-2xl ring-2 ring-amber-400/40 shadow-[0_0_30px_rgba(245,158,11,0.25)]">
+              <div className="relative overflow-hidden rounded-3xl border border-[#FFD200]/50 bg-gradient-to-br from-[#0B1C1E]/95 via-[#061113]/95 to-[#041012]/95 p-6 sm:p-8 backdrop-blur-2xl ring-2 ring-[#FFD200]/40 shadow-[0_0_30px_rgba(255,210,0,0.25)]">
                 {/* Ambient Golden-Amber & Emerald Glows */}
-                <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-amber-400/20 blur-3xl" />
-                <div className="pointer-events-none absolute -bottom-16 -left-16 h-64 w-64 rounded-full bg-teal-400/15 blur-3xl" />
+                <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-[#FFD200]/20 blur-3xl" />
+                <div className="pointer-events-none absolute -bottom-16 -left-16 h-64 w-64 rounded-full bg-[#00BAC7]/20 blur-3xl" />
 
                 <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
                   <div className="space-y-2.5">
-                    <div className="inline-flex items-center gap-2.5 rounded-full border border-amber-400/40 bg-amber-500/15 px-3.5 py-1.5 text-xs font-extrabold tracking-wider text-amber-200 shadow-sm">
-                      <Wallet size={15} className="text-amber-300" />
+                    <div className="inline-flex items-center gap-2.5 rounded-full border border-[#FFD200]/40 bg-[#FFD200]/15 px-3.5 py-1.5 text-xs font-extrabold tracking-wider text-[#FFD200] shadow-sm">
+                      <Wallet size={15} className="text-[#FFD200]" />
                       <span>PHYSICAL CASH DRAWER CLOSING BALANCE</span>
                     </div>
                     <p className="text-sm sm:text-base text-white/75">
@@ -4807,26 +4807,26 @@ function DailyRegisterView({
                   <div className="flex flex-col lg:items-end gap-2.5">
                     <div className="flex items-center gap-3">
                       <span className="inline-flex h-3 w-3 rounded-full bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.9)] animate-pulse" />
-                      <span className="text-3xl lg:text-4xl font-extrabold tracking-tight text-amber-300 font-mono whitespace-nowrap">
+                      <span className="text-3xl lg:text-4xl font-extrabold tracking-tight text-[#FFD200] font-mono whitespace-nowrap drop-shadow-[0_0_15px_rgba(255,210,0,0.3)]">
                         SAR {fmt(calculatedClosingBalance)}
                       </span>
                     </div>
 
                     {/* Live Visual Formula Tag directly under the Hero Number */}
-                    <div className="inline-flex flex-wrap items-center gap-2 rounded-xl border border-amber-400/30 bg-black/45 px-3.5 py-2 text-xs font-mono text-white/80 shadow-inner">
+                    <div className="inline-flex flex-wrap items-center gap-2 rounded-xl border border-[#FFD200]/30 bg-black/45 px-3.5 py-2 text-xs font-mono text-white/80 shadow-inner">
                       <span>
                         Opening Cash (<strong className="text-white">SAR {fmt(openingBalance)}</strong>)
                       </span>
-                      <span className="text-amber-300 font-bold">+</span>
+                      <span className="text-[#FFD200] font-bold">+</span>
                       <span>
                         Cash Inflows (<strong className="text-emerald-300">SAR {fmt(totalCashInSalesAndReceipts)}</strong>)
                       </span>
-                      <span className="text-amber-300 font-bold">-</span>
+                      <span className="text-[#FFD200] font-bold">-</span>
                       <span>
                         Cash Outflows (<strong className="text-rose-300">SAR {fmt(totalMoneyOutDrawer)}</strong>)
                       </span>
-                      <span className="text-amber-300 font-bold">=</span>
-                      <span className="rounded bg-amber-400/20 px-2 py-0.5 font-extrabold text-amber-300">
+                      <span className="text-[#FFD200] font-bold">=</span>
+                      <span className="rounded bg-[#FFD200]/20 px-2 py-0.5 font-extrabold text-[#FFD200]">
                         Final Drawer Cash (SAR {fmt(calculatedClosingBalance)})
                       </span>
                     </div>
@@ -5270,7 +5270,7 @@ function DailyRegisterView({
                                           )
                                         );
                                       }}
-                                      className="rounded-lg border border-teal-850 bg-[#0D2322] px-2 py-1 text-xs font-bold text-amber-300 outline-none"
+                                      className="rounded-lg border border-[#00BAC7]/30 bg-[#061113] px-2 py-1 text-xs font-bold text-[#FFD200] outline-none"
                                     >
                                       {STRICT_EXPENSE_CATEGORIES.map((c) => (
                                         <option key={c} value={c}>
@@ -5355,7 +5355,7 @@ function DailyRegisterView({
                             onChange={(e) =>
                               setMissingExpenseCat(e.target.value as StrictExpenseCategory)
                             }
-                            className="rounded-xl border border-teal-800/40 bg-[#0D2322] px-3 py-2 text-xs font-bold text-amber-300 outline-none"
+                            className="rounded-xl border border-[#00BAC7]/30 bg-[#061113] px-3 py-2 text-xs font-bold text-[#FFD200] outline-none"
                           >
                             {STRICT_EXPENSE_CATEGORIES.map((c) => (
                               <option key={c} value={c}>
@@ -5648,7 +5648,7 @@ function DailyRegisterView({
               </div>
 
               {/* Sticky Bottom Action Bar */}
-              <div className="sticky bottom-4 z-20 flex flex-col lg:flex-row lg:items-center justify-between gap-4 rounded-2xl border border-amber-400/40 bg-[#0D2322]/95 px-6 py-4 backdrop-blur-2xl shadow-[0_10px_40px_rgba(0,0,0,0.6)]">
+              <div className="sticky bottom-4 z-20 flex flex-col lg:flex-row lg:items-center justify-between gap-4 rounded-2xl border border-[#00BAC7]/30 bg-[#061113]/95 px-6 py-4 backdrop-blur-2xl shadow-[0_10px_40px_rgba(0,0,0,0.6)]">
                 <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm font-medium text-white/65">
                   <span>Opening <strong className="text-white/90">SAR {fmt(openingBalance)}</strong></span>
                   <span className="text-white/35">+</span>
@@ -5659,11 +5659,11 @@ function DailyRegisterView({
 
                 <div className="flex flex-wrap items-center justify-between lg:justify-end gap-3.5">
                   {/* Mirrored Highlighted Expected Drawer Cash Badge with Glowing Pulse */}
-                  <div className="inline-flex items-center gap-2.5 rounded-xl border border-amber-400/50 bg-gradient-to-r from-emerald-500/15 to-amber-500/20 px-4 py-2.5 ring-1 ring-amber-400/30 shadow-[0_0_20px_rgba(245,158,11,0.2)]">
+                  <div className="inline-flex items-center gap-2.5 rounded-xl border border-[#FFD200]/50 bg-gradient-to-r from-emerald-500/15 to-[#FFD200]/20 px-4 py-2.5 ring-1 ring-[#FFD200]/30 shadow-[0_0_20px_rgba(255,210,0,0.2)]">
                     <span className="inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.9)] animate-pulse" />
                     <span className="text-xs sm:text-sm font-bold text-amber-100 whitespace-nowrap">
                       Expected Drawer Cash:{" "}
-                      <strong className="font-mono text-base sm:text-lg font-extrabold text-amber-300">
+                      <strong className="font-mono text-base sm:text-lg font-extrabold text-[#FFD200]">
                         [SAR {fmt(calculatedClosingBalance)}]
                       </strong>
                     </span>
@@ -5672,9 +5672,9 @@ function DailyRegisterView({
                   <button
                     type="button"
                     onClick={handleLockAndSaveDay}
-                    className="flex items-center justify-center gap-2.5 rounded-xl bg-gradient-to-r from-emerald-400 via-teal-400 to-amber-400 px-7 py-3.5 text-sm sm:text-base font-extrabold text-slate-950 shadow-[0_0_30px_rgba(45,212,191,0.35)] transition hover:scale-[1.01] whitespace-nowrap"
+                    className="flex items-center justify-center gap-2.5 rounded-xl bg-gradient-to-r from-[#FFD200] via-[#FACC15] to-[#00BAC7] px-7 py-3.5 text-sm sm:text-base font-black text-black shadow-[0_0_30px_rgba(255,210,0,0.35)] transition hover:scale-[1.01] whitespace-nowrap"
                   >
-                    <Lock size={18} className="text-slate-950" />
+                    <Lock size={18} className="text-black" />
                     <span>🔒 Confirm Drawer Cash &amp; Lock Register</span>
                   </button>
                 </div>
@@ -5690,18 +5690,18 @@ function DailyRegisterView({
       {trackingMode === "datasheet" && (
         <div className="relative z-10 w-full px-4 sm:px-6 py-6 flex flex-col gap-5">
           {/* 1. Official Sheet Header Bar */}
-          <div className="rounded-3xl border border-teal-800/40 bg-gradient-to-r from-[#0F2927]/95 via-[#0D2322]/95 to-[#132F2D]/95 p-5 sm:p-6 backdrop-blur-2xl shadow-2xl">
+          <div className="rounded-3xl border border-[#00BAC7]/30 bg-gradient-to-r from-[#0B1C1E]/95 via-[#061113]/95 to-[#041012]/95 p-5 sm:p-6 backdrop-blur-2xl shadow-2xl">
             <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
               <div>
                 <div className="flex flex-wrap items-center gap-3">
-                  <span className="rounded-lg bg-amber-400 px-2.5 py-1 font-mono text-xs font-black text-slate-950">
+                  <span className="rounded-lg bg-[#FFD200] px-2.5 py-1 font-mono text-xs font-black text-black">
                     JCT OFFICIAL LEDGER
                   </span>
                   <h1 className="font-display text-xl sm:text-2xl font-black tracking-wide text-white">
                     DAILY DATA SHEET : JUBAIL CORP. TRADING EST.
                   </h1>
                 </div>
-                <p className="mt-1.5 font-mono text-xs sm:text-sm font-semibold text-amber-200/80">
+                <p className="mt-1.5 font-mono text-xs sm:text-sm font-semibold text-[#FFD200]/80">
                   Tel.: 3623251 / 3614748 · P.O. Box 1461 - Jubail 31951 - Kingdom of Saudi Arabia
                 </p>
               </div>
@@ -5720,16 +5720,16 @@ function DailyRegisterView({
                 <button
                   type="button"
                   onClick={handleSyncSheetFromWizard}
-                  className="flex items-center gap-1.5 rounded-xl border border-teal-400/40 bg-teal-500/20 hover:bg-teal-500/30 px-3.5 py-2.5 text-xs font-extrabold text-teal-200 transition whitespace-nowrap"
+                  className="flex items-center gap-1.5 rounded-xl border border-[#00BAC7]/40 bg-[#00BAC7]/20 hover:bg-[#00BAC7]/30 px-3.5 py-2.5 text-xs font-extrabold text-[#22D3EE] transition whitespace-nowrap"
                 >
-                  <Zap size={14} className="text-amber-300" />
+                  <Zap size={14} className="text-[#FFD200]" />
                   <span>⚡ Sync from Guided Wizard</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={handleAdd5SheetRows}
-                  className="flex items-center gap-1.5 rounded-xl border border-amber-400/40 bg-amber-500/15 hover:bg-amber-500/25 px-3.5 py-2.5 text-xs font-extrabold text-amber-300 transition whitespace-nowrap"
+                  className="flex items-center gap-1.5 rounded-xl border border-[#FFD200]/40 bg-[#FFD200]/15 hover:bg-[#FFD200]/25 px-3.5 py-2.5 text-xs font-extrabold text-[#FFD200] transition whitespace-nowrap"
                 >
                   <Plus size={14} />
                   <span>+ Add 5 Rows</span>
@@ -5738,7 +5738,7 @@ function DailyRegisterView({
                 <button
                   type="button"
                   onClick={handleSaveAndCloseSheet}
-                  className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-emerald-400 via-teal-400 to-amber-400 px-5 py-2.5 text-xs sm:text-sm font-black text-slate-950 shadow-[0_0_25px_rgba(45,212,191,0.35)] hover:scale-[1.01] transition whitespace-nowrap"
+                  className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#FFD200] via-[#FACC15] to-[#00BAC7] px-5 py-2.5 text-xs sm:text-sm font-black text-black shadow-[0_0_25px_rgba(255,210,0,0.35)] hover:scale-[1.01] transition whitespace-nowrap"
                 >
                   <Lock size={14} />
                   <span>🔒 Save &amp; Close Sheet</span>
@@ -5760,9 +5760,9 @@ function DailyRegisterView({
                 <span className="block text-[10px] font-bold text-indigo-300/80">CREDIT INV. AMOUNT</span>
                 <span className="font-display font-extrabold text-indigo-300">SAR {fmt(dsCreditInvTotal)}</span>
               </div>
-              <div className="rounded-xl border border-amber-400/35 bg-amber-500/10 px-3.5 py-2">
-                <span className="block text-[10px] font-extrabold text-amber-300">TOTAL AMT (INFLOWS)</span>
-                <span className="font-display text-sm font-black text-amber-300">SAR {fmt(dsTotalAmt)}</span>
+              <div className="rounded-xl border border-[#FFD200]/35 bg-[#FFD200]/10 px-3.5 py-2">
+                <span className="block text-[10px] font-extrabold text-[#FFD200]">TOTAL AMT (INFLOWS)</span>
+                <span className="font-display text-sm font-black text-[#FFD200]">SAR {fmt(dsTotalAmt)}</span>
               </div>
               <div className="rounded-xl border border-white/10 bg-black/35 px-3.5 py-2">
                 <span className="block text-[10px] font-bold text-sky-300/80">TO BANK (✓ VERIFIED)</span>
@@ -5776,12 +5776,12 @@ function DailyRegisterView({
           </div>
 
           {/* 2. Editable 19-Column Spreadsheet Grid */}
-          <div className="rounded-3xl border border-white/15 bg-[#0e091a]/95 backdrop-blur-2xl shadow-2xl overflow-hidden">
+          <div className="rounded-3xl border border-[#00BAC7]/25 bg-[#061113]/95 backdrop-blur-2xl shadow-2xl overflow-hidden">
             <div className="overflow-x-auto max-h-[68vh] overflow-y-auto">
               <table className="w-full border-collapse text-xs font-mono">
-                <thead className="sticky top-0 z-20 bg-[#19102c] text-[10px] font-extrabold uppercase tracking-wider text-amber-200 shadow-md">
+                <thead className="sticky top-0 z-20 bg-[#0B1C1E] text-[10px] font-extrabold uppercase tracking-wider text-[#FFD200] shadow-md">
                   <tr className="border-b border-white/20 divide-x divide-white/15">
-                    <th className="px-2.5 py-3 text-center bg-[#211538] text-white/60 w-9">#</th>
+                    <th className="px-2.5 py-3 text-center bg-[#041012] text-white/60 w-9">#</th>
                     <th className="px-3 py-3 text-left min-w-[96px] text-amber-300">1. INVOICE NO.</th>
                     <th className="px-3 py-3 text-right min-w-[115px] text-emerald-300">2. AMT CASH SALE</th>
                     <th className="px-3 py-3 text-right min-w-[125px] text-indigo-300">3. CREDIT INV. AMOUNT</th>
@@ -6210,10 +6210,10 @@ function DailyRegisterView({
                 </tbody>
 
                 {/* Sticky Footer Row — Live Column Totals, TOTAL AMT (44,909.00) & CLOSING BALANCE (4,500.00) */}
-                <tfoot className="sticky bottom-0 z-20 bg-[#0D2322] border-t-2 border-amber-400/60 text-xs font-mono font-black text-white shadow-[0_-10px_25px_rgba(0,0,0,0.6)]">
+                <tfoot className="sticky bottom-0 z-20 bg-[#061113] border-t-2 border-[#FFD200]/60 text-xs font-mono font-black text-white shadow-[0_-10px_25px_rgba(0,0,0,0.6)]">
                   <tr className="divide-x divide-white/15">
-                    <td className="px-2 py-3.5 text-center text-amber-300">∑</td>
-                    <td className="px-3 py-3.5 text-left text-amber-300">
+                    <td className="px-2 py-3.5 text-center text-[#FFD200]">∑</td>
+                    <td className="px-3 py-3.5 text-left text-[#FFD200]">
                       TOTAL ({sheetRows.length} ROWS)
                     </td>
                     <td className="px-3 py-3.5 text-right text-emerald-300">
@@ -6352,10 +6352,10 @@ function CreditRadarView({
                 onClick={() => setActiveId(c.id)}
                 className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition ring-1 ${
                   active?.id === c.id
-                    ? "bg-teal-500 text-slate-950 font-extrabold ring-teal-400 shadow-md"
+                    ? "bg-[#00BAC7] text-black font-black ring-[#00BAC7] shadow-md"
                     : c.syncedFromRegister
-                    ? "bg-amber-100/90 text-slate-900 ring-amber-400 hover:bg-amber-200 dark:bg-amber-400/20 dark:text-amber-200 dark:ring-amber-400/50"
-                    : "bg-white text-slate-800 ring-slate-200 hover:bg-slate-50 dark:bg-[#0D2322] dark:text-slate-200 dark:ring-teal-800/30"
+                    ? "bg-amber-100/90 text-slate-900 ring-amber-400 hover:bg-amber-200 dark:bg-[#FFD200]/20 dark:text-[#FFD200] dark:ring-[#FFD200]/50"
+                    : "bg-white text-slate-800 ring-slate-200 hover:bg-slate-50 dark:bg-[#061113] dark:text-slate-200 dark:ring-[#00BAC7]/30"
                 }`}
               >
                 <span>
@@ -6378,11 +6378,11 @@ function CreditRadarView({
           {/* New Credit Issue Box */}
           <form
             onSubmit={handleCreateCredit}
-            className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-900/5 p-5 shrink-0 dark:bg-[#0F2927] dark:ring-teal-800/30"
+            className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-900/5 p-5 shrink-0 dark:bg-gradient-to-b dark:from-[#0B1C1E]/90 dark:to-[#061113]/90 dark:ring-[#00BAC7]/30"
           >
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-display font-extrabold text-lg text-slate-900 dark:text-white flex items-center gap-2">
-                <Plus size={18} className="text-teal-400" /> Issue New Credit / Update Follow-up
+                <Plus size={18} className="text-[#00BAC7]" /> Issue New Credit / Update Follow-up
               </h2>
               <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-2.5 py-1 rounded-full">
                 ● Live Synced with Daily Register
@@ -6395,7 +6395,7 @@ function CreditRadarView({
                   value={contractorInput}
                   onChange={(e) => setContractorInput(e.target.value)}
                   placeholder="Customer / Contractor Name..."
-                  className="w-full px-4 py-2.5 bg-slate-50 rounded-xl ring-1 ring-slate-200 focus:ring-2 focus:ring-teal-400 font-medium text-sm outline-none dark:bg-[#0D2322] dark:ring-teal-800/40 dark:text-white transition-shadow"
+                  className="w-full px-4 py-2.5 bg-slate-50 rounded-xl ring-1 ring-slate-200 focus:ring-2 focus:ring-[#00BAC7] font-medium text-sm outline-none dark:bg-[#061113] dark:ring-[#00BAC7]/30 dark:text-white transition-shadow"
                 />
               </div>
               <input
@@ -6404,24 +6404,24 @@ function CreditRadarView({
                 value={amountInput}
                 onChange={(e) => setAmountInput(e.target.value)}
                 placeholder="Amount (SAR)"
-                className="flex-1 min-w-[120px] px-4 py-2.5 bg-slate-50 rounded-xl ring-1 ring-slate-200 focus:ring-2 focus:ring-teal-400 font-bold text-sm outline-none dark:bg-[#0D2322] dark:ring-teal-800/40 dark:text-white transition-shadow"
+                className="flex-1 min-w-[120px] px-4 py-2.5 bg-slate-50 rounded-xl ring-1 ring-slate-200 focus:ring-2 focus:ring-[#00BAC7] font-bold text-sm outline-none dark:bg-[#061113] dark:ring-[#00BAC7]/30 dark:text-white transition-shadow"
               />
               <input
                 type="text"
                 value={receiptInput}
                 onChange={(e) => setReceiptInput(e.target.value)}
                 placeholder="Invoice # (e.g. #30064)"
-                className="flex-1 min-w-[120px] px-4 py-2.5 bg-slate-50 rounded-xl ring-1 ring-slate-200 focus:ring-2 focus:ring-teal-400 font-medium text-sm outline-none dark:bg-[#0D2322] dark:ring-teal-800/40 dark:text-white transition-shadow"
+                className="flex-1 min-w-[120px] px-4 py-2.5 bg-slate-50 rounded-xl ring-1 ring-slate-200 focus:ring-2 focus:ring-[#00BAC7] font-medium text-sm outline-none dark:bg-[#061113] dark:ring-[#00BAC7]/30 dark:text-white transition-shadow"
               />
               <input
                 type="date"
                 value={dueDateInput}
                 onChange={(e) => setDueDateInput(e.target.value)}
-                className="flex-1 min-w-[140px] px-4 py-2.5 bg-slate-50 rounded-xl ring-1 ring-slate-200 focus:ring-2 focus:ring-teal-400 font-medium text-sm outline-none dark:bg-[#0D2322] dark:ring-teal-800/40 dark:text-white text-slate-500 transition-shadow"
+                className="flex-1 min-w-[140px] px-4 py-2.5 bg-slate-50 rounded-xl ring-1 ring-slate-200 focus:ring-2 focus:ring-[#00BAC7] font-medium text-sm outline-none dark:bg-[#061113] dark:ring-[#00BAC7]/30 dark:text-white text-slate-500 transition-shadow"
               />
               <button
                 type="submit"
-                className="px-6 py-2.5 bg-teal-500 text-slate-950 rounded-xl font-extrabold hover:bg-teal-400 transition shadow-md shadow-teal-500/20 whitespace-nowrap shrink-0"
+                className="px-6 py-2.5 bg-gradient-to-r from-[#00A8B5] to-[#0284C7] text-white rounded-xl font-black hover:brightness-110 transition shadow-md shadow-[#00A8B5]/20 whitespace-nowrap shrink-0"
               >
                 Issue Credit
               </button>
@@ -6731,7 +6731,7 @@ function SupplierHubView({
               placeholder="Search Supplier (Jotun, Hempel, Sigma...)"
               value={supplierSearch}
               onChange={(e) => setSupplierSearch(e.target.value)}
-              className="flex-[2] min-w-[200px] px-4 py-2.5 bg-slate-50 rounded-xl ring-1 ring-slate-200 focus:ring-2 focus:ring-teal-400 font-medium text-sm outline-none dark:bg-[#0D2322] dark:ring-teal-800/40 dark:text-white transition-shadow"
+              className="flex-[2] min-w-[200px] px-4 py-2.5 bg-slate-50 rounded-xl ring-1 ring-slate-200 focus:ring-2 focus:ring-[#00BAC7] font-medium text-sm outline-none dark:bg-[#061113] dark:ring-[#00BAC7]/30 dark:text-white transition-shadow"
             />
             <datalist id="suppliers-list">
               <option value="Jotun" />
@@ -6744,7 +6744,7 @@ function SupplierHubView({
               placeholder="Amount (SAR)"
               value={logAmount}
               onChange={(e) => setLogAmount(e.target.value)}
-              className="flex-1 min-w-[120px] px-4 py-2.5 bg-slate-50 rounded-xl ring-1 ring-slate-200 focus:ring-2 focus:ring-teal-400 font-bold text-sm outline-none dark:bg-[#0D2322] dark:ring-teal-800/40 dark:text-white transition-shadow"
+              className="flex-1 min-w-[120px] px-4 py-2.5 bg-slate-50 rounded-xl ring-1 ring-slate-200 focus:ring-2 focus:ring-[#00BAC7] font-bold text-sm outline-none dark:bg-[#061113] dark:ring-[#00BAC7]/30 dark:text-white transition-shadow"
             />
             <select
               value={logType}
@@ -6754,7 +6754,7 @@ function SupplierHubView({
               className={`flex-1 min-w-[150px] px-4 py-2.5 rounded-xl ring-1 outline-none font-bold text-sm transition-shadow ${
                 logType === "Return"
                   ? "bg-amber-50 ring-amber-200 text-amber-700 focus:ring-amber-500 dark:bg-amber-500/10 dark:ring-amber-500/30 dark:text-amber-400"
-                  : "bg-slate-50 ring-slate-200 focus:ring-2 focus:ring-teal-400 dark:bg-[#0D2322] dark:ring-teal-800/40 dark:text-white text-slate-700"
+                  : "bg-slate-50 ring-slate-200 focus:ring-2 focus:ring-[#00BAC7] dark:bg-[#061113] dark:ring-[#00BAC7]/30 dark:text-white text-slate-700"
               }`}
             >
               <option value="Credit Purchase">Credit Purchase</option>
@@ -6765,14 +6765,14 @@ function SupplierHubView({
               type="date"
               value={logDate}
               onChange={(e) => setLogDate(e.target.value)}
-              className="flex-1 min-w-[140px] px-4 py-2.5 bg-slate-50 rounded-xl ring-1 ring-slate-200 focus:ring-2 focus:ring-teal-400 font-medium text-sm outline-none dark:bg-[#0D2322] dark:ring-teal-800/40 dark:text-white text-slate-500 transition-shadow"
+              className="flex-1 min-w-[140px] px-4 py-2.5 bg-slate-50 rounded-xl ring-1 ring-slate-200 focus:ring-2 focus:ring-[#00BAC7] font-medium text-sm outline-none dark:bg-[#061113] dark:ring-[#00BAC7]/30 dark:text-white text-slate-500 transition-shadow"
             />
             <button
               type="submit"
               className={`px-6 py-2.5 text-white rounded-xl font-bold transition shadow-md whitespace-nowrap shrink-0 ${
                 logType === "Return"
-                  ? "bg-amber-500 hover:bg-amber-600 shadow-amber-500/20"
-                  : "bg-teal-500 hover:bg-teal-400 text-slate-950 font-extrabold shadow-teal-500/20"
+                  ? "bg-[#FFD200] hover:bg-[#FFD200]/90 text-black font-black shadow-[0_0_15px_rgba(255,210,0,0.3)]"
+                  : "bg-gradient-to-r from-[#00A8B5] to-[#0284C7] hover:brightness-110 text-white font-black shadow-[0_0_15px_rgba(0,168,181,0.3)]"
               }`}
             >
               {logType === "Return" ? "Log Return" : "Log Purchase"}
@@ -7904,7 +7904,7 @@ export default function Page() {
 
   return (
     <div
-      className={`flex h-screen w-full bg-slate-50 text-slate-900 antialiased overflow-hidden dark:bg-[#0B0E14] dark:text-slate-100 ${
+      className={`flex h-screen w-full bg-slate-50 text-slate-900 antialiased overflow-hidden dark:bg-[#041012] dark:text-slate-100 ${
         dark ? "dark" : ""
       }`}
     >
@@ -7912,21 +7912,21 @@ export default function Page() {
 
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Top Header */}
-        <header className="flex shrink-0 flex-wrap items-center justify-between gap-4 border-b border-slate-200 bg-white/50 px-6 py-4 backdrop-blur-xl dark:border-teal-900/40 dark:bg-[#071314]/90 z-20">
+        <header className="flex shrink-0 flex-wrap items-center justify-between gap-4 border-b border-slate-200 bg-white/50 px-6 py-4 backdrop-blur-xl dark:border-[#00BAC7]/20 dark:bg-gradient-to-r dark:from-[#041012] dark:via-[#051719] dark:to-[#010405] z-20">
           <div className="flex items-center gap-4">
             <h1 className="font-display text-xl font-extrabold tracking-tight text-white hidden sm:block">
               Good afternoon, Fahad
             </h1>
-            <div className="h-6 w-px bg-slate-200 dark:bg-teal-900/60 hidden sm:block"></div>
-            <div className="flex items-center gap-2 text-sm font-bold text-teal-100/70">
-              <CalendarDays size={16} className="text-teal-400" /> 12-09-2026
+            <div className="h-6 w-px bg-slate-200 dark:bg-[#00BAC7]/20 hidden sm:block"></div>
+            <div className="flex items-center gap-2 text-sm font-bold text-white/80">
+              <CalendarDays size={16} className="text-[#00BAC7]" /> 12-09-2026
             </div>
-            <div className="h-6 w-px bg-slate-200 dark:bg-teal-900/60 hidden sm:block"></div>
+            <div className="h-6 w-px bg-slate-200 dark:bg-[#00BAC7]/20 hidden sm:block"></div>
             <Dropdown.Root>
-              <Dropdown.Trigger className="flex h-10 items-center gap-2 rounded-lg bg-slate-100 px-3 text-sm font-bold hover:bg-slate-200 dark:bg-[#0D2322] dark:border dark:border-teal-800/40 dark:text-teal-100 dark:hover:bg-teal-900/30 outline-none transition">
-                <Store size={16} className="text-teal-400" />
+              <Dropdown.Trigger className="flex h-10 items-center gap-2 rounded-lg bg-slate-100 px-3 text-sm font-bold hover:bg-slate-200 dark:bg-[#061113] dark:border dark:border-[#00BAC7]/30 dark:text-white dark:hover:border-[#00BAC7]/60 outline-none transition">
+                <Store size={16} className="text-[#00BAC7]" />
                 Jubail - Main Branch
-                <ChevronDown size={14} className="text-teal-300/60" />
+                <ChevronDown size={14} className="text-[#00BAC7]/70" />
               </Dropdown.Trigger>
             </Dropdown.Root>
           </div>

@@ -25,25 +25,25 @@
   color-scheme: light;
 }
 
-/* ---------- Dark: Jubail Corp Deep Obsidian Teal & Forest Slate ---------- */
+/* ---------- Dark: True JCT Brand (Electric Cyan, Industrial Yellow, Deep Obsidian Black) ---------- */
 .dark {
-  --bg: #071314;
-  --card: rgba(15, 41, 39, 0.8);
-  --card-solid: #132f2d;
-  --raised: #0d2322;
-  --line: rgba(20, 184, 166, 0.18);
-  --line-strong: rgba(45, 212, 191, 0.28);
-  --fg: #e6f7f6;
-  --muted: #7fa4a1;
-  --accent: #2dd4bf;
-  --accent-fg: #071314;
-  --accent-soft: rgba(45, 212, 191, 0.15);
+  --bg: #041012;
+  --card: rgba(11, 28, 30, 0.85);
+  --card-solid: #0b1c1e;
+  --raised: #061113;
+  --line: rgba(0, 186, 199, 0.2);
+  --line-strong: rgba(0, 186, 199, 0.4);
+  --fg: #ffffff;
+  --muted: #8ea5a8;
+  --accent: #00bac7;
+  --accent-fg: #000000;
+  --accent-soft: rgba(0, 186, 199, 0.18);
   --pos: #34d399;
   --pos-soft: rgba(52, 211, 153, 0.12);
   --neg: #fb7185;
   --neg-soft: rgba(251, 113, 133, 0.12);
-  --warn: #fbbf24;
-  --warn-soft: rgba(251, 191, 36, 0.13);
+  --warn: #ffd200;
+  --warn-soft: rgba(255, 210, 0, 0.16);
   color-scheme: dark;
 }
 
