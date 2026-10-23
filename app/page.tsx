@@ -177,19 +177,19 @@ function Sidebar({ tab, setTab }: { tab: TabId; setTab: (t: TabId) => void }) {
     { id: "ai" as TabId, label: "Nauman AI", icon: Sparkles },
   ];
   return (
-    <aside className="hidden w-64 shrink-0 flex-col overflow-hidden bg-gradient-to-b from-purple-700 to-indigo-900 p-5 text-white lg:flex relative z-40">
+    <aside className="hidden w-64 shrink-0 flex-col overflow-hidden bg-[#0D2322] border-r border-teal-900/40 p-5 text-white lg:flex relative z-40">
       <div className="relative flex items-center gap-3 px-1 pb-8 pt-1">
-        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/10 font-display text-base font-extrabold tracking-tight shadow-sm ring-1 ring-white/20 backdrop-blur-md">
+        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-teal-500/20 font-display text-base font-extrabold tracking-tight text-teal-300 shadow-sm ring-1 ring-teal-400/30 backdrop-blur-md">
           JCT
         </div>
         <div className="leading-tight">
-          <p className="font-display text-[15px] font-extrabold tracking-tight">JCT Financial OS</p>
-          <p className="text-[11px] text-white/60">Jubail Corp. Trading Est.</p>
+          <p className="font-display text-[15px] font-extrabold tracking-tight text-teal-300">JCT Financial OS</p>
+          <p className="text-[11px] text-teal-100/70">Jubail Corp. Trading Est.</p>
         </div>
       </div>
 
       <nav className="flex flex-col gap-2 flex-1">
-        <p className="px-3 pb-2 text-[10px] font-bold uppercase tracking-[0.15em] text-white/40">Modules</p>
+        <p className="px-3 pb-2 text-[10px] font-bold uppercase tracking-[0.15em] text-teal-300/60">Modules</p>
         {nav.map(({ id, label, icon: Icon }) => {
           const active = tab === id;
           return (
@@ -198,11 +198,11 @@ function Sidebar({ tab, setTab }: { tab: TabId; setTab: (t: TabId) => void }) {
               onClick={() => setTab(id)}
               className={`group relative flex w-full items-center gap-3 rounded-xl px-3.5 py-3 text-left text-[14px] font-semibold transition-all ${
                 active
-                  ? "border border-white/40 bg-white/20 text-white shadow-sm backdrop-blur-md"
-                  : "border border-transparent text-white/70 hover:bg-white/10 hover:text-white"
+                  ? "border border-teal-400/40 bg-teal-500/20 text-teal-300 shadow-[0_0_15px_rgba(45,212,191,0.25)] backdrop-blur-md"
+                  : "border border-transparent text-teal-100/70 hover:bg-teal-900/30 hover:text-white"
               }`}
             >
-              <Icon size={18} strokeWidth={active ? 2.2 : 1.8} className={id === "ai" && active ? "text-amber-300 drop-shadow-[0_0_8px_rgba(252,211,77,0.8)]" : ""} />
+              <Icon size={18} strokeWidth={active ? 2.2 : 1.8} className={id === "ai" && active ? "text-amber-300 drop-shadow-[0_0_8px_rgba(252,211,77,0.8)]" : active ? "text-teal-300" : ""} />
               <span className="flex-1">{label}</span>
             </button>
           );
@@ -210,9 +210,9 @@ function Sidebar({ tab, setTab }: { tab: TabId; setTab: (t: TabId) => void }) {
       </nav>
       
       <div className="mt-auto space-y-3">
-        <div className="rounded-xl bg-white/10 p-4 ring-1 ring-white/20 backdrop-blur-md">
-          <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-white/50">Drawer Status</p>
-          <div className="mt-1.5 flex items-center gap-2 text-sm font-semibold text-white">
+        <div className="rounded-xl bg-[#0F2927] p-4 border border-teal-800/40 backdrop-blur-md">
+          <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-teal-300/60">Drawer Status</p>
+          <div className="mt-1.5 flex items-center gap-2 text-sm font-semibold text-teal-100">
             <span className="relative flex h-2.5 w-2.5">
               <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping"></span>
               <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
@@ -279,7 +279,7 @@ function CrystalCanvas() {
     window.addEventListener("mousemove", handleMouseMove);
     window.addEventListener("mouseleave", handleMouseLeave);
 
-    const palette = ["#f59e0b", "#a855f7", "#ffffff", "#fbbf24", "#c084fc"];
+    const palette = ["#2dd4bf", "#f59e0b", "#ffffff", "#14b8a6", "#fbbf24"];
     const shapes: ("diamond" | "hex" | "spark")[] = ["diamond", "hex", "spark"];
     const count = 72;
 
@@ -1223,21 +1223,21 @@ function CreditSaleModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg rounded-3xl border border-indigo-400/40 bg-[#140b24] p-6 shadow-[0_0_60px_rgba(99,102,241,0.3)] space-y-4 max-h-[90vh] overflow-y-auto"
+        className="w-full max-w-lg rounded-3xl border border-teal-500/40 bg-[#0F2927] p-6 shadow-[0_0_60px_rgba(45,212,191,0.25)] space-y-4 max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between gap-3 border-b border-white/10 pb-3">
+        <div className="flex items-start justify-between gap-3 border-b border-teal-900/50 pb-3">
           <div>
             <h3 className="font-display text-lg font-extrabold text-white">
               Credit Sale Setup · Inv #{invoice.invoiceNo}
             </h3>
             <p className="mt-0.5 text-xs text-white/60">
               {invoice.customer} ·{" "}
-              <strong className="text-indigo-200">SAR {fmt(invoice.amount)}</strong>
+              <strong className="text-teal-300">SAR {fmt(invoice.amount)}</strong>
             </p>
           </div>
           <button
@@ -1264,7 +1264,7 @@ function CreditSaleModal({
                 onClick={() => setSettlement(val)}
                 className={`rounded-xl border px-4 py-2.5 text-left text-xs font-bold transition ${
                   settlement === val
-                    ? "border-indigo-300 bg-indigo-500/25 text-indigo-100"
+                    ? "border-teal-400 bg-teal-500/20 text-teal-200"
                     : "border-white/15 bg-white/5 text-white/70 hover:bg-white/10"
                 }`}
               >
@@ -1338,8 +1338,8 @@ function CreditSaleModal({
           />
         </div>
 
-        <div className="flex items-center justify-between rounded-xl border border-indigo-400/30 bg-black/40 px-4 py-2 font-mono text-xs font-bold">
-          <span className="text-indigo-200">Credit Receivable: SAR {fmt(creditPreview)}</span>
+        <div className="flex items-center justify-between rounded-xl border border-teal-500/30 bg-black/40 px-4 py-2 font-mono text-xs font-bold">
+          <span className="text-teal-200">Credit Receivable: SAR {fmt(creditPreview)}</span>
           {settlement === "PARTIAL" && !downInvalid && (
             <span className="text-emerald-300">
               Down: SAR {fmt(downVal)} → {downMethod === "CASH" ? "Drawer" : "Bank"}
@@ -1359,7 +1359,7 @@ function CreditSaleModal({
               followUpDate,
             })
           }
-          className="w-full rounded-xl bg-indigo-400 hover:bg-indigo-300 disabled:opacity-40 disabled:cursor-not-allowed px-6 py-3.5 text-sm font-extrabold text-slate-950 transition"
+          className="w-full rounded-xl bg-teal-400 hover:bg-teal-300 disabled:opacity-40 disabled:cursor-not-allowed px-6 py-3.5 text-sm font-extrabold text-slate-950 transition"
         >
           Save &amp; Sync to Credit Radar
         </button>
@@ -2845,24 +2845,24 @@ function DailyRegisterView({
     },
     OTHER_IN: {
       label: "Other Amt Recd",
-      badgeClass: "bg-purple-500/20 text-purple-300 border-purple-500/30",
+      badgeClass: "bg-teal-500/20 text-teal-300 border-teal-500/30",
       isOutflow: false,
     },
   };
 
   return (
-    <div className="relative flex-1 h-full w-full overflow-y-auto bg-gradient-to-br from-[#0c0714] via-[#1a0f2e] to-[#25161b] text-white select-none">
+    <div className="relative flex-1 h-full w-full overflow-y-auto bg-[#071314] text-white select-none">
       {/* Interactive Antigravity Crystal Particle Canvas */}
       <CrystalCanvas />
 
       {/* Subtle Ambient Cosmic Glows */}
-      <div className="pointer-events-none absolute -top-28 left-1/4 h-96 w-96 rounded-full bg-purple-600/15 blur-[130px]" />
+      <div className="pointer-events-none absolute -top-28 left-1/4 h-96 w-96 rounded-full bg-teal-500/10 blur-[130px]" />
       <div className="pointer-events-none absolute bottom-0 right-1/4 h-96 w-96 rounded-full bg-amber-500/10 blur-[140px]" />
 
       {/* Live Cross-Module Sync Toast Banner */}
       {syncBannerMsg && (
         <div className="relative z-30 max-w-7xl w-full mx-auto px-6 pt-5">
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-purple-400/40 bg-purple-500/15 px-5 py-3 text-xs sm:text-sm font-bold text-purple-100 backdrop-blur-xl shadow-lg">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-teal-400/40 bg-teal-500/15 px-5 py-3 text-xs sm:text-sm font-bold text-teal-100 backdrop-blur-xl shadow-lg">
             <div className="flex items-center gap-2.5">
               <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-400 text-slate-950">
                 <Check size={12} strokeWidth={3} />
@@ -2966,10 +2966,10 @@ function DailyRegisterView({
           </div>
 
           {/* Spacious Hero Card */}
-          <div className="relative overflow-hidden rounded-3xl p-[1.5px] bg-gradient-to-r from-amber-400/70 via-purple-500/70 to-amber-500/70 shadow-[0_0_55px_rgba(168,85,247,0.2)]">
-            <div className="relative overflow-hidden rounded-[22.5px] bg-gradient-to-br from-[#170e29]/95 via-[#130b21]/95 to-[#221319]/95 px-8 py-9 backdrop-blur-2xl">
+          <div className="relative overflow-hidden rounded-3xl p-[1.5px] bg-gradient-to-r from-amber-400/70 via-teal-400/70 to-amber-500/70 shadow-[0_0_55px_rgba(45,212,191,0.2)]">
+            <div className="relative overflow-hidden rounded-[22.5px] bg-gradient-to-br from-[#0F2927]/95 via-[#0D2322]/95 to-[#132F2D]/95 border border-teal-800/40 px-8 py-9 backdrop-blur-2xl">
               <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-amber-400/15 blur-3xl" />
-              <div className="pointer-events-none absolute -bottom-20 left-1/3 h-64 w-64 rounded-full bg-purple-500/20 blur-3xl" />
+              <div className="pointer-events-none absolute -bottom-20 left-1/3 h-64 w-64 rounded-full bg-teal-400/15 blur-3xl" />
 
               <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
                 <div className="max-w-2xl space-y-2">
@@ -2984,7 +2984,7 @@ function DailyRegisterView({
                 <div className="flex flex-wrap items-center gap-3.5 shrink-0">
                   <button
                     onClick={handleStartWizard}
-                    className="group flex items-center gap-2.5 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-500 to-purple-600 px-7 py-4 text-sm sm:text-base font-extrabold text-slate-950 shadow-[0_0_30px_rgba(245,158,11,0.4)] transition-all duration-300 hover:scale-[1.02]"
+                    className="group flex items-center gap-2.5 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-300 to-teal-300 px-7 py-4 text-sm sm:text-base font-extrabold text-slate-950 shadow-[0_0_30px_rgba(245,158,11,0.35)] transition-all duration-300 hover:scale-[1.02]"
                   >
                     <Sparkles size={18} className="text-slate-950" />
                     <span>✨ Start Guided Tracking</span>
@@ -3004,7 +3004,7 @@ function DailyRegisterView({
           </div>
 
           {/* Unified Daytime Quick-Logger */}
-          <div className="rounded-3xl border border-white/12 bg-white/[0.04] p-6 sm:p-8 backdrop-blur-2xl shadow-2xl">
+          <div className="rounded-3xl border border-teal-800/30 bg-[#0F2927]/60 p-6 sm:p-8 backdrop-blur-2xl shadow-2xl">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-white/10">
               <div className="inline-flex rounded-2xl bg-black/40 p-1.5 border border-white/10">
                 <button
@@ -3031,14 +3031,14 @@ function DailyRegisterView({
                   onClick={() => setActiveLoggerTab("expense")}
                   className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs sm:text-sm font-bold transition-all ${
                     activeLoggerTab === "expense"
-                      ? "bg-gradient-to-r from-purple-500 to-amber-500 text-slate-950 shadow-md"
+                      ? "bg-gradient-to-r from-teal-500 to-amber-500 text-slate-950 shadow-md"
                       : "text-white/65 hover:text-white"
                   }`}
                 >
                   <span>⚡ Quick Expense &amp; Cash-In</span>
                   <span
                     className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold ${
-                      activeLoggerTab === "expense" ? "bg-slate-950/20 text-slate-950" : "bg-white/10 text-purple-300"
+                      activeLoggerTab === "expense" ? "bg-slate-950/20 text-slate-950" : "bg-white/10 text-teal-300"
                     }`}
                   >
                     {preLoggedEntries.length}
@@ -3075,7 +3075,7 @@ function DailyRegisterView({
                   <select
                     value={bankModeInput}
                     onChange={(e) => setBankModeInput(e.target.value as "POS_SWIPE" | "BANK_TRANSFER")}
-                    className="rounded-xl border border-white/15 bg-[#160f26] px-3.5 py-3 text-xs sm:text-sm font-bold text-white outline-none"
+                    className="rounded-xl border border-teal-800/40 bg-[#0D2322] px-3.5 py-3 text-xs sm:text-sm font-bold text-white outline-none"
                   >
                     <option value="POS_SWIPE">Swipe (POS)</option>
                     <option value="BANK_TRANSFER">Bank Transfer (0% Fee)</option>
@@ -3116,7 +3116,7 @@ function DailyRegisterView({
                       className="inline-flex items-center gap-2 rounded-xl border border-amber-400/30 bg-amber-500/10 px-3.5 py-1.5 text-xs font-bold text-white"
                     >
                       <span className="font-mono font-extrabold text-amber-300">#{inv.invoiceNo}</span>
-                      <span className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-extrabold text-purple-200">
+                      <span className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-extrabold text-teal-200">
                         {inv.paymentMode === "BANK_TRANSFER"
                           ? "Bank Transfer (0%)"
                           : `${POS_TERMINAL_META[inv.posTerminal || "SAB"].shortLabel} (${POS_TERMINAL_META[inv.posTerminal || "SAB"].feePctLabel})`}
@@ -3143,7 +3143,7 @@ function DailyRegisterView({
                     <select
                       value={entryType}
                       onChange={(e) => setEntryType(e.target.value as PreLoggedEntryType)}
-                      className="rounded-xl border border-white/15 bg-[#160f26] px-4 py-3 text-sm font-bold text-white outline-none"
+                      className="rounded-xl border border-teal-800/40 bg-[#0D2322] px-4 py-3 text-sm font-bold text-white outline-none"
                     >
                       <option value="EXPENSE">Expense / Purchase</option>
                       <option value="SPLIT_SALE">⚡ Split Payment (Cash + Card)</option>
@@ -3158,7 +3158,7 @@ function DailyRegisterView({
                         <select
                           value={hubExpenseCat}
                           onChange={(e) => setHubExpenseCat(e.target.value as StrictExpenseCategory)}
-                          className="rounded-xl border border-amber-400/40 bg-[#160f26] px-4 py-3 text-sm font-extrabold text-amber-300 outline-none"
+                          className="rounded-xl border border-amber-400/40 bg-[#0D2322] px-4 py-3 text-sm font-extrabold text-amber-300 outline-none"
                         >
                           {STRICT_EXPENSE_CATEGORIES.map((cat) => (
                             <option key={cat} value={cat}>
@@ -3176,7 +3176,7 @@ function DailyRegisterView({
                             value={hubSupplierName}
                             onChange={(e) => setHubSupplierName(e.target.value)}
                             placeholder="Supplier Name (e.g. Jotun, Hempel)"
-                            className="flex-1 min-w-[180px] rounded-xl border border-purple-400/40 bg-black/40 px-4 py-3 text-sm font-bold text-white placeholder:text-white/40 outline-none"
+                            className="flex-1 min-w-[180px] rounded-xl border border-teal-400/40 bg-black/40 px-4 py-3 text-sm font-bold text-white placeholder:text-white/40 outline-none"
                           />
                         )}
                         <datalist id="hub-suppliers-list">
@@ -3277,7 +3277,7 @@ function DailyRegisterView({
 
                     <button
                       type="submit"
-                      className="flex items-center justify-center gap-1.5 rounded-xl bg-purple-500 hover:bg-purple-400 px-6 py-3 text-sm font-extrabold text-white transition shrink-0 whitespace-nowrap"
+                      className="flex items-center justify-center gap-1.5 rounded-xl bg-teal-500 hover:bg-teal-400 px-6 py-3 text-sm font-extrabold text-slate-950 transition shrink-0 whitespace-nowrap"
                     >
                       <Plus size={16} strokeWidth={2.5} />
                       <span>+ Record</span>
@@ -3376,7 +3376,7 @@ function DailyRegisterView({
                     entryType === "CREDIT_RECD" ||
                     entryType === "SPLIT_SALE") &&
                     matchedHubInvoice && (
-                      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-400/50 bg-gradient-to-r from-amber-500/20 via-purple-500/20 to-emerald-500/20 px-4 py-2.5 text-xs font-extrabold text-amber-200 shadow-[0_0_25px_rgba(245,158,11,0.2)]">
+                      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-teal-400/50 bg-gradient-to-r from-teal-500/20 via-amber-500/20 to-teal-500/20 px-4 py-2.5 text-xs font-extrabold text-amber-200 shadow-[0_0_25px_rgba(45,212,191,0.2)]">
                         <span>
                           ✨ ERP Invoice #{matchedHubInvoice.invoiceNo} Matched:{" "}
                           <strong className="text-white">{matchedHubInvoice.customer}</strong> — SAR{" "}
@@ -3505,11 +3505,11 @@ function DailyRegisterView({
       {trackingMode === "wizard" && (
         <div className="relative z-10 max-w-7xl w-full mx-auto px-6 py-6 lg:py-8 flex flex-col gap-6">
           {/* Calm Top Step Navigation Bar */}
-          <div className="rounded-2xl border border-white/15 bg-white/[0.04] px-5 py-4 backdrop-blur-2xl shadow-xl">
+          <div className="rounded-2xl border border-teal-800/30 bg-[#0F2927]/70 px-5 py-4 backdrop-blur-2xl shadow-xl">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <button
                 onClick={() => setTrackingMode("hub")}
-                className="flex items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-3.5 py-2 text-xs sm:text-sm font-bold text-white transition hover:bg-white/20"
+                className="flex items-center gap-2 rounded-xl border border-teal-800/40 bg-white/5 px-3.5 py-2 text-xs sm:text-sm font-bold text-white transition hover:bg-white/10"
               >
                 <ArrowLeft size={15} />
                 <span>Daily Hub</span>
@@ -3537,10 +3537,10 @@ function DailyRegisterView({
                       }}
                       className={`rounded-xl px-3.5 py-2 text-xs font-bold transition-all ${
                         active
-                          ? "bg-gradient-to-r from-amber-400 to-purple-500 text-slate-950 font-extrabold shadow-md"
+                          ? "bg-amber-400 text-slate-950 font-extrabold shadow-md"
                           : done
-                          ? "bg-emerald-500/20 text-emerald-300 border border-emerald-400/30"
-                          : "bg-white/5 text-white/55 hover:text-white"
+                          ? "bg-teal-950/80 text-teal-400 border border-teal-500/30"
+                          : "bg-[#0B1A19] text-slate-400 border border-teal-900/30 hover:text-white"
                       }`}
                     >
                       {done ? `✓ ${labels[s]}` : labels[s]}
@@ -3552,7 +3552,7 @@ function DailyRegisterView({
 
             <div className="mt-3.5 h-1 w-full overflow-hidden rounded-full bg-white/10">
               <div
-                className="h-full rounded-full bg-gradient-to-r from-amber-400 via-purple-500 to-emerald-400 transition-all duration-500"
+                className="h-full rounded-full bg-gradient-to-r from-[#2DD4BF] to-[#F59E0B] transition-all duration-500"
                 style={{ width: `${(wizardStep / 5) * 100}%` }}
               />
             </div>
@@ -3562,8 +3562,8 @@ function DailyRegisterView({
               STEP 1: IMPORT TODAY'S ERP SALES (CALM & CENTERED)
              ────────────────────────────────────────────────────────────── */}
           {wizardStep === 1 && (
-            <div className="mx-auto my-6 flex w-full max-w-2xl flex-col items-center justify-center rounded-3xl border border-white/15 bg-white/[0.04] p-10 sm:p-14 text-center backdrop-blur-2xl shadow-2xl">
-              <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400/20 to-purple-500/20 border border-amber-400/40 text-amber-300">
+            <div className="mx-auto my-6 flex w-full max-w-2xl flex-col items-center justify-center rounded-3xl border border-teal-800/30 bg-[#0F2927]/60 p-10 sm:p-14 text-center backdrop-blur-2xl shadow-2xl">
+              <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400/20 to-teal-500/20 border border-amber-400/40 text-amber-300">
                 <UploadCloud size={34} />
               </div>
 
@@ -3574,7 +3574,7 @@ function DailyRegisterView({
                 Drop your daily CSV export or load today&apos;s 18 Jubail invoices (auto-detects `PARTIAL`, `SPLIT`, `CASH/BANK` dual tenders).
               </p>
 
-              <label className="mt-7 flex w-full cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-white/20 bg-black/25 px-6 py-10 transition hover:border-amber-400/60 hover:bg-white/[0.04]">
+              <label className="mt-7 flex w-full cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-teal-800/50 bg-black/25 px-6 py-10 transition hover:border-amber-400/60 hover:bg-white/[0.04]">
                 <UploadCloud size={28} className="text-amber-300 mb-2.5" />
                 <span className="text-sm font-bold text-white">
                   Drop ERP `.csv` file here or click to browse
@@ -3590,7 +3590,7 @@ function DailyRegisterView({
               <button
                 type="button"
                 onClick={handleSimulateCsvUpload}
-                className="mt-6 flex items-center gap-2.5 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-500 to-purple-600 px-7 py-4 text-sm sm:text-base font-extrabold text-slate-950 shadow-[0_0_30px_rgba(245,158,11,0.4)] transition hover:scale-[1.02]"
+                className="mt-6 flex items-center gap-2.5 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-300 to-teal-300 px-7 py-4 text-sm sm:text-base font-extrabold text-slate-950 shadow-[0_0_30px_rgba(245,158,11,0.35)] transition hover:scale-[1.02]"
               >
                 <Zap size={18} className="text-slate-950" />
                 <span>⚡ Load Today&apos;s ERP Batch (18 Invoices · Split Tenders Auto-Detected)</span>
@@ -3611,7 +3611,7 @@ function DailyRegisterView({
               STEP 2: VERIFY BANK SWIPES (SAB / AL RAJHI), SPLIT TENDERS & CASH SALES
              ────────────────────────────────────────────────────────────── */}
           {wizardStep === 2 && (
-            <div className="flex flex-col gap-5 rounded-3xl border border-white/15 bg-white/[0.04] p-6 sm:p-8 backdrop-blur-2xl shadow-2xl">
+            <div className="flex flex-col gap-5 rounded-3xl border border-teal-800/30 bg-[#0F2927]/60 p-6 sm:p-8 backdrop-blur-2xl shadow-2xl">
               {/* Header + Optional MDR Toggle + Summary Cards */}
               <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 pb-5 border-b border-white/10">
                 <div className="space-y-2.5">
@@ -3699,18 +3699,18 @@ function DailyRegisterView({
                   const splitTermMeta =
                     POS_TERMINAL_META[inv.splitPosTerminal || inv.posTerminal || "SAB"];
 
-                  // Dynamic color-coded ambient outline per payment mode
+                  // Dynamic color-coded ambient outline per payment mode (functional clarity)
                   const rowOutline =
                     inv.paymentMode === "CASH"
-                      ? "border-emerald-500/50 ring-1 ring-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.15)] bg-emerald-500/[0.04]"
+                      ? "border-emerald-500/40 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.12)] bg-emerald-500/[0.04]"
                       : inv.paymentMode === "BANK_TRANSFER"
-                      ? "border-violet-500/50 ring-1 ring-violet-500/30 shadow-[0_0_15px_rgba(139,92,246,0.15)] bg-violet-500/[0.04]"
+                      ? "border-cyan-500/40 text-cyan-300 shadow-[0_0_12px_rgba(6,182,212,0.12)] bg-cyan-500/[0.04]"
                       : inv.paymentMode === "POS_SWIPE"
-                      ? "border-amber-400/50 ring-1 ring-amber-400/30 shadow-[0_0_15px_rgba(245,158,11,0.15)] bg-amber-500/[0.04]"
+                      ? "border-amber-400/40 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.15)] bg-amber-500/[0.04]"
                       : inv.paymentMode === "CREDIT_SALE"
-                      ? "border-blue-500/50 ring-1 ring-blue-500/30 shadow-[0_0_15px_rgba(59,130,246,0.15)] bg-blue-500/[0.04]"
+                      ? "border-blue-500/40 text-blue-300 shadow-[0_0_12px_rgba(59,130,246,0.12)] bg-blue-500/[0.04]"
                       : inv.paymentMode === "SPLIT"
-                      ? "border-rose-500/50 ring-1 ring-rose-500/30 shadow-[0_0_15px_rgba(244,63,94,0.18)] bg-rose-500/[0.04]"
+                      ? "border-rose-500/40 text-rose-300 shadow-[0_0_12px_rgba(244,63,94,0.15)] bg-rose-500/[0.04]"
                       : "border-white/5 hover:border-white/10 bg-black/30";
 
                   return (
@@ -3737,7 +3737,7 @@ function DailyRegisterView({
                             </span>
                           )}
                           {isCreditSaleInv && (
-                            <span className="rounded-full bg-indigo-500/25 border border-indigo-400/40 px-2.5 py-0.5 text-[10px] font-extrabold text-indigo-200 shrink-0">
+                            <span className="rounded-full bg-blue-500/25 border border-blue-400/40 px-2.5 py-0.5 text-[10px] font-extrabold text-blue-200 shrink-0">
                               🔔 Credit Sale · Synced to Credit Radar
                             </span>
                           )}
@@ -3749,13 +3749,13 @@ function DailyRegisterView({
                               isSplitMode
                                 ? "text-rose-300"
                                 : inv.paymentMode === "BANK_TRANSFER"
-                                ? "text-violet-300"
+                                ? "text-cyan-300"
                                 : isBankOrPos
                                 ? "text-amber-300"
                                 : isCreditSaleInv
                                 ? "text-blue-300"
                                 : isOtherRecd
-                                ? "text-purple-300"
+                                ? "text-teal-300"
                                 : "text-emerald-300"
                             }`}
                           >
@@ -3780,7 +3780,7 @@ function DailyRegisterView({
                               onClick={() => handleSetInvoiceMode(inv.invoiceNo, "BANK_TRANSFER")}
                               className={`rounded-lg px-2.5 py-1 text-xs font-bold transition-all duration-200 ${
                                 inv.paymentMode === "BANK_TRANSFER"
-                                  ? "bg-violet-500 text-white font-extrabold"
+                                  ? "bg-cyan-500 text-slate-950 font-extrabold"
                                   : "text-white/55 hover:text-white"
                               }`}
                             >
@@ -4016,8 +4016,8 @@ function DailyRegisterView({
 
                       {/* Conditional Sub-Row for Other Amt Recd: Inline Note / Cause Input */}
                       {isOtherRecd && (
-                        <div className="flex items-center gap-3 rounded-xl border border-purple-400/30 bg-black/40 px-4 py-2">
-                          <span className="text-xs font-bold text-purple-300 whitespace-nowrap">
+                        <div className="flex items-center gap-3 rounded-xl border border-teal-400/30 bg-black/40 px-4 py-2">
+                          <span className="text-xs font-bold text-teal-300 whitespace-nowrap">
                             Cause / Note:
                           </span>
                           <input
@@ -4045,7 +4045,7 @@ function DailyRegisterView({
                 <button
                   type="button"
                   onClick={() => setWizardStep(3)}
-                  className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-400 to-purple-500 px-6 py-3 text-sm font-extrabold text-slate-950 shadow-lg transition hover:brightness-110"
+                  className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-400 via-amber-300 to-teal-300 px-6 py-3 text-sm font-extrabold text-slate-950 shadow-lg transition hover:brightness-110"
                 >
                   <span>Continue to Cash Inflows</span>
                   <ArrowRight size={16} />
@@ -4058,7 +4058,7 @@ function DailyRegisterView({
               STEP 3: CREDIT & CASH INFLOWS + MANUAL SPLIT PAYMENT ENTRY
              ────────────────────────────────────────────────────────────── */}
           {wizardStep === 3 && (
-            <div className="flex flex-col gap-6 rounded-3xl border border-white/15 bg-white/[0.04] p-6 sm:p-8 backdrop-blur-2xl shadow-2xl">
+            <div className="flex flex-col gap-6 rounded-3xl border border-teal-800/30 bg-[#0F2927]/60 p-6 sm:p-8 backdrop-blur-2xl shadow-2xl">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-5">
                 <div>
                   <h2 className="font-display text-2xl font-extrabold text-white">
@@ -4141,7 +4141,7 @@ function DailyRegisterView({
                               | "OTHER_IN"
                           )
                         }
-                        className="w-full rounded-xl border border-white/15 bg-[#160f26] px-3.5 py-3 text-sm font-bold text-white outline-none focus:border-amber-400"
+                        className="w-full rounded-xl border border-teal-800/40 bg-[#0D2322] px-3.5 py-3 text-sm font-bold text-white outline-none focus:border-amber-400"
                       >
                         <option value="CREDIT_RECD">Credit Sale Amt Recd</option>
                         <option value="LOAN_IN">Loan In</option>
@@ -4187,7 +4187,7 @@ function DailyRegisterView({
 
                         {/* Single-Line Clean Match Confirmation Pill */}
                         {matchedStep3Invoice && (
-                          <div className="rounded-xl border border-amber-400/50 bg-gradient-to-r from-amber-500/20 via-purple-500/20 to-emerald-500/20 px-3.5 py-2 text-xs font-extrabold text-amber-200 shadow-[0_0_20px_rgba(245,158,11,0.2)] truncate">
+                          <div className="rounded-xl border border-teal-400/50 bg-gradient-to-r from-teal-500/20 via-amber-500/20 to-teal-500/20 px-3.5 py-2 text-xs font-extrabold text-amber-200 shadow-[0_0_20px_rgba(45,212,191,0.2)] truncate">
                             ✨ Matched:{" "}
                             <span className="text-white">{matchedStep3Invoice.customer}</span> · SAR{" "}
                             {fmt(matchedStep3Invoice.amount)}
@@ -4474,7 +4474,7 @@ function DailyRegisterView({
                 <button
                   type="button"
                   onClick={() => setWizardStep(4)}
-                  className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-400 to-purple-500 px-6 py-3 text-sm font-extrabold text-slate-950 shadow-lg transition hover:brightness-110"
+                  className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-400 via-amber-300 to-teal-300 px-6 py-3 text-sm font-extrabold text-slate-950 shadow-lg transition hover:brightness-110"
                 >
                   <span>Continue to Expenses &amp; Purchases</span>
                   <ArrowRight size={16} />
@@ -4487,7 +4487,7 @@ function DailyRegisterView({
               STEP 4: EXPENSES & SUPPLIER PURCHASES (STRICT 7 CATEGORIES + SUPPLIER SYNC)
              ────────────────────────────────────────────────────────────── */}
           {wizardStep === 4 && (
-            <div className="flex flex-col gap-6 rounded-3xl border border-white/15 bg-white/[0.04] p-6 sm:p-8 backdrop-blur-2xl shadow-2xl">
+            <div className="flex flex-col gap-6 rounded-3xl border border-teal-800/30 bg-[#0F2927]/60 p-6 sm:p-8 backdrop-blur-2xl shadow-2xl">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-5">
                 <div>
                   <h2 className="font-display text-2xl font-extrabold text-white">
@@ -4555,9 +4555,9 @@ function DailyRegisterView({
                     {(step4Category === "Credit Purchase" ||
                       step4Category === "Cash Purchase" ||
                       step4Category === "Bank Purchase") && (
-                      <div className="space-y-2.5 rounded-2xl border border-purple-400/35 bg-purple-500/10 p-3.5">
+                      <div className="space-y-2.5 rounded-2xl border border-teal-400/35 bg-teal-500/10 p-3.5">
                         <div>
-                          <label className="block text-[11px] font-bold text-purple-200 mb-1">
+                          <label className="block text-[11px] font-bold text-teal-200 mb-1">
                             Supplier Name (Syncs to Suppliers &amp; Payables)
                           </label>
                           <input
@@ -4716,7 +4716,7 @@ function DailyRegisterView({
                 <button
                   type="button"
                   onClick={() => setWizardStep(5)}
-                  className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-400 to-purple-500 px-6 py-3 text-sm font-extrabold text-slate-950 shadow-lg transition hover:brightness-110"
+                  className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-400 via-amber-300 to-teal-300 px-6 py-3 text-sm font-extrabold text-slate-950 shadow-lg transition hover:brightness-110"
                 >
                   <span>Open Final Audit Workbench</span>
                   <ArrowRight size={16} />
@@ -4731,7 +4731,7 @@ function DailyRegisterView({
           {wizardStep === 5 && (
             <div className="flex flex-col gap-6 pb-8">
               {/* Step 5 Audit Settlement Mode Toggle Bar + Informational MDR & VAT Banner */}
-              <div className="flex flex-col gap-3 rounded-2xl border border-white/15 bg-white/[0.04] px-5 py-4 backdrop-blur-2xl">
+              <div className="flex flex-col gap-3 rounded-2xl border border-teal-800/30 bg-[#0F2927]/60 px-5 py-4 backdrop-blur-2xl">
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
                   <div className="flex flex-wrap items-center gap-3">
                     <span className="text-xs sm:text-sm font-extrabold text-white">
@@ -4754,7 +4754,7 @@ function DailyRegisterView({
                         onClick={() => setBankSettlementMode("NET")}
                         className={`rounded-lg px-3.5 py-2 text-xs font-extrabold transition ${
                           bankSettlementMode === "NET"
-                            ? "bg-gradient-to-r from-amber-400 to-purple-400 text-slate-950 shadow-sm"
+                            ? "bg-gradient-to-r from-amber-400 to-teal-400 text-slate-950 shadow-sm"
                             : "text-white/65 hover:text-white"
                         }`}
                       >
@@ -4788,10 +4788,10 @@ function DailyRegisterView({
               </div>
 
               {/* 1. Dedicated Flagship Hero Header Banner for Physical Cash Drawer Closing Balance */}
-              <div className="relative overflow-hidden rounded-3xl border border-amber-400/50 bg-gradient-to-br from-[#1f162c]/95 via-[#181c24]/95 to-[#1c1528]/95 p-6 sm:p-8 backdrop-blur-2xl ring-2 ring-amber-400/40 shadow-[0_0_30px_rgba(245,158,11,0.25)]">
+              <div className="relative overflow-hidden rounded-3xl border border-amber-400/50 bg-gradient-to-br from-[#0F2927]/95 via-[#0D2322]/95 to-[#132F2D]/95 p-6 sm:p-8 backdrop-blur-2xl ring-2 ring-amber-400/40 shadow-[0_0_30px_rgba(245,158,11,0.25)]">
                 {/* Ambient Golden-Amber & Emerald Glows */}
                 <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-amber-400/20 blur-3xl" />
-                <div className="pointer-events-none absolute -bottom-16 -left-16 h-64 w-64 rounded-full bg-emerald-400/15 blur-3xl" />
+                <div className="pointer-events-none absolute -bottom-16 -left-16 h-64 w-64 rounded-full bg-teal-400/15 blur-3xl" />
 
                 <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
                   <div className="space-y-2.5">
@@ -4999,7 +4999,7 @@ function DailyRegisterView({
                                 </span>
                               )}
                               {inv.paymentMode === "OTHER_RECD" && (
-                                <span className="rounded bg-purple-500/20 border border-purple-400/40 px-2 py-0.5 text-[10px] font-bold text-purple-200 shrink-0">
+                                <span className="rounded bg-teal-500/20 border border-teal-400/40 px-2 py-0.5 text-[10px] font-bold text-teal-200 shrink-0">
                                   Other Recd{inv.otherNote ? `: ${inv.otherNote}` : ""}
                                 </span>
                               )}
@@ -5245,7 +5245,7 @@ function DailyRegisterView({
                                     {entry.title}
                                   </span>
                                   {entry.dueDate && (
-                                    <span className="rounded bg-purple-500/20 border border-purple-400/40 px-1.5 py-0.5 text-[10px] font-bold text-purple-200 shrink-0">
+                                    <span className="rounded bg-teal-500/20 border border-teal-400/40 px-1.5 py-0.5 text-[10px] font-bold text-teal-200 shrink-0">
                                       Due: {entry.dueDate}
                                     </span>
                                   )}
@@ -5270,7 +5270,7 @@ function DailyRegisterView({
                                           )
                                         );
                                       }}
-                                      className="rounded-lg border border-white/15 bg-[#160f26] px-2 py-1 text-xs font-bold text-amber-300 outline-none"
+                                      className="rounded-lg border border-teal-850 bg-[#0D2322] px-2 py-1 text-xs font-bold text-amber-300 outline-none"
                                     >
                                       {STRICT_EXPENSE_CATEGORIES.map((c) => (
                                         <option key={c} value={c}>
@@ -5355,7 +5355,7 @@ function DailyRegisterView({
                             onChange={(e) =>
                               setMissingExpenseCat(e.target.value as StrictExpenseCategory)
                             }
-                            className="rounded-xl border border-white/15 bg-[#160f26] px-3 py-2 text-xs font-bold text-amber-300 outline-none"
+                            className="rounded-xl border border-teal-800/40 bg-[#0D2322] px-3 py-2 text-xs font-bold text-amber-300 outline-none"
                           >
                             {STRICT_EXPENSE_CATEGORIES.map((c) => (
                               <option key={c} value={c}>
@@ -5495,7 +5495,7 @@ function DailyRegisterView({
                                         isBankTransferRow
                                           ? "bg-sky-400/15 border-sky-400/35 text-sky-200"
                                           : activeTerm === "VISA_MC"
-                                          ? "bg-purple-500/20 border-purple-400/40 text-purple-200"
+                                          ? "bg-blue-500/20 border-blue-400/40 text-blue-200"
                                           : "bg-amber-400/15 border-amber-400/35 text-amber-200"
                                       }`}
                                     >
@@ -5648,7 +5648,7 @@ function DailyRegisterView({
               </div>
 
               {/* Sticky Bottom Action Bar */}
-              <div className="sticky bottom-4 z-20 flex flex-col lg:flex-row lg:items-center justify-between gap-4 rounded-2xl border border-amber-400/40 bg-[#140b24]/95 px-6 py-4 backdrop-blur-2xl shadow-[0_10px_40px_rgba(0,0,0,0.6)]">
+              <div className="sticky bottom-4 z-20 flex flex-col lg:flex-row lg:items-center justify-between gap-4 rounded-2xl border border-amber-400/40 bg-[#0D2322]/95 px-6 py-4 backdrop-blur-2xl shadow-[0_10px_40px_rgba(0,0,0,0.6)]">
                 <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm font-medium text-white/65">
                   <span>Opening <strong className="text-white/90">SAR {fmt(openingBalance)}</strong></span>
                   <span className="text-white/35">+</span>
@@ -5672,7 +5672,7 @@ function DailyRegisterView({
                   <button
                     type="button"
                     onClick={handleLockAndSaveDay}
-                    className="flex items-center justify-center gap-2.5 rounded-xl bg-gradient-to-r from-emerald-400 via-amber-400 to-purple-500 px-7 py-3.5 text-sm sm:text-base font-extrabold text-slate-950 shadow-[0_0_30px_rgba(16,185,129,0.35)] transition hover:scale-[1.01] whitespace-nowrap"
+                    className="flex items-center justify-center gap-2.5 rounded-xl bg-gradient-to-r from-emerald-400 via-teal-400 to-amber-400 px-7 py-3.5 text-sm sm:text-base font-extrabold text-slate-950 shadow-[0_0_30px_rgba(45,212,191,0.35)] transition hover:scale-[1.01] whitespace-nowrap"
                   >
                     <Lock size={18} className="text-slate-950" />
                     <span>🔒 Confirm Drawer Cash &amp; Lock Register</span>
@@ -5690,7 +5690,7 @@ function DailyRegisterView({
       {trackingMode === "datasheet" && (
         <div className="relative z-10 w-full px-4 sm:px-6 py-6 flex flex-col gap-5">
           {/* 1. Official Sheet Header Bar */}
-          <div className="rounded-3xl border border-amber-400/40 bg-gradient-to-r from-[#170e29]/95 via-[#1c1132]/95 to-[#25151d]/95 p-5 sm:p-6 backdrop-blur-2xl shadow-2xl">
+          <div className="rounded-3xl border border-teal-800/40 bg-gradient-to-r from-[#0F2927]/95 via-[#0D2322]/95 to-[#132F2D]/95 p-5 sm:p-6 backdrop-blur-2xl shadow-2xl">
             <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
               <div>
                 <div className="flex flex-wrap items-center gap-3">
@@ -5720,7 +5720,7 @@ function DailyRegisterView({
                 <button
                   type="button"
                   onClick={handleSyncSheetFromWizard}
-                  className="flex items-center gap-1.5 rounded-xl border border-purple-400/40 bg-purple-500/20 hover:bg-purple-500/30 px-3.5 py-2.5 text-xs font-extrabold text-purple-200 transition whitespace-nowrap"
+                  className="flex items-center gap-1.5 rounded-xl border border-teal-400/40 bg-teal-500/20 hover:bg-teal-500/30 px-3.5 py-2.5 text-xs font-extrabold text-teal-200 transition whitespace-nowrap"
                 >
                   <Zap size={14} className="text-amber-300" />
                   <span>⚡ Sync from Guided Wizard</span>
@@ -5738,7 +5738,7 @@ function DailyRegisterView({
                 <button
                   type="button"
                   onClick={handleSaveAndCloseSheet}
-                  className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-emerald-400 via-amber-400 to-purple-500 px-5 py-2.5 text-xs sm:text-sm font-black text-slate-950 shadow-[0_0_25px_rgba(16,185,129,0.35)] hover:scale-[1.01] transition whitespace-nowrap"
+                  className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-emerald-400 via-teal-400 to-amber-400 px-5 py-2.5 text-xs sm:text-sm font-black text-slate-950 shadow-[0_0_25px_rgba(45,212,191,0.35)] hover:scale-[1.01] transition whitespace-nowrap"
                 >
                   <Lock size={14} />
                   <span>🔒 Save &amp; Close Sheet</span>
@@ -5788,8 +5788,8 @@ function DailyRegisterView({
                     <th className="px-3 py-3 text-left min-w-[120px] text-teal-300">4. RECEIPT NO.</th>
                     <th className="px-3 py-3 text-right min-w-[135px] text-teal-300">5. CREDIT SALE AMT RECD</th>
                     <th className="px-3 py-3 text-right min-w-[105px] text-amber-200">6. OPEN BAL</th>
-                    <th className="px-3 py-3 text-right min-w-[110px] text-purple-300">7. LOAN IN</th>
-                    <th className="px-3 py-3 text-right min-w-[115px] text-purple-200">8. OTHER AMT RECD</th>
+                    <th className="px-3 py-3 text-right min-w-[110px] text-amber-300">7. LOAN IN</th>
+                    <th className="px-3 py-3 text-right min-w-[115px] text-teal-300">8. OTHER AMT RECD</th>
                     <th className="px-3 py-3 text-right min-w-[105px] text-sky-200">9. FROM BANK</th>
                     <th className="px-3.5 py-3 text-right min-w-[130px] bg-amber-500/20 text-amber-300 font-black">
                       10. TOTAL AMT
@@ -5957,7 +5957,7 @@ function DailyRegisterView({
                               handleSheetCellChange(row.id, "loanIn", e.target.value)
                             }
                             placeholder={rIdx === 1 ? "Shadab" : "—"}
-                            className="w-full rounded-lg bg-transparent px-2 py-1.5 text-right font-mono text-xs font-extrabold text-purple-300 placeholder:text-white/20 outline-none focus:bg-black/60 focus:ring-1 focus:ring-purple-400"
+                            className="w-full rounded-lg bg-transparent px-2 py-1.5 text-right font-mono text-xs font-extrabold text-amber-300 placeholder:text-white/20 outline-none focus:bg-black/60 focus:ring-1 focus:ring-amber-400"
                           />
                         </td>
 
@@ -5974,7 +5974,7 @@ function DailyRegisterView({
                               handleSheetCellChange(row.id, "otherAmtRecd", e.target.value)
                             }
                             placeholder="—"
-                            className="w-full rounded-lg bg-transparent px-2 py-1.5 text-right font-mono text-xs font-bold text-purple-200 placeholder:text-white/20 outline-none focus:bg-black/60 focus:ring-1 focus:ring-purple-400"
+                            className="w-full rounded-lg bg-transparent px-2 py-1.5 text-right font-mono text-xs font-bold text-teal-300 placeholder:text-white/20 outline-none focus:bg-black/60 focus:ring-1 focus:ring-teal-400"
                           />
                         </td>
 
@@ -6210,7 +6210,7 @@ function DailyRegisterView({
                 </tbody>
 
                 {/* Sticky Footer Row — Live Column Totals, TOTAL AMT (44,909.00) & CLOSING BALANCE (4,500.00) */}
-                <tfoot className="sticky bottom-0 z-20 bg-[#1c1132] border-t-2 border-amber-400/60 text-xs font-mono font-black text-white shadow-[0_-10px_25px_rgba(0,0,0,0.6)]">
+                <tfoot className="sticky bottom-0 z-20 bg-[#0D2322] border-t-2 border-amber-400/60 text-xs font-mono font-black text-white shadow-[0_-10px_25px_rgba(0,0,0,0.6)]">
                   <tr className="divide-x divide-white/15">
                     <td className="px-2 py-3.5 text-center text-amber-300">∑</td>
                     <td className="px-3 py-3.5 text-left text-amber-300">
@@ -6229,10 +6229,10 @@ function DailyRegisterView({
                     <td className="px-3 py-3.5 text-right text-amber-200">
                       {fmt(dsOpenBalTotal)}
                     </td>
-                    <td className="px-3 py-3.5 text-right text-purple-300">
+                    <td className="px-3 py-3.5 text-right text-amber-300">
                       {fmt(dsLoanInTotal)}
                     </td>
-                    <td className="px-3 py-3.5 text-right text-purple-200">
+                    <td className="px-3 py-3.5 text-right text-teal-300">
                       {fmt(dsOtherRecdTotal)}
                     </td>
                     <td className="px-3 py-3.5 text-right text-sky-200">
@@ -6322,7 +6322,7 @@ function CreditRadarView({
   return (
     <div className="flex flex-col h-full w-full gap-5 p-6 overflow-hidden">
       {/* Prominent Top Banner: Upcoming Follow-Up Reminders */}
-      <div className="rounded-2xl border border-amber-300/60 bg-gradient-to-r from-amber-50 via-purple-50 to-indigo-50 p-4 shadow-sm shrink-0 dark:border-amber-400/30 dark:from-amber-500/10 dark:via-purple-500/10 dark:to-indigo-500/10">
+      <div className="rounded-2xl border border-teal-800/40 bg-gradient-to-r from-teal-500/10 via-amber-500/10 to-teal-500/10 p-4 shadow-sm shrink-0 dark:border-teal-700/40">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
           <div className="flex items-center gap-2">
             <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-400 text-slate-950 shadow-sm">
@@ -6332,7 +6332,7 @@ function CreditRadarView({
               Upcoming Follow-Up Reminders ({reminderAccounts.length})
             </h2>
           </div>
-          <span className="text-[11px] font-bold text-purple-700 dark:text-amber-300">
+          <span className="text-[11px] font-bold text-teal-300 dark:text-amber-300">
             Live synced from Step 3 Credit Sales &amp; Daytime Quick-Logger
           </span>
         </div>
@@ -6341,8 +6341,8 @@ function CreditRadarView({
           {reminderAccounts.map((c) => {
             const invLabel = c.latestInvoiceNo
               ? c.latestInvoiceNo.startsWith("#")
-                ? c.latestInvoiceNo
-                : `#${c.latestInvoiceNo}`
+              ? c.latestInvoiceNo
+              : `#${c.latestInvoiceNo}`
               : "#30064";
             const remDate = c.followUpDate || c.dueDate;
             return (
@@ -6352,10 +6352,10 @@ function CreditRadarView({
                 onClick={() => setActiveId(c.id)}
                 className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition ring-1 ${
                   active?.id === c.id
-                    ? "bg-purple-600 text-white ring-purple-600 shadow-md"
+                    ? "bg-teal-500 text-slate-950 font-extrabold ring-teal-400 shadow-md"
                     : c.syncedFromRegister
                     ? "bg-amber-100/90 text-slate-900 ring-amber-400 hover:bg-amber-200 dark:bg-amber-400/20 dark:text-amber-200 dark:ring-amber-400/50"
-                    : "bg-white text-slate-800 ring-slate-200 hover:bg-slate-50 dark:bg-[#171b28] dark:text-slate-200 dark:ring-white/10"
+                    : "bg-white text-slate-800 ring-slate-200 hover:bg-slate-50 dark:bg-[#0D2322] dark:text-slate-200 dark:ring-teal-800/30"
                 }`}
               >
                 <span>
@@ -6378,11 +6378,11 @@ function CreditRadarView({
           {/* New Credit Issue Box */}
           <form
             onSubmit={handleCreateCredit}
-            className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-900/5 p-5 shrink-0 dark:bg-[#121620] dark:ring-white/10"
+            className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-900/5 p-5 shrink-0 dark:bg-[#0F2927] dark:ring-teal-800/30"
           >
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-display font-extrabold text-lg text-slate-900 dark:text-white flex items-center gap-2">
-                <Plus size={18} className="text-purple-500" /> Issue New Credit / Update Follow-up
+                <Plus size={18} className="text-teal-400" /> Issue New Credit / Update Follow-up
               </h2>
               <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-2.5 py-1 rounded-full">
                 ● Live Synced with Daily Register
@@ -6395,7 +6395,7 @@ function CreditRadarView({
                   value={contractorInput}
                   onChange={(e) => setContractorInput(e.target.value)}
                   placeholder="Customer / Contractor Name..."
-                  className="w-full px-4 py-2.5 bg-slate-50 rounded-xl ring-1 ring-slate-200 focus:ring-2 focus:ring-purple-500 font-medium text-sm outline-none dark:bg-[#171b28] dark:ring-white/10 dark:text-white transition-shadow"
+                  className="w-full px-4 py-2.5 bg-slate-50 rounded-xl ring-1 ring-slate-200 focus:ring-2 focus:ring-teal-400 font-medium text-sm outline-none dark:bg-[#0D2322] dark:ring-teal-800/40 dark:text-white transition-shadow"
                 />
               </div>
               <input
@@ -6404,24 +6404,24 @@ function CreditRadarView({
                 value={amountInput}
                 onChange={(e) => setAmountInput(e.target.value)}
                 placeholder="Amount (SAR)"
-                className="flex-1 min-w-[120px] px-4 py-2.5 bg-slate-50 rounded-xl ring-1 ring-slate-200 focus:ring-2 focus:ring-purple-500 font-bold text-sm outline-none dark:bg-[#171b28] dark:ring-white/10 dark:text-white transition-shadow"
+                className="flex-1 min-w-[120px] px-4 py-2.5 bg-slate-50 rounded-xl ring-1 ring-slate-200 focus:ring-2 focus:ring-teal-400 font-bold text-sm outline-none dark:bg-[#0D2322] dark:ring-teal-800/40 dark:text-white transition-shadow"
               />
               <input
                 type="text"
                 value={receiptInput}
                 onChange={(e) => setReceiptInput(e.target.value)}
                 placeholder="Invoice # (e.g. #30064)"
-                className="flex-1 min-w-[120px] px-4 py-2.5 bg-slate-50 rounded-xl ring-1 ring-slate-200 focus:ring-2 focus:ring-purple-500 font-medium text-sm outline-none dark:bg-[#171b28] dark:ring-white/10 dark:text-white transition-shadow"
+                className="flex-1 min-w-[120px] px-4 py-2.5 bg-slate-50 rounded-xl ring-1 ring-slate-200 focus:ring-2 focus:ring-teal-400 font-medium text-sm outline-none dark:bg-[#0D2322] dark:ring-teal-800/40 dark:text-white transition-shadow"
               />
               <input
                 type="date"
                 value={dueDateInput}
                 onChange={(e) => setDueDateInput(e.target.value)}
-                className="flex-1 min-w-[140px] px-4 py-2.5 bg-slate-50 rounded-xl ring-1 ring-slate-200 focus:ring-2 focus:ring-purple-500 font-medium text-sm outline-none dark:bg-[#171b28] dark:ring-white/10 dark:text-white text-slate-500 transition-shadow"
+                className="flex-1 min-w-[140px] px-4 py-2.5 bg-slate-50 rounded-xl ring-1 ring-slate-200 focus:ring-2 focus:ring-teal-400 font-medium text-sm outline-none dark:bg-[#0D2322] dark:ring-teal-800/40 dark:text-white text-slate-500 transition-shadow"
               />
               <button
                 type="submit"
-                className="px-6 py-2.5 bg-purple-600 text-white rounded-xl font-bold hover:bg-purple-700 transition shadow-md shadow-purple-500/20 whitespace-nowrap shrink-0"
+                className="px-6 py-2.5 bg-teal-500 text-slate-950 rounded-xl font-extrabold hover:bg-teal-400 transition shadow-md shadow-teal-500/20 whitespace-nowrap shrink-0"
               >
                 Issue Credit
               </button>
@@ -6449,15 +6449,15 @@ function CreditRadarView({
                   onClick={() => setActiveId(c.id)}
                   className={`w-full text-left flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-2xl ring-1 transition-all gap-4 ${
                     active.id === c.id
-                      ? "bg-white ring-purple-500 shadow-md dark:bg-[#1f2536]"
-                      : "bg-white ring-slate-900/5 hover:shadow-sm dark:bg-[#121620] dark:ring-white/10 hover:dark:bg-[#1a1f2e]"
+                      ? "bg-white ring-teal-500 shadow-md dark:bg-[#0D2322] dark:ring-teal-400"
+                      : "bg-white ring-slate-900/5 hover:shadow-sm dark:bg-[#0F2927] dark:ring-teal-800/30 hover:dark:bg-[#132F2D]"
                   }`}
                 >
                   <div className="flex items-center gap-4">
                     <div
                       className={`h-12 w-12 rounded-full flex items-center justify-center font-display font-extrabold text-xl text-white shadow-sm shrink-0 ${
                         active.id === c.id
-                          ? "bg-gradient-to-br from-purple-500 to-indigo-500"
+                          ? "bg-gradient-to-br from-teal-400 to-amber-400 text-slate-950"
                           : "bg-slate-300 dark:bg-slate-700"
                       }`}
                     >
@@ -6510,7 +6510,7 @@ function CreditRadarView({
           <div className="flex-[1.5] flex flex-col bg-white rounded-2xl shadow-sm ring-1 ring-slate-900/5 overflow-hidden dark:bg-[#121620] dark:ring-white/10">
             <div className="p-8 border-b border-slate-100 dark:border-white/5 bg-slate-50 dark:bg-white/[0.02]">
               <div className="flex items-center gap-5 mb-6">
-                <div className="h-16 w-16 rounded-2xl flex items-center justify-center font-display font-extrabold text-3xl text-white shadow-md bg-gradient-to-br from-purple-500 to-indigo-500 shrink-0">
+                <div className="h-16 w-16 rounded-2xl flex items-center justify-center font-display font-extrabold text-3xl text-slate-950 shadow-md bg-gradient-to-br from-teal-400 to-amber-400 shrink-0">
                   {active.name.charAt(0)}
                 </div>
                 <div>
@@ -6594,7 +6594,7 @@ function CreditRadarView({
               <button className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl bg-slate-900 text-white font-bold hover:bg-slate-800 transition dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200 shadow-md">
                 <Mail size={18} /> Email Reminder
               </button>
-              <button className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl bg-purple-100 text-purple-700 font-bold hover:bg-purple-200 transition dark:bg-purple-500/20 dark:text-purple-300 shadow-sm ring-1 ring-purple-500/20">
+              <button className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl bg-teal-100 text-teal-800 font-bold hover:bg-teal-200 transition dark:bg-teal-500/20 dark:text-teal-300 shadow-sm ring-1 ring-teal-500/30">
                 <Bell size={18} /> Push Notification
               </button>
             </div>
@@ -6709,7 +6709,7 @@ function SupplierHubView({
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <h2 className="font-display font-extrabold text-2xl text-slate-900 dark:text-white flex items-center gap-2">
-            <Package className="text-purple-500" /> Official Brand Payables
+            <Package className="text-teal-400" /> Official Brand Payables
           </h2>
           <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-1 rounded-full">
             ● Live Synced with Daily Register Credit Purchases
@@ -6719,7 +6719,7 @@ function SupplierHubView({
         {/* Quick Supplier Add/Log Card */}
         <form
           onSubmit={handleLogSubmit}
-          className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-900/5 p-5 dark:bg-[#121620] dark:ring-white/10"
+          className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-900/5 p-5 dark:bg-[#0F2927] dark:ring-teal-800/30"
         >
           <h3 className="font-bold text-sm text-slate-500 mb-4 uppercase tracking-wider">
             Log Supplier Credit Purchase or Return
@@ -6731,7 +6731,7 @@ function SupplierHubView({
               placeholder="Search Supplier (Jotun, Hempel, Sigma...)"
               value={supplierSearch}
               onChange={(e) => setSupplierSearch(e.target.value)}
-              className="flex-[2] min-w-[200px] px-4 py-2.5 bg-slate-50 rounded-xl ring-1 ring-slate-200 focus:ring-2 focus:ring-purple-500 font-medium text-sm outline-none dark:bg-[#171b28] dark:ring-white/10 dark:text-white transition-shadow"
+              className="flex-[2] min-w-[200px] px-4 py-2.5 bg-slate-50 rounded-xl ring-1 ring-slate-200 focus:ring-2 focus:ring-teal-400 font-medium text-sm outline-none dark:bg-[#0D2322] dark:ring-teal-800/40 dark:text-white transition-shadow"
             />
             <datalist id="suppliers-list">
               <option value="Jotun" />
@@ -6744,7 +6744,7 @@ function SupplierHubView({
               placeholder="Amount (SAR)"
               value={logAmount}
               onChange={(e) => setLogAmount(e.target.value)}
-              className="flex-1 min-w-[120px] px-4 py-2.5 bg-slate-50 rounded-xl ring-1 ring-slate-200 focus:ring-2 focus:ring-purple-500 font-bold text-sm outline-none dark:bg-[#171b28] dark:ring-white/10 dark:text-white transition-shadow"
+              className="flex-1 min-w-[120px] px-4 py-2.5 bg-slate-50 rounded-xl ring-1 ring-slate-200 focus:ring-2 focus:ring-teal-400 font-bold text-sm outline-none dark:bg-[#0D2322] dark:ring-teal-800/40 dark:text-white transition-shadow"
             />
             <select
               value={logType}
@@ -6754,7 +6754,7 @@ function SupplierHubView({
               className={`flex-1 min-w-[150px] px-4 py-2.5 rounded-xl ring-1 outline-none font-bold text-sm transition-shadow ${
                 logType === "Return"
                   ? "bg-amber-50 ring-amber-200 text-amber-700 focus:ring-amber-500 dark:bg-amber-500/10 dark:ring-amber-500/30 dark:text-amber-400"
-                  : "bg-slate-50 ring-slate-200 focus:ring-2 focus:ring-purple-500 dark:bg-[#171b28] dark:ring-white/10 dark:text-white text-slate-700"
+                  : "bg-slate-50 ring-slate-200 focus:ring-2 focus:ring-teal-400 dark:bg-[#0D2322] dark:ring-teal-800/40 dark:text-white text-slate-700"
               }`}
             >
               <option value="Credit Purchase">Credit Purchase</option>
@@ -6765,14 +6765,14 @@ function SupplierHubView({
               type="date"
               value={logDate}
               onChange={(e) => setLogDate(e.target.value)}
-              className="flex-1 min-w-[140px] px-4 py-2.5 bg-slate-50 rounded-xl ring-1 ring-slate-200 focus:ring-2 focus:ring-purple-500 font-medium text-sm outline-none dark:bg-[#171b28] dark:ring-white/10 dark:text-white text-slate-500 transition-shadow"
+              className="flex-1 min-w-[140px] px-4 py-2.5 bg-slate-50 rounded-xl ring-1 ring-slate-200 focus:ring-2 focus:ring-teal-400 font-medium text-sm outline-none dark:bg-[#0D2322] dark:ring-teal-800/40 dark:text-white text-slate-500 transition-shadow"
             />
             <button
               type="submit"
               className={`px-6 py-2.5 text-white rounded-xl font-bold transition shadow-md whitespace-nowrap shrink-0 ${
                 logType === "Return"
                   ? "bg-amber-500 hover:bg-amber-600 shadow-amber-500/20"
-                  : "bg-purple-600 hover:bg-purple-700 shadow-purple-500/20"
+                  : "bg-teal-500 hover:bg-teal-400 text-slate-950 font-extrabold shadow-teal-500/20"
               }`}
             >
               {logType === "Return" ? "Log Return" : "Log Purchase"}
@@ -6785,10 +6785,10 @@ function SupplierHubView({
           {supplierBrands.map((p) => (
             <div
               key={p.id}
-              className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-900/5 p-5 dark:bg-[#121620] dark:ring-white/10 flex flex-col gap-4"
+              className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-900/5 p-5 dark:bg-[#0F2927] dark:ring-teal-800/30 flex flex-col gap-4"
             >
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center font-display font-extrabold text-white text-lg bg-gradient-to-br from-purple-600 to-indigo-600 shadow-sm">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center font-display font-extrabold text-slate-950 text-lg bg-gradient-to-br from-teal-400 to-amber-400 shadow-sm">
                   {p.brand.charAt(0)}
                 </div>
                 <h3 className="font-display font-extrabold text-lg text-slate-900 dark:text-white">
@@ -6841,7 +6841,7 @@ function SupplierHubView({
                   <span className="font-extrabold text-slate-900 dark:text-white">
                     {bill.supplierName}
                   </span>
-                  <span className="rounded-md bg-purple-100 dark:bg-purple-500/20 px-2 py-0.5 text-xs font-bold text-purple-700 dark:text-purple-300">
+                  <span className="rounded-md bg-teal-100 dark:bg-teal-500/20 px-2 py-0.5 text-xs font-bold text-teal-800 dark:text-teal-300">
                     {bill.category}
                   </span>
                   {bill.source === "Daily Register" && (
@@ -7217,7 +7217,7 @@ function BranchConsolidationView({ metrics }: { metrics: LiveCrossModuleMetrics 
       <div className="flex items-center justify-between mb-2">
         <div className="flex flex-col gap-1.5">
           <h2 className="font-display font-extrabold text-2xl text-slate-900 dark:text-white flex items-center gap-2">
-            <Building2 className="text-purple-500 dark:text-purple-400" /> Branch Consolidation
+            <Building2 className="text-teal-400" /> Branch Consolidation
           </h2>
           <p className="text-slate-500 dark:text-slate-400 font-semibold text-sm">
             All 3 shops combined: live daily cash, POS settlements, and supplier payables.
@@ -7482,7 +7482,7 @@ function NaumanAiView({ txns }: { txns: Txn[] }) {
           <div className="flex items-center justify-between">
             <div>
               <h3 className="font-display font-extrabold text-2xl flex items-center gap-2 text-slate-900 dark:text-white">
-                <Activity className="text-purple-500 dark:text-purple-400" /> Today&apos;s Business Summary &amp; Blind-Spot Monitor
+                <Activity className="text-teal-400" /> Today&apos;s Business Summary &amp; Blind-Spot Monitor
               </h3>
               <p className="text-slate-500 dark:text-slate-400 font-semibold text-sm mt-1">
                 Live synced with today&apos;s Daily Register entries.
@@ -7912,21 +7912,21 @@ export default function Page() {
 
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Top Header */}
-        <header className="flex shrink-0 flex-wrap items-center justify-between gap-4 border-b border-slate-200 bg-white/50 px-6 py-4 backdrop-blur-xl dark:border-white/5 dark:bg-[#0B0E14]/50 z-20">
+        <header className="flex shrink-0 flex-wrap items-center justify-between gap-4 border-b border-slate-200 bg-white/50 px-6 py-4 backdrop-blur-xl dark:border-teal-900/40 dark:bg-[#071314]/90 z-20">
           <div className="flex items-center gap-4">
-            <h1 className="font-display text-xl font-extrabold tracking-tight hidden sm:block">
+            <h1 className="font-display text-xl font-extrabold tracking-tight text-white hidden sm:block">
               Good afternoon, Fahad
             </h1>
-            <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 hidden sm:block"></div>
-            <div className="flex items-center gap-2 text-sm font-bold text-slate-500">
-              <CalendarDays size={16} /> 12-09-2026
+            <div className="h-6 w-px bg-slate-200 dark:bg-teal-900/60 hidden sm:block"></div>
+            <div className="flex items-center gap-2 text-sm font-bold text-teal-100/70">
+              <CalendarDays size={16} className="text-teal-400" /> 12-09-2026
             </div>
-            <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 hidden sm:block"></div>
+            <div className="h-6 w-px bg-slate-200 dark:bg-teal-900/60 hidden sm:block"></div>
             <Dropdown.Root>
-              <Dropdown.Trigger className="flex h-10 items-center gap-2 rounded-lg bg-slate-100 px-3 text-sm font-bold hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 outline-none transition">
-                <Store size={16} className="text-purple-500" />
+              <Dropdown.Trigger className="flex h-10 items-center gap-2 rounded-lg bg-slate-100 px-3 text-sm font-bold hover:bg-slate-200 dark:bg-[#0D2322] dark:border dark:border-teal-800/40 dark:text-teal-100 dark:hover:bg-teal-900/30 outline-none transition">
+                <Store size={16} className="text-teal-400" />
                 Jubail - Main Branch
-                <ChevronDown size={14} className="text-slate-400" />
+                <ChevronDown size={14} className="text-teal-300/60" />
               </Dropdown.Trigger>
             </Dropdown.Root>
           </div>

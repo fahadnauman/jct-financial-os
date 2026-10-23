@@ -25,19 +25,19 @@
   color-scheme: light;
 }
 
-/* ---------- Dark: deep charcoal with violet glow ---------- */
+/* ---------- Dark: Jubail Corp Deep Obsidian Teal & Forest Slate ---------- */
 .dark {
-  --bg: #0b0e14;
-  --card: rgba(23, 27, 40, 0.7);
-  --card-solid: #171b28;
-  --raised: #1e2333;
-  --line: rgba(167, 139, 250, 0.12);
-  --line-strong: rgba(167, 139, 250, 0.22);
-  --fg: #eef0f6;
-  --muted: #8d94a8;
-  --accent: #a78bfa;
-  --accent-fg: #120a24;
-  --accent-soft: rgba(167, 139, 250, 0.13);
+  --bg: #071314;
+  --card: rgba(15, 41, 39, 0.8);
+  --card-solid: #132f2d;
+  --raised: #0d2322;
+  --line: rgba(20, 184, 166, 0.18);
+  --line-strong: rgba(45, 212, 191, 0.28);
+  --fg: #e6f7f6;
+  --muted: #7fa4a1;
+  --accent: #2dd4bf;
+  --accent-fg: #071314;
+  --accent-soft: rgba(45, 212, 191, 0.15);
   --pos: #34d399;
   --pos-soft: rgba(52, 211, 153, 0.12);
   --neg: #fb7185;
