@@ -1,12 +1,15 @@
 /**
- * JCT Pocket ⇄ Desktop Register bridge.
+ * JCT Pocket ⇄ Desktop Register bridge, backed by Neon PostgreSQL via /api/pocket.
  *
- * Entries logged on /owner-pocket are written to a shared queue (localStorage, same origin).
- * The desktop register (app/page.tsx) consumes the queue and injects entries into the branch
- * register. This module is the single seam to swap for a Neon/Prisma API later for cross-device sync.
+ * Phone (/owner-pocket) POSTs transactions; every client polls GET /api/pocket so the
+ * desktop register and the phone feed stay in sync across devices.
  */
 
+import { useCallback, useEffect, useState } from "react";
+
 export type BranchId = "JCT_HQ" | "HEMPEL_JUBAIL" | "JOTUN_DAMMAM" | "SIGMA_JUBAIL";
+export type PocketType = "EXPENSE" | "ADVANCE" | "CREDIT_COLLECTION";
+export type PaymentSource = "DRAWER_CASH" | "OWNER_POCKET" | "BANK_TRANSFER";
 
 export const POCKET_BRANCHES: { id: BranchId; short: string; full: string }[] = [
   { id: "JCT_HQ", short: "HQ", full: "Jubail Main HQ" },
@@ -15,75 +18,86 @@ export const POCKET_BRANCHES: { id: BranchId; short: string; full: string }[] = 
   { id: "SIGMA_JUBAIL", short: "Sigma", full: "Sigma Jubail" },
 ];
 
-export type PocketKind = "EXPENSE" | "ADVANCE" | "COLLECTION";
-
-export interface PocketEntry {
+/** Row shape returned by /api/pocket (mirrors the PocketTransaction model). */
+export interface PocketTransaction {
   id: string;
-  kind: PocketKind;
-  branchId: BranchId;
+  branch: BranchId;
+  type: PocketType;
   amount: number;
-  /** Expense category, advance purpose or collection tender summary */
-  category: string;
-  /** Recipient (advance) or customer (collection) */
-  party?: string;
-  reference?: string;
-  note?: string;
-  /** EXPENSE only: true when paid from the owner's personal pocket (does NOT reduce drawer cash) */
-  paidFromOwnerPocket?: boolean;
-  /** COLLECTION only */
-  tender?: "CASH_TO_OWNER" | "BANK_TRANSFER";
-  followUpDate?: string;
-  tag: string;
-  createdAt: number;
+  /** EXPENSE: category · ADVANCE: purpose · CREDIT_COLLECTION: invoice/reference */
+  category: string | null;
+  /** ADVANCE: staff name · CREDIT_COLLECTION: customer name */
+  recipientName: string | null;
+  paymentSource: PaymentSource;
+  note: string | null;
+  date: string;
+  createdAt: string;
 }
 
-export const POCKET_QUEUE_KEY = "jct_pocket_queue";
-export const POCKET_APPLIED_KEY = "jct_pocket_applied";
+export type NewPocketTransaction = Omit<PocketTransaction, "id" | "createdAt">;
+
 export const POCKET_CUSTOMERS_KEY = "jct_credit_customers";
-export const POCKET_EVENT = "jct-pocket-change";
+export const POCKET_POLL_MS = 5000;
 
-export function readRaw(key: string): string {
-  if (typeof window === "undefined") return "";
-  return window.localStorage.getItem(key) ?? "";
+export const pocketTag = (type: PocketType): string =>
+  type === "CREDIT_COLLECTION" ? "⚡ Collected by Owner (On-Road)" : "⚡ Logged by Owner (Mobile)";
+
+export const todayIso = (): string => {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+};
+
+export async function postPocketTransaction(tx: NewPocketTransaction): Promise<PocketTransaction> {
+  const res = await fetch("/api/pocket", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(tx),
+  });
+  if (!res.ok) throw new Error("Could not save to the database");
+  const json = (await res.json()) as { transaction: PocketTransaction };
+  return json.transaction;
 }
 
-export function parseQueue(raw: string): PocketEntry[] {
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as PocketEntry[]) : [];
-  } catch {
-    return [];
-  }
+export async function fetchPocketTransactions(
+  branch: BranchId | "ALL",
+  date: string
+): Promise<PocketTransaction[]> {
+  const res = await fetch(`/api/pocket?branch=${branch}&date=${date}`, { cache: "no-store" });
+  if (!res.ok) throw new Error("Could not load transactions");
+  const json = (await res.json()) as { transactions: PocketTransaction[] };
+  return json.transactions;
 }
 
-export function appendPocketEntry(entry: PocketEntry): void {
-  const queue = parseQueue(readRaw(POCKET_QUEUE_KEY));
-  queue.push(entry);
-  window.localStorage.setItem(POCKET_QUEUE_KEY, JSON.stringify(queue.slice(-200)));
-  window.dispatchEvent(new Event(POCKET_EVENT));
-}
+/** Polls Neon so every device sees new entries within a few seconds. */
+export function usePocketTransactions(branch: BranchId | "ALL", enabled = true) {
+  const [transactions, setTransactions] = useState<PocketTransaction[]>([]);
+  const [error, setError] = useState(false);
 
-export function readAppliedIds(): string[] {
-  try {
-    const parsed = JSON.parse(readRaw(POCKET_APPLIED_KEY) || "[]");
-    return Array.isArray(parsed) ? (parsed as string[]) : [];
-  } catch {
-    return [];
-  }
-}
+  const refresh = useCallback(async () => {
+    try {
+      const rows = await fetchPocketTransactions(branch, todayIso());
+      setTransactions(rows);
+      setError(false);
+    } catch {
+      setError(true);
+    }
+  }, [branch]);
 
-export function markApplied(ids: string[]): void {
-  const next = Array.from(new Set([...readAppliedIds(), ...ids])).slice(-400);
-  window.localStorage.setItem(POCKET_APPLIED_KEY, JSON.stringify(next));
-  window.dispatchEvent(new Event(POCKET_EVENT));
-}
+  useEffect(() => {
+    if (!enabled) return;
+    const first = window.setTimeout(refresh, 0);
+    const timer = window.setInterval(refresh, POCKET_POLL_MS);
+    const onFocus = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      window.clearTimeout(first);
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
+  }, [refresh, enabled]);
 
-export function subscribePocket(cb: () => void): () => void {
-  window.addEventListener("storage", cb);
-  window.addEventListener(POCKET_EVENT, cb);
-  return () => {
-    window.removeEventListener("storage", cb);
-    window.removeEventListener(POCKET_EVENT, cb);
-  };
+  return { transactions, error, refresh };
 }

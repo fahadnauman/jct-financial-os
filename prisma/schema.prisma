@@ -1,11 +1,39 @@
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 generator client {
   provider = "prisma-client-js"
 }
+
+// Owner mobile ("JCT Pocket") + desktop register shared ledger
+model PocketTransaction {
+  id            String   @id @default(cuid())
+  branch        String   // JCT_HQ | HEMPEL_JUBAIL | JOTUN_DAMMAM | SIGMA_JUBAIL
+  type          String   // EXPENSE | ADVANCE | CREDIT_COLLECTION
+  amount        Float
+  category      String?
+  recipientName String?
+  paymentSource String   // DRAWER_CASH | OWNER_POCKET | BANK_TRANSFER
+  note          String?
+  date          String   // YYYY-MM-DD
+  createdAt     DateTime @default(now())
+
+  @@index([branch, date])
+}
+
+model DailyRegisterLock {
+  id          String   @id @default(cuid())
+  branch      String
+  date        String
+  closingCash Float
+  lockedAt    DateTime @default(now())
+  lockedBy    String
+  status      String   @default("LOCKED")
+
+  @@index([branch, date])
+}
+
 
 model DailyRegister {
   id          String   @id @default(cuid())

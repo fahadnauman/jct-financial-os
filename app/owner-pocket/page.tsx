@@ -4,15 +4,13 @@ import { useState, useSyncExternalStore } from "react";
 import {
   POCKET_BRANCHES,
   POCKET_CUSTOMERS_KEY,
-  POCKET_QUEUE_KEY,
-  appendPocketEntry,
-  parseQueue,
-  readAppliedIds,
-  readRaw,
-  subscribePocket,
+  postPocketTransaction,
+  todayIso,
+  usePocketTransactions,
   type BranchId,
-  type PocketEntry,
-  type PocketKind,
+  type NewPocketTransaction,
+  type PocketTransaction,
+  type PocketType,
 } from "../../lib/pocket-bridge";
 
 /** Client-side convenience PIN (NOT real security). Override with NEXT_PUBLIC_OWNER_PIN. */
@@ -22,11 +20,14 @@ const EXPENSE_CATEGORIES = ["Fuel / Vehicle", "Shop Maintenance", "Food & Refres
 const ADVANCE_PURPOSES = ["Salary Advance", "Daily Lunch / Travel Allowance", "Shop Runner Float"];
 const FALLBACK_CUSTOMERS = ["Al-Hamad Contracting", "Gulf Coast Painters", "Eastern Province Builders"];
 
+const subscribeStorage = (cb: () => void) => {
+  window.addEventListener("storage", cb);
+  return () => window.removeEventListener("storage", cb);
+};
+
 const fmt = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const todayKey = () => new Date().toDateString();
-const hhmm = (ts: number) =>
-  new Date(ts).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-const plusDays = (d: number) => new Date(Date.now() + d * 86400000).toISOString().slice(0, 10);
+const hhmm = (iso: string) =>
+  new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 
 function Pills<T extends string>({
   options,
@@ -133,7 +134,7 @@ function BranchPicker({ value, onChange }: { value: BranchId; onChange: (b: Bran
 export default function OwnerPocketPage() {
   const [unlocked, setUnlocked] = useState(false);
   const [branch, setBranch] = useState<BranchId>("JCT_HQ");
-  const [action, setAction] = useState<PocketKind | null>(null);
+  const [action, setAction] = useState<PocketType | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   // Expense form
@@ -156,26 +157,17 @@ export default function OwnerPocketPage() {
   const [cAmount, setCAmount] = useState("");
   const [cTender, setCTender] = useState<"CASH_TO_OWNER" | "BANK_TRANSFER">("CASH_TO_OWNER");
 
-  const queueRaw = useSyncExternalStore(
-    subscribePocket,
-    () => readRaw(POCKET_QUEUE_KEY),
-    () => ""
-  );
+  const [saving, setSaving] = useState(false);
+
   const customersRaw = useSyncExternalStore(
-    subscribePocket,
-    () => readRaw(POCKET_CUSTOMERS_KEY),
-    () => ""
-  );
-  const appliedRaw = useSyncExternalStore(
-    subscribePocket,
-    () => readRaw("jct_pocket_applied"),
+    subscribeStorage,
+    () => window.localStorage.getItem(POCKET_CUSTOMERS_KEY) ?? "",
     () => ""
   );
 
-  const queue = parseQueue(queueRaw);
-  const today = todayKey();
-  const recent = queue.filter((e) => new Date(e.createdAt).toDateString() === today).slice(-5).reverse();
-  const appliedIds = appliedRaw ? readAppliedIds() : [];
+  // Live feed straight from Neon (all branches, today), polled every few seconds
+  const { transactions, refresh } = usePocketTransactions("ALL", unlocked);
+  const recent = transactions.slice(-5).reverse();
 
   let customerNames: string[] = FALLBACK_CUSTOMERS;
   try {
@@ -191,86 +183,101 @@ export default function OwnerPocketPage() {
   const branchFull = (id: BranchId) => POCKET_BRANCHES.find((b) => b.id === id)?.full ?? id;
   const branchShort = (id: BranchId) => POCKET_BRANCHES.find((b) => b.id === id)?.short ?? id;
 
-  const finish = (entry: PocketEntry, msg: string) => {
-    appendPocketEntry(entry);
-    setToast(msg);
-    setAction(null);
-    setTimeout(() => setToast(null), 3500);
+  const finish = async (tx: NewPocketTransaction, msg: string): Promise<boolean> => {
+    setSaving(true);
+    try {
+      await postPocketTransaction(tx);
+      setToast(msg);
+      setAction(null);
+      refresh();
+      setTimeout(() => setToast(null), 3500);
+      return true;
+    } catch {
+      setToast("Could not reach the database. Nothing was saved, please retry.");
+      setTimeout(() => setToast(null), 4500);
+      return false;
+    } finally {
+      setSaving(false);
+    }
   };
-  const base = () => ({ id: `pk-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, createdAt: Date.now() });
 
-  const saveExpense = () => {
+  const saveExpense = async () => {
     const amount = parseFloat(eAmount);
-    if (!(amount > 0)) return;
-    finish(
+    if (!(amount > 0) || saving) return;
+    const ok = await finish(
       {
-        ...base(),
-        kind: "EXPENSE",
-        branchId: eBranch,
+        branch: eBranch,
+        type: "EXPENSE",
         amount,
         category: eCat,
-        note: eNote.trim() || undefined,
-        paidFromOwnerPocket: eSource === "POCKET",
-        tag: "⚡ Logged by Owner (Mobile)",
+        recipientName: null,
+        paymentSource: eSource === "POCKET" ? "OWNER_POCKET" : "DRAWER_CASH",
+        note: eNote.trim() || null,
+        date: todayIso(),
       },
       `Expense SAR ${fmt(amount)} saved · ${branchShort(eBranch)}`
     );
-    setEAmount("");
-    setENote("");
+    if (ok) {
+      setEAmount("");
+      setENote("");
+    }
   };
 
-  const saveAdvance = () => {
+  const saveAdvance = async () => {
     const amount = parseFloat(aAmount);
-    if (!(amount > 0) || !aName.trim()) return;
-    finish(
+    if (!(amount > 0) || !aName.trim() || saving) return;
+    const ok = await finish(
       {
-        ...base(),
-        kind: "ADVANCE",
-        branchId: aBranch,
+        branch: aBranch,
+        type: "ADVANCE",
         amount,
         category: aPurpose,
-        party: aName.trim(),
-        tag: "⚡ Logged by Owner (Mobile)",
+        recipientName: aName.trim(),
+        paymentSource: "DRAWER_CASH",
+        note: null,
+        date: todayIso(),
       },
       `Advance SAR ${fmt(amount)} to ${aName.trim()} saved`
     );
-    setAAmount("");
-    setAName("");
+    if (ok) {
+      setAAmount("");
+      setAName("");
+    }
   };
 
-  const saveCollection = () => {
+  const saveCollection = async () => {
     const amount = parseFloat(cAmount);
-    if (!(amount > 0) || !cName.trim()) return;
-    finish(
+    if (!(amount > 0) || !cName.trim() || saving) return;
+    const ok = await finish(
       {
-        ...base(),
-        kind: "COLLECTION",
-        branchId: cBranch,
+        branch: cBranch,
+        type: "CREDIT_COLLECTION",
         amount,
-        category: cTender === "CASH_TO_OWNER" ? "Cash Handed to Owner" : "Bank Transfer to SAB / Rajhi",
-        party: cName.trim(),
-        reference: cRef.trim() || undefined,
-        tender: cTender,
-        followUpDate: plusDays(14),
-        tag: "⚡ Collected by Owner (On-Road)",
+        category: cRef.trim() || null,
+        recipientName: cName.trim(),
+        paymentSource: cTender === "CASH_TO_OWNER" ? "DRAWER_CASH" : "BANK_TRANSFER",
+        note: cTender === "CASH_TO_OWNER" ? "Cash Handed to Owner" : "Bank Transfer to SAB / Rajhi",
+        date: todayIso(),
       },
       `Collected SAR ${fmt(amount)} from ${cName.trim()}`
     );
-    setCAmount("");
-    setCName("");
-    setCRef("");
+    if (ok) {
+      setCAmount("");
+      setCName("");
+      setCRef("");
+    }
   };
 
   if (!unlocked) return <PinGate onUnlock={() => setUnlocked(true)} />;
 
-  const statusFor = (e: PocketEntry) => {
-    if (e.kind === "EXPENSE" && e.paidFromOwnerPocket) return "Recorded · Owner pocket";
-    if (e.kind === "COLLECTION" && e.tender === "BANK_TRANSFER") return "Synced to Credit Radar";
-    if (e.branchId !== "JCT_HQ") return "Queued for Branch Register";
-    return appliedIds.includes(e.id) ? "Synced to Branch Drawer" : "Pending desktop sync";
+  const statusFor = (e: PocketTransaction) => {
+    if (e.type === "EXPENSE" && e.paymentSource === "OWNER_POCKET") return "Recorded · Owner pocket";
+    if (e.type === "CREDIT_COLLECTION" && e.paymentSource === "BANK_TRANSFER") return "Synced to Credit Radar";
+    if (e.branch !== "JCT_HQ") return "Saved · Branch register";
+    return "Synced to Branch Drawer";
   };
 
-  const kindLabel = (k: PocketKind) =>
+  const kindLabel = (k: PocketType) =>
     k === "EXPENSE" ? "💸 Expense" : k === "ADVANCE" ? "🤝 Advance" : "💵 Collection";
 
   return (
@@ -338,7 +345,7 @@ export default function OwnerPocketPage() {
             </button>
             <button
               type="button"
-              onClick={() => setAction("COLLECTION")}
+              onClick={() => setAction("CREDIT_COLLECTION")}
               className="w-full rounded-2xl bg-emerald-400 p-5 text-left text-black shadow-[0_0_20px_rgba(52,211,153,0.25)] active:scale-[0.98]"
             >
               <span className="block text-xl font-extrabold">💵 Roadside Credit Collection</span>
@@ -436,7 +443,7 @@ export default function OwnerPocketPage() {
         )}
 
         {/* Collection form */}
-        {action === "COLLECTION" && (
+        {action === "CREDIT_COLLECTION" && (
           <section className="space-y-4 rounded-2xl border border-emerald-400/30 bg-[#081517] p-4">
             <h2 className="text-lg font-extrabold text-emerald-300">💵 Roadside Credit Collection</h2>
             <div>
@@ -503,13 +510,13 @@ export default function OwnerPocketPage() {
             <div key={e.id} className="rounded-xl border border-white/5 bg-[#061416] p-3">
               <div className="flex items-center justify-between text-sm">
                 <span className="font-bold">
-                  {kindLabel(e.kind)} · SAR {fmt(e.amount)}
+                  {kindLabel(e.type)} · SAR {fmt(e.amount)}
                 </span>
                 <span className="text-[11px] text-slate-500">{hhmm(e.createdAt)}</span>
               </div>
               <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[10px] font-bold">
                 <span className="rounded-full border border-[#00BAC7]/30 bg-[#00BAC7]/10 px-2 py-0.5 text-[#22D3EE]">
-                  {branchFull(e.branchId)}
+                  {branchFull(e.branch)}
                 </span>
                 <span className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2 py-0.5 text-emerald-300">
                   {statusFor(e)}

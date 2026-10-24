@@ -1,15 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import {
-  POCKET_CUSTOMERS_KEY,
-  POCKET_QUEUE_KEY,
-  markApplied,
-  parseQueue,
-  readAppliedIds,
-  readRaw,
-  subscribePocket,
-} from "../lib/pocket-bridge";
+import { POCKET_CUSTOMERS_KEY, pocketTag, usePocketTransactions, type BranchId } from "../lib/pocket-bridge";
 import * as Dropdown from "@radix-ui/react-dropdown-menu";
 import {
   Activity, Building2, CalendarDays, Check, ChevronDown, 
@@ -8014,73 +8006,81 @@ export default function Page() {
     })),
   ];
 
-  // JCT Pocket bridge: ingest owner mobile entries into the HQ register + Credit Radar
-  const pocketApplyRef = useRef<() => void>(() => {});
+  // JCT Pocket bridge: live Neon feed -> register (Steps 3/4/5) + Credit Radar
+  const activePocketBranch: BranchId | "ALL" = profile?.isOwner
+    ? ownerBranch === "Hempel - Jubail"
+      ? "HEMPEL_JUBAIL"
+      : ownerBranch === "Jotun - Dammam"
+      ? "JOTUN_DAMMAM"
+      : ownerBranch === "Sigma Paints - Jubail"
+      ? "SIGMA_JUBAIL"
+      : ownerBranch === "All Branches (Combined)"
+      ? "ALL"
+      : "JCT_HQ"
+    : (profile?.id as BranchId) || "JCT_HQ";
+
+  const { transactions: pocketTxns } = usePocketTransactions(activePocketBranch, Boolean(profile));
+  const pocketSyncedRef = useRef<Set<string>>(new Set());
+  const syncCustomerRef = useRef(handleSyncCreditCustomer);
   useEffect(() => {
-    pocketApplyRef.current = () => {
-      const applied = new Set(readAppliedIds());
-      const pending = parseQueue(readRaw(POCKET_QUEUE_KEY)).filter(
-        (e) => !applied.has(e.id) && e.branchId === "JCT_HQ"
-      );
-      if (pending.length === 0) return;
-      const injected: PreLoggedEntry[] = [];
-      pending.forEach((e) => {
-        const time = new Date(e.createdAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-        if (e.kind === "EXPENSE") {
-          if (e.paidFromOwnerPocket) return; // owner's own money: not a drawer outflow
-          injected.push({
-            id: e.id,
-            type: "EXPENSE",
-            expenseCategory: e.category.startsWith("Food") ? "Food" : "Personal Reasons",
-            title: `${e.category}`,
-            note: [e.tag, e.note].filter(Boolean).join(" · "),
-            amount: e.amount,
-            time,
-          });
-        } else if (e.kind === "ADVANCE") {
-          injected.push({
-            id: e.id,
-            type: "EXPENSE",
-            expenseCategory: "Salary",
-            title: `Staff Advance · ${e.party ?? "Staff"} (${e.category})`,
-            note: `${e.tag} · Staff Payables / Advances`,
-            amount: e.amount,
-            time,
-          });
-        } else {
-          if (e.tender !== "BANK_TRANSFER") {
-            injected.push({
-              id: e.id,
-              type: "CREDIT_RECD",
-              title: `Credit Sale Amt Recd · ${e.party ?? "Customer"}`,
-              customerName: e.party,
-              receiptNo: e.reference,
-              followUpDate: e.followUpDate,
-              note: `${e.tag} · ${e.category}`,
-              amount: e.amount,
-              time,
-            });
-          }
-          if (e.party) {
-            handleSyncCreditCustomer(e.party, e.amount, e.followUpDate ?? "", e.reference, "CREDIT_RECD");
-          }
-        }
-      });
-      if (injected.length) setPreLoggedEntries((prev) => [...prev, ...injected]);
-      markApplied(pending.map((e) => e.id));
-    };
+    syncCustomerRef.current = handleSyncCreditCustomer;
   });
   useEffect(() => {
-    const run = () => pocketApplyRef.current();
-    const t = window.setTimeout(run, 0);
-    const unsub = subscribePocket(run);
-    return () => {
-      window.clearTimeout(t);
-      unsub();
-    };
-  }, []);
+    const fresh = pocketTxns.filter((t) => !pocketSyncedRef.current.has(t.id));
+    if (fresh.length === 0) return;
+    const injected: PreLoggedEntry[] = [];
+    fresh.forEach((t) => {
+      pocketSyncedRef.current.add(t.id);
+      const time = new Date(t.createdAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+      const tag = pocketTag(t.type);
+      const entryId = `pk-${t.id}`;
+      if (t.type === "EXPENSE") {
+        if (t.paymentSource === "OWNER_POCKET") return; // owner's own money: not a drawer outflow
+        injected.push({
+          id: entryId,
+          type: "EXPENSE",
+          expenseCategory: (t.category ?? "").startsWith("Food") ? "Food" : "Personal Reasons",
+          title: t.category ?? "Owner Expense",
+          note: [tag, t.note].filter(Boolean).join(" · "),
+          amount: t.amount,
+          time,
+        });
+      } else if (t.type === "ADVANCE") {
+        injected.push({
+          id: entryId,
+          type: "EXPENSE",
+          expenseCategory: "Salary",
+          title: `Staff Advance · ${t.recipientName ?? "Staff"} (${t.category ?? "Advance"})`,
+          note: `${tag} · Staff Payables / Advances`,
+          amount: t.amount,
+          time,
+        });
+      } else {
+        const followUp = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
+        if (t.paymentSource !== "BANK_TRANSFER") {
+          injected.push({
+            id: entryId,
+            type: "CREDIT_RECD",
+            title: `Credit Sale Amt Recd · ${t.recipientName ?? "Customer"}`,
+            customerName: t.recipientName ?? undefined,
+            receiptNo: t.category ?? undefined,
+            followUpDate: followUp,
+            note: [tag, t.note].filter(Boolean).join(" · "),
+            amount: t.amount,
+            time,
+          });
+        }
+        if (t.recipientName) {
+          syncCustomerRef.current(t.recipientName, t.amount, followUp, t.category ?? undefined, "CREDIT_RECD");
+        }
+      }
+    });
+    if (injected.length) {
+      setPreLoggedEntries((prev) => [...prev, ...injected.filter((i) => !prev.some((p) => p.id === i.id))]);
+    }
+  }, [pocketTxns]);
 
-  // Publish credit customer names so /owner-pocket can auto-lookup
+  // Publish credit customer names so /owner-pocket can auto-lookup (same-browser convenience)
   useEffect(() => {
     window.localStorage.setItem(POCKET_CUSTOMERS_KEY, JSON.stringify(creditCustomers.map((c) => c.name)));
   }, [creditCustomers]);
