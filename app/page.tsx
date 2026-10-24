@@ -7404,7 +7404,7 @@ function NaumanAiView({ txns }: { txns: Txn[] }) {
             <div className="mt-1">
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-teal-500/10 border border-teal-500/30 text-[#00BAC7] text-xs font-bold shadow-[0_0_12px_rgba(0,186,199,0.2)]">
                 <span className="inline-block h-2 w-2 rounded-full bg-teal-400 shadow-[0_0_8px_rgba(45,212,191,0.8)] animate-pulse" />
-                <span>⚡ LIVE AI ANALYSIS (GROQ LLAMA-3.3)</span>
+                <span>⚡ LIVE AI ANALYSIS (GROQ LLAMA-3.1)</span>
               </div>
             </div>
           )}
@@ -7439,7 +7439,7 @@ function NaumanAiView({ txns }: { txns: Txn[] }) {
       {isAnalyzing && (
         <div className="flex items-center gap-3 p-4 rounded-xl bg-teal-500/10 border border-[#00BAC7]/25 text-[#00BAC7] text-sm font-semibold animate-pulse">
           <Sparkles className="animate-spin text-[#00BAC7]" size={18} />
-          <span>Auditing ledger with Groq llama-3.3-70b-versatile in real time...</span>
+          <span>Auditing ledger with Groq llama-3.1-8b-instant in real time...</span>
         </div>
       )}
 

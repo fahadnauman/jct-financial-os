@@ -18,7 +18,7 @@ interface RequestPayload {
   contractors?: { name: string; outstanding: number; status?: string }[];
 }
 
-const PRIMARY_MODEL = "llama-3.3-70b-versatile";
+const PRIMARY_MODEL = "llama-3.1-8b-instant";
 
 export async function POST(req: Request) {
   let payload: RequestPayload = {};
@@ -44,9 +44,9 @@ export async function POST(req: Request) {
   const netCash = Math.round((totalIn - totalOut) * 100) / 100;
   const txCount = (payload.inflows?.length || 0) + (payload.outflows?.length || 0);
 
-  const systemPrompt = `You are Nauman AI, Chief Financial Auditor for Jubail Corporation Trading Est. (JCT - wholesale paint distributor for Jotun, Hempel, Sigma in Saudi Arabia).
+  const systemPrompt = `You are an executive CFO assistant for Jubail Corporation Trading Est. (JCT - wholesale paint distributor for Jotun, Hempel, Sigma in Saudi Arabia).
 Analyze the provided daytime transactions, contractor receivables, and cash flow ledger.
-You must return a valid JSON object matching EXACTLY this JSON schema:
+Respond in valid JSON. You must return a valid JSON object matching EXACTLY this JSON schema:
 {
   "summary": {
     "headline": "A concise executive takeaway sentence describing today's financial position",
@@ -71,7 +71,7 @@ You must return a valid JSON object matching EXACTLY this JSON schema:
   "advice": "1-2 high-impact executive directives for the owners (Nazim & Nadeem / BONGSI)"
 }`;
 
-  const userPrompt = `Here is today's financial ledger data. Return a valid JSON object:
+  const userPrompt = `Here is today's financial ledger data. Respond in valid JSON as an executive CFO assistant:
 ${JSON.stringify({
     inflowsCount: payload.inflows?.length || 0,
     inflowsSample: (payload.inflows || []).slice(0, 15),
