@@ -6,6 +6,7 @@ import {
   Activity, Building2, CalendarDays, Check, ChevronDown, 
   FileSpreadsheet, Lock, LockOpen, Moon, 
   Package, Sparkles, Store, Sun, TrendingUp, 
+  Crown, Paintbrush, PaintRoller, SprayCan, Landmark, Repeat,
   Wallet, Plus, Target, AlertTriangle, Mail, Bell,
   UploadCloud, Zap, ArrowLeft, ArrowRight, BarChart2, Eye, ArrowRightLeft, Trash2, Maximize2, Minimize2
 } from "lucide-react";
@@ -161,7 +162,7 @@ function ThemeToggle({ dark, onToggle }: { dark: boolean; onToggle: () => void }
   );
 }
 
-function Sidebar({ tab, setTab }: { tab: TabId; setTab: (t: TabId) => void }) {
+function Sidebar({ tab, setTab, allowedTabs }: { tab: TabId; setTab: (t: TabId) => void; allowedTabs: TabId[] }) {
   const nav = [
     { id: "register" as TabId, label: "Daily Register", icon: Wallet },
     { id: "radar" as TabId, label: "Credit Radar", icon: Target },
@@ -169,7 +170,7 @@ function Sidebar({ tab, setTab }: { tab: TabId; setTab: (t: TabId) => void }) {
     { id: "pulse" as TabId, label: "Financial Pulse", icon: Activity },
     { id: "consolidation" as TabId, label: "Branch Consolidation", icon: Building2 },
     { id: "ai" as TabId, label: "Nauman AI", icon: Sparkles },
-  ];
+  ].filter((n) => allowedTabs.includes(n.id));
   return (
     <aside className="hidden w-64 shrink-0 flex-col overflow-hidden bg-[#050F11] border-r border-[#00BAC7]/20 p-5 text-white lg:flex relative z-40">
       <div className="relative flex items-center gap-3 px-1 pb-8 pt-1">
@@ -7510,7 +7511,186 @@ function NaumanAiView({ txns }: { txns: Txn[] }) {
   );
 }
 
+/* ════════════════════════════════════════════════════════════════════════
+   PROFILE GATE, ROLE ACCESS & OWNER AUDIT RADAR
+   ════════════════════════════════════════════════════════════════════════ */
+
+type ProfileId = "BONGSI" | "JCT_HQ" | "HEMPEL_JUBAIL" | "JOTUN_DAMMAM" | "SIGMA_JUBAIL";
+
+interface UserProfile {
+  id: ProfileId;
+  emoji: string;
+  name: string;
+  label: string;
+  badge: string;
+  greeting: string;
+  branch: string;
+  isOwner: boolean;
+  avatarClass: string;
+  hoverRing: string;
+  icon: typeof Crown;
+}
+
+const PROFILE_STORAGE_KEY = "jct_user_profile";
+
+const USER_PROFILES: UserProfile[] = [
+  {
+    id: "BONGSI", emoji: "👑", name: "BONGSI", label: "Nazim & Nadeem (Owners)",
+    badge: "Master Admin · All Branches", greeting: "Nazim & Nadeem", branch: "All Branches", isOwner: true,
+    avatarClass: "bg-gradient-to-br from-[#000000] via-[#0A1012] to-[#06262B] ring-2 ring-[#00BAC7]/60",
+    hoverRing: "hover:ring-2 hover:ring-[#00BAC7] hover:shadow-[0_0_25px_rgba(0,186,199,0.35)]",
+    icon: Crown,
+  },
+  {
+    id: "JCT_HQ", emoji: "🏢", name: "JCT Main HQ", label: "Jubail Main HQ",
+    badge: "Hardware & Jotun Store", greeting: "JCT Main HQ", branch: "Jubail - Main Branch", isOwner: false,
+    avatarClass: "bg-gradient-to-br from-[#14281F] to-[#0B1713]",
+    hoverRing: "hover:ring-2 hover:ring-[#FFD200] hover:shadow-[0_0_25px_rgba(255,210,0,0.25)]",
+    icon: Store,
+  },
+  {
+    id: "HEMPEL_JUBAIL", emoji: "🎨", name: "Hempel Jubail", label: "Hempel Franchise",
+    badge: "Jubail Branch", greeting: "Hempel Jubail", branch: "Hempel - Jubail", isOwner: false,
+    avatarClass: "bg-gradient-to-br from-[#0F3338] to-[#082023]",
+    hoverRing: "hover:ring-2 hover:ring-[#00BAC7] hover:shadow-[0_0_25px_rgba(0,186,199,0.3)]",
+    icon: PaintRoller,
+  },
+  {
+    id: "JOTUN_DAMMAM", emoji: "🖌️", name: "Jotun Dammam", label: "Jotun Franchise",
+    badge: "Dammam Branch", greeting: "Jotun Dammam", branch: "Jotun - Dammam", isOwner: false,
+    avatarClass: "bg-gradient-to-br from-[#06566A] to-[#032B36]",
+    hoverRing: "hover:ring-2 hover:ring-[#00BAC7] hover:shadow-[0_0_25px_rgba(0,186,199,0.3)]",
+    icon: SprayCan,
+  },
+  {
+    id: "SIGMA_JUBAIL", emoji: "🏗️", name: "Sigma Paints", label: "Sigma Paints Franchise",
+    badge: "Jubail Branch", greeting: "Sigma Paints Jubail", branch: "Sigma Paints - Jubail", isOwner: false,
+    avatarClass: "bg-gradient-to-br from-[#2A3338] to-[#141A1D]",
+    hoverRing: "hover:ring-2 hover:ring-[#FFD200] hover:shadow-[0_0_25px_rgba(255,210,0,0.25)]",
+    icon: Landmark,
+  },
+];
+
+const OWNER_TABS: TabId[] = ["register", "radar", "suppliers", "pulse", "consolidation", "ai"];
+const STAFF_TABS: TabId[] = ["register"];
+
+const OWNER_BRANCH_OPTIONS = [
+  "All Branches (Combined)",
+  "Jubail - Main Branch",
+  "Hempel - Jubail",
+  "Jotun - Dammam",
+  "Sigma Paints - Jubail",
+];
+
+function ProfileGate({ onSelect }: { onSelect: (p: UserProfile) => void }) {
+  return (
+    <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center overflow-y-auto bg-gradient-to-br from-[#041012] via-[#051719] to-[#010405] px-6 py-10 text-slate-100">
+      <div className="pointer-events-none absolute left-1/2 top-0 h-80 w-80 -translate-x-1/2 rounded-full bg-[#00BAC7]/10 blur-3xl" />
+      <div className="relative z-10 flex w-full max-w-6xl flex-col items-center">
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-[#FFD200] to-[#FACC15] font-display text-base font-black text-black shadow-[0_0_20px_rgba(255,210,0,0.35)]">
+            JCT
+          </div>
+          <span className="font-display text-lg font-extrabold tracking-tight text-[#22D3EE]">JCT Financial OS</span>
+        </div>
+        <h1 className="mt-10 text-3xl md:text-4xl font-extrabold text-white tracking-tight text-center">Who is signing in?</h1>
+        <p className="text-sm text-slate-400 mt-2 text-center">Select your branch profile or owner terminal to begin.</p>
+
+        <div className="mt-12 grid w-full grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-5">
+          {USER_PROFILES.map((p) => {
+            const Icon = p.icon;
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => onSelect(p)}
+                className="group flex flex-col items-center gap-3 text-center outline-none"
+              >
+                <div
+                  className={`flex aspect-square w-full max-w-[170px] items-center justify-center rounded-2xl border border-white/10 transition-all duration-200 group-hover:scale-105 group-focus-visible:scale-105 ${p.avatarClass} ${p.hoverRing}`}
+                >
+                  <Icon
+                    size={64}
+                    strokeWidth={1.5}
+                    className={p.isOwner ? "text-[#FFD200] drop-shadow-[0_0_12px_rgba(255,210,0,0.6)]" : "text-white/85"}
+                  />
+                </div>
+                <div>
+                  <p className="text-base font-bold text-white">
+                    {p.emoji} {p.name}
+                  </p>
+                  <p className="text-xs text-slate-400">{p.label}</p>
+                  <span
+                    className={`mt-2 inline-block rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${
+                      p.isOwner
+                        ? "border-[#FFD200]/40 bg-[#FFD200]/10 text-[#FFD200]"
+                        : "border-[#00BAC7]/30 bg-[#00BAC7]/10 text-[#22D3EE]"
+                    }`}
+                  >
+                    {p.badge}
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BranchAuditRadar() {
+  const branches = [
+    { name: "JCT Main HQ", status: "🟢 AUDITED & LOCKED", detail: "SAR 43,092 locked at 10:14 PM", cls: "border-emerald-400/40 text-emerald-300 bg-emerald-500/5" },
+    { name: "Hempel Jubail", status: "🟡 REGISTER ACTIVE", detail: "Staff logged in, 18 invoices matched", cls: "border-amber-400/40 text-amber-300 bg-amber-500/5" },
+    { name: "Jotun Dammam", status: "🟢 AUDITED & LOCKED", detail: "Locked at 10:02 PM", cls: "border-emerald-400/40 text-emerald-300 bg-emerald-500/5" },
+    { name: "Sigma Paints Jubail", status: "🔴 AUDIT PENDING", detail: "Closing time passed, register still unlocked", cls: "border-rose-400/50 text-rose-300 bg-rose-500/10" },
+  ];
+  return (
+    <div className="rounded-2xl border border-[#00BAC7]/25 bg-[#060F11]/80 p-4 backdrop-blur-md">
+      <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#22D3EE]">
+        <Eye size={14} /> Real-Time Branch Audit Radar
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {branches.map((b) => (
+          <div key={b.name} className={`rounded-xl border px-4 py-3 ${b.cls}`}>
+            <p className="text-sm font-bold text-white">{b.name}</p>
+            <p className="mt-1 text-xs font-extrabold">{b.status}</p>
+            <p className="mt-0.5 text-[11px] text-slate-400">{b.detail}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function Page() {
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [profileLoaded, setProfileLoaded] = useState(false);
+  const [ownerBranch, setOwnerBranch] = useState(OWNER_BRANCH_OPTIONS[1]);
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem(PROFILE_STORAGE_KEY);
+    const found = USER_PROFILES.find((p) => p.id === saved) || null;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setProfile(found);
+    setProfileLoaded(true);
+  }, []);
+
+  const handleSelectProfile = (p: UserProfile) => {
+    window.localStorage.setItem(PROFILE_STORAGE_KEY, p.id);
+    setProfile(p);
+    setTab("register");
+  };
+
+  const handleSwitchProfile = () => {
+    window.localStorage.removeItem(PROFILE_STORAGE_KEY);
+    setProfile(null);
+  };
+
+  const allowedTabs = profile?.isOwner ? OWNER_TABS : STAFF_TABS;
+  const activeBranchLabel = profile?.isOwner ? ownerBranch : profile?.branch ?? "";
+
   const [dark, setDark] = useState(true);
   const [tab, setTab] = useState<TabId>("register");
 
@@ -7825,33 +8005,77 @@ export default function Page() {
     })),
   ];
 
+  if (!profileLoaded) {
+    return <div className="h-screen w-full bg-[#041012]" />;
+  }
+  if (!profile) {
+    return <ProfileGate onSelect={handleSelectProfile} />;
+  }
+  const safeTab: TabId = allowedTabs.includes(tab) ? tab : "register";
+
   return (
     <div
       className={`flex h-screen w-full bg-[#041012] text-slate-100 antialiased overflow-hidden ${
         dark ? "dark" : ""
       }`}
     >
-      <Sidebar tab={tab} setTab={setTab} />
+      <Sidebar tab={safeTab} setTab={setTab} allowedTabs={allowedTabs} />
 
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Top Header */}
         <header className="flex shrink-0 flex-wrap items-center justify-between gap-4 border-b border-[#00BAC7]/15 bg-[#060F11]/90 px-6 py-4 backdrop-blur-md z-20">
           <div className="flex items-center gap-4">
             <h1 className="text-white font-semibold text-base hidden sm:block">
-              Good afternoon, Fahad
+              Good afternoon, {profile.greeting}
             </h1>
+            <button
+              type="button"
+              onClick={handleSwitchProfile}
+              className="flex items-center gap-1.5 rounded-lg border border-[#FFD200]/30 bg-[#FFD200]/10 px-2.5 py-1.5 text-xs font-bold text-[#FFD200] transition hover:bg-[#FFD200]/20"
+            >
+              Switch Profile <Repeat size={12} />
+            </button>
             <div className="h-4 w-px bg-[#00BAC7]/20 hidden sm:block"></div>
             <div className="flex items-center gap-2 bg-[#0B1E21] border border-[#00BAC7]/25 text-[#22D3EE] text-xs font-medium px-3 py-1.5 rounded-lg">
               <CalendarDays size={14} className="text-[#00BAC7]" /> 12-09-2026
             </div>
             <div className="h-4 w-px bg-[#00BAC7]/20 hidden sm:block"></div>
-            <Dropdown.Root>
-              <Dropdown.Trigger className="flex items-center gap-2 bg-[#0B1E21] border border-[#00BAC7]/25 text-[#22D3EE] text-xs font-medium px-3 py-1.5 rounded-lg outline-none transition hover:border-[#00BAC7]/50">
+            {profile.isOwner ? (
+              <Dropdown.Root>
+                <Dropdown.Trigger className="flex items-center gap-2 bg-[#0B1E21] border border-[#00BAC7]/25 text-[#22D3EE] text-xs font-medium px-3 py-1.5 rounded-lg outline-none transition hover:border-[#00BAC7]/50">
+                  <Store size={14} className="text-[#00BAC7]" />
+                  {activeBranchLabel}
+                  <ChevronDown size={12} className="text-[#00BAC7]/70" />
+                </Dropdown.Trigger>
+                <Dropdown.Portal>
+                  <Dropdown.Content
+                    align="start"
+                    sideOffset={6}
+                    className="z-[200] min-w-[200px] rounded-xl border border-[#00BAC7]/30 bg-[#0B1E21] p-1 shadow-xl"
+                  >
+                    {OWNER_BRANCH_OPTIONS.map((b) => (
+                      <Dropdown.Item
+                        key={b}
+                        onSelect={() => setOwnerBranch(b)}
+                        className="cursor-pointer rounded-lg px-3 py-2 text-xs text-[#22D3EE] outline-none data-[highlighted]:bg-[#00BAC7]/15"
+                      >
+                        {b}
+                      </Dropdown.Item>
+                    ))}
+                  </Dropdown.Content>
+                </Dropdown.Portal>
+              </Dropdown.Root>
+            ) : (
+              <div
+                aria-disabled="true"
+                title="Branch locked to your profile"
+                className="flex cursor-not-allowed items-center gap-2 bg-[#0B1E21] border border-[#00BAC7]/25 text-[#22D3EE] text-xs font-medium px-3 py-1.5 rounded-lg opacity-90"
+              >
                 <Store size={14} className="text-[#00BAC7]" />
-                Jubail - Main Branch
-                <ChevronDown size={12} className="text-[#00BAC7]/70" />
-              </Dropdown.Trigger>
-            </Dropdown.Root>
+                {activeBranchLabel}
+                <Lock size={11} className="text-[#00BAC7]/70" />
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-4">
@@ -7863,7 +8087,12 @@ export default function Page() {
         <div className="flex flex-1 overflow-hidden relative">
           {/* Center Canvas */}
           <main className="flex-1 overflow-hidden flex flex-col relative z-10">
-            {tab === "register" ? (
+            {profile.isOwner && safeTab === "register" && trackingMode === "hub" && (
+              <div className="shrink-0 px-4 pt-4 sm:px-6">
+                <BranchAuditRadar />
+              </div>
+            )}
+            {safeTab === "register" ? (
               <DailyRegisterView
                 trackingMode={trackingMode}
                 setTrackingMode={setTrackingMode}
@@ -7883,22 +8112,25 @@ export default function Page() {
                 onSyncCreditCustomer={handleSyncCreditCustomer}
                 onSwitchTab={setTab}
               />
-            ) : tab === "radar" ? (
+            ) : safeTab === "radar" ? (
               <CreditRadarView
                 customers={creditCustomers}
                 onIssueCredit={handleSyncCreditCustomer}
               />
-            ) : tab === "suppliers" ? (
+            ) : safeTab === "suppliers" ? (
               <SupplierHubView
                 supplierBrands={supplierBrands}
                 supplierBills={supplierBills}
                 onLogSupplierPurchase={handleSyncCreditPurchase}
               />
-            ) : tab === "ai" ? (
+            ) : safeTab === "ai" ? (
               <NaumanAiView txns={liveAiTxns} />
-            ) : tab === "consolidation" ? (
-              <BranchConsolidationView metrics={liveMetrics} />
-            ) : tab === "pulse" ? (
+            ) : safeTab === "consolidation" ? (
+              <div className="flex flex-1 flex-col overflow-y-auto">
+                <div className="px-4 pt-4 sm:px-6"><BranchAuditRadar /></div>
+                <BranchConsolidationView metrics={liveMetrics} />
+              </div>
+            ) : safeTab === "pulse" ? (
               <FinancialPulseView metrics={liveMetrics} />
             ) : null}
           </main>
