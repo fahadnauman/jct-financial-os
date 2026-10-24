@@ -1,6 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import {
+  POCKET_CUSTOMERS_KEY,
+  POCKET_QUEUE_KEY,
+  markApplied,
+  parseQueue,
+  readAppliedIds,
+  readRaw,
+  subscribePocket,
+} from "../lib/pocket-bridge";
 import * as Dropdown from "@radix-ui/react-dropdown-menu";
 import {
   Activity, Building2, CalendarDays, Check, ChevronDown, 
@@ -8004,6 +8013,77 @@ export default function Page() {
       time: e.time,
     })),
   ];
+
+  // JCT Pocket bridge: ingest owner mobile entries into the HQ register + Credit Radar
+  const pocketApplyRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    pocketApplyRef.current = () => {
+      const applied = new Set(readAppliedIds());
+      const pending = parseQueue(readRaw(POCKET_QUEUE_KEY)).filter(
+        (e) => !applied.has(e.id) && e.branchId === "JCT_HQ"
+      );
+      if (pending.length === 0) return;
+      const injected: PreLoggedEntry[] = [];
+      pending.forEach((e) => {
+        const time = new Date(e.createdAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+        if (e.kind === "EXPENSE") {
+          if (e.paidFromOwnerPocket) return; // owner's own money: not a drawer outflow
+          injected.push({
+            id: e.id,
+            type: "EXPENSE",
+            expenseCategory: e.category.startsWith("Food") ? "Food" : "Personal Reasons",
+            title: `${e.category}`,
+            note: [e.tag, e.note].filter(Boolean).join(" · "),
+            amount: e.amount,
+            time,
+          });
+        } else if (e.kind === "ADVANCE") {
+          injected.push({
+            id: e.id,
+            type: "EXPENSE",
+            expenseCategory: "Salary",
+            title: `Staff Advance · ${e.party ?? "Staff"} (${e.category})`,
+            note: `${e.tag} · Staff Payables / Advances`,
+            amount: e.amount,
+            time,
+          });
+        } else {
+          if (e.tender !== "BANK_TRANSFER") {
+            injected.push({
+              id: e.id,
+              type: "CREDIT_RECD",
+              title: `Credit Sale Amt Recd · ${e.party ?? "Customer"}`,
+              customerName: e.party,
+              receiptNo: e.reference,
+              followUpDate: e.followUpDate,
+              note: `${e.tag} · ${e.category}`,
+              amount: e.amount,
+              time,
+            });
+          }
+          if (e.party) {
+            handleSyncCreditCustomer(e.party, e.amount, e.followUpDate ?? "", e.reference, "CREDIT_RECD");
+          }
+        }
+      });
+      if (injected.length) setPreLoggedEntries((prev) => [...prev, ...injected]);
+      markApplied(pending.map((e) => e.id));
+    };
+  });
+  useEffect(() => {
+    const run = () => pocketApplyRef.current();
+    const t = window.setTimeout(run, 0);
+    const unsub = subscribePocket(run);
+    return () => {
+      window.clearTimeout(t);
+      unsub();
+    };
+  }, []);
+
+  // Publish credit customer names so /owner-pocket can auto-lookup
+  useEffect(() => {
+    window.localStorage.setItem(POCKET_CUSTOMERS_KEY, JSON.stringify(creditCustomers.map((c) => c.name)));
+  }, [creditCustomers]);
 
   if (!profileLoaded) {
     return <div className="h-screen w-full bg-[#041012]" />;

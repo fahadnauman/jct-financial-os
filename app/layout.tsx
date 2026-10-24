@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 
@@ -17,6 +17,21 @@ export const metadata: Metadata = {
   title: "JCT Financial OS | Jubail Corp. Trading Est.",
   description:
     "Financial management and cash register dashboard for wholesale paint distribution (Jotun, Hempel, Sigma).",
+  manifest: "/manifest.webmanifest",
+  applicationName: "JCT Pocket",
+  appleWebApp: {
+    capable: true,
+    title: "JCT Pocket",
+    statusBarStyle: "black-translucent",
+  },
+  icons: { apple: "/pwa-icon/180" },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#040D0E",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 // Applies the saved/system theme before first paint to avoid a flash (defaults to Jubail Corp obsidian dark).
