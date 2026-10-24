@@ -7335,6 +7335,13 @@ function BranchConsolidationView({ metrics }: { metrics: LiveCrossModuleMetrics 
 
 function NaumanAiView({ txns }: { txns: Txn[] }) {
   const [aiInsights, setAiInsights] = useState<{
+    summary?: {
+      headline?: string;
+      netCash?: number;
+      inflowsTotal?: number;
+      outflowsTotal?: number;
+      healthScore?: string;
+    };
     leaks: { type: string; severity: "amber" | "red"; message: string }[];
     trends: { highlight: string; message: string }[];
     advice: string;
@@ -7354,7 +7361,7 @@ function NaumanAiView({ txns }: { txns: Txn[] }) {
     setIsAnalyzing(true);
     setAiInsights(null);
     try {
-      const res = await fetch("/api/ai-pulse", {
+      const res = await fetch("/api/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ inflows, outflows, totals }),
@@ -7367,13 +7374,14 @@ function NaumanAiView({ txns }: { txns: Txn[] }) {
           leaks: [],
           trends: [],
           advice: "",
+          source: "LOCAL_SAFETY_FALLBACK",
         });
         return;
       }
       setAiInsights(data);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Network error.";
-      setAiInsights({ error: msg, leaks: [], trends: [], advice: "" });
+      setAiInsights({ error: msg, leaks: [], trends: [], advice: "", source: "LOCAL_SAFETY_FALLBACK" });
     } finally {
       setIsAnalyzing(false);
     }
@@ -7381,21 +7389,31 @@ function NaumanAiView({ txns }: { txns: Txn[] }) {
 
   return (
     <div className="flex flex-col gap-6 p-6 h-full overflow-y-auto w-full">
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-2">
         <div className="flex flex-col gap-1.5">
           <h2 className="font-display font-extrabold text-2xl text-slate-900 dark:text-white flex items-center gap-2">
             <Sparkles className="text-amber-500 animate-pulse" /> Nauman AI &amp; Executive Pulse
           </h2>
           {aiInsights?.source && (
-            <div className="flex items-center gap-2 text-[10px] font-bold px-2.5 py-1 bg-slate-100 dark:bg-white/5 rounded-md text-slate-500 dark:text-slate-400 w-fit">
-              <span className="uppercase tracking-wider">Source: {aiInsights.source}</span>
+            <div className="mt-1">
+              {aiInsights.source === "GROQ_LIVE" || aiInsights.source.includes("Groq") || aiInsights.source.includes("LLAMA") ? (
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-teal-500/10 border border-teal-500/30 text-[#00BAC7] text-xs font-bold shadow-[0_0_12px_rgba(0,186,199,0.2)]">
+                  <span className="inline-block h-2 w-2 rounded-full bg-teal-400 shadow-[0_0_8px_rgba(45,212,191,0.8)] animate-pulse" />
+                  <span>⚡ LIVE AI ANALYSIS (GROQ LLAMA-3.3)</span>
+                </div>
+              ) : (
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-bold">
+                  <span className="inline-block h-2 w-2 rounded-full bg-amber-400" />
+                  <span>⚠️ LOCAL SAFETY FALLBACK (GROQ API UNREACHABLE)</span>
+                </div>
+              )}
             </div>
           )}
         </div>
         <button
           onClick={runAudit}
           disabled={isAnalyzing}
-          className="relative flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-500 hover:to-orange-600 text-white rounded-xl font-bold transition-all shadow-[0_0_20px_rgba(245,158,11,0.4)] disabled:opacity-70"
+          className="relative flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-500 hover:to-orange-600 text-white rounded-xl font-bold transition-all shadow-[0_0_20px_rgba(245,158,11,0.4)] disabled:opacity-70 shrink-0"
         >
           {isAnalyzing ? <Sparkles className="animate-spin" size={18} /> : <Zap size={18} />}
           {isAnalyzing ? "Analyzing..." : "⚡ Run End-of-Day Audit"}
@@ -7414,15 +7432,20 @@ function NaumanAiView({ txns }: { txns: Txn[] }) {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 auto-rows-max">
         <div className="lg:col-span-2 bg-white dark:bg-[#0F1219] rounded-3xl p-6 ring-1 ring-slate-900/5 dark:ring-white/10 relative overflow-hidden flex flex-col gap-6">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h3 className="font-display font-extrabold text-2xl flex items-center gap-2 text-slate-900 dark:text-white">
                 <Activity className="text-teal-400" /> Today&apos;s Business Summary &amp; Blind-Spot Monitor
               </h3>
               <p className="text-slate-500 dark:text-slate-400 font-semibold text-sm mt-1">
-                Live synced with today&apos;s Daily Register entries.
+                {aiInsights?.summary?.headline || "Live synced with today's Daily Register entries."}
               </p>
             </div>
+            {aiInsights?.summary?.healthScore && (
+              <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-1.5 text-xs font-mono font-bold text-emerald-300 shrink-0 w-fit">
+                {aiInsights.summary.healthScore}
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -7517,6 +7540,19 @@ function NaumanAiView({ txns }: { txns: Txn[] }) {
             )}
           </div>
         </div>
+
+        {/* Executive CFO Directive */}
+        {aiInsights?.advice && (
+          <div className="lg:col-span-2 rounded-2xl border border-[#00BAC7]/30 bg-gradient-to-r from-[#0B2023]/90 via-[#071719]/95 to-[#040E10] p-5 backdrop-blur-md flex items-start gap-3.5 shadow-[0_0_20px_rgba(0,186,199,0.1)]">
+            <Sparkles className="text-[#FFD200] shrink-0 mt-0.5" size={20} />
+            <div>
+              <span className="text-xs font-bold uppercase tracking-wider text-[#FFD200]">Executive CFO Directive</span>
+              <p className="mt-1 text-sm font-medium text-slate-200 leading-relaxed">
+                {aiInsights.advice}
+              </p>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
