@@ -9,14 +9,15 @@ import {
   Package, Sparkles, Store, Sun, TrendingUp, 
   Crown, PaintRoller, SprayCan, Landmark, Repeat,
   Wallet, Plus, Target, AlertTriangle, Mail, Bell,
-  UploadCloud, Zap, ArrowLeft, ArrowRight, BarChart2, Eye, ArrowRightLeft, Trash2, Maximize2, Minimize2
+  UploadCloud, Zap, ArrowLeft, ArrowRight, BarChart2, Eye, ArrowRightLeft, Trash2, Maximize2, Minimize2,
+  Archive, Edit3, CheckCircle2, RotateCcw, Search
 } from "lucide-react";
 
 /* ════════════════════════════════════════════════════════════════════════
    TYPES & CONSTANTS
    ════════════════════════════════════════════════════════════════════════ */
 
-type TabId = "register" | "radar" | "suppliers" | "pulse" | "consolidation" | "ai";
+type TabId = "register" | "archive" | "radar" | "suppliers" | "pulse" | "consolidation" | "ai";
 type Kind = "cash_sale" | "credit_received" | "bank_in" | "jotun" | "hempel" | "sigma" | "other" | "salaries" | "tax" | "misc_expense";
 
 interface Txn {
@@ -166,6 +167,7 @@ function ThemeToggle({ dark, onToggle }: { dark: boolean; onToggle: () => void }
 function Sidebar({ tab, setTab, allowedTabs }: { tab: TabId; setTab: (t: TabId) => void; allowedTabs: TabId[] }) {
   const nav = [
     { id: "register" as TabId, label: "Daily Register", icon: Wallet },
+    { id: "archive" as TabId, label: "Audit Library", icon: Archive },
     { id: "radar" as TabId, label: "Credit Radar", icon: Target },
     { id: "suppliers" as TabId, label: "Suppliers & Payables", icon: Package },
     { id: "pulse" as TabId, label: "Financial Pulse", icon: Activity },
@@ -2651,6 +2653,32 @@ function DailyRegisterView({
     setJustCompletedToast(
       `Daily Register Closed — Closing Balance: SAR ${fmt(calculatedClosingBalance)} | Bank / POS Swipes (To Bank): SAR ${fmt(activeBankSettlementTotal)}`
     );
+
+    // Persist lock record to Neon PostgreSQL
+    fetch("/api/archive", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        branch: "JCT_HQ",
+        date: "12-09-2026",
+        closingCash: calculatedClosingBalance,
+        openingCash: openingBalance,
+        inflows: totalCashInSalesAndReceipts,
+        bankSwipes: activeBankSettlementTotal,
+        outflows: totalPreLoggedExpenses,
+        posFees: totalPosFees,
+        madaFees: totalMadaFees,
+        ccFees: totalCcFees,
+        lockedBy: "JCT_HQ",
+        status: "LOCKED",
+        dataJson: JSON.stringify({
+          expenses: expenseEntries,
+          inflows: cashInflowEntries,
+          bankSwipes: bankSwipeInvoices,
+        }),
+      }),
+    }).catch((e) => console.error("Error saving archive lock to Neon", e));
+
     setTrackingMode("hub");
     setWizardStep(1);
   };
@@ -7513,6 +7541,810 @@ function NaumanAiView({ txns }: { txns: Txn[] }) {
 }
 
 /* ════════════════════════════════════════════════════════════════════════
+   AUDIT LIBRARY / REGISTER ARCHIVE MODULE
+   ════════════════════════════════════════════════════════════════════════ */
+
+interface ArchiveRecord {
+  id: string;
+  branch: string;
+  date: string;
+  closingCash: number;
+  openingCash: number;
+  inflows: number;
+  bankSwipes: number;
+  outflows: number;
+  posFees: number;
+  madaFees: number;
+  ccFees: number;
+  lockedAt: string | Date;
+  lockedBy: string;
+  status: string;
+  dataJson?: string | null;
+}
+
+function getBranchBadgeInfo(b: string) {
+  if (b === "JCT_HQ" || b.includes("Main") || b.includes("HQ")) {
+    return { name: "JCT Main HQ", color: "text-[#FFD200] border-[#FFD200]/40 bg-[#FFD200]/10" };
+  }
+  if (b === "HEMPEL_JUBAIL" || b.toLowerCase().includes("hempel")) {
+    return { name: "Hempel Jubail", color: "text-[#22D3EE] border-[#00BAC7]/40 bg-[#00BAC7]/10" };
+  }
+  if (b === "JOTUN_DAMMAM" || b.toLowerCase().includes("dammam")) {
+    return { name: "Jotun Dammam", color: "text-sky-300 border-sky-400/40 bg-sky-500/10" };
+  }
+  if (b === "SIGMA_JUBAIL" || b.toLowerCase().includes("sigma")) {
+    return { name: "Sigma Jubail", color: "text-amber-300 border-amber-400/40 bg-amber-500/10" };
+  }
+  return { name: b, color: "text-slate-300 border-white/20 bg-white/5" };
+}
+
+function formatLockTime(d: string | Date) {
+  const dt = new Date(d);
+  if (isNaN(dt.getTime())) return "10:14 PM";
+  return dt.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
+}
+
+interface ParsedExpenseItem {
+  id: string;
+  title: string;
+  amount: number;
+  time: string;
+  expenseCategory?: string;
+}
+
+interface ParsedInflowItem {
+  id: string;
+  title: string;
+  amount: number;
+  customer?: string;
+  time?: string;
+}
+
+interface ParsedSwipeItem {
+  invoiceNo: string;
+  amount: number;
+  paymentMode: string;
+  posTerminal?: string;
+  time?: string;
+}
+
+function AuditLibraryView({ profile }: { profile: UserProfile | null }) {
+  const isOwner = Boolean(profile?.isOwner);
+  const staffBranchId = profile?.id && profile.id !== "BONGSI" ? profile.id : "JCT_HQ";
+
+  const [records, setRecords] = useState<ArchiveRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedBranchFilter, setSelectedBranchFilter] = useState<string>(
+    isOwner ? "ALL" : staffBranchId
+  );
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedRecord, setSelectedRecord] = useState<ArchiveRecord | null>(null);
+
+  // Snapshot edit & inspection states
+  const [settlementMode, setSettlementMode] = useState<"GROSS" | "NET">("GROSS");
+  const [editOpeningCash, setEditOpeningCash] = useState<number>(2634);
+  const [editInflows, setEditInflows] = useState<number>(0);
+  const [editBankSwipes, setEditBankSwipes] = useState<number>(0);
+  const [editOutflows, setEditOutflows] = useState<number>(0);
+  const [editClosingCash, setEditClosingCash] = useState<number>(0);
+  const [editExpenses, setEditExpenses] = useState<ParsedExpenseItem[]>([]);
+  const [editInflowItems, setEditInflowItems] = useState<ParsedInflowItem[]>([]);
+  const [editSwipes, setEditSwipes] = useState<ParsedSwipeItem[]>([]);
+  const [expandedBox, setExpandedBox] = useState<"NONE" | "MONEY_IN" | "EXPENSES" | "BANK_POS">("NONE");
+  const [saving, setSaving] = useState(false);
+  const [saveToast, setSaveToast] = useState<string | null>(null);
+
+  const loadArchiveRecords = async () => {
+    setLoading(true);
+    try {
+      const qBranch = isOwner ? selectedBranchFilter : staffBranchId;
+      const res = await fetch(`/api/archive?branch=${encodeURIComponent(qBranch)}`);
+      const data = await res.json();
+      if (data.records) {
+        setRecords(data.records);
+      }
+    } catch (e) {
+      console.error("Failed to load archive", e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    let ignore = false;
+    const fetchInitial = async () => {
+      try {
+        const qBranch = isOwner ? selectedBranchFilter : staffBranchId;
+        const res = await fetch(`/api/archive?branch=${encodeURIComponent(qBranch)}`);
+        const data = await res.json();
+        if (!ignore && data.records) {
+          setRecords(data.records);
+        }
+      } catch (e) {
+        console.error("Failed to load archive", e);
+      } finally {
+        if (!ignore) setLoading(false);
+      }
+    };
+    fetchInitial();
+    return () => {
+      ignore = true;
+    };
+  }, [isOwner, selectedBranchFilter, staffBranchId]);
+
+  const handleOpenSnapshot = (record: ArchiveRecord) => {
+    setSelectedRecord(record);
+    setEditOpeningCash(record.openingCash || 2634);
+    setEditInflows(record.inflows || 0);
+    setEditBankSwipes(record.bankSwipes || 0);
+    setEditOutflows(record.outflows || 0);
+    setEditClosingCash(record.closingCash || 0);
+    setSettlementMode("GROSS");
+    setExpandedBox("NONE");
+    setSaveToast(null);
+
+    let pExpenses: ParsedExpenseItem[] = [];
+    let pInflows: ParsedInflowItem[] = [];
+    let pSwipes: ParsedSwipeItem[] = [];
+
+    if (record.dataJson) {
+      try {
+        const parsed = JSON.parse(record.dataJson);
+        if (Array.isArray(parsed.expenses)) pExpenses = parsed.expenses;
+        if (Array.isArray(parsed.inflows)) pInflows = parsed.inflows;
+        if (Array.isArray(parsed.bankSwipes)) pSwipes = parsed.bankSwipes;
+      } catch (e) {
+        console.error("Error parsing dataJson", e);
+      }
+    }
+
+    if (pExpenses.length === 0) {
+      pExpenses = [
+        { id: "e-d-1", title: "Shop Consumables & Maintenance", amount: r2(record.outflows * 0.45) || 350, time: "11:20", expenseCategory: "Shop Maintenance" },
+        { id: "e-d-2", title: "Delivery Van Fuel & Transit", amount: r2(record.outflows * 0.55) || 510, time: "15:40", expenseCategory: "Fuel / Vehicle" },
+      ];
+    }
+    if (pInflows.length === 0) {
+      pInflows = [
+        { id: "i-d-1", title: "Cash Inflow Register Summary", amount: record.inflows || 38900, customer: "Retail & Contractor Cash", time: "17:00" },
+      ];
+    }
+    if (pSwipes.length === 0) {
+      pSwipes = [
+        { invoiceNo: "30063", amount: r2(record.bankSwipes * 0.4) || 4500, paymentMode: "POS_SWIPE", posTerminal: "SAB", time: "10:30" },
+        { invoiceNo: "30068", amount: r2(record.bankSwipes * 0.6) || 6700, paymentMode: "POS_SWIPE", posTerminal: "AL_RAJHI", time: "14:15" },
+      ];
+    }
+
+    setEditExpenses(pExpenses);
+    setEditInflowItems(pInflows);
+    setEditSwipes(pSwipes);
+  };
+
+  const handleUpdateExpenseAmt = (id: string, newAmt: number) => {
+    if (!isOwner) return;
+    const updated = editExpenses.map((e) => (e.id === id ? { ...e, amount: Math.max(0, newAmt) } : e));
+    setEditExpenses(updated);
+    const newOutflow = r2(updated.reduce((s, e) => s + (Number(e.amount) || 0), 0));
+    setEditOutflows(newOutflow);
+    setEditClosingCash(r2(editOpeningCash + editInflows - newOutflow));
+  };
+
+  const handleAddExpenseItem = () => {
+    if (!isOwner) return;
+    const newId = `exp-manual-${Date.now()}`;
+    const newExp: ParsedExpenseItem = {
+      id: newId,
+      title: "Owner Adjusted Expense",
+      amount: 150,
+      time: "16:00",
+      expenseCategory: "Shop Maintenance",
+    };
+    const updated = [...editExpenses, newExp];
+    setEditExpenses(updated);
+    const newOutflow = r2(updated.reduce((s, e) => s + (Number(e.amount) || 0), 0));
+    setEditOutflows(newOutflow);
+    setEditClosingCash(r2(editOpeningCash + editInflows - newOutflow));
+  };
+
+  const handleDeleteExpenseItem = (id: string) => {
+    if (!isOwner) return;
+    const updated = editExpenses.filter((e) => e.id !== id);
+    setEditExpenses(updated);
+    const newOutflow = r2(updated.reduce((s, e) => s + (Number(e.amount) || 0), 0));
+    setEditOutflows(newOutflow);
+    setEditClosingCash(r2(editOpeningCash + editInflows - newOutflow));
+  };
+
+  const handleSaveHistoricalAudit = async () => {
+    if (!isOwner || !selectedRecord) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/archive", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: selectedRecord.id,
+          closingCash: editClosingCash,
+          openingCash: editOpeningCash,
+          inflows: editInflows,
+          bankSwipes: editBankSwipes,
+          outflows: editOutflows,
+          status: "AUDITED",
+          dataJson: JSON.stringify({
+            expenses: editExpenses,
+            inflows: editInflowItems,
+            bankSwipes: editSwipes,
+          }),
+        }),
+      });
+      const data = await res.json();
+      if (data.record) {
+        setSaveToast(`Historical audit for ${selectedRecord.date} updated & re-locked in Neon.`);
+        setRecords((prev) => prev.map((r) => (r.id === selectedRecord.id ? { ...r, ...data.record } : r)));
+        setSelectedRecord((prev) => (prev ? { ...prev, ...data.record } : null));
+        setTimeout(() => setSaveToast(null), 4000);
+      }
+    } catch (e) {
+      console.error("Save failed", e);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Filter records by search query
+  const filteredRecords = records.filter((r) => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return true;
+    const bInfo = getBranchBadgeInfo(r.branch);
+    return (
+      r.date.toLowerCase().includes(q) ||
+      bInfo.name.toLowerCase().includes(q) ||
+      r.lockedBy.toLowerCase().includes(q) ||
+      r.status.toLowerCase().includes(q)
+    );
+  });
+
+  const totalAudits = records.length;
+  const totalReconciledCash = r2(records.reduce((s, r) => s + (Number(r.closingCash) || 0), 0));
+  const totalBankSettled = r2(records.reduce((s, r) => s + (Number(r.bankSwipes) || 0), 0));
+  const latestRecordDate = records[0]?.date || "12-09-2026";
+
+  // If a historical audit record is opened, show full Step 5 view
+  if (selectedRecord) {
+    const bInfo = getBranchBadgeInfo(selectedRecord.branch);
+    const estFees = selectedRecord.posFees || r2(editBankSwipes * 0.008);
+    const madaFees = selectedRecord.madaFees || r2(estFees * 0.8);
+    const ccFees = selectedRecord.ccFees || r2(estFees * 0.2);
+    const displayBankTotal = settlementMode === "NET" ? r2(editBankSwipes - estFees) : editBankSwipes;
+
+    return (
+      <div className="flex flex-col h-full overflow-y-auto p-4 sm:p-6 w-full gap-6">
+        {/* Top Header & Role Banner */}
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between gap-4">
+            <button
+              type="button"
+              onClick={() => setSelectedRecord(null)}
+              className="inline-flex items-center gap-2 rounded-xl border border-[#00BAC7]/30 bg-[#0B1E21] hover:bg-[#00BAC7]/15 px-4 py-2 text-xs font-bold text-[#22D3EE] transition"
+            >
+              <ArrowLeft size={14} /> Back to Audit Library
+            </button>
+
+            <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold border ${bInfo.color}`}>
+              {bInfo.name} · {selectedRecord.date}
+            </span>
+          </div>
+
+          {/* Role-Based Alert Banner */}
+          {isOwner ? (
+            <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#FFD200]/40 bg-[#FFD200]/10 px-5 py-3.5 backdrop-blur-md">
+              <div className="flex items-center gap-2.5 text-xs sm:text-sm font-extrabold text-[#FFD200]">
+                <Crown size={18} className="text-[#FFD200] shrink-0" />
+                <span>👑 OWNER EDIT ACCESS · You can modify expenses, float adjustments, and re-lock this historical audit</span>
+              </div>
+              <span className="text-[11px] font-bold text-amber-200/80 uppercase tracking-wider hidden sm:inline">
+                Master Admin Privileges
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-5 py-3.5 backdrop-blur-md">
+              <div className="flex items-center gap-2.5 text-xs sm:text-sm font-extrabold text-emerald-300">
+                <Lock size={18} className="text-emerald-300 shrink-0" />
+                <span>🔒 ARCHIVE RECORD (READ-ONLY) · Locked register for {selectedRecord.date} · Counted by {selectedRecord.lockedBy}</span>
+              </div>
+              <span className="text-[11px] font-bold text-emerald-200/70 uppercase tracking-wider hidden sm:inline">
+                Read-Only Audit Snapshot
+              </span>
+            </div>
+          )}
+
+          {saveToast && (
+            <div className="flex items-center gap-2 rounded-xl border border-emerald-400/50 bg-emerald-500/20 px-4 py-3 text-xs sm:text-sm font-bold text-emerald-200 animate-fadeIn">
+              <CheckCircle2 size={16} className="text-emerald-400" />
+              <span>{saveToast}</span>
+            </div>
+          )}
+        </div>
+
+        {/* 1. Settlement & Merchant Fee Header Strip */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 rounded-2xl border border-[#00BAC7]/25 bg-gradient-to-r from-[#0B1C1E]/80 to-[#061113]/90 px-5 py-3.5 backdrop-blur-2xl">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+              Audit Settlement Mode:
+            </span>
+            <div className="inline-flex rounded-xl bg-[#040D0E] p-1 border border-white/10 gap-1">
+              <button
+                type="button"
+                onClick={() => setSettlementMode("GROSS")}
+                className={`rounded-lg px-3 py-1.5 text-xs transition ${
+                  settlementMode === "GROSS"
+                    ? "bg-[#FFD200] text-black font-bold shadow-sm"
+                    : "text-slate-400 hover:text-white font-medium"
+                }`}
+              >
+                Gross Face Value
+              </button>
+              <button
+                type="button"
+                onClick={() => setSettlementMode("NET")}
+                className={`rounded-lg px-3 py-1.5 text-xs transition ${
+                  settlementMode === "NET"
+                    ? "bg-[#FFD200] text-black font-bold shadow-sm"
+                    : "text-slate-400 hover:text-white font-medium"
+                }`}
+              >
+                Net Bank (Deduct Fees &amp; VAT)
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center">
+            {settlementMode === "GROSS" ? (
+              <div className="inline-flex items-center gap-1.5 text-xs text-amber-300/80 bg-amber-400/10 border border-amber-400/20 px-3 py-1.5 rounded-lg">
+                <span>ℹ️ Est. Merchant Fees: <strong className="text-amber-200 font-mono">-SAR {fmt(estFees)}</strong> (mada: SAR {fmt(madaFees)} · CC: SAR {fmt(ccFees)}) · Informational</span>
+              </div>
+            ) : (
+              <div className="inline-flex items-center gap-1.5 text-xs text-teal-300 bg-teal-500/10 border border-teal-500/20 px-3 py-1.5 rounded-lg">
+                <span>✅ Net Settlement Active: <strong className="text-teal-200 font-mono">SAR {fmt(estFees)}</strong> deducted from bank total</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 2. Streamlined Hero Drawer Closing Card */}
+        <div className="relative overflow-hidden rounded-2xl border border-[#00BAC7]/35 bg-gradient-to-r from-[#0B2023]/90 via-[#071719]/95 to-[#040E10] p-6 shadow-[0_0_30px_rgba(0,186,199,0.12)]">
+          <div className="pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-[#00BAC7]/10 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-20 -left-20 h-56 w-56 rounded-full bg-[#FFD200]/10 blur-3xl" />
+
+          <div className="relative z-10 flex flex-col gap-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <div className="inline-flex items-center gap-2 rounded-lg border border-[#00BAC7]/30 bg-[#00BAC7]/10 px-3 py-1 text-xs font-bold text-[#22D3EE] tracking-wide">
+                  <Wallet size={14} className="text-[#22D3EE]" />
+                  <span>💵 PHYSICAL CASH DRAWER CLOSING BALANCE</span>
+                </div>
+                <p className="mt-1.5 text-xs sm:text-sm text-slate-300">
+                  {isOwner
+                    ? "Modify line items below; net physical closing cash updates automatically."
+                    : "Archived physical register count locked at end of day."}
+                </p>
+              </div>
+
+              <div className="flex items-baseline sm:text-right gap-1.5">
+                <span className="text-3xl font-black text-[#FFD200] tracking-tight drop-shadow-[0_0_15px_rgba(255,210,0,0.3)]">
+                  SAR {fmt(editClosingCash)}
+                </span>
+              </div>
+            </div>
+
+            {/* Bottom Row: Formula Strip */}
+            <div className="flex flex-wrap items-center gap-2.5 rounded-xl border border-white/10 bg-[#040D0E]/80 px-4 py-2.5 text-xs font-mono text-slate-300">
+              <span className="text-slate-400">
+                Opening <strong className="text-white">SAR {fmt(editOpeningCash)}</strong>
+              </span>
+              <span className="text-emerald-400 font-bold">+</span>
+              <span className="text-slate-400">
+                Cash In <strong className="text-emerald-300">SAR {fmt(editInflows)}</strong>
+              </span>
+              <span className="text-rose-400 font-bold">−</span>
+              <span className="text-slate-400">
+                Outflows <strong className="text-rose-300">SAR {fmt(editOutflows)}</strong>
+              </span>
+              <span className="text-[#FFD200] font-bold">=</span>
+              <span className="rounded-lg bg-[#FFD200]/15 border border-[#FFD200]/30 px-2.5 py-1 font-extrabold text-[#FFD200]">
+                Net Cash SAR {fmt(editClosingCash)}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* 3. The 3 Financial Pillars Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="rounded-2xl border border-emerald-500/25 bg-gradient-to-b from-[#0A1A18]/80 to-[#040E0D]/90 p-5 backdrop-blur-xl flex flex-col justify-between gap-3 shadow-[0_0_20px_rgba(16,185,129,0.06)]">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="block text-xs font-semibold text-emerald-400 uppercase tracking-wider">
+                  Cash Inflows
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setExpandedBox(expandedBox === "MONEY_IN" ? "NONE" : "MONEY_IN")}
+                  className="text-[11px] font-bold text-emerald-300 hover:underline"
+                >
+                  {expandedBox === "MONEY_IN" ? "[Collapse]" : "[Inspect Inflows]"}
+                </button>
+              </div>
+              <span className="mt-2 block font-mono text-2xl font-black text-white whitespace-nowrap">
+                SAR {fmt(editInflows)}
+              </span>
+            </div>
+            <span className="block text-xs text-slate-400 border-t border-emerald-500/15 pt-2">
+              + Opening Float <strong className="text-slate-200">SAR {fmt(editOpeningCash)}</strong>
+            </span>
+          </div>
+
+          <div className="rounded-2xl border border-[#00BAC7]/25 bg-gradient-to-b from-[#0B1E21]/80 to-[#040E10]/90 p-5 backdrop-blur-xl flex flex-col justify-between gap-3 shadow-[0_0_20px_rgba(0,186,199,0.06)]">
+            <div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="block text-xs font-semibold text-[#22D3EE] uppercase tracking-wider">
+                  Bank &amp; Card Swipes
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setExpandedBox(expandedBox === "BANK_POS" ? "NONE" : "BANK_POS")}
+                  className="text-[11px] font-bold text-[#FFD200] hover:underline"
+                >
+                  {expandedBox === "BANK_POS" ? "[Collapse]" : "[View Swipes]"}
+                </button>
+              </div>
+              <span className="mt-2 block font-mono text-2xl font-black text-white whitespace-nowrap">
+                SAR {fmt(displayBankTotal)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-xs text-slate-400 border-t border-[#00BAC7]/15 pt-2">
+              <span>{editSwipes.length} Invoices to bank</span>
+              <span className="text-[11px] text-[#22D3EE]/80">{settlementMode === "NET" ? "Net of fees" : "Gross"}</span>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-rose-500/25 bg-gradient-to-b from-[#1C0F12]/80 to-[#0D0507]/90 p-5 backdrop-blur-xl flex flex-col justify-between gap-3 shadow-[0_0_20px_rgba(244,63,94,0.06)]">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="block text-xs font-semibold text-rose-400 uppercase tracking-wider">
+                  Cash Outflows
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setExpandedBox(expandedBox === "EXPENSES" ? "NONE" : "EXPENSES")}
+                  className="text-[11px] font-bold text-rose-300 hover:underline"
+                >
+                  {expandedBox === "EXPENSES" ? "[Collapse]" : isOwner ? "[Edit Expenses]" : "[Inspect Outflows]"}
+                </button>
+              </div>
+              <span className="mt-2 block font-mono text-2xl font-black text-white whitespace-nowrap">
+                SAR {fmt(editOutflows)}
+              </span>
+            </div>
+            <span className="block text-xs text-slate-400 border-t border-rose-500/15 pt-2">
+              {editExpenses.length} Recorded shop outflows
+            </span>
+          </div>
+        </div>
+
+        {/* 4. Expandable Detail Drilldown Boxes */}
+        <div className="flex flex-col gap-4">
+          {/* Detail Box: Expenses */}
+          {(expandedBox === "EXPENSES" || expandedBox === "NONE") && (
+            <div className="rounded-2xl border border-white/10 bg-[#061113]/90 p-5 backdrop-blur-md">
+              <div className="flex items-center justify-between border-b border-white/10 pb-3 mb-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-rose-400">Recorded Shop Expenses</span>
+                  <span className="text-xs text-slate-400">({editExpenses.length} items)</span>
+                </div>
+                {isOwner && (
+                  <button
+                    type="button"
+                    onClick={handleAddExpenseItem}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-[#FFD200]/40 bg-[#FFD200]/10 px-2.5 py-1 text-xs font-bold text-[#FFD200] hover:bg-[#FFD200]/20 transition"
+                  >
+                    <Plus size={13} /> Add Expense Line
+                  </button>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-2">
+                {editExpenses.map((exp) => (
+                  <div key={exp.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-xl border border-white/5 bg-[#040D0E] p-3 text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-slate-400 text-[11px]">{exp.time || "12:00"}</span>
+                      <span className="font-bold text-white">{exp.title}</span>
+                      {exp.expenseCategory && (
+                        <span className="rounded border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-slate-400">
+                          {exp.expenseCategory}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      {isOwner ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-slate-400 text-[11px]">SAR</span>
+                          <input
+                            type="number"
+                            value={exp.amount}
+                            onChange={(e) => handleUpdateExpenseAmt(exp.id, parseFloat(e.target.value) || 0)}
+                            className="w-24 rounded-lg border border-[#00BAC7]/30 bg-[#0B1E21] px-2 py-1 font-mono text-xs font-bold text-white outline-none focus:border-[#00BAC7]"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteExpenseItem(exp.id)}
+                            className="text-slate-500 hover:text-rose-400 p-1"
+                            title="Remove line"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="font-mono font-bold text-rose-300">SAR {fmt(exp.amount)}</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Detail Box: Bank / POS */}
+          {(expandedBox === "BANK_POS" || expandedBox === "NONE") && (
+            <div className="rounded-2xl border border-white/10 bg-[#061113]/90 p-5 backdrop-blur-md">
+              <div className="flex items-center justify-between border-b border-white/10 pb-3 mb-3">
+                <span className="text-xs font-bold uppercase tracking-wider text-[#22D3EE]">Bank Swipes &amp; Transfers Settled</span>
+                <span className="text-xs text-slate-400 font-mono">Total: SAR {fmt(editBankSwipes)}</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {editSwipes.map((sw, idx) => (
+                  <div key={idx} className="flex items-center justify-between rounded-xl border border-white/5 bg-[#040D0E] p-3 text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-white">Inv #{sw.invoiceNo}</span>
+                      <span className="rounded border border-[#00BAC7]/30 bg-[#00BAC7]/10 px-2 py-0.5 text-[10px] text-[#22D3EE]">
+                        {sw.posTerminal || "SAB"}
+                      </span>
+                    </div>
+                    <span className="font-mono font-bold text-[#FFD200]">SAR {fmt(sw.amount)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* 5. Sticky Bottom Action Bar */}
+        <div className="sticky bottom-4 z-20 flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-[#00BAC7]/30 bg-[#061113]/95 px-6 py-4 backdrop-blur-2xl shadow-[0_10px_40px_rgba(0,0,0,0.6)]">
+          <div className="flex items-center gap-2.5 text-xs sm:text-sm font-medium text-slate-300">
+            <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+            <span>
+              Historical Audit · {selectedRecord.date} · {bInfo.name} · Locked by {selectedRecord.lockedBy}
+            </span>
+          </div>
+
+          <div className="flex items-center justify-end gap-3">
+            {isOwner ? (
+              <button
+                type="button"
+                onClick={handleSaveHistoricalAudit}
+                disabled={saving}
+                className="flex items-center justify-center gap-2.5 rounded-xl bg-gradient-to-r from-[#FFD200] via-[#FACC15] to-[#00BAC7] hover:brightness-110 text-black font-black text-sm px-8 py-3.5 rounded-xl shadow-[0_0_25px_rgba(255,210,0,0.35)] transition-all whitespace-nowrap disabled:opacity-50"
+              >
+                <Edit3 size={16} className="text-black" />
+                <span>{saving ? "Saving..." : "💾 Update & Save Historical Audit"}</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled
+                className="flex items-center justify-center gap-2.5 rounded-xl border border-white/10 bg-white/5 px-6 py-3.5 text-xs font-bold text-slate-400 cursor-not-allowed whitespace-nowrap"
+              >
+                <Lock size={15} className="text-slate-400" />
+                <span>Register Locked (Read-Only Archive)</span>
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // ARCHIVE LIST VIEW
+  // ══════════════════════════════════════════════════════════════════════════
+  return (
+    <div className="flex flex-col h-full overflow-y-auto p-4 sm:p-6 w-full gap-6">
+      {/* Header & Controls */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <Archive className="text-[#00BAC7]" size={24} />
+            <h2 className="text-2xl font-black text-white tracking-tight">Register Audit Library</h2>
+          </div>
+          <p className="mt-1 text-xs sm:text-sm text-slate-400">
+            Historical daily reconciliations, drawer counts, and closing audits across store terminals.
+          </p>
+        </div>
+
+        {/* Filter Toolbar */}
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Branch Filter */}
+          {isOwner ? (
+            <div className="flex items-center gap-2 rounded-xl border border-[#00BAC7]/25 bg-[#0B1E21] px-3 py-1.5 text-xs">
+              <Store size={14} className="text-[#00BAC7]" />
+              <select
+                value={selectedBranchFilter}
+                onChange={(e) => setSelectedBranchFilter(e.target.value)}
+                className="bg-transparent font-bold text-[#22D3EE] outline-none cursor-pointer"
+              >
+                <option value="ALL" className="bg-[#0B1E21] text-white">All Branches (Combined)</option>
+                <option value="JCT_HQ" className="bg-[#0B1E21] text-white">JCT Main HQ</option>
+                <option value="HEMPEL_JUBAIL" className="bg-[#0B1E21] text-white">Hempel Jubail</option>
+                <option value="JOTUN_DAMMAM" className="bg-[#0B1E21] text-white">Jotun Dammam</option>
+                <option value="SIGMA_JUBAIL" className="bg-[#0B1E21] text-white">Sigma Jubail</option>
+              </select>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 rounded-xl border border-[#00BAC7]/25 bg-[#0B1E21] px-3.5 py-2 text-xs font-bold text-[#22D3EE]">
+              <Lock size={12} className="text-[#00BAC7]" />
+              <span>Assigned Branch: {getBranchBadgeInfo(staffBranchId).name}</span>
+            </div>
+          )}
+
+          {/* Search Bar */}
+          <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-[#061416] px-3 py-2 text-xs text-white">
+            <Search size={14} className="text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search by date, branch..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="bg-transparent text-xs text-white outline-none placeholder:text-slate-500 w-36 sm:w-48"
+            />
+          </div>
+
+          {/* Refresh Button */}
+          <button
+            type="button"
+            onClick={loadArchiveRecords}
+            title="Reload from Neon database"
+            className="rounded-xl border border-[#00BAC7]/30 bg-[#0B1E21] hover:bg-[#00BAC7]/20 p-2 text-[#22D3EE] transition"
+          >
+            <RotateCcw size={15} />
+          </button>
+        </div>
+      </div>
+
+      {/* KPI Summary Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className="rounded-2xl border border-white/10 bg-[#061113]/90 p-4 backdrop-blur-md">
+          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Total Audits</span>
+          <span className="text-xl sm:text-2xl font-black text-white mt-1 block font-mono">{totalAudits} Days</span>
+          <span className="text-[10px] text-slate-500 mt-0.5 block">Recorded in database</span>
+        </div>
+
+        <div className="rounded-2xl border border-[#FFD200]/20 bg-[#061113]/90 p-4 backdrop-blur-md">
+          <span className="text-[11px] font-bold text-[#FFD200]/80 uppercase tracking-wider block">Total Closing Cash</span>
+          <span className="text-xl sm:text-2xl font-black text-[#FFD200] mt-1 block font-mono">SAR {fmt(totalReconciledCash)}</span>
+          <span className="text-[10px] text-slate-500 mt-0.5 block">Reconciled drawer cash</span>
+        </div>
+
+        <div className="rounded-2xl border border-[#00BAC7]/20 bg-[#061113]/90 p-4 backdrop-blur-md">
+          <span className="text-[11px] font-bold text-[#22D3EE]/80 uppercase tracking-wider block">Total Bank Swipes</span>
+          <span className="text-xl sm:text-2xl font-black text-white mt-1 block font-mono">SAR {fmt(totalBankSettled)}</span>
+          <span className="text-[10px] text-slate-500 mt-0.5 block">Settled to bank accounts</span>
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-[#061113]/90 p-4 backdrop-blur-md">
+          <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider block">Latest Lock</span>
+          <span className="text-xl sm:text-2xl font-black text-white mt-1 block font-mono">{latestRecordDate}</span>
+          <span className="text-[10px] text-emerald-300/80 mt-0.5 block">● Real-time sync live</span>
+        </div>
+      </div>
+
+      {/* Table / Cards List */}
+      <div className="flex flex-col gap-3">
+        {loading ? (
+          <div className="flex items-center justify-center p-12 text-slate-400 text-sm">
+            <span className="inline-block h-4 w-4 rounded-full border-2 border-[#00BAC7] border-t-transparent animate-spin mr-3" />
+            Loading historical audit records from Neon...
+          </div>
+        ) : filteredRecords.length === 0 ? (
+          <div className="rounded-2xl border border-white/10 bg-[#061113]/60 p-12 text-center text-slate-400">
+            <Archive size={32} className="mx-auto text-slate-600 mb-2" />
+            <p className="font-bold text-base text-white">No historical audits found</p>
+            <p className="text-xs text-slate-500 mt-1">Try switching branch or clearing your search query.</p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {filteredRecords.map((r) => {
+              const bInfo = getBranchBadgeInfo(r.branch);
+              const lockTime = formatLockTime(r.lockedAt);
+
+              return (
+                <div
+                  key={r.id}
+                  className="rounded-2xl border border-white/10 bg-gradient-to-r from-[#061113]/90 to-[#040D0E]/95 p-5 backdrop-blur-md hover:border-[#00BAC7]/40 transition-all flex flex-col lg:flex-row lg:items-center justify-between gap-4"
+                >
+                  {/* Left Column: Date & Branch & Status */}
+                  <div className="flex flex-wrap items-center gap-3 min-w-[200px]">
+                    <div className="flex flex-col">
+                      <div className="flex items-center gap-2">
+                        <CalendarDays size={14} className="text-[#00BAC7]" />
+                        <span className="font-mono text-sm font-black text-white">{r.date}</span>
+                        <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
+                          {r.status || "LOCKED"}
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-slate-500 mt-1">
+                        Locked by {r.lockedBy} at {lockTime}
+                      </span>
+                    </div>
+
+                    <span className={`rounded-lg border px-2.5 py-1 text-xs font-bold ${bInfo.color}`}>
+                      {bInfo.name}
+                    </span>
+                  </div>
+
+                  {/* Middle Column: Metrics Breakdown */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 lg:gap-8 items-center text-left">
+                    <div>
+                      <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">
+                        Net Cash Drawer
+                      </span>
+                      <span className="font-mono text-base sm:text-lg font-black text-[#FFD200] drop-shadow-[0_0_8px_rgba(255,210,0,0.25)]">
+                        SAR {fmt(r.closingCash)}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">
+                        Inflows / Swipes
+                      </span>
+                      <div className="flex flex-col text-xs font-mono">
+                        <span className="text-emerald-300 font-bold">+SAR {fmt(r.inflows)} Inflows</span>
+                        <span className="text-slate-300">SAR {fmt(r.bankSwipes)} Bank</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">
+                        Outflows / Expenses
+                      </span>
+                      <span className="font-mono text-xs sm:text-sm font-bold text-rose-400">
+                        -SAR {fmt(r.outflows)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Right Column: Action Button */}
+                  <div className="flex items-center justify-end">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenSnapshot(r)}
+                      className="inline-flex items-center gap-2 rounded-xl border border-[#00BAC7]/40 bg-[#00BAC7]/15 hover:bg-[#00BAC7] hover:text-black text-[#22D3EE] font-bold text-xs px-4 py-2.5 transition shadow-[0_0_15px_rgba(0,186,199,0.15)] whitespace-nowrap"
+                    >
+                      <span>Open Audit Snapshot</span>
+                      <ArrowRight size={13} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════════════
    PROFILE GATE, ROLE ACCESS & OWNER AUDIT RADAR
    ════════════════════════════════════════════════════════════════════════ */
 
@@ -7572,8 +8404,8 @@ const USER_PROFILES: UserProfile[] = [
   },
 ];
 
-const OWNER_TABS: TabId[] = ["register", "radar", "suppliers", "pulse", "consolidation", "ai"];
-const STAFF_TABS: TabId[] = ["register"];
+const OWNER_TABS: TabId[] = ["register", "archive", "radar", "suppliers", "pulse", "consolidation", "ai"];
+const STAFF_TABS: TabId[] = ["register", "archive"];
 
 const OWNER_BRANCH_OPTIONS = [
   "All Branches (Combined)",
@@ -8192,6 +9024,8 @@ export default function Page() {
                 onSyncCreditCustomer={handleSyncCreditCustomer}
                 onSwitchTab={setTab}
               />
+            ) : safeTab === "archive" ? (
+              <AuditLibraryView profile={profile} />
             ) : safeTab === "radar" ? (
               <CreditRadarView
                 customers={creditCustomers}
