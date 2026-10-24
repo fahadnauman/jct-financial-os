@@ -4734,54 +4734,36 @@ function DailyRegisterView({
               </div>
 
               {/* 2. Streamlined Hero Drawer Closing Card */}
-              <div className="relative overflow-hidden rounded-2xl border border-[#00BAC7]/35 bg-gradient-to-r from-[#0B2023]/90 via-[#071719]/95 to-[#040E10] p-6 shadow-[0_0_30px_rgba(0,186,199,0.12)]">
-                {/* Ambient Subtle Cyan & Yellow Glows */}
-                <div className="pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-[#00BAC7]/10 blur-3xl" />
-                <div className="pointer-events-none absolute -bottom-20 -left-20 h-56 w-56 rounded-full bg-[#FFD200]/10 blur-3xl" />
-
-                <div className="relative z-10 flex flex-col gap-5">
-                  {/* Top Row: Title Badge + Grand Total */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div>
-                      <div className="inline-flex items-center gap-2 rounded-lg border border-[#00BAC7]/30 bg-[#00BAC7]/10 px-3 py-1 text-xs font-bold text-[#22D3EE] tracking-wide">
-                        <Wallet size={14} className="text-[#22D3EE]" />
-                        <span>💵 PHYSICAL CASH DRAWER CLOSING BALANCE</span>
-                      </div>
-                      <p className="mt-1.5 text-xs sm:text-sm text-slate-300">
-                        Count physical cash in register before locking.
-                      </p>
+              <div className="w-full bg-gradient-to-r from-[#0B2023]/90 via-[#071719]/95 to-[#040E10] border border-[#00BAC7]/35 rounded-2xl p-6 shadow-[0_0_30px_rgba(0,186,199,0.12)] mb-6">
+                <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-4">
+                  <div>
+                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-teal-500/10 border border-teal-500/20 text-[#00BAC7] text-xs font-bold uppercase tracking-wider">
+                      <Wallet size={14} className="text-[#00BAC7]" />
+                      <span>💵 PHYSICAL CASH DRAWER CLOSING BALANCE</span>
                     </div>
-
-                    <div className="flex items-baseline sm:text-right gap-1.5">
-                      <span className="text-3xl font-black text-[#FFD200] tracking-tight drop-shadow-[0_0_15px_rgba(255,210,0,0.3)]">
-                        SAR {fmt(calculatedClosingBalance)}
-                      </span>
-                    </div>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Count physical cash in register before locking.
+                    </p>
                   </div>
-
-                  {/* Bottom Row: The Formula Strip */}
-                  <div className="flex flex-wrap items-center gap-2.5 rounded-xl border border-white/10 bg-[#040D0E]/80 px-4 py-2.5 text-xs font-mono text-slate-300">
-                    <span className="text-slate-400">
-                      Opening <strong className="text-white">SAR {fmt(openingBalance)}</strong>
-                    </span>
-                    <span className="text-emerald-400 font-bold">+</span>
-                    <span className="text-slate-400">
-                      Cash In <strong className="text-emerald-300">SAR {fmt(totalCashInSalesAndReceipts)}</strong>
-                    </span>
-                    <span className="text-rose-400 font-bold">−</span>
-                    <span className="text-slate-400">
-                      Outflows <strong className="text-rose-300">SAR {fmt(totalMoneyOutDrawer)}</strong>
-                    </span>
-                    <span className="text-[#FFD200] font-bold">=</span>
-                    <span className="rounded-lg bg-[#FFD200]/15 border border-[#FFD200]/30 px-2.5 py-1 font-extrabold text-[#FFD200]">
-                      Net Cash SAR {fmt(calculatedClosingBalance)}
-                    </span>
+                  <div className="text-3xl md:text-4xl font-black text-[#FFD200] tracking-tight">
+                    SAR {fmt(calculatedClosingBalance)}
                   </div>
+                </div>
+
+                {/* Clean Math Formula Strip (Fully Visible) */}
+                <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-[#00BAC7]/15 text-xs text-slate-300">
+                  <span>Opening Float: <strong className="text-white">SAR {fmt(openingBalance)}</strong></span>
+                  <span className="text-[#00BAC7] font-bold">+</span>
+                  <span>Inflows: <strong className="text-emerald-400">SAR {fmt(totalCashInSalesAndReceipts)}</strong></span>
+                  <span className="text-rose-400 font-bold">-</span>
+                  <span>Outflows: <strong className="text-rose-400">SAR {fmt(totalMoneyOutDrawer)}</strong></span>
+                  <span className="text-[#FFD200] font-bold">=</span>
+                  <span>Closing Cash: <strong className="text-[#FFD200]">SAR {fmt(calculatedClosingBalance)}</strong></span>
                 </div>
               </div>
 
               {/* 3. The 3 Financial Pillars Grid (Inflows · Bank/Swipes · Outflows) */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
                 {/* Card 1: Cash Inflows */}
                 <div className="rounded-2xl border border-emerald-500/25 bg-gradient-to-b from-[#0A1A18]/80 to-[#040E0D]/90 p-5 backdrop-blur-xl flex flex-col justify-between gap-3 shadow-[0_0_20px_rgba(16,185,129,0.06)]">
                   <div>
@@ -7913,54 +7895,38 @@ function AuditLibraryView({ profile }: { profile: UserProfile | null }) {
         </div>
 
         {/* 2. Streamlined Hero Drawer Closing Card */}
-        <div className="relative overflow-hidden rounded-2xl border border-[#00BAC7]/35 bg-gradient-to-r from-[#0B2023]/90 via-[#071719]/95 to-[#040E10] p-6 shadow-[0_0_30px_rgba(0,186,199,0.12)]">
-          <div className="pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-[#00BAC7]/10 blur-3xl" />
-          <div className="pointer-events-none absolute -bottom-20 -left-20 h-56 w-56 rounded-full bg-[#FFD200]/10 blur-3xl" />
-
-          <div className="relative z-10 flex flex-col gap-5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <div className="inline-flex items-center gap-2 rounded-lg border border-[#00BAC7]/30 bg-[#00BAC7]/10 px-3 py-1 text-xs font-bold text-[#22D3EE] tracking-wide">
-                  <Wallet size={14} className="text-[#22D3EE]" />
-                  <span>💵 PHYSICAL CASH DRAWER CLOSING BALANCE</span>
-                </div>
-                <p className="mt-1.5 text-xs sm:text-sm text-slate-300">
-                  {isOwner
-                    ? "Modify line items below; net physical closing cash updates automatically."
-                    : "Archived physical register count locked at end of day."}
-                </p>
+        <div className="w-full bg-gradient-to-r from-[#0B2023]/90 via-[#071719]/95 to-[#040E10] border border-[#00BAC7]/35 rounded-2xl p-6 shadow-[0_0_30px_rgba(0,186,199,0.12)] mb-6">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-4">
+            <div>
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-teal-500/10 border border-teal-500/20 text-[#00BAC7] text-xs font-bold uppercase tracking-wider">
+                <Wallet size={14} className="text-[#00BAC7]" />
+                <span>💵 PHYSICAL CASH DRAWER CLOSING BALANCE</span>
               </div>
-
-              <div className="flex items-baseline sm:text-right gap-1.5">
-                <span className="text-3xl font-black text-[#FFD200] tracking-tight drop-shadow-[0_0_15px_rgba(255,210,0,0.3)]">
-                  SAR {fmt(editClosingCash)}
-                </span>
-              </div>
+              <p className="text-xs text-slate-400 mt-1">
+                {isOwner
+                  ? "Historical closing cash balance locked for this register session. Modify line items below to re-audit."
+                  : "Historical closing cash balance locked for this register session."}
+              </p>
             </div>
-
-            {/* Bottom Row: Formula Strip */}
-            <div className="flex flex-wrap items-center gap-2.5 rounded-xl border border-white/10 bg-[#040D0E]/80 px-4 py-2.5 text-xs font-mono text-slate-300">
-              <span className="text-slate-400">
-                Opening <strong className="text-white">SAR {fmt(editOpeningCash)}</strong>
-              </span>
-              <span className="text-emerald-400 font-bold">+</span>
-              <span className="text-slate-400">
-                Cash In <strong className="text-emerald-300">SAR {fmt(editInflows)}</strong>
-              </span>
-              <span className="text-rose-400 font-bold">−</span>
-              <span className="text-slate-400">
-                Outflows <strong className="text-rose-300">SAR {fmt(editOutflows)}</strong>
-              </span>
-              <span className="text-[#FFD200] font-bold">=</span>
-              <span className="rounded-lg bg-[#FFD200]/15 border border-[#FFD200]/30 px-2.5 py-1 font-extrabold text-[#FFD200]">
-                Net Cash SAR {fmt(editClosingCash)}
-              </span>
+            <div className="text-3xl md:text-4xl font-black text-[#FFD200] tracking-tight">
+              SAR {fmt(editClosingCash)}
             </div>
+          </div>
+
+          {/* Clean Math Formula Strip (Fully Visible) */}
+          <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-[#00BAC7]/15 text-xs text-slate-300">
+            <span>Opening Float: <strong className="text-white">SAR {fmt(editOpeningCash)}</strong></span>
+            <span className="text-[#00BAC7] font-bold">+</span>
+            <span>Inflows: <strong className="text-emerald-400">SAR {fmt(editInflows)}</strong></span>
+            <span className="text-rose-400 font-bold">-</span>
+            <span>Outflows: <strong className="text-rose-400">SAR {fmt(editOutflows)}</strong></span>
+            <span className="text-[#FFD200] font-bold">=</span>
+            <span>Closing Cash: <strong className="text-[#FFD200]">SAR {fmt(editClosingCash)}</strong></span>
           </div>
         </div>
 
         {/* 3. The 3 Financial Pillars Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
           <div className="rounded-2xl border border-emerald-500/25 bg-gradient-to-b from-[#0A1A18]/80 to-[#040E0D]/90 p-5 backdrop-blur-xl flex flex-col justify-between gap-3 shadow-[0_0_20px_rgba(16,185,129,0.06)]">
             <div>
               <div className="flex items-center justify-between">
