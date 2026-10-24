@@ -18,14 +18,11 @@ interface RequestPayload {
   contractors?: { name: string; outstanding: number; status?: string }[];
 }
 
-const FALLBACK_MODELS = [
-  "llama-3.1-8b-instant",
-  "llama-3.3-70b-versatile",
-  "llama3-8b-8192",
-  "llama3-70b-8192",
-  "gemma2-9b-it",
-  "mixtral-8x7b-32768",
-  "qwen-2.5-32b",
+const PREFERRED_CHAT_MODELS = [
+  "qwen/qwen3.8-27b",
+  "openai/gpt-oss-120b",
+  "openai/gpt-oss-20b",
+  "allam-2-7b",
 ];
 
 export async function POST(req: Request) {
@@ -87,17 +84,22 @@ export async function POST(req: Request) {
     console.error("[Groq /models Network Exception]:", modelsQueryErr);
   }
 
-  // 3. Auto-select active chat model
-  // Filter out non-chat models (audio whisper, guardrails, embeddings)
+  // 3. Filter out non-chat models: guard, safeguard, whisper, canopylabs (requires terms), embeddings
   const chatCandidates = availableModelIds.filter((id) => {
     const lower = id.toLowerCase();
-    const isNonChat = lower.includes("whisper") || lower.includes("guard") || lower.includes("embed");
-    return !isNonChat;
+    const isExcluded =
+      lower.includes("whisper") ||
+      lower.includes("guard") ||
+      lower.includes("safeguard") ||
+      lower.includes("prompt-guard") ||
+      lower.includes("canopylabs") ||
+      lower.includes("embed");
+    return !isExcluded;
   });
 
-  // Pick first preferred matching fallback model if available, or first valid candidate, or fallback default
+  // Pick first model that matches PREFERRED_CHAT_MODELS
   let selectedModel = "";
-  for (const preferred of FALLBACK_MODELS) {
+  for (const preferred of PREFERRED_CHAT_MODELS) {
     if (chatCandidates.includes(preferred)) {
       selectedModel = preferred;
       break;
@@ -109,7 +111,7 @@ export async function POST(req: Request) {
   }
 
   if (!selectedModel) {
-    selectedModel = FALLBACK_MODELS[0];
+    selectedModel = "qwen/qwen3.8-27b";
   }
 
   console.log(`[AI Route] Selected Groq model: "${selectedModel}" (out of ${availableModelIds.length} available models)`);
@@ -121,7 +123,7 @@ export async function POST(req: Request) {
 
   const systemPrompt = `You are an executive CFO assistant for Jubail Corporation Trading Est. (JCT - wholesale paint distributor for Jotun, Hempel, Sigma in Saudi Arabia).
 Analyze the provided daytime transactions, contractor receivables, and cash flow ledger.
-Respond in valid JSON. You must return a valid JSON object matching EXACTLY this JSON schema:
+Respond strictly in valid JSON. You must return a valid JSON object matching EXACTLY this JSON schema without any surrounding conversational text:
 {
   "summary": {
     "headline": "A concise executive takeaway sentence describing today's financial position",
@@ -146,7 +148,7 @@ Respond in valid JSON. You must return a valid JSON object matching EXACTLY this
   "advice": "1-2 high-impact executive directives for the owners (Nazim & Nadeem / BONGSI)"
 }`;
 
-  const userPrompt = `Here is today's financial ledger data. Respond in valid JSON as an executive CFO assistant:
+  const userPrompt = `Here is today's financial ledger data. Respond strictly in valid JSON as an executive CFO assistant:
 ${JSON.stringify({
     inflowsCount: payload.inflows?.length || 0,
     inflowsSample: (payload.inflows || []).slice(0, 15),
@@ -161,7 +163,7 @@ ${JSON.stringify({
   })}`;
 
   try {
-    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    let res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -189,21 +191,64 @@ ${JSON.stringify({
         if (text) errorDetail = text;
       }
 
-      console.error(`[AI Route] Groq API returned status ${res.status} for model ${selectedModel}:`, errorDetail);
-      return NextResponse.json({
-        source: "GROQ_API_ERROR",
-        status: res.status,
-        error: `Model "${selectedModel}" failed (HTTP ${res.status}): ${errorDetail}`,
-        selectedModel,
-        availableModels: availableModelIds,
-      });
+      // If model does not support response_format: { type: "json_object" }, retry without it
+      if (res.status === 400 && errorDetail.toLowerCase().includes("response_format")) {
+        console.warn(`[AI Route] Model ${selectedModel} rejected response_format. Retrying without response_format...`);
+        res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model: selectedModel,
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: userPrompt },
+            ],
+            temperature: 0.2,
+            max_completion_tokens: 1500,
+          }),
+        });
+      }
+
+      if (!res.ok) {
+        let finalError = `Groq HTTP ${res.status} ${res.statusText}`;
+        try {
+          const finalJson = await res.json();
+          finalError = finalJson.error?.message || finalJson.message || JSON.stringify(finalJson);
+        } catch {
+          const text = await res.text();
+          if (text) finalError = text;
+        }
+
+        console.error(`[AI Route] Groq API returned status ${res.status} for model ${selectedModel}:`, finalError);
+        return NextResponse.json({
+          source: "GROQ_API_ERROR",
+          status: res.status,
+          error: `Model "${selectedModel}" failed (HTTP ${res.status}): ${finalError}`,
+          selectedModel,
+          availableModels: availableModelIds,
+        });
+      }
     }
 
     const groqData = await res.json();
     const content = groqData.choices?.[0]?.message?.content || "";
 
     try {
-      const parsed = JSON.parse(content);
+      // Clean and strip markdown code fences if present (e.g., ```json ... ``` or ``` ... ```)
+      let cleanText = content.trim();
+      if (cleanText.startsWith("```")) {
+        cleanText = cleanText.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+      }
+      const firstBrace = cleanText.indexOf("{");
+      const lastBrace = cleanText.lastIndexOf("}");
+      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        cleanText = cleanText.slice(firstBrace, lastBrace + 1);
+      }
+
+      const parsed = JSON.parse(cleanText);
       return NextResponse.json({
         summary: {
           headline: parsed.summary?.headline || `Reconciled ${txCount} transactions with SAR ${netCash.toLocaleString()} net cash flow.`,
@@ -239,7 +284,7 @@ ${JSON.stringify({
       return NextResponse.json({
         source: "GROQ_API_ERROR",
         status: 502,
-        error: `Groq model "${selectedModel}" returned non-JSON output: ${(parseErr as Error).message}`,
+        error: `Groq model "${selectedModel}" returned non-JSON output: ${(parseErr as Error).message}. Raw content preview: ${content.slice(0, 150)}`,
         selectedModel,
         availableModels: availableModelIds,
       });
