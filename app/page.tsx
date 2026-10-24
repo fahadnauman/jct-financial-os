@@ -6,7 +6,7 @@ import {
   Activity, Building2, CalendarDays, Check, ChevronDown, 
   FileSpreadsheet, Lock, LockOpen, Moon, 
   Package, Sparkles, Store, Sun, TrendingUp, 
-  Crown, Paintbrush, PaintRoller, SprayCan, Landmark, Repeat,
+  Crown, PaintRoller, SprayCan, Landmark, Repeat,
   Wallet, Plus, Target, AlertTriangle, Mail, Bell,
   UploadCloud, Zap, ArrowLeft, ArrowRight, BarChart2, Eye, ArrowRightLeft, Trash2, Maximize2, Minimize2
 } from "lucide-react";
