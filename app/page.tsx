@@ -7347,6 +7347,8 @@ function NaumanAiView({ txns }: { txns: Txn[] }) {
     advice: string;
     error?: string;
     source?: string;
+    modelUsed?: string;
+    availableModels?: string[];
   } | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
@@ -7375,6 +7377,8 @@ function NaumanAiView({ txns }: { txns: Txn[] }) {
           trends: [],
           advice: "",
           source: data.source || "GROQ_API_ERROR",
+          modelUsed: data.selectedModel || data.modelUsed,
+          availableModels: data.availableModels || [],
         });
         return;
       }
@@ -7387,6 +7391,7 @@ function NaumanAiView({ txns }: { txns: Txn[] }) {
         trends: [],
         advice: "",
         source: "GROQ_API_ERROR",
+        availableModels: [],
       });
     } finally {
       setIsAnalyzing(false);
@@ -7404,7 +7409,7 @@ function NaumanAiView({ txns }: { txns: Txn[] }) {
             <div className="mt-1">
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-teal-500/10 border border-teal-500/30 text-[#00BAC7] text-xs font-bold shadow-[0_0_12px_rgba(0,186,199,0.2)]">
                 <span className="inline-block h-2 w-2 rounded-full bg-teal-400 shadow-[0_0_8px_rgba(45,212,191,0.8)] animate-pulse" />
-                <span>⚡ LIVE AI ANALYSIS (GROQ LLAMA-3.1)</span>
+                <span>⚡ LIVE AI ANALYSIS (GROQ {aiInsights.modelUsed?.toUpperCase() || "ACTIVE"})</span>
               </div>
             </div>
           )}
@@ -7422,7 +7427,7 @@ function NaumanAiView({ txns }: { txns: Txn[] }) {
       {(aiInsights?.source === "KEY_MISSING_IN_ENV" || aiInsights?.source === "GROQ_API_ERROR" || (aiInsights?.error && aiInsights.source !== "GROQ_LIVE")) && (
         <div className="bg-amber-500/10 border border-amber-500/30 text-amber-200 px-5 py-4 rounded-2xl flex items-start gap-3 shadow-[0_0_20px_rgba(245,158,11,0.1)]">
           <AlertTriangle size={20} className="shrink-0 text-amber-400 mt-0.5" />
-          <div className="flex-1 text-sm">
+          <div className="flex-1 text-sm flex flex-col gap-2">
             <div className="font-extrabold text-amber-300 flex items-center gap-2">
               <span>⚠️ AI Error:</span>
               <span className="px-2 py-0.5 text-[10px] font-mono uppercase bg-amber-400/20 text-amber-300 rounded border border-amber-400/30">
@@ -7432,6 +7437,20 @@ function NaumanAiView({ txns }: { txns: Txn[] }) {
             <p className="mt-1 font-mono text-xs text-amber-100/90 break-words leading-relaxed">
               {aiInsights?.error || "Unable to reach Groq AI API endpoint."}
             </p>
+            {aiInsights?.availableModels && aiInsights.availableModels.length > 0 && (
+              <div className="mt-2 pt-2.5 border-t border-amber-500/20">
+                <div className="text-[11px] font-bold text-amber-300 uppercase tracking-wider mb-1.5">
+                  Available Models on Your Groq Account ({aiInsights.availableModels.length}):
+                </div>
+                <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto pr-1">
+                  {aiInsights.availableModels.map((m) => (
+                    <span key={m} className="px-2 py-0.5 bg-black/40 border border-amber-400/20 rounded font-mono text-[11px] text-amber-200">
+                      {m}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -7439,7 +7458,7 @@ function NaumanAiView({ txns }: { txns: Txn[] }) {
       {isAnalyzing && (
         <div className="flex items-center gap-3 p-4 rounded-xl bg-teal-500/10 border border-[#00BAC7]/25 text-[#00BAC7] text-sm font-semibold animate-pulse">
           <Sparkles className="animate-spin text-[#00BAC7]" size={18} />
-          <span>Auditing ledger with Groq llama-3.1-8b-instant in real time...</span>
+          <span>Auto-discovering active Groq models &amp; auditing ledger in real time...</span>
         </div>
       )}
 
