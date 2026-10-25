@@ -73,3 +73,35 @@ model SupplierBill {
   isPaid      Boolean  @default(false)
   createdAt   DateTime @default(now())
 }
+
+
+model Staff {
+  id           String        @id @default(cuid())
+  name         String
+  branch       String        // e.g., "JCT_HQ", "HEMPEL_JUBAIL", "JOTUN_DAMMAM", "SIGMA_JUBAIL"
+  role         String?       // "Cashier", "Sales", "Driver", "Warehouse"
+  baseSalary   Float         @default(0.0)
+  phone        String?
+  iqamaNumber  String?
+  status       String        @default("ACTIVE") // "ACTIVE" or "ARCHIVED"
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  payrollLogs  PayrollLog[]
+}
+
+model PayrollLog {
+  id          String   @id @default(cuid())
+  staffId     String
+  staff       Staff    @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  type        String   // "SALARY_PAYOUT", "ADVANCE", "BONUS", "DEDUCTION"
+  amount      Float
+  date        String   // Format: "YYYY-MM-DD"
+  branch      String
+  note        String?
+  source      String   @default("REGISTER_DRAWER") // or "BANK_TRANSFER", "OWNER_POCKET"
+  createdAt   DateTime @default(now())
+
+  @@index([staffId])
+  @@index([branch])
+  @@index([date])
+}

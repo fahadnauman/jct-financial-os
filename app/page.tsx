@@ -10,14 +10,15 @@ import {
   Crown, PaintRoller, SprayCan, Landmark, Repeat,
   Wallet, Plus, Target, AlertTriangle, Mail, Bell,
   UploadCloud, Zap, ArrowLeft, ArrowRight, BarChart2, Eye, ArrowRightLeft, Trash2, Maximize2, Minimize2,
-  Archive, Edit3, CheckCircle2, RotateCcw, Search
+  Archive, Edit3, CheckCircle2, RotateCcw, Search,
+  Users, UserCheck, DollarSign, X, Banknote
 } from "lucide-react";
 
 /* ════════════════════════════════════════════════════════════════════════
    TYPES & CONSTANTS
    ════════════════════════════════════════════════════════════════════════ */
 
-type TabId = "register" | "archive" | "radar" | "suppliers" | "pulse" | "consolidation" | "ai";
+type TabId = "register" | "archive" | "radar" | "suppliers" | "payroll" | "pulse" | "consolidation" | "ai";
 type Kind = "cash_sale" | "credit_received" | "bank_in" | "jotun" | "hempel" | "sigma" | "other" | "salaries" | "tax" | "misc_expense";
 
 interface Txn {
@@ -71,6 +72,39 @@ export interface SupplierBillItem {
   category: "Credit Purchase" | "Cash Purchase" | "Bank Purchase" | "Return";
   createdAt: string;
   source: "Daily Register" | "Supplier Hub";
+}
+
+export interface StaffMember {
+  id: string;
+  name: string;
+  branch: string;
+  role: string | null;
+  baseSalary: number;
+  phone: string | null;
+  iqamaNumber: string | null;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  payrollLogs?: PayrollLogItem[];
+}
+
+export interface PayrollLogItem {
+  id: string;
+  staffId: string;
+  type: string;
+  amount: number;
+  date: string;
+  branch: string;
+  note: string | null;
+  source: string;
+  createdAt: string;
+  staff?: {
+    id: string;
+    name: string;
+    branch: string;
+    role: string | null;
+    baseSalary: number;
+  };
 }
 
 const SEED_TXNS: Txn[] = [
@@ -170,6 +204,7 @@ function Sidebar({ tab, setTab, allowedTabs }: { tab: TabId; setTab: (t: TabId) 
     { id: "archive" as TabId, label: "Audit Library", icon: Archive },
     { id: "radar" as TabId, label: "Credit Radar", icon: Target },
     { id: "suppliers" as TabId, label: "Suppliers & Payables", icon: Package },
+    { id: "payroll" as TabId, label: "Staff & Payroll", icon: Users },
     { id: "pulse" as TabId, label: "Financial Pulse", icon: Activity },
     { id: "consolidation" as TabId, label: "Branch Consolidation", icon: Building2 },
     { id: "ai" as TabId, label: "Nauman AI", icon: Sparkles },
@@ -457,6 +492,7 @@ export const STRICT_EXPENSE_CATEGORIES = [
   "Food",
   "Water",
   "Salary",
+  "Staff Advance",
   "Credit Purchase",
   "Cash Purchase",
   "Bank Purchase",
@@ -524,6 +560,8 @@ export interface PreLoggedEntry {
   customerName?: string;
   followUpDate?: string;
   receiptNo?: string;
+  staffId?: string;
+  staffName?: string;
   note?: string;
   amount: number;
   originalAmount?: number;
@@ -1395,6 +1433,7 @@ interface DailyRegisterViewProps {
     mode?: "CREDIT_RECD" | "CREDIT_SALE"
   ) => void;
   onSwitchTab: (tab: TabId) => void;
+  branchId?: string;
 }
 
 function DailyRegisterView({
@@ -1415,6 +1454,7 @@ function DailyRegisterView({
   onSyncCreditPurchase,
   onSyncCreditCustomer,
   onSwitchTab,
+  branchId = "JCT_HQ",
 }: DailyRegisterViewProps) {
   const [activeLoggerTab, setActiveLoggerTab] = useState<"bank" | "expense">("bank");
   const [trackPosFees, setTrackPosFees] = useState(false);
@@ -1426,6 +1466,25 @@ function DailyRegisterView({
     targetTab: TabId;
     targetLabel: string;
   } | null>(null);
+
+  // Active Branch Staff State for Outflows & Advances
+  const [staffList, setStaffList] = useState<StaffMember[]>([]);
+  const [step4StaffId, setStep4StaffId] = useState<string>("");
+
+  useEffect(() => {
+    const query = branchId && branchId !== "ALL" ? `?branch=${branchId}` : "";
+    fetch(`/api/staff${query}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data.staff)) {
+          setStaffList(data.staff);
+          if (data.staff.length > 0) {
+            setStep4StaffId((prev) => (data.staff.some((s: StaffMember) => s.id === prev) ? prev : data.staff[0].id));
+          }
+        }
+      })
+      .catch((err) => console.error("Error loading branch staff:", err));
+  }, [branchId]);
 
   // Hub Quick-Logger Form State (Bank / POS)
   const [bankInvoiceInput, setBankInvoiceInput] = useState("");
@@ -2140,9 +2199,14 @@ function DailyRegisterView({
         hubExpenseCat === "Credit Purchase" ||
         hubExpenseCat === "Cash Purchase" ||
         hubExpenseCat === "Bank Purchase";
+      const isStaffExpense = hubExpenseCat === "Staff Advance" || hubExpenseCat === "Salary";
+      const selectedStaff = staffList.find((s) => s.id === step4StaffId);
+      const staffName = selectedStaff?.name || "";
       const supplierClean = hubSupplierName.trim() || "Jotun";
       const displayTitle = isPurchase
         ? `${hubExpenseCat} — ${supplierClean}${entryTitle.trim() ? ` (${entryTitle.trim()})` : ""}`
+        : isStaffExpense && staffName
+        ? `${hubExpenseCat} — ${staffName}${entryTitle.trim() ? ` (${entryTitle.trim()})` : ""}`
         : entryTitle.trim()
         ? `${hubExpenseCat} — ${entryTitle.trim()}`
         : hubExpenseCat;
@@ -2150,11 +2214,15 @@ function DailyRegisterView({
       upsertEntry({
         id: isPurchase
           ? `ple-${hubExpenseCat.toLowerCase().replace(/\s+/g, "-")}-${supplierClean.toLowerCase().replace(/\s+/g, "-")}`
+          : isStaffExpense && step4StaffId
+          ? `ple-${hubExpenseCat.toLowerCase().replace(/\s+/g, "-")}-${step4StaffId}-${val}`
           : `ple-${displayTitle.toLowerCase().replace(/\s+/g, "-")}`,
         type: "EXPENSE",
         expenseCategory: hubExpenseCat,
         supplierName: isPurchase ? supplierClean : undefined,
         dueDate: isCreditPurchase ? hubDueDate : undefined,
+        staffId: isStaffExpense ? step4StaffId : undefined,
+        staffName: isStaffExpense ? staffName : undefined,
         title: displayTitle,
         amount: val,
         time: nowHHMM(),
@@ -2168,6 +2236,29 @@ function DailyRegisterView({
           targetLabel: "Open Suppliers & Payables →",
         });
       }
+
+      if (isStaffExpense && step4StaffId) {
+        fetch("/api/payroll", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            staffId: step4StaffId,
+            type: hubExpenseCat === "Salary" ? "SALARY_PAYOUT" : "ADVANCE",
+            amount: val,
+            branch: branchId,
+            date: new Date().toISOString().slice(0, 10),
+            note: entryTitle.trim() || `${hubExpenseCat} logged via Hub Quick Logger`,
+            source: "REGISTER_DRAWER",
+          }),
+        }).catch((err) => console.error("Error creating PayrollLog from hub:", err));
+
+        setSyncBannerMsg({
+          text: `${hubExpenseCat}: ${staffName} (SAR ${fmt(val)}) linked directly to Monthly Payroll Ledger`,
+          targetTab: "payroll",
+          targetLabel: "View in Staff & Payroll →",
+        });
+      }
+
       setEntryTitle("");
       setEntryAmount("");
       return;
@@ -2421,10 +2512,15 @@ function DailyRegisterView({
       step4Category === "Credit Purchase" ||
       step4Category === "Cash Purchase" ||
       step4Category === "Bank Purchase";
+    const isStaffExpense = step4Category === "Staff Advance" || step4Category === "Salary";
+    const selectedStaff = staffList.find((s) => s.id === step4StaffId);
+    const staffName = selectedStaff?.name || "";
 
     const cleanSupplier = step4SupplierName.trim() || "Jotun";
     const displayTitle = isSupplierPurchase
       ? `${step4Category} — ${cleanSupplier}${step4Note.trim() ? ` (${step4Note.trim()})` : ""}`
+      : isStaffExpense && staffName
+      ? `${step4Category} — ${staffName}${step4Note.trim() ? ` (${step4Note.trim()})` : ""}`
       : step4Note.trim()
       ? `${step4Category} (${step4Note.trim()})`
       : step4Category;
@@ -2432,11 +2528,15 @@ function DailyRegisterView({
     upsertEntry({
       id: isSupplierPurchase
         ? `ple-${step4Category.toLowerCase().replace(/\s+/g, "-")}-${cleanSupplier.toLowerCase().replace(/\s+/g, "-")}`
+        : isStaffExpense && step4StaffId
+        ? `ple-${step4Category.toLowerCase().replace(/\s+/g, "-")}-${step4StaffId}-${val}`
         : `ple-${step4Category.toLowerCase().replace(/\s+/g, "-")}`,
       type: "EXPENSE",
       expenseCategory: step4Category,
       supplierName: isSupplierPurchase ? cleanSupplier : undefined,
       dueDate: isCreditPurchase ? step4DueDate : undefined,
+      staffId: isStaffExpense ? step4StaffId : undefined,
+      staffName: isStaffExpense ? staffName : undefined,
       note: step4Note.trim() || undefined,
       title: displayTitle,
       amount: val,
@@ -2454,6 +2554,28 @@ function DailyRegisterView({
         text: `${step4Category}: ${cleanSupplier} (SAR ${fmt(val)}${isCreditPurchase ? ` · Due: ${step4DueDate}` : ""}) synced live to Suppliers & Payables`,
         targetTab: "suppliers",
         targetLabel: "View in Suppliers & Payables →",
+      });
+    }
+
+    if (isStaffExpense && step4StaffId) {
+      fetch("/api/payroll", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          staffId: step4StaffId,
+          type: step4Category === "Salary" ? "SALARY_PAYOUT" : "ADVANCE",
+          amount: val,
+          branch: branchId,
+          date: new Date().toISOString().slice(0, 10),
+          note: step4Note.trim() || `${step4Category} logged in Daily Register drawer`,
+          source: "REGISTER_DRAWER",
+        }),
+      }).catch((err) => console.error("Error creating PayrollLog:", err));
+
+      setSyncBannerMsg({
+        text: `${step4Category}: ${staffName} (SAR ${fmt(val)}) recorded & linked directly to Monthly Payroll Ledger`,
+        targetTab: "payroll",
+        targetLabel: "View in Staff & Payroll →",
       });
     }
 
@@ -3202,6 +3324,20 @@ function DailyRegisterView({
                               className="bg-transparent text-xs font-bold text-white outline-none"
                             />
                           </div>
+                        )}
+
+                        {(hubExpenseCat === "Staff Advance" || hubExpenseCat === "Salary") && staffList.length > 0 && (
+                          <select
+                            value={step4StaffId}
+                            onChange={(e) => setStep4StaffId(e.target.value)}
+                            className="bg-[#061416] border border-[#FFD200]/40 focus:border-[#FFD200] text-[#FFD200] text-xs font-bold rounded-xl px-3 py-2.5 outline-none transition"
+                          >
+                            {staffList.map((st) => (
+                              <option key={st.id} value={st.id}>
+                                {st.name} ({st.role || "Staff"})
+                              </option>
+                            ))}
+                          </select>
                         )}
 
                         <input
@@ -4479,6 +4615,7 @@ function DailyRegisterView({
                         Food: "24",
                         Water: "150",
                         Salary: "1500",
+                        "Staff Advance": "500",
                         "Credit Purchase": "2000",
                         "Cash Purchase": "640",
                         "Bank Purchase": "1800",
@@ -4544,6 +4681,37 @@ function DailyRegisterView({
                               onChange={(e) => setStep4DueDate(e.target.value)}
                               className="rounded-lg border border-[#FFD200]/40 bg-black/50 px-3 py-1.5 text-xs font-bold text-white outline-none"
                             />
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Show Staff Member selector when Staff Advance or Salary is selected */}
+                    {(step4Category === "Staff Advance" || step4Category === "Salary") && (
+                      <div className="space-y-2 rounded-2xl border border-[#FFD200]/30 bg-[#FFD200]/10 p-3.5">
+                        <div className="flex items-center justify-between">
+                          <label className="block text-[11px] font-bold text-[#FFD200]">
+                            Select Staff Member (Syncs to Monthly Payroll Ledger)
+                          </label>
+                          <span className="text-[10px] text-amber-200/80 font-mono">
+                            {branchId}
+                          </span>
+                        </div>
+                        {staffList.length > 0 ? (
+                          <select
+                            value={step4StaffId}
+                            onChange={(e) => setStep4StaffId(e.target.value)}
+                            className="w-full rounded-xl border border-white/15 bg-black/50 px-3.5 py-2.5 text-sm font-bold text-white outline-none focus:border-[#FFD200]"
+                          >
+                            {staffList.map((st) => (
+                              <option key={st.id} value={st.id} className="bg-[#0B1E21] text-white">
+                                {st.name} {st.role ? `· ${st.role}` : ""} (Base: SAR {fmt(st.baseSalary)})
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <div className="text-xs text-amber-200/70 p-2 border border-dashed border-amber-400/20 rounded-lg">
+                            No active staff registered for this branch yet. You can add them in the Staff &amp; Payroll portal.
                           </div>
                         )}
                       </div>
@@ -8379,6 +8547,1040 @@ function AuditLibraryView({ profile }: { profile: UserProfile | null }) {
 }
 
 /* ════════════════════════════════════════════════════════════════════════
+   STAFF MANAGEMENT & PAYROLL MODULE (OWNER EXCLUSIVE)
+   ════════════════════════════════════════════════════════════════════════ */
+
+function StaffPayrollView({ profile }: { profile: UserProfile | null }) {
+  const isOwner = Boolean(profile?.isOwner);
+  const [branchFilter, setBranchFilter] = useState<string>("ALL");
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => new Date().toISOString().slice(0, 7));
+  const [searchQuery, setSearchQuery] = useState("");
+  const [staffList, setStaffList] = useState<StaffMember[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Modals
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [selectedStaffForLedger, setSelectedStaffForLedger] = useState<StaffMember | null>(null);
+  const [ledgerLogs, setLedgerLogs] = useState<PayrollLogItem[]>([]);
+  const [loadingLedgerLogs, setLoadingLedgerLogs] = useState(false);
+
+  // Add Staff Form
+  const [newStaffName, setNewStaffName] = useState("");
+  const [newStaffBranch, setNewStaffBranch] = useState("JCT_HQ");
+  const [newStaffRole, setNewStaffRole] = useState("Cashier");
+  const [newStaffSalary, setNewStaffSalary] = useState("3500");
+  const [newStaffPhone, setNewStaffPhone] = useState("");
+  const [newStaffIqama, setNewStaffIqama] = useState("");
+  const [isSubmittingStaff, setIsSubmittingStaff] = useState(false);
+
+  // Disburse Form inside modal
+  const [disburseAmount, setDisburseAmount] = useState("");
+  const [disburseSource, setDisburseSource] = useState<"BANK_TRANSFER" | "REGISTER_DRAWER" | "OWNER_POCKET">("BANK_TRANSFER");
+  const [disburseNote, setDisburseNote] = useState("");
+  const [isSubmittingDisburse, setIsSubmittingDisburse] = useState(false);
+
+  // Quick Action in ledger (Advance / Bonus / Deduction)
+  const [showAdjustmentForm, setShowAdjustmentForm] = useState(false);
+  const [adjType, setAdjType] = useState<"ADVANCE" | "BONUS" | "DEDUCTION">("ADVANCE");
+  const [adjAmount, setAdjAmount] = useState("");
+  const [adjSource, setAdjSource] = useState<"REGISTER_DRAWER" | "OWNER_POCKET" | "BANK_TRANSFER">("REGISTER_DRAWER");
+  const [adjNote, setAdjNote] = useState("");
+  const [isSubmittingAdj, setIsSubmittingAdj] = useState(false);
+
+  // Fetch staff list
+  const loadStaff = async () => {
+    setLoading(true);
+    try {
+      const q = branchFilter !== "ALL" ? `?branch=${branchFilter}&includeArchived=true` : "?includeArchived=true";
+      const res = await fetch(`/api/staff${q}`);
+      const data = await res.json();
+      if (Array.isArray(data.staff)) {
+        setStaffList(data.staff);
+      }
+    } catch (e) {
+      console.error("Failed to load staff list:", e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    let ignore = false;
+    const q = branchFilter !== "ALL" ? `?branch=${branchFilter}&includeArchived=true` : "?includeArchived=true";
+    fetch(`/api/staff${q}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (!ignore && Array.isArray(data.staff)) {
+          setStaffList(data.staff);
+        }
+      })
+      .catch((e) => console.error("Failed to load staff list:", e))
+      .finally(() => {
+        if (!ignore) setLoading(false);
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [branchFilter]);
+
+  // Load detailed logs when viewing ledger
+  const openStaffLedger = async (staff: StaffMember) => {
+    setSelectedStaffForLedger(staff);
+    setLoadingLedgerLogs(true);
+    setShowAdjustmentForm(false);
+    try {
+      const res = await fetch(`/api/payroll?staffId=${staff.id}`);
+      const data = await res.json();
+      if (Array.isArray(data.logs)) {
+        setLedgerLogs(data.logs);
+      } else {
+        setLedgerLogs(staff.payrollLogs || []);
+      }
+    } catch (e) {
+      console.error("Failed to load payroll logs:", e);
+      setLedgerLogs(staff.payrollLogs || []);
+    } finally {
+      setLoadingLedgerLogs(false);
+    }
+  };
+
+  // Helper calculations for a staff member in selected month
+  const getStaffMonthStats = (staff: StaffMember) => {
+    const logs = staff.payrollLogs || [];
+    const monthLogs = logs.filter((l) => l.date.startsWith(selectedMonth));
+    const advances = monthLogs
+      .filter((l) => l.type === "ADVANCE")
+      .reduce((sum, l) => sum + l.amount, 0);
+    const payouts = monthLogs
+      .filter((l) => l.type === "SALARY_PAYOUT")
+      .reduce((sum, l) => sum + l.amount, 0);
+    const bonuses = monthLogs
+      .filter((l) => l.type === "BONUS")
+      .reduce((sum, l) => sum + l.amount, 0);
+    const deductions = monthLogs
+      .filter((l) => l.type === "DEDUCTION")
+      .reduce((sum, l) => sum + l.amount, 0);
+
+    const netRemaining = Math.max(0, staff.baseSalary + bonuses - advances - deductions - payouts);
+
+    return {
+      advances,
+      payouts,
+      bonuses,
+      deductions,
+      netRemaining,
+    };
+  };
+
+  // Add Staff Submit
+  const handleCreateStaff = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newStaffName.trim()) return;
+    setIsSubmittingStaff(true);
+    try {
+      const res = await fetch("/api/staff", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newStaffName.trim(),
+          branch: newStaffBranch,
+          role: newStaffRole.trim() || "Staff",
+          baseSalary: parseFloat(newStaffSalary) || 0,
+          phone: newStaffPhone.trim() || undefined,
+          iqamaNumber: newStaffIqama.trim() || undefined,
+        }),
+      });
+      if (res.ok) {
+        setShowAddModal(false);
+        setNewStaffName("");
+        setNewStaffPhone("");
+        setNewStaffIqama("");
+        loadStaff();
+      }
+    } catch (e) {
+      console.error("Error creating staff:", e);
+    } finally {
+      setIsSubmittingStaff(false);
+    }
+  };
+
+  // Toggle Staff Status (Archive / Restore)
+  const handleToggleArchive = async (staff: StaffMember) => {
+    const nextStatus = staff.status === "ACTIVE" ? "ARCHIVED" : "ACTIVE";
+    try {
+      const res = await fetch("/api/staff", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: staff.id, status: nextStatus }),
+      });
+      if (res.ok) {
+        loadStaff();
+      }
+    } catch (e) {
+      console.error("Error toggling staff status:", e);
+    }
+  };
+
+  // Disburse Salary Submit
+  const handleDisburseSalary = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedStaffForLedger) return;
+    const amount = parseFloat(disburseAmount);
+    if (Number.isNaN(amount) || amount <= 0) return;
+
+    setIsSubmittingDisburse(true);
+    try {
+      const res = await fetch("/api/payroll", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          staffId: selectedStaffForLedger.id,
+          type: "SALARY_PAYOUT",
+          amount,
+          source: disburseSource,
+          date: new Date().toISOString().slice(0, 10),
+          note: disburseNote.trim() || `Salary settlement for ${selectedMonth}`,
+        }),
+      });
+
+      if (res.ok) {
+        setDisburseAmount("");
+        setDisburseNote("");
+        await loadStaff();
+        openStaffLedger(selectedStaffForLedger);
+      }
+    } catch (e) {
+      console.error("Error disbursing salary:", e);
+    } finally {
+      setIsSubmittingDisburse(false);
+    }
+  };
+
+  // Add Direct Adjustment (Advance, Bonus, Deduction) in Ledger
+  const handleAddAdjustment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedStaffForLedger) return;
+    const amount = parseFloat(adjAmount);
+    if (Number.isNaN(amount) || amount <= 0) return;
+
+    setIsSubmittingAdj(true);
+    try {
+      const res = await fetch("/api/payroll", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          staffId: selectedStaffForLedger.id,
+          type: adjType,
+          amount,
+          source: adjSource,
+          date: new Date().toISOString().slice(0, 10),
+          note: adjNote.trim() || `${adjType} recorded directly by owner`,
+        }),
+      });
+
+      if (res.ok) {
+        setAdjAmount("");
+        setAdjNote("");
+        setShowAdjustmentForm(false);
+        await loadStaff();
+        openStaffLedger(selectedStaffForLedger);
+      }
+    } catch (e) {
+      console.error("Error adding adjustment:", e);
+    } finally {
+      setIsSubmittingAdj(false);
+    }
+  };
+
+  // Filtered staff list
+  const filteredStaff = staffList.filter((s) => {
+    if (branchFilter !== "ALL" && s.branch !== branchFilter) return false;
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      s.name.toLowerCase().includes(q) ||
+      (s.role || "").toLowerCase().includes(q) ||
+      (s.phone || "").toLowerCase().includes(q) ||
+      (s.iqamaNumber || "").toLowerCase().includes(q)
+    );
+  });
+
+  // KPI Calculations
+  const activeStaffMembers = staffList.filter(
+    (s) => s.status === "ACTIVE" && (branchFilter === "ALL" || s.branch === branchFilter)
+  );
+  const totalBasePayroll = activeStaffMembers.reduce((sum, s) => sum + s.baseSalary, 0);
+  const totalAdvancesThisMonth = activeStaffMembers.reduce(
+    (sum, s) => sum + getStaffMonthStats(s).advances,
+    0
+  );
+  const totalNetDue = activeStaffMembers.reduce(
+    (sum, s) => sum + getStaffMonthStats(s).netRemaining,
+    0
+  );
+
+  return (
+    <div className="flex flex-col gap-6 p-6 h-full overflow-y-auto w-full text-slate-100">
+      {/* Top Header Bar */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#00BAC7]/15 pb-5">
+        <div>
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#FFD200] to-[#F59E0B] text-black shadow-[0_0_15px_rgba(255,210,0,0.3)]">
+              <Users size={20} strokeWidth={2.5} />
+            </div>
+            <div>
+              <h2 className="font-display font-extrabold text-2xl text-white tracking-tight flex items-center gap-2">
+                Staff Management &amp; Payroll Portal
+              </h2>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Owner executive portal: Employee base salaries, daily cash advances, and monthly net disbursements.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Month Selector */}
+          <div className="flex items-center gap-1.5 rounded-xl border border-[#00BAC7]/25 bg-[#0B1E21] px-3 py-1.5 text-xs text-[#22D3EE] font-bold">
+            <CalendarDays size={14} className="text-[#00BAC7]" />
+            <input
+              type="month"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="bg-transparent text-xs font-bold text-[#22D3EE] outline-none cursor-pointer"
+            />
+          </div>
+
+          {/* Branch Filter */}
+          <select
+            value={branchFilter}
+            onChange={(e) => setBranchFilter(e.target.value)}
+            className="rounded-xl border border-[#00BAC7]/25 bg-[#0B1E21] px-3 py-2 text-xs font-bold text-white outline-none focus:border-[#00BAC7]"
+          >
+            <option value="ALL">All Branches (Combined)</option>
+            <option value="JCT_HQ">JCT Main HQ</option>
+            <option value="HEMPEL_JUBAIL">Hempel Jubail</option>
+            <option value="JOTUN_DAMMAM">Jotun Dammam</option>
+            <option value="SIGMA_JUBAIL">Sigma Jubail</option>
+          </select>
+
+          {/* Add Staff Button */}
+          {isOwner && (
+            <button
+              type="button"
+              onClick={() => setShowAddModal(true)}
+              className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-[#FFD200] to-[#F59E0B] px-4 py-2 text-xs font-extrabold text-black hover:brightness-105 transition shadow-[0_0_15px_rgba(255,210,0,0.3)]"
+            >
+              <Plus size={15} strokeWidth={3} />
+              <span>Add New Staff</span>
+            </button>
+          )}
+
+          {/* Refresh Button */}
+          <button
+            type="button"
+            onClick={loadStaff}
+            title="Reload from Neon database"
+            className="rounded-xl border border-[#00BAC7]/25 bg-[#0B1E21] hover:bg-[#00BAC7]/20 p-2 text-[#22D3EE] transition"
+          >
+            <RotateCcw size={15} />
+          </button>
+        </div>
+      </div>
+
+      {/* Top 4 KPI Summary Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        {/* Card 1: Active Staff */}
+        <div className="rounded-2xl border border-white/10 bg-[#061113]/90 p-4 backdrop-blur-md relative overflow-hidden">
+          <div className="flex items-center justify-between text-slate-400">
+            <span className="text-[11px] font-bold uppercase tracking-wider">Active Staff</span>
+            <Users size={16} className="text-[#00BAC7]" />
+          </div>
+          <span className="text-2xl sm:text-3xl font-black text-white mt-1.5 block font-mono">
+            {activeStaffMembers.length}
+          </span>
+          <span className="text-[10px] text-slate-500 mt-0.5 block">
+            {branchFilter === "ALL" ? "Across all 4 branches" : branchFilter}
+          </span>
+        </div>
+
+        {/* Card 2: Total Base Payroll */}
+        <div className="rounded-2xl border border-[#00BAC7]/25 bg-[#061113]/90 p-4 backdrop-blur-md relative overflow-hidden shadow-[0_0_20px_rgba(0,186,199,0.06)]">
+          <div className="flex items-center justify-between text-[#22D3EE]">
+            <span className="text-[11px] font-bold uppercase tracking-wider">Monthly Base Payroll</span>
+            <Banknote size={16} className="text-[#00BAC7]" />
+          </div>
+          <span className="text-xl sm:text-2xl font-black text-white mt-1.5 block font-mono">
+            SAR {fmt(totalBasePayroll)}
+          </span>
+          <span className="text-[10px] text-slate-500 mt-0.5 block">
+            Gross contractual monthly liability
+          </span>
+        </div>
+
+        {/* Card 3: Advances Taken */}
+        <div className="rounded-2xl border border-rose-500/25 bg-[#061113]/90 p-4 backdrop-blur-md relative overflow-hidden">
+          <div className="flex items-center justify-between text-rose-300">
+            <span className="text-[11px] font-bold uppercase tracking-wider">Advances Taken ({selectedMonth})</span>
+            <DollarSign size={16} className="text-rose-400" />
+          </div>
+          <span className="text-xl sm:text-2xl font-black text-rose-400 mt-1.5 block font-mono">
+            -SAR {fmt(totalAdvancesThisMonth)}
+          </span>
+          <span className="text-[10px] text-slate-500 mt-0.5 block">
+            Auto-linked from Register drawers &amp; Pocket
+          </span>
+        </div>
+
+        {/* Card 4: Net Remaining Due */}
+        <div className="rounded-2xl border border-[#FFD200]/30 bg-gradient-to-br from-[#0B2023] to-[#040E10] p-4 backdrop-blur-md relative overflow-hidden shadow-[0_0_25px_rgba(255,210,0,0.1)]">
+          <div className="flex items-center justify-between text-[#FFD200]">
+            <span className="text-[11px] font-bold uppercase tracking-wider">Net Due to Disburse</span>
+            <UserCheck size={16} className="text-[#FFD200]" />
+          </div>
+          <span className="text-xl sm:text-2xl font-black text-[#FFD200] mt-1.5 block font-mono">
+            SAR {fmt(totalNetDue)}
+          </span>
+          <span className="text-[10px] text-amber-200/70 mt-0.5 block">
+            Base minus advances &amp; payouts
+          </span>
+        </div>
+      </div>
+
+      {/* Staff Roster Controls & Search */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-[#061416] px-3.5 py-2 text-xs text-white max-w-md w-full">
+          <Search size={14} className="text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search employee by name, role, phone, or iqama..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="bg-transparent text-xs text-white outline-none placeholder:text-slate-500 w-full"
+          />
+        </div>
+
+        <div className="text-xs text-slate-400 flex items-center gap-1.5 font-medium">
+          Showing <strong className="text-white font-mono">{filteredStaff.length}</strong> staff members
+        </div>
+      </div>
+
+      {/* Staff Roster Table */}
+      <div className="rounded-2xl border border-white/10 bg-[#061113]/90 backdrop-blur-md overflow-hidden">
+        {loading ? (
+          <div className="flex items-center justify-center p-12 text-slate-400">
+            <RotateCcw className="animate-spin text-[#00BAC7] mr-2" size={18} />
+            <span className="text-sm font-semibold">Loading employees &amp; monthly payroll ledger...</span>
+          </div>
+        ) : filteredStaff.length === 0 ? (
+          <div className="p-12 text-center text-slate-400">
+            <Users size={32} className="mx-auto text-slate-600 mb-2" />
+            <p className="font-bold text-base text-white">No staff members found</p>
+            <p className="text-xs text-slate-500 mt-1">
+              Click &quot;Add New Staff&quot; above to register your employees.
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="border-b border-white/10 bg-[#040C0E] text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                <tr>
+                  <th className="py-3.5 px-4">Employee &amp; Role</th>
+                  <th className="py-3.5 px-4">Branch</th>
+                  <th className="py-3.5 px-4 text-right">Base Salary</th>
+                  <th className="py-3.5 px-4 text-right">Advances ({selectedMonth})</th>
+                  <th className="py-3.5 px-4 text-right">Net Remaining Due</th>
+                  <th className="py-3.5 px-4 text-center">Status</th>
+                  <th className="py-3.5 px-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {filteredStaff.map((staff) => {
+                  const bInfo = getBranchBadgeInfo(staff.branch);
+                  const stats = getStaffMonthStats(staff);
+                  const initials = staff.name
+                    .split(" ")
+                    .map((n) => n[0])
+                    .join("")
+                    .slice(0, 2)
+                    .toUpperCase();
+
+                  return (
+                    <tr key={staff.id} className="hover:bg-white/[0.02] transition">
+                      {/* Name & Role */}
+                      <td className="py-3.5 px-4">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#0B1E21] border border-[#00BAC7]/30 text-xs font-black text-[#22D3EE] font-mono shrink-0">
+                            {initials}
+                          </div>
+                          <div>
+                            <p className="font-bold text-white text-sm">{staff.name}</p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="rounded bg-white/5 border border-white/10 px-1.5 py-0.5 text-[10px] text-slate-300">
+                                {staff.role || "Staff"}
+                              </span>
+                              {staff.phone && (
+                                <span className="text-[10px] text-slate-500 font-mono">
+                                  📞 {staff.phone}
+                                </span>
+                              )}
+                              {staff.iqamaNumber && (
+                                <span className="text-[10px] text-slate-500 font-mono">
+                                  ID: {staff.iqamaNumber}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Branch */}
+                      <td className="py-3.5 px-4">
+                        <span className={`inline-block rounded-md border px-2 py-0.5 text-[10px] font-bold ${bInfo.color}`}>
+                          {bInfo.name}
+                        </span>
+                      </td>
+
+                      {/* Base Salary */}
+                      <td className="py-3.5 px-4 text-right font-mono font-bold text-white">
+                        SAR {fmt(staff.baseSalary)}
+                      </td>
+
+                      {/* Advances Taken This Month */}
+                      <td className="py-3.5 px-4 text-right font-mono">
+                        {stats.advances > 0 ? (
+                          <span className="inline-block rounded-md border border-rose-500/30 bg-rose-500/10 px-2 py-0.5 font-bold text-rose-300">
+                            -SAR {fmt(stats.advances)}
+                          </span>
+                        ) : (
+                          <span className="text-slate-500">SAR 0.00</span>
+                        )}
+                      </td>
+
+                      {/* Net Remaining Due */}
+                      <td className="py-3.5 px-4 text-right font-mono">
+                        <span
+                          className={`text-sm font-extrabold ${
+                            stats.netRemaining > 0 ? "text-[#FFD200]" : "text-emerald-400"
+                          }`}
+                        >
+                          SAR {fmt(stats.netRemaining)}
+                        </span>
+                      </td>
+
+                      {/* Status */}
+                      <td className="py-3.5 px-4 text-center">
+                        <span
+                          className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                            staff.status === "ACTIVE"
+                              ? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-300"
+                              : "bg-slate-500/10 border border-slate-500/30 text-slate-400"
+                          }`}
+                        >
+                          {staff.status}
+                        </span>
+                      </td>
+
+                      {/* Actions */}
+                      <td className="py-3.5 px-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openStaffLedger(staff)}
+                            className="rounded-lg border border-[#00BAC7]/30 bg-[#0B1E21] hover:bg-[#00BAC7]/20 px-3 py-1.5 text-xs font-bold text-[#22D3EE] transition flex items-center gap-1"
+                          >
+                            <span>Ledger</span>
+                            <ArrowRight size={12} />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleToggleArchive(staff)}
+                            title={staff.status === "ACTIVE" ? "Archive employee" : "Restore employee"}
+                            className="rounded-lg border border-white/10 hover:border-rose-400/30 hover:bg-rose-500/10 p-1.5 text-slate-400 hover:text-rose-300 transition"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* ──────────────────────────────────────────────────────────────
+          MODAL 1: ADD NEW STAFF MEMBER
+         ────────────────────────────────────────────────────────────── */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-[#00BAC7]/30 bg-[#061113] p-6 shadow-2xl text-white flex flex-col gap-5">
+            <div className="flex items-center justify-between border-b border-white/10 pb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#FFD200] to-[#F59E0B] text-black">
+                  <Users size={18} strokeWidth={2.5} />
+                </div>
+                <h3 className="font-display font-extrabold text-lg">Add New Employee</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddModal(false)}
+                className="text-slate-400 hover:text-white p-1"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateStaff} className="flex flex-col gap-3.5">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-300 uppercase mb-1">
+                  Employee Full Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newStaffName}
+                  onChange={(e) => setNewStaffName(e.target.value)}
+                  placeholder="e.g. Tariq Al-Ghamdi"
+                  className="w-full rounded-xl border border-white/15 bg-black/50 px-3.5 py-2.5 text-sm font-semibold text-white placeholder:text-slate-600 outline-none focus:border-[#FFD200]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-300 uppercase mb-1">
+                    Branch Assignment *
+                  </label>
+                  <select
+                    value={newStaffBranch}
+                    onChange={(e) => setNewStaffBranch(e.target.value)}
+                    className="w-full rounded-xl border border-white/15 bg-black/50 px-3 py-2.5 text-xs font-bold text-white outline-none focus:border-[#FFD200]"
+                  >
+                    <option value="JCT_HQ">JCT Main HQ</option>
+                    <option value="HEMPEL_JUBAIL">Hempel Jubail</option>
+                    <option value="JOTUN_DAMMAM">Jotun Dammam</option>
+                    <option value="SIGMA_JUBAIL">Sigma Jubail</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-300 uppercase mb-1">
+                    Job Role
+                  </label>
+                  <input
+                    type="text"
+                    value={newStaffRole}
+                    onChange={(e) => setNewStaffRole(e.target.value)}
+                    placeholder="e.g. Cashier, Sales"
+                    className="w-full rounded-xl border border-white/15 bg-black/50 px-3.5 py-2.5 text-xs font-semibold text-white outline-none focus:border-[#FFD200]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-300 uppercase mb-1">
+                  Monthly Base Salary (SAR) *
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  required
+                  value={newStaffSalary}
+                  onChange={(e) => setNewStaffSalary(e.target.value)}
+                  placeholder="3500.00"
+                  className="w-full rounded-xl border border-white/15 bg-black/50 px-3.5 py-2.5 font-mono text-sm font-bold text-white outline-none focus:border-[#FFD200]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-300 uppercase mb-1">
+                    Phone (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={newStaffPhone}
+                    onChange={(e) => setNewStaffPhone(e.target.value)}
+                    placeholder="05XXXXXXXX"
+                    className="w-full rounded-xl border border-white/15 bg-black/50 px-3.5 py-2 text-xs text-white outline-none focus:border-[#FFD200]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-300 uppercase mb-1">
+                    Iqama / ID (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={newStaffIqama}
+                    onChange={(e) => setNewStaffIqama(e.target.value)}
+                    placeholder="2XXXXXXXXX"
+                    className="w-full rounded-xl border border-white/15 bg-black/50 px-3.5 py-2 text-xs text-white outline-none focus:border-[#FFD200]"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/10 mt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="rounded-xl border border-white/15 px-4 py-2.5 text-xs font-bold text-slate-300 hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingStaff}
+                  className="rounded-xl bg-gradient-to-r from-[#FFD200] to-[#F59E0B] px-5 py-2.5 text-xs font-extrabold text-black hover:brightness-105 disabled:opacity-50 transition"
+                >
+                  {isSubmittingStaff ? "Adding..." : "+ Create Employee"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ──────────────────────────────────────────────────────────────
+          MODAL 2: INDIVIDUAL STAFF MONTHLY LEDGER & DISBURSEMENT
+         ────────────────────────────────────────────────────────────── */}
+      {selectedStaffForLedger && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md">
+          <div className="w-full max-w-2xl max-h-[90vh] overflow-hidden rounded-2xl border border-[#00BAC7]/30 bg-[#061113] shadow-2xl flex flex-col text-white">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between border-b border-white/10 p-5 bg-[#0B1E21]/60">
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#00BAC7]/15 border border-[#00BAC7]/30 font-display text-lg font-black text-[#22D3EE] font-mono">
+                  {selectedStaffForLedger.name
+                    .split(" ")
+                    .map((n) => n[0])
+                    .join("")
+                    .slice(0, 2)
+                    .toUpperCase()}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-display font-extrabold text-xl text-white">
+                      {selectedStaffForLedger.name}
+                    </h3>
+                    <span className="rounded bg-white/5 border border-white/10 px-2 py-0.5 text-[10px] font-bold text-slate-300">
+                      {selectedStaffForLedger.role || "Staff"}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-slate-400 mt-1">
+                    <span>Branch: <strong className="text-white">{selectedStaffForLedger.branch}</strong></span>
+                    {selectedStaffForLedger.phone && <span>📞 {selectedStaffForLedger.phone}</span>}
+                    {selectedStaffForLedger.iqamaNumber && <span>ID: {selectedStaffForLedger.iqamaNumber}</span>}
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedStaffForLedger(null)}
+                className="rounded-lg p-1.5 text-slate-400 hover:text-white"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Body (Scrollable) */}
+            <div className="p-6 overflow-y-auto flex flex-col gap-6 flex-1">
+              {/* Month Balance Strip */}
+              {(() => {
+                const stats = getStaffMonthStats(selectedStaffForLedger);
+                return (
+                  <div className="rounded-2xl border border-[#00BAC7]/25 bg-gradient-to-r from-[#0B2023] via-[#071719] to-[#040E10] p-4 flex flex-wrap items-center justify-between gap-4">
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        {selectedMonth} Base Salary
+                      </span>
+                      <span className="font-mono text-lg font-black text-white mt-0.5">
+                        SAR {fmt(selectedStaffForLedger.baseSalary)}
+                      </span>
+                    </div>
+
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-rose-300">
+                        Total Advances
+                      </span>
+                      <span className="font-mono text-lg font-black text-rose-400 mt-0.5">
+                        -SAR {fmt(stats.advances)}
+                      </span>
+                    </div>
+
+                    {stats.payouts > 0 && (
+                      <div className="flex flex-col">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-300">
+                          Disbursed So Far
+                        </span>
+                        <span className="font-mono text-lg font-black text-emerald-400 mt-0.5">
+                          SAR {fmt(stats.payouts)}
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="flex flex-col pl-4 border-l border-white/10">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-[#FFD200]">
+                        Net Balance Due
+                      </span>
+                      <span className="font-mono text-xl font-black text-[#FFD200] mt-0.5">
+                        SAR {fmt(stats.netRemaining)}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Action Buttons Row */}
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
+                <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                  Itemized Payroll &amp; Advances Ledger ({ledgerLogs.length})
+                </span>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowAdjustmentForm(!showAdjustmentForm)}
+                    className="rounded-xl border border-white/15 bg-white/5 hover:bg-white/10 px-3 py-1.5 text-xs font-bold text-slate-200 transition"
+                  >
+                    {showAdjustmentForm ? "Cancel Adjustment" : "+ Record Advance / Adjustment"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const stats = getStaffMonthStats(selectedStaffForLedger);
+                      setDisburseAmount(String(stats.netRemaining));
+                      setDisburseNote(`Final Salary Payout for ${selectedMonth}`);
+                    }}
+                    className="rounded-xl bg-gradient-to-r from-[#FFD200] to-[#F59E0B] px-4 py-1.5 text-xs font-extrabold text-black hover:brightness-105 transition shadow-sm"
+                  >
+                    ⚡ Disburse Salary
+                  </button>
+                </div>
+              </div>
+
+              {/* Inline Adjustment Form */}
+              {showAdjustmentForm && (
+                <form onSubmit={handleAddAdjustment} className="rounded-xl border border-[#00BAC7]/30 bg-[#0B1E21]/80 p-4 flex flex-col gap-3">
+                  <span className="text-xs font-bold text-[#22D3EE]">
+                    Record Direct Staff Ledger Entry
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div>
+                      <label className="block text-[10px] text-slate-400 mb-1">Type</label>
+                      <select
+                        value={adjType}
+                        onChange={(e) => setAdjType(e.target.value as "ADVANCE" | "BONUS" | "DEDUCTION")}
+                        className="w-full rounded-lg border border-white/15 bg-black/60 px-2.5 py-1.5 text-xs font-bold text-white outline-none"
+                      >
+                        <option value="ADVANCE">Advance (Deduction)</option>
+                        <option value="BONUS">Bonus (Addition)</option>
+                        <option value="DEDUCTION">Deduction (Penalty)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] text-slate-400 mb-1">Amount (SAR)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        required
+                        value={adjAmount}
+                        onChange={(e) => setAdjAmount(e.target.value)}
+                        placeholder="500.00"
+                        className="w-full rounded-lg border border-white/15 bg-black/60 px-2.5 py-1.5 font-mono text-xs font-bold text-white outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] text-slate-400 mb-1">Payment Source</label>
+                      <select
+                        value={adjSource}
+                        onChange={(e) => setAdjSource(e.target.value as "REGISTER_DRAWER" | "OWNER_POCKET" | "BANK_TRANSFER")}
+                        className="w-full rounded-lg border border-white/15 bg-black/60 px-2.5 py-1.5 text-xs font-bold text-white outline-none"
+                      >
+                        <option value="REGISTER_DRAWER">Cash Drawer</option>
+                        <option value="OWNER_POCKET">Owner Pocket</option>
+                        <option value="BANK_TRANSFER">Bank Transfer</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={adjNote}
+                      onChange={(e) => setAdjNote(e.target.value)}
+                      placeholder="Optional memo / reason..."
+                      className="flex-1 rounded-lg border border-white/15 bg-black/60 px-3 py-1.5 text-xs text-white outline-none"
+                    />
+                    <button
+                      type="submit"
+                      disabled={isSubmittingAdj}
+                      className="rounded-lg bg-teal-500 hover:bg-teal-400 px-4 py-1.5 text-xs font-bold text-black transition shrink-0"
+                    >
+                      {isSubmittingAdj ? "Saving..." : "Save Entry"}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* Inline Disburse Form */}
+              {disburseAmount && (
+                <form onSubmit={handleDisburseSalary} className="rounded-xl border border-[#FFD200]/40 bg-[#FFD200]/10 p-4 flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-extrabold text-[#FFD200] flex items-center gap-1.5">
+                      <CheckCircle2 size={15} /> Confirm Salary Disbursement
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setDisburseAmount("")}
+                      className="text-amber-200/70 hover:text-white text-xs"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] text-amber-200/80 mb-1">Disbursement Amount (SAR)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        required
+                        value={disburseAmount}
+                        onChange={(e) => setDisburseAmount(e.target.value)}
+                        className="w-full rounded-lg border border-[#FFD200]/40 bg-black/70 px-3 py-2 font-mono text-sm font-black text-[#FFD200] outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] text-amber-200/80 mb-1">Payment Method</label>
+                      <select
+                        value={disburseSource}
+                        onChange={(e) => setDisburseSource(e.target.value as "BANK_TRANSFER" | "REGISTER_DRAWER" | "OWNER_POCKET")}
+                        className="w-full rounded-lg border border-[#FFD200]/40 bg-black/70 px-3 py-2 text-xs font-bold text-white outline-none"
+                      >
+                        <option value="BANK_TRANSFER">Bank Wire / Transfer (Company Account)</option>
+                        <option value="REGISTER_DRAWER">Cash Drawer (Daily Register)</option>
+                        <option value="OWNER_POCKET">Owner Pocket (Nazim / Nadeem Personal)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={disburseNote}
+                      onChange={(e) => setDisburseNote(e.target.value)}
+                      placeholder="e.g. October Salary Settlement"
+                      className="flex-1 rounded-lg border border-[#FFD200]/30 bg-black/70 px-3 py-2 text-xs text-white outline-none"
+                    />
+                    <button
+                      type="submit"
+                      disabled={isSubmittingDisburse}
+                      className="rounded-lg bg-[#FFD200] hover:bg-amber-400 px-5 py-2 text-xs font-black text-black transition shrink-0 shadow-sm"
+                    >
+                      {isSubmittingDisburse ? "Processing..." : "Disburse & Zero Balance"}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* Itemized Logs Table */}
+              <div className="rounded-xl border border-white/10 bg-[#040C0E] overflow-hidden">
+                {loadingLedgerLogs ? (
+                  <div className="p-8 text-center text-slate-400 text-xs">
+                    <RotateCcw className="animate-spin inline mr-1" size={14} /> Loading ledger entries...
+                  </div>
+                ) : ledgerLogs.length === 0 ? (
+                  <div className="p-8 text-center text-slate-500 text-xs">
+                    No payroll entries or advances recorded yet for this staff member.
+                  </div>
+                ) : (
+                  <div className="divide-y divide-white/5">
+                    {ledgerLogs.map((log) => {
+                      const isAdvance = log.type === "ADVANCE";
+                      const isPayout = log.type === "SALARY_PAYOUT";
+                      const isBonus = log.type === "BONUS";
+
+                      const badgeCls = isAdvance
+                        ? "border-rose-500/30 bg-rose-500/10 text-rose-300"
+                        : isPayout
+                        ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                        : isBonus
+                        ? "border-cyan-500/30 bg-cyan-500/10 text-[#22D3EE]"
+                        : "border-amber-500/30 bg-amber-500/10 text-amber-300";
+
+                      const sourceLabel =
+                        log.source === "REGISTER_DRAWER"
+                          ? "Cash Drawer"
+                          : log.source === "OWNER_POCKET"
+                          ? "Owner Pocket"
+                          : "Bank Transfer";
+
+                      return (
+                        <div key={log.id} className="flex items-center justify-between p-3.5 hover:bg-white/[0.02] transition gap-3">
+                          <div className="flex items-center gap-3">
+                            <span className="font-mono text-xs text-slate-400 whitespace-nowrap">
+                              {log.date}
+                            </span>
+                            <span className={`rounded px-2 py-0.5 text-[10px] font-bold border ${badgeCls}`}>
+                              {log.type}
+                            </span>
+                            <span className="rounded bg-black/40 border border-white/10 px-1.5 py-0.5 text-[10px] text-slate-400">
+                              {sourceLabel}
+                            </span>
+                            {log.note && (
+                              <span className="text-xs text-slate-300 truncate max-w-xs">
+                                {log.note}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="text-right font-mono font-bold whitespace-nowrap">
+                            <span
+                              className={
+                                isPayout || isBonus
+                                  ? "text-emerald-400"
+                                  : "text-rose-400"
+                              }
+                            >
+                              {isPayout || isBonus ? "+" : "-"}SAR {fmt(log.amount)}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="border-t border-white/10 p-4 bg-[#0B1E21]/40 flex items-center justify-end">
+              <button
+                type="button"
+                onClick={() => setSelectedStaffForLedger(null)}
+                className="rounded-xl border border-white/15 px-5 py-2 text-xs font-bold text-slate-300 hover:text-white"
+              >
+                Close Ledger
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════════════
    PROFILE GATE, ROLE ACCESS & OWNER AUDIT RADAR
    ════════════════════════════════════════════════════════════════════════ */
 
@@ -8438,7 +9640,7 @@ const USER_PROFILES: UserProfile[] = [
   },
 ];
 
-const OWNER_TABS: TabId[] = ["register", "archive", "radar", "suppliers", "pulse", "consolidation", "ai"];
+const OWNER_TABS: TabId[] = ["register", "archive", "radar", "suppliers", "payroll", "pulse", "consolidation", "ai"];
 const STAFF_TABS: TabId[] = ["register", "archive"];
 
 const OWNER_BRANCH_OPTIONS = [
@@ -9057,6 +10259,7 @@ export default function Page() {
                 onSyncCreditPurchase={handleSyncCreditPurchase}
                 onSyncCreditCustomer={handleSyncCreditCustomer}
                 onSwitchTab={setTab}
+                branchId={activePocketBranch === "ALL" ? "JCT_HQ" : activePocketBranch}
               />
             ) : safeTab === "archive" ? (
               <AuditLibraryView profile={profile} />
@@ -9071,6 +10274,8 @@ export default function Page() {
                 supplierBills={supplierBills}
                 onLogSupplierPurchase={handleSyncCreditPurchase}
               />
+            ) : safeTab === "payroll" ? (
+              <StaffPayrollView profile={profile} />
             ) : safeTab === "ai" ? (
               <NaumanAiView txns={liveAiTxns} />
             ) : safeTab === "consolidation" ? (
