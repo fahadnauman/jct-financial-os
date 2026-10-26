@@ -3162,7 +3162,7 @@ function DailyRegisterView({
             <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
               <div className="max-w-2xl space-y-1.5">
                 <h2 className="font-display text-xl sm:text-2xl font-extrabold tracking-tight text-jct-charcoal dark:text-white">
-                  End-of-Day Reconciliation
+                  SALE SUMMARY
                 </h2>
                 <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
                   Match ERP sales, calculate SAB &amp; Al Rajhi POS terminal fees, and close today&apos;s drawer in 5 guided steps.
@@ -3176,23 +3176,26 @@ function DailyRegisterView({
                   className="bg-jct-turquoise text-jct-charcoal font-bold hover:brightness-95 transition-all shadow-sm rounded-lg px-6 py-3 flex items-center gap-2 text-sm whitespace-nowrap border border-jct-turquoise/60 hover:border-jct-turquoise hover:shadow-[0_0_15px_rgba(45,226,230,0.25)]"
                 >
                   <Sparkles size={16} className="text-jct-charcoal" />
-                  <span>Start Guided Tracking</span>
+                  <span>TRACK SALE</span>
                   <ArrowRight size={14} className="text-jct-charcoal" />
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => setShowManualEntry((prev) => !prev)}
-                  className={`bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 transition-all px-5 py-3 rounded-lg shadow-sm flex items-center gap-2 text-sm whitespace-nowrap border border-jct-yellow/60 hover:border-jct-yellow hover:shadow-[0_0_15px_rgba(255,222,89,0.25)] duration-300 ${
-                    showManualEntry ? "ring-2 ring-jct-yellow" : ""
-                  }`}
+                  onClick={() => setTrackingMode("datasheet")}
+                  className="bg-jct-yellow text-jct-charcoal font-bold px-4 py-2 rounded-lg hover:brightness-95 transition-all flex items-center gap-2 whitespace-nowrap shadow-sm border border-jct-yellow/60 hover:border-jct-yellow hover:shadow-[0_0_15px_rgba(255,222,89,0.25)]"
                 >
                   <FileSpreadsheet size={16} className="text-jct-charcoal" />
-                  <span>Classic Data Entry / Add Manual Entry</span>
-                  <ChevronDown
-                    size={16}
-                    className={`transition-transform duration-300 ${showManualEntry ? "rotate-180" : ""}`}
-                  />
+                  <span>Classic Data Entry</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowManualEntry((prev) => !prev)}
+                  className="bg-slate-800 text-slate-300 border border-slate-600 text-sm px-3 py-1.5 rounded-md hover:bg-slate-700 transition-colors flex items-center gap-1.5 whitespace-nowrap"
+                  title="Toggle manual entry forms"
+                >
+                  <span>Add Manual Entry 🔽</span>
                 </button>
               </div>
             </div>
