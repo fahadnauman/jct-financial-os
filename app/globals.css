@@ -25,21 +25,21 @@
   color-scheme: light;
 }
 
-/* ---------- Dark: True JCT Brand (Electric Cyan, Industrial Yellow, Deep Obsidian Black) ---------- */
+/* ---------- Dark: Deep Forest Green & Sky Turquoise Enterprise Palette ---------- */
 .dark {
-  --bg: #041012;
-  --card: rgba(11, 28, 30, 0.85);
-  --card-solid: #0b1c1e;
-  --raised: #061113;
-  --line: rgba(0, 186, 199, 0.2);
-  --line-strong: rgba(0, 186, 199, 0.4);
-  --fg: #ffffff;
-  --muted: #8ea5a8;
-  --accent: #00bac7;
-  --accent-fg: #000000;
-  --accent-soft: rgba(0, 186, 199, 0.18);
-  --pos: #34d399;
-  --pos-soft: rgba(52, 211, 153, 0.12);
+  --bg: #0b1e22;
+  --card: rgba(22, 54, 58, 0.9);
+  --card-solid: #16363a;
+  --raised: #10292e;
+  --line: #244a4e;
+  --line-strong: #3b9ea3;
+  --fg: #f8fafc;
+  --muted: #94a3b8;
+  --accent: #3b9ea3;
+  --accent-fg: #ffffff;
+  --accent-soft: rgba(59, 158, 163, 0.18);
+  --pos: #6ecbce;
+  --pos-soft: rgba(110, 203, 206, 0.14);
   --neg: #fb7185;
   --neg-soft: rgba(251, 113, 133, 0.12);
   --warn: #ffd200;
