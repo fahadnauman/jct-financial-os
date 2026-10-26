@@ -264,20 +264,20 @@ function PrintReportHeader({ branch, date }: { branch: string; date: string }) {
   }, []);
 
   return (
-    <div className="hidden print:block mb-6 border-b-2 border-black pb-4 text-black">
-      <div className="flex items-center justify-between">
+    <div className="hidden print:block text-black print:mb-8">
+      <div className="flex items-center justify-between print:border-b-4 print:border-black print:pb-4 print:mb-8 border-b-4 border-black pb-4 mb-6">
         <div>
-          <h1 className="text-2xl font-black uppercase tracking-tight text-black">
-            JCT Financial OS - Daily Register Report
+          <h1 className="text-2xl print:text-3xl print:font-black print:tracking-tighter print:uppercase font-black uppercase tracking-tight text-black">
+            JCT FINANCIAL OS - DAILY REGISTER REPORT
           </h1>
-          <p className="text-xs font-bold text-slate-700 mt-0.5">
+          <p className="text-xs font-bold text-slate-700 mt-0.5 print:text-black">
             Jubail Corp. Trading Est. · Wholesale Paint Distribution (Jotun, Hempel, Sigma)
           </p>
         </div>
-        <div className="text-right font-mono text-xs text-slate-800">
+        <div className="text-right font-mono text-xs text-slate-800 print:text-black">
           <p className="font-bold text-sm text-black">Branch: {branch}</p>
           <p>Register Date: <strong className="text-black">{date}</strong></p>
-          <p className="text-[11px] text-slate-600 mt-0.5">Printed: {timestamp || "Live"}</p>
+          <p className="text-[11px] text-slate-600 mt-0.5 print:text-black">Printed: {timestamp || "Live"}</p>
         </div>
       </div>
     </div>
@@ -286,13 +286,10 @@ function PrintReportHeader({ branch, date }: { branch: string; date: string }) {
 
 function PrintReportFooter() {
   return (
-    <div className="hidden print:flex justify-between items-center mt-12 pt-8 border-t border-black text-black text-sm font-bold">
-      <div>
-        <span>Prepared By: ____________________</span>
-      </div>
-      <div>
-        <span>Audited By (Owner): ____________________</span>
-      </div>
+    <div className="hidden print:flex justify-between mt-16 pt-8 border-t-2 border-black text-sm font-bold text-black">
+      <div>PREPARED BY (STAFF): _________________________</div>
+      <div>DATE / TIME: _________________________</div>
+      <div>AUDITED BY (OWNER): _________________________</div>
     </div>
   );
 }
@@ -3346,8 +3343,8 @@ function DailyRegisterView({
     <div className="relative flex-1 h-full w-full overflow-y-auto bg-jct-offwhite dark:bg-black text-jct-charcoal dark:text-jct-offwhite select-none">
       {/* Live Cross-Module Sync Toast Banner */}
       {syncBannerMsg && (
-        <div className="relative z-30 max-w-7xl w-full mx-auto px-6 pt-5">
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 dark:border-[#1F1F1F] bg-white dark:bg-[#0A0A0A] px-5 py-3 text-xs sm:text-sm font-semibold text-jct-charcoal dark:text-jct-offwhite shadow-sm">
+        <div className="relative z-30 max-w-7xl w-full mx-auto px-6 pt-5 print:hidden">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 dark:border-[#1F1F1F] bg-white dark:bg-[#0A0A0A] px-5 py-3 text-xs sm:text-sm font-semibold text-jct-charcoal dark:text-jct-offwhite shadow-sm print:hidden">
             <div className="flex items-center gap-2.5">
               <span className="flex h-5 w-5 items-center justify-center rounded-full bg-jct-turquoise text-jct-charcoal font-bold">
                 <Check size={12} strokeWidth={3} />
@@ -3380,7 +3377,7 @@ function DailyRegisterView({
       {trackingMode === "hub" && (
         <div className="relative z-10 max-w-7xl w-full mx-auto px-6 py-8 lg:py-10 flex flex-col gap-7">
           {justCompletedToast && (
-            <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 dark:border-[#1F1F1F] bg-white dark:bg-[#0A0A0A] px-5 py-3.5 text-sm font-semibold text-jct-charcoal dark:text-jct-offwhite shadow-sm">
+            <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 dark:border-[#1F1F1F] bg-white dark:bg-[#0A0A0A] px-5 py-3.5 text-sm font-semibold text-jct-charcoal dark:text-jct-offwhite shadow-sm print:hidden">
               <div className="flex items-center gap-2.5">
                 <span className="flex h-6 w-6 items-center justify-center rounded-full bg-jct-turquoise text-jct-charcoal font-bold">
                   <Check size={14} strokeWidth={3} />
@@ -5619,7 +5616,7 @@ function DailyRegisterView({
               STEP 5: FULL-WIDESCREEN EDITABLE AUDIT WORKBENCH WITH [⤢ EXPAND] ON ALL 3 BOXES
              ────────────────────────────────────────────────────────────── */}
           {wizardStep === 5 && (
-            <div className="flex flex-col gap-6 pb-8 print:w-full print:p-0 print:m-0 print:bg-white print:text-black">
+            <div className="flex flex-col gap-6 pb-8 print:border-2 print:border-black print:p-8 print:m-0 print:block print:w-full print:bg-white print:text-black">
               {/* Print-Only Report Header */}
               <PrintReportHeader
                 branch={branchId === "JCT_HQ" ? "JCT Main HQ (Jubail)" : branchId}
@@ -5628,7 +5625,7 @@ function DailyRegisterView({
 
               {/* 1. Consolidated Settlement & Merchant Fee Header Strip - Staff RBAC */}
               {isOwner && (
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 transition-all duration-300 print:shadow-none print:border-slate-300 print:bg-white print:text-black">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 transition-all duration-300 print:hidden">
                   <div className="flex flex-wrap items-center gap-3">
                     <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                       Audit Settlement Mode:
@@ -5674,56 +5671,56 @@ function DailyRegisterView({
               )}
 
               {/* 2. Streamlined Hero Drawer Closing Card */}
-              <div className="w-full bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-yellow/20 dark:border-jct-yellow/30 hover:border-jct-yellow/80 hover:shadow-[0_0_15px_rgba(255,222,89,0.1)] rounded-xl p-6 mb-2 transition-all duration-300 print:shadow-none print:border-slate-300 print:bg-white print:text-black">
+              <div className="w-full bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-yellow/20 dark:border-jct-yellow/30 hover:border-jct-yellow/80 hover:shadow-[0_0_15px_rgba(255,222,89,0.1)] rounded-xl p-6 mb-2 transition-all duration-300 print:shadow-none print:border print:border-black print:rounded-none print:bg-white print:text-black print:p-6 print:mb-4">
                 <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-4">
                   <div>
-                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-jct-yellow text-jct-charcoal text-xs font-bold uppercase tracking-wider">
-                      <Wallet size={14} className="text-jct-charcoal" />
+                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-jct-yellow text-jct-charcoal text-xs font-bold uppercase tracking-wider print:border print:border-black print:bg-white print:text-black">
+                      <Wallet size={14} className="text-jct-charcoal print:text-black" />
                       <span>💵 PHYSICAL CASH DRAWER CLOSING BALANCE</span>
                     </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 print:text-black">
                       Count physical cash in register before locking.
                     </p>
                   </div>
-                  <div className="text-3xl md:text-4xl font-black text-jct-charcoal dark:text-jct-offwhite tracking-tight">
+                  <div className="text-3xl md:text-4xl font-black text-jct-charcoal dark:text-jct-offwhite tracking-tight print:text-black">
                     SAR {fmt(calculatedClosingBalance)}
                   </div>
                 </div>
 
                 {/* Clean Math Formula Strip (Fully Visible) */}
-                <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-slate-200 dark:border-[#1F1F1F] text-xs text-slate-500 dark:text-slate-400">
-                  <span>Opening Float: <strong className="text-jct-charcoal dark:text-jct-offwhite">SAR {fmt(openingBalance)}</strong></span>
-                  <span className="text-jct-turquoise font-bold">+</span>
-                  <span>Inflows: <strong className="text-jct-charcoal dark:text-jct-offwhite">SAR {fmt(totalCashInSalesAndReceipts)}</strong></span>
-                  <span className="text-rose-500 font-bold">-</span>
-                  <span>Outflows: <strong className="text-jct-charcoal dark:text-jct-offwhite">SAR {fmt(totalMoneyOutDrawer)}</strong></span>
-                  <span className="text-jct-yellow font-bold">=</span>
-                  <span>Closing Cash: <strong className="text-jct-charcoal dark:text-jct-offwhite">SAR {fmt(calculatedClosingBalance)}</strong></span>
+                <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-slate-200 dark:border-[#1F1F1F] text-xs text-slate-500 dark:text-slate-400 print:text-black print:border-black">
+                  <span>Opening Float: <strong className="text-jct-charcoal dark:text-jct-offwhite print:text-black">SAR {fmt(openingBalance)}</strong></span>
+                  <span className="text-jct-turquoise font-bold print:text-black">+</span>
+                  <span>Inflows: <strong className="text-jct-charcoal dark:text-jct-offwhite print:text-black">SAR {fmt(totalCashInSalesAndReceipts)}</strong></span>
+                  <span className="text-rose-500 font-bold print:text-black">-</span>
+                  <span>Outflows: <strong className="text-jct-charcoal dark:text-jct-offwhite print:text-black">SAR {fmt(totalMoneyOutDrawer)}</strong></span>
+                  <span className="text-jct-yellow font-bold print:text-black">=</span>
+                  <span>Closing Cash: <strong className="text-jct-charcoal dark:text-jct-offwhite print:text-black">SAR {fmt(calculatedClosingBalance)}</strong></span>
                 </div>
               </div>
 
               {/* 3. The 3 Financial Pillars Grid (Inflows · Bank/Swipes · Outflows) */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-2 print:grid-cols-3 print:gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-2 print:grid-cols-3 print:gap-4 print:mb-6">
                 {/* Card 1: Cash Inflows */}
-                <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 flex flex-col justify-between gap-3 transition-all duration-300 print:shadow-none print:border-slate-300 print:bg-white print:text-black">
+                <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 flex flex-col justify-between gap-3 transition-all duration-300 print:shadow-none print:border print:border-black print:rounded-none print:bg-white print:text-black">
                   <div>
-                    <span className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    <span className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider print:text-black">
                       Cash Inflows (Sales &amp; Receipts)
                     </span>
-                    <span className="mt-2 block font-mono text-2xl font-black text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap">
+                    <span className="mt-2 block font-mono text-2xl font-black text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap print:text-black">
                       SAR {fmt(totalCashInSalesAndReceipts)}
                     </span>
                   </div>
-                  <span className="block text-xs text-slate-500 dark:text-slate-400 border-t border-slate-200 dark:border-[#1F1F1F] pt-2">
-                    + Opening Float <strong className="text-jct-charcoal dark:text-jct-offwhite">SAR {fmt(openingBalance)}</strong>
+                  <span className="block text-xs text-slate-500 dark:text-slate-400 border-t border-slate-200 dark:border-[#1F1F1F] pt-2 print:text-black print:border-black">
+                    + Opening Float <strong className="text-jct-charcoal dark:text-jct-offwhite print:text-black">SAR {fmt(openingBalance)}</strong>
                   </span>
                 </div>
 
                 {/* Card 2: Bank / Card Swipes */}
-                <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-yellow/20 dark:border-jct-yellow/30 hover:border-jct-yellow/80 hover:shadow-[0_0_15px_rgba(255,222,89,0.1)] rounded-xl p-6 flex flex-col justify-between gap-3 transition-all duration-300 print:shadow-none print:border-slate-300 print:bg-white print:text-black">
+                <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-yellow/20 dark:border-jct-yellow/30 hover:border-jct-yellow/80 hover:shadow-[0_0_15px_rgba(255,222,89,0.1)] rounded-xl p-6 flex flex-col justify-between gap-3 transition-all duration-300 print:shadow-none print:border print:border-black print:rounded-none print:bg-white print:text-black">
                   <div>
                     <div className="flex items-center justify-between gap-2">
-                      <span className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                      <span className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider print:text-black">
                         Bank &amp; Card Swipes
                       </span>
                       <button
@@ -5736,35 +5733,38 @@ function DailyRegisterView({
                         {expandedAuditBox === "BANK_POS" ? "[Collapse]" : "[View Details]"}
                       </button>
                     </div>
-                    <span className="mt-2 block font-mono text-2xl font-black text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap">
+                    <span className="mt-2 block font-mono text-2xl font-black text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap print:text-black">
                       SAR {fmt(activeBankSettlementTotal)}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 border-t border-slate-200 dark:border-[#1F1F1F] pt-2">
-                    <span>
+                  <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 border-t border-slate-200 dark:border-[#1F1F1F] pt-2 print:text-black print:border-black">
+                    <span className="print:text-black">
                       {bankSwipeInvoices.length} Invoices settled to bank
                     </span>
-                    <span className="text-[11px] font-semibold text-jct-charcoal dark:text-jct-offwhite">
+                    <span className="text-[11px] font-semibold text-jct-charcoal dark:text-jct-offwhite print:text-black">
                       {bankSettlementMode === "NET" ? "Net of fees" : "Gross"}
                     </span>
                   </div>
                 </div>
 
                 {/* Card 3: Cash Outflows */}
-                <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 flex flex-col justify-between gap-3 transition-all duration-300 print:shadow-none print:border-slate-300 print:bg-white print:text-black">
+                <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 flex flex-col justify-between gap-3 transition-all duration-300 print:shadow-none print:border print:border-black print:rounded-none print:bg-white print:text-black">
                   <div>
-                    <span className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    <span className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider print:text-black">
                       Cash Outflows (Shop Expenses)
                     </span>
-                    <span className="mt-2 block font-mono text-2xl font-black text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap">
+                    <span className="mt-2 block font-mono text-2xl font-black text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap print:text-black">
                       SAR {fmt(totalMoneyOutDrawer)}
                     </span>
                   </div>
-                  <span className="block text-xs text-slate-500 dark:text-slate-400 border-t border-slate-200 dark:border-[#1F1F1F] pt-2">
+                  <span className="block text-xs text-slate-500 dark:text-slate-400 border-t border-slate-200 dark:border-[#1F1F1F] pt-2 print:text-black print:border-black">
                     {expenseEntries.length} Recorded shop expenses
                   </span>
                 </div>
               </div>
+
+              {/* Print-Only Signature Footer at bottom of visible summary */}
+              <PrintReportFooter />
 
               {/* Expanded Mode Banner if a Box is Expanded */}
               {expandedAuditBox !== "NONE" && (
@@ -5788,11 +5788,11 @@ function DailyRegisterView({
                 </div>
               )}
 
-              {/* Main Body — 3 Expandable Boxes */}
+              {/* Main Body — 3 Expandable Boxes (Hidden in Print) */}
               <div
                 className={`grid grid-cols-1 ${
                   expandedAuditBox === "NONE" ? "lg:grid-cols-2" : "lg:grid-cols-1"
-                } gap-6 items-start`}
+                } gap-6 items-start print:hidden`}
               >
                 {/* ══════════════════════════════════════════════════════════
                     BOX 1: Money In — Cash Sales & Receipts
@@ -6604,9 +6604,6 @@ function DailyRegisterView({
                   </button>
                 </div>
               </div>
-
-              {/* Print-Only Report Footer */}
-              <PrintReportFooter />
             </div>
           )}
         </div>
