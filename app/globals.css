@@ -3,25 +3,25 @@
 /* Class-based dark mode (toggled on <html>) */
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* ---------- Light: clean slate canvas, white floating cards ---------- */
+/* ---------- Light (Default Day Mode): Crisp Slate-50 Workspace & White Cards ---------- */
 :root {
   --bg: #f8fafc;
-  --card: rgba(255, 255, 255, 0.85);
+  --card: #ffffff;
   --card-solid: #ffffff;
   --raised: #f1f5f9;
-  --line: rgba(15, 23, 42, 0.07);
-  --line-strong: rgba(15, 23, 42, 0.12);
+  --line: #e2e8f0;
+  --line-strong: #cbd5e1;
   --fg: #0f172a;
   --muted: #64748b;
-  --accent: #7c3aed;
+  --accent: #2563eb;
   --accent-fg: #ffffff;
-  --accent-soft: rgba(124, 58, 237, 0.09);
-  --pos: #059669;
-  --pos-soft: rgba(5, 150, 105, 0.1);
-  --neg: #e11d48;
-  --neg-soft: rgba(225, 29, 72, 0.09);
+  --accent-soft: #eff6ff;
+  --pos: #10b981;
+  --pos-soft: #ecfdf5;
+  --neg: #f43f5e;
+  --neg-soft: #fff1f2;
   --warn: #d97706;
-  --warn-soft: rgba(217, 119, 6, 0.12);
+  --warn-soft: #fffbeb;
   color-scheme: light;
 }
 
