@@ -11,7 +11,8 @@ import {
   Wallet, Plus, Target, AlertTriangle, Mail, Bell,
   UploadCloud, Zap, ArrowLeft, ArrowRight, BarChart2, Eye, ArrowRightLeft, Trash2, Maximize2, Minimize2,
   Archive, Edit3, CheckCircle2, RotateCcw, Search,
-  Users, UserCheck, DollarSign, X, Banknote, Printer
+  Users, UserCheck, DollarSign, X, Banknote, Printer,
+  Coins, ArrowDownLeft
 } from "lucide-react";
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -1482,9 +1483,85 @@ function DailyRegisterView({
     field: keyof DataSheetRow,
     value: string | boolean
   ) => {
-    setSheetRows((prev) =>
-      prev.map((row) => (row.id === rowId ? { ...row, [field]: value } : row))
-    );
+    setSheetRows((prev) => {
+      const nextRows = prev.map((row) => (row.id === rowId ? { ...row, [field]: value } : row));
+      const targetRow = nextRows.find((r) => r.id === rowId);
+
+      if (targetRow && typeof value === "string") {
+        const invNo = targetRow.invoiceNo.trim();
+        if (invNo) {
+          const cashVal = numCell(targetRow.amtCashSale);
+          const crVal = numCell(targetRow.creditInvAmt);
+          const bankVal = numCell(targetRow.toBankAmt);
+
+          setErpInvoices((prevErp) => {
+            const exists = prevErp.some((i) => i.invoiceNo === invNo);
+            const totalAmt = cashVal || crVal || bankVal || 0;
+            const mode: InvoicePaymentMode = crVal > 0 ? "CREDIT_SALE" : bankVal > 0 ? "POS_SWIPE" : "CASH";
+
+            if (exists) {
+              return prevErp.map((inv) =>
+                inv.invoiceNo === invNo
+                  ? {
+                      ...inv,
+                      amount: totalAmt > 0 ? totalAmt : inv.amount,
+                      paymentMode: mode,
+                    }
+                  : inv
+              );
+            } else if (totalAmt > 0) {
+              return [
+                ...prevErp,
+                {
+                  invoiceNo: invNo,
+                  customer: targetRow.receiptNo.trim() || `Customer #${invNo}`,
+                  amount: totalAmt,
+                  paymentMode: mode,
+                  isSplit: false,
+                  splitCashAmount: 0,
+                  splitBankAmount: 0,
+                  splitBankMethod: "POS_SWIPE" as const,
+                  autoMatched: false,
+                  posTerminal: "SAB" as const,
+                  time: "12:00",
+                },
+              ];
+            }
+            return prevErp;
+          });
+        }
+
+        // If expense cell was updated in classic data sheet
+        if (field === "expenseAmt" || field === "expenseLabel") {
+          const expAmt = numCell(targetRow.expenseAmt);
+          const expLabel = targetRow.expenseLabel.trim() || "Shop Expense";
+          if (expAmt > 0) {
+            setPreLoggedEntries((prevPle) => {
+              const pleId = `ple-sheet-${rowId}`;
+              const exists = prevPle.some((e) => e.id === pleId);
+              if (exists) {
+                return prevPle.map((e) =>
+                  e.id === pleId ? { ...e, amount: expAmt, title: expLabel, expenseCategory: "Cash Purchase" as const } : e
+                );
+              }
+              return [
+                ...prevPle,
+                {
+                  id: pleId,
+                  type: "EXPENSE",
+                  title: expLabel,
+                  expenseCategory: "Cash Purchase" as const,
+                  amount: expAmt,
+                  time: "12:00",
+                },
+              ];
+            });
+          }
+        }
+      }
+
+      return nextRows;
+    });
   };
 
   const handleSheetKeyDown = (
@@ -1764,9 +1841,11 @@ function DailyRegisterView({
     const matched = buildMatchedErpList();
     setErpInvoices(matched);
     setCsvLoadedBanner(true);
-    setTimeout(() => {
-      setWizardStep(2);
-    }, 650);
+    if (trackingMode === "wizard") {
+      setTimeout(() => {
+        setWizardStep(2);
+      }, 650);
+    }
   };
 
   const handleCsvFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1782,9 +1861,11 @@ function DailyRegisterView({
       const parsed = parseErpCsvText(text, fallback);
       setErpInvoices(parsed);
       setCsvLoadedBanner(true);
-      setTimeout(() => {
-        setWizardStep(2);
-      }, 650);
+      if (trackingMode === "wizard") {
+        setTimeout(() => {
+          setWizardStep(2);
+        }, 650);
+      }
     };
     reader.onerror = () => {
       handleSimulateCsvUpload();
@@ -2864,6 +2945,39 @@ function DailyRegisterView({
     setWizardStep(1);
   };
 
+  const prevDayReceivedAmount = completedDaysLog[0]
+    ? r2((completedDaysLog[0].totalCashSales || 0) + (completedDaysLog[0].totalBankSwipe || 0))
+    : 41980;
+  const yesterdayClosingBalance = completedDaysLog[0]?.closingBalance ?? openingBalance;
+
+  // 12:00 AM Automatic Daily Reset: resets active hub day at midnight without manual purge
+  useEffect(() => {
+    const getCalendarDateStr = () => {
+      const d = new Date();
+      return `${String(d.getDate()).padStart(2, "0")}-${String(d.getMonth() + 1).padStart(2, "0")}-${d.getFullYear()}`;
+    };
+
+    const checkMidnightReset = () => {
+      const todayStr = getCalendarDateStr();
+      const lastActiveDate = window.localStorage.getItem("jct_daily_hub_active_date");
+      if (lastActiveDate && lastActiveDate !== todayStr) {
+        setErpInvoices([]);
+        setPreLoggedBankInvoices([]);
+        setPreLoggedEntries([]);
+        setWizardStep(1);
+        setTrackingMode("hub");
+        if (completedDaysLog.length > 0) {
+          setOpeningBalance(completedDaysLog[0].closingBalance);
+        }
+      }
+      window.localStorage.setItem("jct_daily_hub_active_date", todayStr);
+    };
+
+    checkMidnightReset();
+    const timer = setInterval(checkMidnightReset, 15000);
+    return () => clearInterval(timer);
+  }, [completedDaysLog, setErpInvoices, setPreLoggedBankInvoices, setPreLoggedEntries, setWizardStep, setTrackingMode, setOpeningBalance]);
+
   // Classic Digital Data Sheet Derived Column Totals & Live Actions
   const dsCashSaleTotal = r2(sheetRows.reduce((s, r) => s + numCell(r.amtCashSale), 0));
   const dsCreditInvTotal = r2(sheetRows.reduce((s, r) => s + numCell(r.creditInvAmt), 0));
@@ -2910,13 +3024,13 @@ function DailyRegisterView({
   );
 
   const handleSyncSheetFromWizard = () => {
-    const syncedRows: DataSheetRow[] = INITIAL_DATASHEET_ROWS.map((baseRow, idx) => {
-      const matchedErp = activeErpList.find((inv) => inv.invoiceNo === baseRow.invoiceNo);
-      const isCreditSale = matchedErp?.paymentMode === "CREDIT_SALE";
-      const isSplit = matchedErp?.paymentMode === "SPLIT";
+    const baseList = activeErpList.length > 0 ? activeErpList : buildMatchedErpList();
+    const syncedRows: DataSheetRow[] = baseList.map((inv, idx) => {
+      const isCreditSale = inv.paymentMode === "CREDIT_SALE";
+      const isSplit = inv.paymentMode === "SPLIT";
       const isBankOrPos =
-        matchedErp?.paymentMode === "BANK_TRANSFER" ||
-        matchedErp?.paymentMode === "POS_SWIPE" ||
+        inv.paymentMode === "BANK_TRANSFER" ||
+        inv.paymentMode === "POS_SWIPE" ||
         isSplit;
 
       const expEntry = expenseEntries[idx];
@@ -2924,36 +3038,44 @@ function DailyRegisterView({
       const loanEntry = cashInflowEntries.find((e) => e.type === "LOAN_IN");
 
       return {
-        ...baseRow,
-        openBal: idx === 0 ? String(openingBalance) : "",
-        receiptNo: idx === 0 ? crRecdEntry?.customerName || "Chicago" : baseRow.receiptNo,
-        creditSaleRecd:
-          idx === 0 && crRecdEntry ? String(crRecdEntry.amount) : baseRow.creditSaleRecd,
-        loanIn: idx === 1 && loanEntry ? String(loanEntry.amount) : baseRow.loanIn,
-        creditInvAmt: isCreditSale
-          ? String(matchedErp?.amount || baseRow.creditInvAmt)
-          : baseRow.creditInvAmt,
+        id: `ds-sync-${inv.invoiceNo}`,
+        invoiceNo: inv.invoiceNo,
         amtCashSale: isCreditSale
           ? ""
           : isSplit
-          ? String(matchedErp?.splitCashAmount || baseRow.amtCashSale)
-          : baseRow.amtCashSale,
-        expenseLabel: expEntry
-          ? expEntry.expenseCategory || expEntry.title
-          : baseRow.expenseLabel,
-        expenseAmt: expEntry ? String(expEntry.amount) : baseRow.expenseAmt,
+          ? String(inv.splitCashAmount || "")
+          : String(inv.amount),
+        creditInvAmt: isCreditSale ? String(inv.amount) : "",
+        receiptNo: idx === 0 ? crRecdEntry?.customerName || "Chicago" : "",
+        creditSaleRecd: idx === 0 && crRecdEntry ? String(crRecdEntry.amount) : "",
+        openBal: idx === 0 ? String(openingBalance) : "",
+        loanIn: idx === 1 && loanEntry ? String(loanEntry.amount) : "",
+        otherAmtRecd: "",
+        fromBank: "",
+        creditPurchaseSupplier: "",
+        creditPurchaseAmt: "",
+        cashPurchase: "",
+        creditPurchasePayment: "",
+        crNote: "",
+        expenseLabel: expEntry ? expEntry.expenseCategory || expEntry.title : "",
+        expenseAmt: expEntry ? String(expEntry.amount) : "",
         toBankLabel: isSplit
           ? `Split ${
-              matchedErp?.splitBankMethod === "BANK_TRANSFER"
+              inv.splitBankMethod === "BANK_TRANSFER"
                 ? "Bank"
-                : POS_TERMINAL_META[matchedErp?.splitPosTerminal || "SAB"].shortLabel
-            } #${baseRow.invoiceNo}`
+                : POS_TERMINAL_META[inv.splitPosTerminal || "SAB"].shortLabel
+            } #${inv.invoiceNo}`
           : isBankOrPos
-          ? `${matchedErp?.paymentMode === "BANK_TRANSFER" ? "Bank" : POS_TERMINAL_META[matchedErp?.posTerminal || "SAB"].shortLabel} #${baseRow.invoiceNo}`
-          : baseRow.toBankLabel,
+          ? `${inv.paymentMode === "BANK_TRANSFER" ? "Bank" : POS_TERMINAL_META[inv.posTerminal || "SAB"].shortLabel} #${inv.invoiceNo}`
+          : "",
         toBankAmt: isSplit
-          ? String(matchedErp?.splitBankAmount || "")
-          : baseRow.toBankAmt,
+          ? String(inv.splitBankAmount || "")
+          : isBankOrPos
+          ? String(inv.amount)
+          : "",
+        toBankChecked: true,
+        loanOut: "",
+        excessAmt: "",
       };
     });
     setSheetRows(syncedRows);
@@ -2963,6 +3085,15 @@ function DailyRegisterView({
       targetLabel: "View Financial Pulse →",
     });
   };
+
+  // Two-way synchronization: Keep sheetRows in sync when erpInvoices change
+  useEffect(() => {
+    if (erpInvoices.length > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      handleSyncSheetFromWizard();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [erpInvoices]);
 
   const handleSaveAndCloseSheet = () => {
     // 1. Sync any Credit Purchases to Suppliers & Payables
@@ -3120,31 +3251,33 @@ function DailyRegisterView({
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
-              {/* Discreet POS Fee Toggle */}
-              <button
-                type="button"
-                role="switch"
-                aria-checked={trackPosFees}
-                onClick={() => setTrackPosFees((prev) => !prev)}
-                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-bold transition whitespace-nowrap shadow-sm ${
-                  trackPosFees
-                    ? "border-jct-turquoise bg-jct-turquoise text-jct-charcoal"
-                    : "border-slate-200 dark:border-[#1F1F1F] bg-white dark:bg-[#0A0A0A] text-slate-500 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-jct-offwhite"
-                }`}
-              >
-                <span>POS Fees (MDR)</span>
-                <span
-                  className={`inline-flex h-3.5 w-6 items-center rounded-full p-0.5 transition-colors ${
-                    trackPosFees ? "bg-jct-charcoal" : "bg-slate-300 dark:bg-slate-600"
+              {/* Discreet POS Fee Toggle - Staff RBAC: Only visible to Owner */}
+              {isOwner && (
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={trackPosFees}
+                  onClick={() => setTrackPosFees((prev) => !prev)}
+                  className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-bold transition whitespace-nowrap shadow-sm ${
+                    trackPosFees
+                      ? "border-jct-turquoise bg-jct-turquoise text-jct-charcoal"
+                      : "border-slate-200 dark:border-[#1F1F1F] bg-white dark:bg-[#0A0A0A] text-slate-500 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-jct-offwhite"
                   }`}
                 >
+                  <span>POS Fees (MDR)</span>
                   <span
-                    className={`h-2.5 w-2.5 rounded-full bg-white transition-transform ${
-                      trackPosFees ? "translate-x-2.5" : "translate-x-0"
+                    className={`inline-flex h-3.5 w-6 items-center rounded-full p-0.5 transition-colors ${
+                      trackPosFees ? "bg-jct-charcoal" : "bg-slate-300 dark:bg-slate-600"
                     }`}
-                  />
-                </span>
-              </button>
+                  >
+                    <span
+                      className={`h-2.5 w-2.5 rounded-full bg-white transition-transform ${
+                        trackPosFees ? "translate-x-2.5" : "translate-x-0"
+                      }`}
+                    />
+                  </span>
+                </button>
+              )}
 
               {/* Consolidated KPI Ribbon */}
               <div className="text-xs text-slate-500 dark:text-slate-400 bg-white dark:bg-[#0A0A0A] border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/60 px-3.5 py-1.5 rounded-full whitespace-nowrap font-medium flex items-center gap-1.5 shadow-sm transition-all duration-300">
@@ -3154,6 +3287,60 @@ function DailyRegisterView({
                 <span className="text-slate-300 dark:text-slate-600">·</span>
                 <span className="text-rose-600 dark:text-rose-400 font-semibold">SAR {fmt(totalPreLoggedExpenses)} Expenses</span>
               </div>
+            </div>
+          </div>
+
+          {/* Top Dashboard Metrics (3 Values) */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 sm:gap-4">
+            <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-5 sm:p-6 transition-all duration-300">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
+                  Prev Day Received Amount
+                </span>
+                <span className="rounded-full bg-jct-turquoise/15 text-jct-charcoal dark:text-jct-turquoise p-1.5">
+                  <ArrowDownLeft size={14} />
+                </span>
+              </div>
+              <span className="text-xl sm:text-2xl font-black text-jct-charcoal dark:text-jct-offwhite mt-2 block font-mono">
+                SAR {fmt(prevDayReceivedAmount)}
+              </span>
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 block">
+                Yesterday&apos;s verified total inflows ({completedDaysLog[0]?.date || "11-09-2026"})
+              </span>
+            </div>
+
+            <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-5 sm:p-6 transition-all duration-300">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
+                  Opening Balance
+                </span>
+                <span className="rounded-full bg-jct-yellow/20 text-jct-charcoal dark:text-jct-yellow p-1.5">
+                  <Wallet size={14} />
+                </span>
+              </div>
+              <span className="text-xl sm:text-2xl font-black text-jct-charcoal dark:text-jct-offwhite mt-2 block font-mono">
+                SAR {fmt(yesterdayClosingBalance)}
+              </span>
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 block">
+                Yesterday&apos;s closing cash drawer balance
+              </span>
+            </div>
+
+            <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-5 sm:p-6 transition-all duration-300">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
+                  Cash Drawer Amount
+                </span>
+                <span className="rounded-full bg-emerald-500/15 text-emerald-600 dark:text-jct-turquoise p-1.5">
+                  <Coins size={14} />
+                </span>
+              </div>
+              <span className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-jct-turquoise mt-2 block font-mono">
+                SAR {fmt(calculatedClosingBalance)}
+              </span>
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 block">
+                Opening balance + today&apos;s inflows - cash expenses
+              </span>
             </div>
           </div>
 
@@ -3917,36 +4104,38 @@ function DailyRegisterView({
                   <p className="text-sm text-slate-500 dark:text-slate-400">
                     Reconciles 100% gross ERP invoice face value by default. Choose Cash Sale, Bank Transfer, Swipe (SAB / Al Rajhi), Split / Partial, or Credit Sale.
                   </p>
-                  {/* Clean Optional Toggle Switch: Estimate POS Merchant Fees (MDR) */}
-                  <div className="pt-0.5">
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={trackPosFees}
-                      onClick={() => setTrackPosFees((prev) => !prev)}
-                      className={`inline-flex items-center gap-2.5 rounded-lg border px-3 py-1.5 text-xs font-bold transition-colors shadow-sm ${
-                        trackPosFees
-                          ? "border-jct-turquoise bg-jct-turquoise text-jct-charcoal"
-                          : "border-slate-200 dark:border-[#1F1F1F] bg-white dark:bg-black text-slate-500 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-jct-offwhite"
-                      }`}
-                    >
-                      <span>Estimate POS Merchant Fees (MDR)</span>
-                      <span
-                        className={`inline-flex h-4 w-7 items-center rounded-full p-0.5 transition-colors ${
-                          trackPosFees ? "bg-jct-charcoal" : "bg-slate-300 dark:bg-slate-600"
+                  {/* Clean Optional Toggle Switch: Estimate POS Merchant Fees (MDR) - Staff RBAC */}
+                  {isOwner && (
+                    <div className="pt-0.5">
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={trackPosFees}
+                        onClick={() => setTrackPosFees((prev) => !prev)}
+                        className={`inline-flex items-center gap-2.5 rounded-lg border px-3 py-1.5 text-xs font-bold transition-colors shadow-sm ${
+                          trackPosFees
+                            ? "border-jct-turquoise bg-jct-turquoise text-jct-charcoal"
+                            : "border-slate-200 dark:border-[#1F1F1F] bg-white dark:bg-black text-slate-500 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-jct-offwhite"
                         }`}
                       >
+                        <span>Estimate POS Merchant Fees (MDR)</span>
                         <span
-                          className={`h-3 w-3 rounded-full bg-white transition-transform ${
-                            trackPosFees ? "translate-x-3" : "translate-x-0"
+                          className={`inline-flex h-4 w-7 items-center rounded-full p-0.5 transition-colors ${
+                            trackPosFees ? "bg-jct-charcoal" : "bg-slate-300 dark:bg-slate-600"
                           }`}
-                        />
-                      </span>
-                      <span className="text-[10px] font-bold uppercase tracking-wider">
-                        {trackPosFees ? "ON" : "OFF"}
-                      </span>
-                    </button>
-                  </div>
+                        >
+                          <span
+                            className={`h-3 w-3 rounded-full bg-white transition-transform ${
+                              trackPosFees ? "translate-x-3" : "translate-x-0"
+                            }`}
+                          />
+                        </span>
+                        <span className="text-[10px] font-bold uppercase tracking-wider">
+                          {trackPosFees ? "ON" : "OFF"}
+                        </span>
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 shrink-0">
@@ -3972,7 +4161,7 @@ function DailyRegisterView({
                     <span className="mt-0.5 block text-[11px] text-slate-500 dark:text-slate-400">
                       100% Gross Face Value Settlement
                     </span>
-                    {trackPosFees && (
+                    {isOwner && trackPosFees && (
                       <span className="mt-0.5 block text-[11px] text-slate-500 dark:text-slate-400">
                         Est. MDR fee (audit only): SAR {fmt(totalPosFees)}
                       </span>
@@ -4241,7 +4430,7 @@ function DailyRegisterView({
                                 Bank/Card: SAR {fmt(inv.splitBankAmount)}
                               </span>
                             </div>
-                            {trackPosFees && inv.splitBankMethod === "POS_SWIPE" && posFee > 0 && (
+                            {isOwner && trackPosFees && inv.splitBankMethod === "POS_SWIPE" && posFee > 0 && (
                               <span className="text-[10px] text-slate-500 dark:text-slate-400">
                                 {(() => {
                                   const fb = calcInvoiceFeeBreakdown(inv);
@@ -4280,7 +4469,7 @@ function DailyRegisterView({
                             <span className="text-slate-700 font-semibold dark:text-jct-yellow dark:font-normal">
                               {termMeta.badgeTag}: SAR {fmt(inv.amount)}
                             </span>
-                            {trackPosFees && posFee > 0 && (
+                            {isOwner && trackPosFees && posFee > 0 && (
                               <span className="text-[10px] text-slate-500 dark:text-slate-400">
                                 {(() => {
                                   const fb = calcInvoiceFeeBreakdown(inv);
@@ -5165,50 +5354,52 @@ function DailyRegisterView({
                 date="12-09-2026"
               />
 
-              {/* 1. Consolidated Settlement & Merchant Fee Header Strip */}
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 transition-all duration-300 print:shadow-none print:border-slate-300 print:bg-white print:text-black">
-                <div className="flex flex-wrap items-center gap-3">
-                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                    Audit Settlement Mode:
-                  </span>
-                  <div className="inline-flex rounded-xl bg-slate-100 dark:bg-black p-1 border border-slate-200 dark:border-[#1F1F1F] gap-1 print:hidden">
-                    <button
-                      type="button"
-                      onClick={() => setBankSettlementMode("GROSS")}
-                      className={`rounded-lg px-3 py-1.5 text-xs transition ${
-                        bankSettlementMode === "GROSS"
-                          ? "bg-jct-turquoise text-jct-charcoal font-bold shadow-sm"
-                          : "text-slate-500 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-jct-offwhite font-medium"
-                      }`}
-                    >
-                      Gross Face Value
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setBankSettlementMode("NET")}
-                      className={`rounded-lg px-3 py-1.5 text-xs transition ${
-                        bankSettlementMode === "NET"
-                          ? "bg-jct-turquoise text-jct-charcoal font-bold shadow-sm"
-                          : "text-slate-500 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-jct-offwhite font-medium"
-                      }`}
-                    >
-                      Net Bank (Deduct Fees &amp; VAT)
-                    </button>
+              {/* 1. Consolidated Settlement & Merchant Fee Header Strip - Staff RBAC */}
+              {isOwner && (
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 transition-all duration-300 print:shadow-none print:border-slate-300 print:bg-white print:text-black">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                      Audit Settlement Mode:
+                    </span>
+                    <div className="inline-flex rounded-xl bg-slate-100 dark:bg-black p-1 border border-slate-200 dark:border-[#1F1F1F] gap-1 print:hidden">
+                      <button
+                        type="button"
+                        onClick={() => setBankSettlementMode("GROSS")}
+                        className={`rounded-lg px-3 py-1.5 text-xs transition ${
+                          bankSettlementMode === "GROSS"
+                            ? "bg-jct-turquoise text-jct-charcoal font-bold shadow-sm"
+                            : "text-slate-500 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-jct-offwhite font-medium"
+                        }`}
+                      >
+                        Gross Face Value
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBankSettlementMode("NET")}
+                        className={`rounded-lg px-3 py-1.5 text-xs transition ${
+                          bankSettlementMode === "NET"
+                            ? "bg-jct-turquoise text-jct-charcoal font-bold shadow-sm"
+                            : "text-slate-500 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-jct-offwhite font-medium"
+                        }`}
+                      >
+                        Net Bank (Deduct Fees &amp; VAT)
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center">
+                    {bankSettlementMode === "GROSS" ? (
+                      <div className="inline-flex items-center gap-1.5 text-xs bg-jct-yellow text-jct-charcoal font-bold px-3 py-1.5 rounded-lg">
+                        <span>ℹ️ Est. Merchant Fees: <strong className="font-mono">-SAR {fmt(totalPosFees)}</strong> (mada: SAR {fmt(totalMadaFees)} · CC: SAR {fmt(totalCcFees)}) · Informational</span>
+                      </div>
+                    ) : (
+                      <div className="inline-flex items-center gap-1.5 text-xs bg-jct-turquoise text-jct-charcoal font-bold px-3 py-1.5 rounded-lg">
+                        <span>✅ Net Settlement Active: <strong className="font-mono">SAR {fmt(totalPosFees)}</strong> deducted from bank total</span>
+                      </div>
+                    )}
                   </div>
                 </div>
-
-                <div className="flex items-center">
-                  {bankSettlementMode === "GROSS" ? (
-                    <div className="inline-flex items-center gap-1.5 text-xs bg-jct-yellow text-jct-charcoal font-bold px-3 py-1.5 rounded-lg">
-                      <span>ℹ️ Est. Merchant Fees: <strong className="font-mono">-SAR {fmt(totalPosFees)}</strong> (mada: SAR {fmt(totalMadaFees)} · CC: SAR {fmt(totalCcFees)}) · Informational</span>
-                    </div>
-                  ) : (
-                    <div className="inline-flex items-center gap-1.5 text-xs bg-jct-turquoise text-jct-charcoal font-bold px-3 py-1.5 rounded-lg">
-                      <span>✅ Net Settlement Active: <strong className="font-mono">SAR {fmt(totalPosFees)}</strong> deducted from bank total</span>
-                    </div>
-                  )}
-                </div>
-              </div>
+              )}
 
               {/* 2. Streamlined Hero Drawer Closing Card */}
               <div className="w-full bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-yellow/20 dark:border-jct-yellow/30 hover:border-jct-yellow/80 hover:shadow-[0_0_15px_rgba(255,222,89,0.1)] rounded-xl p-6 mb-2 transition-all duration-300 print:shadow-none print:border-slate-300 print:bg-white print:text-black">
@@ -5877,22 +6068,26 @@ function DailyRegisterView({
                               Bank / POS Transfers ({bankSwipeInvoices.length})
                             </h3>
                             <p className="text-xs text-slate-500 dark:text-slate-400">
-                              {bankSettlementMode === "NET"
+                              {isOwner && bankSettlementMode === "NET"
                                 ? "Net bank settlement after SAMA mada / Credit Card MDR & 15% ZATCA VAT"
-                                : "100% gross face value reconciled · Expand to inspect MDR + 15% VAT breakdown"}
+                                : isOwner
+                                ? "100% gross face value reconciled · Expand to inspect MDR + 15% VAT breakdown"
+                                : "100% gross face value reconciled"}
                             </p>
                           </div>
                           <div className="flex items-center gap-3 shrink-0">
                             <div className="text-right">
                               <span className="block font-display text-base font-extrabold text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap">
-                                {bankSettlementMode === "NET" ? "Net: " : ""}SAR{" "}
+                                {isOwner && bankSettlementMode === "NET" ? "Net: " : ""}SAR{" "}
                                 {fmt(activeBankSettlementTotal)}
                               </span>
-                              <span className="block text-[10px] font-medium text-slate-500 dark:text-slate-400">
-                                {bankSettlementMode === "NET"
-                                  ? `Gross: SAR ${fmt(bankSwipeGrossTotal)} · Fees: -SAR ${fmt(totalPosFees)}`
-                                  : `Est. MDR + VAT: -SAR ${fmt(totalPosFees)}`}
-                              </span>
+                              {isOwner && (
+                                <span className="block text-[10px] font-medium text-slate-500 dark:text-slate-400">
+                                  {bankSettlementMode === "NET"
+                                    ? `Gross: SAR ${fmt(bankSwipeGrossTotal)} · Fees: -SAR ${fmt(totalPosFees)}`
+                                    : `Est. MDR + VAT: -SAR ${fmt(totalPosFees)}`}
+                                </span>
+                              )}
                             </div>
                             <button
                               type="button"
@@ -5935,9 +6130,11 @@ function DailyRegisterView({
                               ? inv.splitBankMethod === "BANK_TRANSFER"
                               : inv.paymentMode === "BANK_TRANSFER";
                             const showExpandedFeeBreakdown =
-                              expandedAuditBox === "BANK_POS" ||
-                              bankSettlementMode === "NET" ||
-                              trackPosFees;
+                              isOwner && (
+                                expandedAuditBox === "BANK_POS" ||
+                                bankSettlementMode === "NET" ||
+                                trackPosFees
+                              );
 
                             return (
                               <div
@@ -6176,13 +6373,25 @@ function DailyRegisterView({
                   <span>← Back to Daily Hub</span>
                 </button>
 
+                <label className="flex cursor-pointer items-center gap-1.5 bg-jct-turquoise text-jct-charcoal font-bold hover:brightness-95 transition-all shadow-sm rounded-lg px-3.5 py-2.5 text-xs whitespace-nowrap border border-jct-turquoise">
+                  <UploadCloud size={14} />
+                  <span>Upload CSV</span>
+                  <input
+                    type="file"
+                    accept=".csv"
+                    onChange={handleCsvFileUpload}
+                    className="hidden"
+                  />
+                </label>
+
                 <button
                   type="button"
-                  onClick={handleSyncSheetFromWizard}
+                  onClick={handleSimulateCsvUpload}
                   className="flex items-center gap-1.5 bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 transition-all rounded-lg px-3.5 py-2.5 text-xs whitespace-nowrap"
+                  title="Simulate loading 18 ERP Invoices"
                 >
                   <Zap size={14} />
-                  <span>⚡ Sync from Guided Wizard</span>
+                  <span>Load 18 ERP Invoices</span>
                 </button>
 
                 <button
@@ -6232,6 +6441,54 @@ function DailyRegisterView({
                 <span className="font-display text-sm font-black">SAR {fmt(dsClosingBalance)}</span>
               </div>
             </div>
+          </div>
+
+          {/* Drag & Drop CSV Upload Component in Classic Data Entry */}
+          <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-5 transition-all duration-300">
+            <label className="flex w-full cursor-pointer flex-col sm:flex-row items-center justify-between gap-4 rounded-xl border-2 border-dashed border-slate-300 dark:border-[#1F1F1F] hover:border-jct-turquoise bg-slate-50 dark:bg-black hover:bg-slate-100 dark:hover:bg-[#111111] px-6 py-5 transition-colors">
+              <div className="flex items-center gap-3.5">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-jct-turquoise/20 text-jct-charcoal dark:text-jct-turquoise border border-jct-turquoise/40">
+                  <UploadCloud size={24} />
+                </div>
+                <div className="text-left">
+                  <span className="text-sm font-bold text-jct-charcoal dark:text-jct-offwhite block">
+                    Drop daily ERP `.csv` export here or click to browse
+                  </span>
+                  <span className="text-xs text-slate-500 dark:text-slate-400 block mt-0.5">
+                    Unified import auto-detects `PARTIAL`, `SPLIT`, `CASH/BANK` tenders and syncs instantly to Guided Tracking.
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 shrink-0">
+                {erpInvoices.length > 0 && (
+                  <span className="text-xs font-bold text-emerald-600 dark:text-jct-turquoise">
+                    ✓ {erpInvoices.length} Invoices Active
+                  </span>
+                )}
+                <span className="rounded-lg bg-jct-turquoise text-jct-charcoal px-4 py-2 text-xs font-bold whitespace-nowrap shadow-sm hover:brightness-95">
+                  Browse File
+                </span>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleSimulateCsvUpload();
+                  }}
+                  className="rounded-lg bg-jct-yellow text-jct-charcoal px-3.5 py-2 text-xs font-bold whitespace-nowrap shadow-sm hover:brightness-95"
+                >
+                  ⚡ Load 18 Invoices
+                </button>
+              </div>
+
+              <input
+                type="file"
+                accept=".csv"
+                onChange={handleCsvFileUpload}
+                className="hidden"
+              />
+            </label>
           </div>
 
           {/* 2. Editable 19-Column Spreadsheet Grid */}

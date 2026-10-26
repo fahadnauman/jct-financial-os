@@ -13,11 +13,23 @@ export async function GET(req: Request) {
   const branch = rawBranch && rawBranch !== "ALL" ? normalizeBranch(rawBranch) : rawBranch;
   const date = searchParams.get("date");
 
+  // Compute 12:00 AM calendar boundaries for current day query
+  const now = new Date();
+  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+  const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
   try {
     const rows = await prisma.pocketTransaction.findMany({
       where: {
         ...(branch && branch !== "ALL" ? { branch } : {}),
-        ...(date ? { date } : {}),
+        ...(date
+          ? { date }
+          : {
+              createdAt: {
+                gte: startOfDay,
+                lt: endOfDay,
+              },
+            }),
       },
       orderBy: { createdAt: "asc" },
       take: 500,
