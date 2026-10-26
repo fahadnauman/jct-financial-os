@@ -387,7 +387,8 @@ export type InvoicePaymentMode =
   | "POS_SWIPE"
   | "SPLIT"
   | "OTHER_RECD"
-  | "CREDIT_SALE";
+  | "CREDIT_SALE"
+  | "Cash";
 export type PosTerminalBank = "SAB" | "AL_RAJHI" | "VISA_MC";
 
 export const STRICT_EXPENSE_CATEGORIES = [
@@ -483,8 +484,10 @@ export interface PreLoggedEntry {
 export type OverrideReason = "BUSINESS_COMMISSION" | "BILL_MISTAKE" | "CUSTOM";
 
 export interface ErpInvoiceItem {
+  id?: string;
   invoiceNo: string;
   customer: string;
+  customerName?: string;
   amount: number;
   originalAmount?: number;
   isEdited?: boolean;
@@ -507,6 +510,7 @@ export interface ErpInvoiceItem {
   creditFollowUpDate?: string;
   autoMatched: boolean;
   time: string;
+  isManualEntry?: boolean;
 }
 
 export interface CompletedDaySummary {
@@ -992,7 +996,12 @@ export const calcAmountPosFeeBreakdown = (
 };
 
 export const calcInvoiceCashPortion = (inv: ErpInvoiceItem): number => {
-  if (inv.paymentMode === "CASH" || inv.paymentMode === "OTHER_RECD") return inv.amount;
+  if (
+    inv.paymentMode === "CASH" ||
+    (inv.paymentMode as string) === "Cash" ||
+    inv.paymentMode === "OTHER_RECD"
+  )
+    return inv.amount;
   if (inv.paymentMode === "SPLIT") return r2(inv.splitCashAmount || 0);
   if (inv.paymentMode === "CREDIT_SALE" && inv.creditDownMethod === "CASH") {
     return r2(inv.creditDownAmount || 0);
@@ -2403,7 +2412,9 @@ function DailyRegisterView({
   const handleRemoveErpInvoice = (invoiceNo: string) => {
     setErpInvoices((prev) => {
       const base = prev.length > 0 ? prev : buildMatchedErpList();
-      return base.filter((inv) => inv.invoiceNo !== invoiceNo);
+      return base.filter(
+        (inv) => inv.invoiceNo !== invoiceNo && (!inv.id || inv.id !== invoiceNo)
+      );
     });
   };
 
@@ -2768,7 +2779,9 @@ function DailyRegisterView({
     setErpInvoices((prev) => {
       const base = prev.length > 0 ? prev : buildMatchedErpList();
       return base.map((inv) =>
-        inv.invoiceNo === invoiceNo ? { ...inv, customer: nextCustomer } : inv
+        inv.invoiceNo === invoiceNo || (inv.id && inv.id === invoiceNo)
+          ? { ...inv, customer: nextCustomer, customerName: nextCustomer }
+          : inv
       );
     });
   };
@@ -2778,9 +2791,9 @@ function DailyRegisterView({
     setErpInvoices((prev) => {
       const base = prev.length > 0 ? prev : buildMatchedErpList();
       return base.map((inv) => {
-        if (inv.invoiceNo !== invoiceNo) return inv;
-        const orig = inv.originalAmount ?? inv.amount;
-        const isEdited = val !== orig;
+        if (inv.invoiceNo !== invoiceNo && (!inv.id || inv.id !== invoiceNo)) return inv;
+        const orig = inv.originalAmount ?? (inv.isManualEntry ? undefined : inv.amount);
+        const isEdited = !inv.isManualEntry && orig !== undefined && val !== orig;
         const cashShare = inv.isSplit ? r2(val / 2) : inv.splitCashAmount;
         const bankShare = inv.isSplit ? r2(val - cashShare) : inv.splitBankAmount;
         return {
@@ -2808,7 +2821,9 @@ function DailyRegisterView({
     setErpInvoices((prev) => {
       const base = prev.length > 0 ? prev : buildMatchedErpList();
       return base.map((inv) =>
-        inv.invoiceNo === invoiceNo ? { ...inv, overrideReason: reason } : inv
+        inv.invoiceNo === invoiceNo || (inv.id && inv.id === invoiceNo)
+          ? { ...inv, overrideReason: reason }
+          : inv
       );
     });
   };
@@ -2817,7 +2832,9 @@ function DailyRegisterView({
     setErpInvoices((prev) => {
       const base = prev.length > 0 ? prev : buildMatchedErpList();
       return base.map((inv) =>
-        inv.invoiceNo === invoiceNo ? { ...inv, overrideNote: note } : inv
+        inv.invoiceNo === invoiceNo || (inv.id && inv.id === invoiceNo)
+          ? { ...inv, overrideNote: note }
+          : inv
       );
     });
   };
@@ -2868,8 +2885,36 @@ function DailyRegisterView({
     setErpInvoices((prev) => {
       const base = prev.length > 0 ? prev : buildMatchedErpList();
       return base.map((inv) =>
-        inv.invoiceNo === invoiceNo ? { ...inv, bankPaymentMode: nextBankMode } : inv
+        inv.invoiceNo === invoiceNo || (inv.id && inv.id === invoiceNo)
+          ? { ...inv, bankPaymentMode: nextBankMode }
+          : inv
       );
+    });
+  };
+
+  const handleAddInvoiceRow = () => {
+    const manualId = `MANUAL-${Date.now()}`;
+    const newRow: ErpInvoiceItem = {
+      id: manualId,
+      invoiceNo: manualId,
+      customerName: "",
+      customer: "",
+      amount: 0,
+      paymentMode: "Cash",
+      isManualEntry: true,
+      posTerminal: "SAB",
+      bankPaymentMode: "CASH",
+      isSplit: false,
+      splitCashAmount: 0,
+      splitBankAmount: 0,
+      splitBankMethod: "POS_SWIPE",
+      splitPosTerminal: "SAB",
+      autoMatched: false,
+      time: nowHHMM(),
+    };
+    setErpInvoices((prev) => {
+      const base = prev.length > 0 ? prev : buildMatchedErpList();
+      return [...base, newRow];
     });
   };
 
@@ -2962,6 +3007,7 @@ function DailyRegisterView({
   const cashSaleInvoices = activeErpList.filter(
     (i) =>
       i.paymentMode === "CASH" ||
+      (i.paymentMode as string) === "Cash" ||
       i.paymentMode === "OTHER_RECD" ||
       (i.paymentMode === "SPLIT" && i.splitCashAmount > 0) ||
       (i.paymentMode === "CREDIT_SALE" &&
@@ -4377,7 +4423,7 @@ function DailyRegisterView({
                           {/* Editable Customer / Description Input */}
                           <input
                             type="text"
-                            value={inv.customer}
+                            value={inv.customer || inv.customerName || ""}
                             onChange={(e) =>
                               handleEditErpInvoiceCustomer(inv.invoiceNo, e.target.value)
                             }
@@ -4389,6 +4435,11 @@ function DailyRegisterView({
                           >
                             {pmBadge.badge}
                           </span>
+                          {inv.isManualEntry && (
+                            <span className="rounded-full bg-jct-turquoise/20 text-jct-charcoal dark:text-jct-turquoise border border-jct-turquoise/40 px-2.5 py-0.5 text-[10px] font-bold shrink-0">
+                              Manual
+                            </span>
+                          )}
                           {isSplitMode && (
                             <span className="rounded-full bg-jct-yellow px-3 py-1 text-[10px] font-bold text-black shrink-0">
                               Split Tender
@@ -4414,7 +4465,8 @@ function DailyRegisterView({
                               <input
                                 type="number"
                                 step="0.01"
-                                value={inv.amount}
+                                value={inv.amount === 0 ? "" : inv.amount}
+                                placeholder="0.00"
                                 onChange={(e) =>
                                   handleEditErpInvoiceAmount(inv.invoiceNo, e.target.value)
                                 }
@@ -4471,7 +4523,7 @@ function DailyRegisterView({
                               type="button"
                               onClick={() => handleSetInvoiceMode(inv.invoiceNo, "CASH")}
                               className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
-                                inv.paymentMode === "CASH"
+                                inv.paymentMode === "CASH" || (inv.paymentMode as string) === "Cash"
                                   ? "bg-jct-turquoise text-jct-charcoal font-bold"
                                   : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
                               }`}
@@ -4834,13 +4886,20 @@ function DailyRegisterView({
                 })}
               </div>
 
-              <div className="flex items-center justify-between pt-2">
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
                 <button
                   type="button"
                   onClick={() => setWizardStep(1)}
                   className="rounded-lg border border-slate-200 dark:border-[#1F1F1F] bg-white dark:bg-black px-4 py-2 text-xs font-semibold text-jct-charcoal dark:text-jct-offwhite hover:bg-slate-50 dark:hover:bg-[#0A0A0A] shadow-sm transition-colors"
                 >
                   ← Back
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAddInvoiceRow}
+                  className="px-4 py-2 rounded-lg border border-jct-turquoise/50 text-jct-turquoise hover:bg-jct-turquoise/10 transition-all font-semibold text-sm"
+                >
+                  + Add Manual Invoice
                 </button>
                 <button
                   type="button"
