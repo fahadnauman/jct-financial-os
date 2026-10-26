@@ -28,26 +28,28 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#040D0E",
+  themeColor: "#2F2D2E",
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
 };
 
-// Applies the saved/system theme before first paint to avoid a flash (defaults to Jubail Corp obsidian dark).
-const themeInit = `(function(){try{var t=localStorage.getItem('jct-theme');if(!t){t='dark'}if(t==='dark')document.documentElement.classList.add('dark')}catch(e){}})();`;
+// Applies the saved theme before first paint to avoid a flash.
+const themeInit = `(function(){try{var t=localStorage.getItem('jct-theme');if(t==='dark'){document.documentElement.classList.add('dark')}else{document.documentElement.classList.remove('dark')}}catch(e){}})();`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${inter.variable} ${jakarta.variable} h-full antialiased dark`}
+      className={`${inter.variable} ${jakarta.variable} h-full antialiased`}
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />
       </head>
-      <body className="min-h-full bg-[#041012] text-white selection:bg-[#00BAC7] selection:text-black">{children}</body>
+      <body className="min-h-full bg-jct-offwhite dark:bg-[#222021] text-jct-charcoal dark:text-jct-offwhite selection:bg-jct-turquoise selection:text-jct-charcoal">
+        {children}
+      </body>
     </html>
   );
 }

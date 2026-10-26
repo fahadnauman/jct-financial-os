@@ -1,53 +1,58 @@
 @import "tailwindcss";
+@config "../tailwind.config.ts";
 
 /* Class-based dark mode (toggled on <html>) */
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* ---------- Light (Default Day Mode): Crisp Slate-50 Workspace & White Cards ---------- */
+/* ---------- Light Mode: Custom JCT Offwhite / Charcoal / Turquoise / Yellow Palette ---------- */
 :root {
-  --bg: #f8fafc;
+  --bg: #F8F9FA;
   --card: #ffffff;
   --card-solid: #ffffff;
   --raised: #f1f5f9;
   --line: #e2e8f0;
   --line-strong: #cbd5e1;
-  --fg: #0f172a;
+  --fg: #2F2D2E;
   --muted: #64748b;
-  --accent: #2563eb;
-  --accent-fg: #ffffff;
-  --accent-soft: #eff6ff;
+  --accent: #2DE2E6;
+  --accent-fg: #2F2D2E;
+  --accent-soft: rgba(45, 226, 230, 0.15);
   --pos: #10b981;
   --pos-soft: #ecfdf5;
   --neg: #f43f5e;
   --neg-soft: #fff1f2;
-  --warn: #d97706;
-  --warn-soft: #fffbeb;
+  --warn: #FFDE59;
+  --warn-soft: rgba(255, 222, 89, 0.2);
   color-scheme: light;
 }
 
-/* ---------- Dark: Deep Forest Green & Sky Turquoise Enterprise Palette ---------- */
+/* ---------- Dark Mode: Custom JCT Charcoal / Turquoise / Yellow Palette ---------- */
 .dark {
-  --bg: #0b1e22;
-  --card: rgba(22, 54, 58, 0.9);
-  --card-solid: #16363a;
-  --raised: #10292e;
-  --line: #244a4e;
-  --line-strong: #3b9ea3;
-  --fg: #f8fafc;
+  --bg: #222021;
+  --card: #2F2D2E;
+  --card-solid: #2F2D2E;
+  --raised: #2A2829;
+  --line: #403e3f;
+  --line-strong: #2DE2E6;
+  --fg: #F8F9FA;
   --muted: #94a3b8;
-  --accent: #3b9ea3;
-  --accent-fg: #ffffff;
-  --accent-soft: rgba(59, 158, 163, 0.18);
-  --pos: #6ecbce;
-  --pos-soft: rgba(110, 203, 206, 0.14);
+  --accent: #2DE2E6;
+  --accent-fg: #2F2D2E;
+  --accent-soft: rgba(45, 226, 230, 0.18);
+  --pos: #2DE2E6;
+  --pos-soft: rgba(45, 226, 230, 0.14);
   --neg: #fb7185;
   --neg-soft: rgba(251, 113, 133, 0.12);
-  --warn: #ffd200;
-  --warn-soft: rgba(255, 210, 0, 0.16);
+  --warn: #FFDE59;
+  --warn-soft: rgba(255, 222, 89, 0.16);
   color-scheme: dark;
 }
 
 @theme inline {
+  --color-jct-yellow: #FFDE59;
+  --color-jct-turquoise: #2DE2E6;
+  --color-jct-charcoal: #2F2D2E;
+  --color-jct-offwhite: #F8F9FA;
   --color-bg: var(--bg);
   --color-card: var(--card);
   --color-solid: var(--card-solid);
@@ -83,13 +88,6 @@ body {
   letter-spacing: -0.02em;
 }
 
-/* Smooth light/dark switch (class applied briefly by the toggle) */
-html.theme-fade *,
-html.theme-fade *::before,
-html.theme-fade *::after {
-  transition: background-color 0.4s ease, color 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease !important;
-}
-
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--line-strong) transparent;
@@ -108,10 +106,9 @@ html.theme-fade *::after {
   from { opacity: 0; transform: translateY(-10px) scale(0.97); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
-/* Neon-green heartbeat when the drawer balances perfectly */
 @keyframes jct-neon {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(57, 255, 130, 0.65), 0 0 18px 2px rgba(57, 255, 130, 0.5); }
-  50% { box-shadow: 0 0 0 14px rgba(57, 255, 130, 0), 0 0 30px 6px rgba(57, 255, 130, 0.75); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(45, 226, 230, 0.45), 0 0 18px 2px rgba(45, 226, 230, 0.35); }
+  50% { box-shadow: 0 0 0 14px rgba(45, 226, 230, 0), 0 0 30px 6px rgba(45, 226, 230, 0.55); }
 }
 @keyframes jct-ping-soft {
   0% { transform: scale(1); opacity: 0.7; }
