@@ -93,30 +93,30 @@ export const formatPaymentModeBadge = (
 ): { badge: string; badgeClass: string; label: string; cls: string } => {
   const m = (mode || "CASH").toUpperCase();
   if (m.includes("SAB")) {
-    const cls = "bg-jct-turquoise/20 text-jct-charcoal dark:text-jct-turquoise border border-jct-turquoise/40";
+    const cls = "rounded-full font-bold px-3 py-1 bg-jct-turquoise/20 text-jct-charcoal dark:text-jct-turquoise border border-jct-turquoise/40";
     return { badge: "🏦 SAB", badgeClass: cls, label: "🏦 SAB", cls };
   }
   if (m.includes("RAJHI")) {
-    const cls = "bg-jct-turquoise/20 text-jct-charcoal dark:text-jct-turquoise border border-jct-turquoise/40";
+    const cls = "rounded-full font-bold px-3 py-1 bg-jct-turquoise/20 text-jct-charcoal dark:text-jct-turquoise border border-jct-turquoise/40";
     return { badge: "🏦 Al Rajhi", badgeClass: cls, label: "🏦 Al Rajhi", cls };
   }
   if (m.includes("SNB")) {
-    const cls = "bg-jct-turquoise/20 text-jct-charcoal dark:text-jct-turquoise border border-jct-turquoise/40";
+    const cls = "rounded-full font-bold px-3 py-1 bg-jct-turquoise/20 text-jct-charcoal dark:text-jct-turquoise border border-jct-turquoise/40";
     return { badge: "🏦 SNB", badgeClass: cls, label: "🏦 SNB", cls };
   }
   if (m.includes("VISA") || m.includes("MC")) {
-    const cls = "bg-jct-yellow text-jct-charcoal font-bold border border-jct-yellow";
+    const cls = "rounded-full font-bold px-3 py-1 bg-jct-yellow text-jct-charcoal border border-jct-yellow";
     return { badge: "💳 VISA", badgeClass: cls, label: "💳 VISA", cls };
   }
   if (m.includes("MADA")) {
-    const cls = "bg-jct-turquoise/20 text-jct-charcoal dark:text-jct-turquoise border border-jct-turquoise/40";
+    const cls = "rounded-full font-bold px-3 py-1 bg-jct-turquoise/20 text-jct-charcoal dark:text-jct-turquoise border border-jct-turquoise/40";
     return { badge: "💳 Mada", badgeClass: cls, label: "💳 Mada", cls };
   }
   if (m.includes("BANK") || m.includes("TRANSFER")) {
-    const cls = "bg-jct-turquoise/20 text-jct-charcoal dark:text-jct-turquoise border border-jct-turquoise/40";
+    const cls = "rounded-full font-bold px-3 py-1 bg-jct-turquoise/20 text-jct-charcoal dark:text-jct-turquoise border border-jct-turquoise/40";
     return { badge: "🏦 Bank Transfer", badgeClass: cls, label: "🏦 Bank Transfer", cls };
   }
-  const cls = "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/40";
+  const cls = "rounded-full font-bold px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/40";
   return { badge: "💵 Cash", badgeClass: cls, label: "💵 Cash", cls };
 };
 
@@ -3052,7 +3052,7 @@ function DailyRegisterView({
           {/* Header Section */}
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-jct-charcoal dark:text-jct-offwhite tracking-tight">
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-jct-charcoal dark:text-white tracking-tight">
                 Jubail Corp Daily Hub
               </h1>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
@@ -3102,7 +3102,7 @@ function DailyRegisterView({
           <div className="relative overflow-hidden bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6">
             <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
               <div className="max-w-2xl space-y-1.5">
-                <h2 className="font-display text-xl sm:text-2xl font-bold tracking-tight text-jct-charcoal dark:text-jct-offwhite">
+                <h2 className="font-display text-xl sm:text-2xl font-extrabold tracking-tight text-jct-charcoal dark:text-white">
                   End-of-Day Reconciliation
                 </h2>
                 <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
@@ -3521,10 +3521,10 @@ function DailyRegisterView({
                           key={entry.id}
                           className="inline-flex items-center gap-2 rounded-lg border border-slate-200 dark:border-[#1F1F1F] bg-slate-50 dark:bg-black px-3 py-1.5 text-xs text-jct-charcoal dark:text-jct-offwhite"
                         >
-                          <span className={`rounded border px-1.5 py-0.5 text-[10px] font-bold ${meta.badgeClass}`}>
+                          <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${meta.badgeClass}`}>
                             {entry.expenseCategory || meta.label}
                           </span>
-                          <span className={`rounded border px-1.5 py-0.5 text-[10px] font-bold ${pmBadge.badgeClass}`}>
+                          <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${pmBadge.badgeClass}`}>
                             {pmBadge.badge}
                           </span>
                           {entry.receiptNo && (
@@ -3774,7 +3774,7 @@ function DailyRegisterView({
                 <UploadCloud size={28} />
               </div>
 
-              <h2 className="font-display text-2xl sm:text-3xl font-bold text-jct-charcoal dark:text-jct-offwhite">
+              <h2 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-jct-charcoal dark:text-white">
                 Import Today&apos;s ERP Sales
               </h2>
               <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
@@ -3822,7 +3822,7 @@ function DailyRegisterView({
               {/* Header + Optional MDR Toggle + Summary Cards */}
               <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 pb-5 border-b border-slate-200 dark:border-[#1F1F1F]">
                 <div className="space-y-2">
-                  <h2 className="font-display text-xl sm:text-2xl font-bold text-jct-charcoal dark:text-jct-offwhite">
+                  <h2 className="font-display text-xl sm:text-2xl font-extrabold tracking-tight text-jct-charcoal dark:text-white">
                     Verify Bank Swipes, Split Tenders &amp; Cash Sales
                   </h2>
                   <p className="text-sm text-slate-500 dark:text-slate-400">
@@ -3933,7 +3933,7 @@ function DailyRegisterView({
                   return (
                     <div
                       key={inv.invoiceNo}
-                      className="border-b border-slate-100 dark:border-[#1A1A1A] py-2.5 transition-colors"
+                      className="border-b border-slate-100 dark:border-[#1A1A1A] py-3 transition-colors"
                     >
                       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
                         <div className="flex flex-wrap items-center gap-2.5 min-w-0 flex-1">
@@ -3951,22 +3951,22 @@ function DailyRegisterView({
                             className="min-w-[180px] flex-1 max-w-sm text-sm font-medium bg-transparent border-transparent text-jct-charcoal dark:text-white placeholder-slate-400 focus:outline-none focus:ring-0 focus:border-b-2 focus:border-jct-turquoise transition-all rounded-none px-2 py-1"
                           />
                           <span
-                            className={`rounded border px-2 py-0.5 text-[10px] font-semibold shrink-0 ${pmBadge.badgeClass}`}
+                            className={`rounded-full border px-3 py-1 text-[10px] font-bold shrink-0 ${pmBadge.badgeClass}`}
                           >
                             {pmBadge.badge}
                           </span>
                           {isSplitMode && (
-                            <span className="rounded-md bg-jct-yellow px-2 py-0.5 text-[10px] font-bold text-black shrink-0">
+                            <span className="rounded-full bg-jct-yellow px-3 py-1 text-[10px] font-bold text-black shrink-0">
                               Split Tender
                             </span>
                           )}
                           {inv.autoMatched && isBankOrPos && (
-                            <span className="rounded-md bg-jct-turquoise px-2 py-0.5 text-[10px] font-bold text-black shrink-0">
+                            <span className="rounded-full bg-jct-turquoise px-3 py-1 text-[10px] font-bold text-black shrink-0">
                               ✓ Auto-Matched
                             </span>
                           )}
                           {isCreditSaleInv && (
-                            <span className="rounded-md bg-jct-yellow px-2 py-0.5 text-[10px] font-bold text-black shrink-0">
+                            <span className="rounded-full bg-jct-yellow px-3 py-1 text-[10px] font-bold text-black shrink-0">
                               Credit Sale
                             </span>
                           )}
@@ -3992,10 +3992,10 @@ function DailyRegisterView({
                             <button
                               type="button"
                               onClick={() => handleSetInvoiceMode(inv.invoiceNo, "CASH")}
-                              className={`rounded-md px-2 py-1 text-xs font-semibold transition-colors ${
+                              className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
                                 inv.paymentMode === "CASH"
-                                  ? "bg-jct-turquoise text-black font-bold"
-                                  : "text-slate-500 dark:text-slate-400 font-medium hover:text-jct-charcoal dark:hover:text-white"
+                                  ? "bg-jct-turquoise text-jct-charcoal font-bold"
+                                  : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
                               }`}
                             >
                               Cash
@@ -4003,10 +4003,10 @@ function DailyRegisterView({
                             <button
                               type="button"
                               onClick={() => handleSetInvoiceMode(inv.invoiceNo, "BANK_TRANSFER")}
-                              className={`rounded-md px-2 py-1 text-xs font-semibold transition-colors ${
+                              className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
                                 inv.paymentMode === "BANK_TRANSFER"
-                                  ? "bg-jct-turquoise text-black font-bold"
-                                  : "text-slate-500 dark:text-slate-400 font-medium hover:text-jct-charcoal dark:hover:text-white"
+                                  ? "bg-jct-turquoise text-jct-charcoal font-bold"
+                                  : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
                               }`}
                             >
                               Bank
@@ -4014,10 +4014,10 @@ function DailyRegisterView({
                             <button
                               type="button"
                               onClick={() => handleSetInvoiceMode(inv.invoiceNo, "POS_SWIPE")}
-                              className={`rounded-md px-2 py-1 text-xs font-semibold transition-colors ${
+                              className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
                                 inv.paymentMode === "POS_SWIPE"
-                                  ? "bg-jct-turquoise text-black font-bold"
-                                  : "text-slate-500 dark:text-slate-400 font-medium hover:text-jct-charcoal dark:hover:text-white"
+                                  ? "bg-jct-turquoise text-jct-charcoal font-bold"
+                                  : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
                               }`}
                             >
                               Swipe (POS)
@@ -4025,10 +4025,10 @@ function DailyRegisterView({
                             <button
                               type="button"
                               onClick={() => handleSetInvoiceMode(inv.invoiceNo, "SPLIT")}
-                              className={`rounded-md px-2 py-1 text-xs font-semibold transition-colors ${
+                              className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
                                 inv.paymentMode === "SPLIT"
-                                  ? "bg-jct-turquoise text-black font-bold"
-                                  : "text-slate-500 dark:text-slate-400 font-medium hover:text-jct-charcoal dark:hover:text-white"
+                                  ? "bg-jct-turquoise text-jct-charcoal font-bold"
+                                  : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
                               }`}
                             >
                               Split/Partial
@@ -4036,10 +4036,10 @@ function DailyRegisterView({
                             <button
                               type="button"
                               onClick={() => setCreditModalInvNo(inv.invoiceNo)}
-                              className={`rounded-md px-2 py-1 text-xs font-semibold transition-colors ${
+                              className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
                                 inv.paymentMode === "CREDIT_SALE"
-                                  ? "bg-jct-turquoise text-black font-bold"
-                                  : "text-slate-500 dark:text-slate-400 font-medium hover:text-jct-charcoal dark:hover:text-white"
+                                  ? "bg-jct-turquoise text-jct-charcoal font-bold"
+                                  : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
                               }`}
                             >
                               Credit
@@ -4061,7 +4061,7 @@ function DailyRegisterView({
 
                       {/* Progressive Disclosure Sub-Row: Split/Partial Allocation & Card Method */}
                       {isSplitMode && (
-                        <div className="bg-slate-50 dark:bg-[#111111] rounded-lg mt-1.5 p-3 flex flex-col xl:flex-row xl:items-center justify-between gap-2.5 text-xs">
+                        <div className="bg-slate-50 dark:bg-[#111111] rounded-lg mt-2 p-3 flex flex-col xl:flex-row xl:items-center justify-between gap-2.5 text-xs">
                           <div className="flex flex-wrap items-center gap-2.5">
                             {/* Cash Portion Input */}
                             <div className="flex items-center gap-1.5">
@@ -4114,8 +4114,8 @@ function DailyRegisterView({
                                   }
                                   className={`rounded-md px-2 py-0.5 text-xs font-semibold transition-colors ${
                                     inv.splitBankMethod === "BANK_TRANSFER"
-                                      ? "bg-jct-turquoise text-black font-bold"
-                                      : "text-slate-500 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-white"
+                                      ? "bg-jct-turquoise text-jct-charcoal font-bold"
+                                      : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
                                   }`}
                                 >
                                   Bank Transfer (0%)
@@ -4130,8 +4130,8 @@ function DailyRegisterView({
                                     className={`rounded-md px-2 py-0.5 text-xs font-semibold transition-colors ${
                                       inv.splitBankMethod === "POS_SWIPE" &&
                                       (inv.splitPosTerminal || inv.posTerminal) === term
-                                        ? "bg-jct-turquoise text-black font-bold"
-                                        : "text-jct-yellow hover:brightness-110"
+                                        ? "bg-jct-turquoise text-jct-charcoal font-bold"
+                                        : "text-slate-700 font-semibold hover:text-black dark:text-jct-yellow dark:font-normal dark:hover:brightness-110"
                                     }`}
                                   >
                                     {POS_TERMINAL_META[term].badgeTag}
@@ -4148,7 +4148,7 @@ function DailyRegisterView({
                                 Cash: SAR {fmt(inv.splitCashAmount)}
                               </span>
                               <span className="text-slate-300 dark:text-slate-600">|</span>
-                              <span className="text-jct-charcoal dark:text-jct-yellow font-semibold">
+                              <span className="text-slate-700 font-semibold dark:text-jct-yellow dark:font-normal">
                                 Bank/Card: SAR {fmt(inv.splitBankAmount)}
                               </span>
                             </div>
@@ -4166,7 +4166,7 @@ function DailyRegisterView({
 
                       {/* Progressive Disclosure Sub-Row for Swipe (POS): Card Method */}
                       {isPosSwipe && (
-                        <div className="bg-slate-50 dark:bg-[#111111] rounded-lg mt-1.5 p-3 flex flex-wrap items-center justify-between gap-2.5 text-xs">
+                        <div className="bg-slate-50 dark:bg-[#111111] rounded-lg mt-2 p-3 flex flex-wrap items-center justify-between gap-2.5 text-xs">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="font-medium text-slate-500 dark:text-slate-400">Card Method:</span>
                             <div className="bg-white dark:bg-[#0A0A0A] p-0.5 rounded-lg flex flex-wrap gap-1.5">
@@ -4177,8 +4177,8 @@ function DailyRegisterView({
                                   onClick={() => handleSetInvoiceTerminal(inv.invoiceNo, term)}
                                   className={`rounded-md px-2 py-0.5 text-xs font-semibold transition-colors ${
                                     inv.posTerminal === term
-                                      ? "bg-jct-turquoise text-black font-bold"
-                                      : "text-jct-yellow hover:brightness-110"
+                                      ? "bg-jct-turquoise text-jct-charcoal font-bold"
+                                      : "text-slate-700 font-semibold hover:text-black dark:text-jct-yellow dark:font-normal dark:hover:brightness-110"
                                   }`}
                                 >
                                   {POS_TERMINAL_META[term].badgeTag} ({POS_TERMINAL_META[term].feePctLabel})
@@ -4188,7 +4188,7 @@ function DailyRegisterView({
                           </div>
 
                           <div className="flex flex-col items-end gap-0.5 font-mono text-xs">
-                            <span className="font-bold text-jct-charcoal dark:text-jct-yellow">
+                            <span className="text-slate-700 font-semibold dark:text-jct-yellow dark:font-normal">
                               {termMeta.badgeTag}: SAR {fmt(inv.amount)}
                             </span>
                             {trackPosFees && posFee > 0 && (
@@ -4205,7 +4205,7 @@ function DailyRegisterView({
 
                       {/* Credit Sale Summary Sub-Row (edit via popup modal) */}
                       {isCreditSaleInv && (
-                        <div className="bg-slate-50 dark:bg-[#111111] rounded-lg mt-1.5 p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+                        <div className="bg-slate-50 dark:bg-[#111111] rounded-lg mt-2 p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
                           <div className="flex flex-wrap items-center gap-2 font-mono">
                             <span className="text-jct-charcoal dark:text-white font-semibold">
                               Credit Balance: SAR {fmt(inv.creditBalance ?? inv.amount)}
@@ -4243,7 +4243,7 @@ function DailyRegisterView({
 
                       {/* Conditional Sub-Row for Bank Transfer (0% Fee) with Bank Mode of Payment Selector */}
                       {inv.paymentMode === "BANK_TRANSFER" && (
-                        <div className="bg-slate-50 dark:bg-[#111111] rounded-lg mt-1.5 p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+                        <div className="bg-slate-50 dark:bg-[#111111] rounded-lg mt-2 p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
                           <div className="flex items-center gap-2">
                             <span className="font-medium text-slate-500 dark:text-slate-400">
                               Mode of Payment (Bank):
@@ -4273,7 +4273,7 @@ function DailyRegisterView({
 
                       {/* Conditional Sub-Row for Other Amt Recd: Inline Note / Cause Input */}
                       {isOtherRecd && (
-                        <div className="bg-slate-50 dark:bg-[#111111] rounded-lg mt-1.5 p-3 flex items-center gap-2.5 text-xs">
+                        <div className="bg-slate-50 dark:bg-[#111111] rounded-lg mt-2 p-3 flex items-center gap-2.5 text-xs">
                           <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">
                             Cause / Note:
                           </span>
@@ -4318,7 +4318,7 @@ function DailyRegisterView({
             <div className="flex flex-col gap-6 bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 sm:p-8">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-[#1F1F1F] pb-5">
                 <div>
-                  <h2 className="font-display text-xl sm:text-2xl font-bold text-jct-charcoal dark:text-jct-offwhite">
+                  <h2 className="font-display text-xl sm:text-2xl font-extrabold tracking-tight text-jct-charcoal dark:text-white">
                     Credit Sales, Split Payments, Receipts &amp; Opening Balance
                   </h2>
                   <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
@@ -4663,17 +4663,17 @@ function DailyRegisterView({
                                 )}
                                 <p className="text-sm font-semibold text-jct-charcoal dark:text-jct-offwhite truncate">{item.title}</p>
                                 <span
-                                  className={`rounded border px-2 py-0.5 text-[10px] font-semibold ${pmBadge.badgeClass}`}
+                                  className={`rounded-full border px-3 py-1 text-[10px] font-bold ${pmBadge.badgeClass}`}
                                 >
                                   {pmBadge.badge}
                                 </span>
                                 {isCreditSaleRow && (
-                                  <span className="rounded-md bg-jct-yellow text-jct-charcoal font-bold px-2 py-0.5 text-[10px]">
+                                  <span className="rounded-full bg-jct-yellow text-jct-charcoal font-bold px-3 py-1 text-[10px]">
                                     Credit Inv. Amount
                                   </span>
                                 )}
                                 {isSplitSaleRow && (
-                                  <span className="rounded-md bg-jct-yellow text-jct-charcoal font-bold px-2 py-0.5 text-[10px]">
+                                  <span className="rounded-full bg-jct-yellow text-jct-charcoal font-bold px-3 py-1 text-[10px]">
                                     Split Tender (Cash: SAR {fmt(item.splitCashAmount || 0)} · Card: SAR {fmt(item.splitBankAmount || 0)})
                                   </span>
                                 )}
@@ -4768,7 +4768,7 @@ function DailyRegisterView({
             <div className="flex flex-col gap-6 bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 sm:p-8">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-[#1F1F1F] pb-5">
                 <div>
-                  <h2 className="font-display text-xl sm:text-2xl font-bold text-jct-charcoal dark:text-jct-offwhite">
+                  <h2 className="font-display text-xl sm:text-2xl font-extrabold tracking-tight text-jct-charcoal dark:text-white">
                     Expenses &amp; Supplier Purchases
                   </h2>
                   <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
@@ -4974,17 +4974,17 @@ function DailyRegisterView({
                           <div key={item.id} className="flex items-center justify-between gap-3 py-3">
                             <div className="min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <span className="rounded-md bg-jct-yellow text-jct-charcoal font-bold px-2 py-0.5 text-[10px]">
+                                <span className="rounded-full bg-jct-yellow text-jct-charcoal font-bold px-3 py-1 text-[10px]">
                                   {item.expenseCategory || "Food"}
                                 </span>
                                 <span
-                                  className={`rounded border px-2 py-0.5 text-[10px] font-semibold ${pmBadge.badgeClass}`}
+                                  className={`rounded-full border px-3 py-1 text-[10px] font-bold ${pmBadge.badgeClass}`}
                                 >
                                   {pmBadge.badge}
                                 </span>
                                 <p className="text-sm font-semibold text-jct-charcoal dark:text-jct-offwhite truncate">{item.title}</p>
                                 {item.dueDate && (
-                                  <span className="rounded-md bg-jct-turquoise/25 border border-jct-turquoise/40 px-2 py-0.5 text-[10px] font-bold text-jct-charcoal dark:text-jct-offwhite">
+                                  <span className="rounded-full bg-jct-turquoise/25 border border-jct-turquoise/40 px-3 py-1 text-[10px] font-bold text-jct-charcoal dark:text-jct-offwhite">
                                     Due: {item.dueDate}
                                   </span>
                                 )}
@@ -5431,7 +5431,7 @@ function DailyRegisterView({
                                 {entry.receiptNo || "RECEIPT"}
                               </span>
                               <span
-                                className={`rounded border px-1.5 py-0.5 text-[10px] font-bold shrink-0 ${pmBadge.badgeClass}`}
+                                className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold shrink-0 ${pmBadge.badgeClass}`}
                               >
                                 {pmBadge.badge}
                               </span>
@@ -5439,7 +5439,7 @@ function DailyRegisterView({
                                 {entry.title}
                               </span>
                               {entry.followUpDate && (
-                                <span className="rounded bg-jct-turquoise/25 border border-jct-turquoise/40 px-1.5 py-0.5 text-[10px] font-bold text-jct-charcoal dark:text-jct-offwhite shrink-0">
+                                <span className="rounded-full bg-jct-turquoise/25 border border-jct-turquoise/40 px-2.5 py-0.5 text-[10px] font-bold text-jct-charcoal dark:text-jct-offwhite shrink-0">
                                   Follow-up: {entry.followUpDate}
                                 </span>
                               )}
@@ -5593,11 +5593,11 @@ function DailyRegisterView({
                                 className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 hover:bg-slate-100/70 dark:hover:bg-[#111111] transition"
                               >
                                 <div className="flex flex-wrap items-center gap-2 min-w-0 flex-1">
-                                  <span className="rounded bg-jct-yellow text-jct-charcoal font-bold px-2 py-0.5 text-[10px] shrink-0">
+                                  <span className="rounded-full bg-jct-yellow text-jct-charcoal font-bold px-2.5 py-0.5 text-[10px] shrink-0">
                                     {entry.expenseCategory || "Food"}
                                   </span>
                                   <span
-                                    className={`rounded border px-1.5 py-0.5 text-[10px] font-bold shrink-0 ${pmBadge.badgeClass}`}
+                                    className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold shrink-0 ${pmBadge.badgeClass}`}
                                   >
                                     {pmBadge.badge}
                                   </span>
@@ -5605,12 +5605,12 @@ function DailyRegisterView({
                                     {entry.title}
                                   </span>
                                   {entry.dueDate && (
-                                    <span className="rounded bg-jct-turquoise/25 border border-jct-turquoise/40 px-1.5 py-0.5 text-[10px] font-bold text-jct-charcoal dark:text-jct-offwhite shrink-0">
+                                    <span className="rounded-full bg-jct-turquoise/25 border border-jct-turquoise/40 px-2.5 py-0.5 text-[10px] font-bold text-jct-charcoal dark:text-jct-offwhite shrink-0">
                                       Due: {entry.dueDate}
                                     </span>
                                   )}
                                   {entry.originalAmount !== undefined && (
-                                    <span className="rounded bg-jct-yellow text-jct-charcoal font-bold px-1.5 py-0.5 text-[10px] shrink-0">
+                                    <span className="rounded-full bg-jct-yellow text-jct-charcoal font-bold px-2.5 py-0.5 text-[10px] shrink-0">
                                       Orig: SAR {fmt(entry.originalAmount)}
                                     </span>
                                   )}
@@ -6050,7 +6050,7 @@ function DailyRegisterView({
                   <span className="rounded-lg bg-jct-yellow px-2.5 py-1 font-mono text-xs font-bold text-jct-charcoal">
                     JCT OFFICIAL LEDGER
                   </span>
-                  <h1 className="font-display text-xl sm:text-2xl font-black tracking-wide text-jct-charcoal dark:text-jct-offwhite">
+                  <h1 className="font-display text-xl sm:text-2xl font-black tracking-tight text-jct-charcoal dark:text-white">
                     DAILY DATA SHEET : JUBAIL CORP. TRADING EST.
                   </h1>
                 </div>
@@ -7000,7 +7000,7 @@ function CreditRadarView({
                   {active.name.charAt(0)}
                 </div>
                 <div>
-                  <h2 className="font-display font-extrabold text-2xl text-jct-charcoal dark:text-jct-offwhite leading-tight">
+                  <h2 className="font-display font-extrabold text-2xl sm:text-3xl text-jct-charcoal dark:text-white tracking-tight leading-tight">
                     {active.name}
                   </h2>
                   <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mt-2">
@@ -7322,7 +7322,7 @@ function SupplierHubView({
       {/* Top section: Official Brand Payables */}
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
-          <h2 className="font-display font-extrabold text-2xl text-jct-charcoal dark:text-jct-offwhite flex items-center gap-2">
+          <h2 className="font-display font-extrabold text-2xl text-jct-charcoal dark:text-white tracking-tight flex items-center gap-2">
             <Package className="text-jct-turquoise" /> Official Brand Payables
           </h2>
           <span className="text-xs font-bold bg-jct-yellow text-jct-charcoal px-3 py-1 rounded-full">
@@ -7461,11 +7461,11 @@ function SupplierHubView({
                     <span className="font-extrabold text-jct-charcoal dark:text-jct-offwhite">
                       {bill.supplierName}
                     </span>
-                    <span className="rounded-md bg-jct-yellow text-jct-charcoal font-bold px-2 py-0.5 text-xs">
+                    <span className="rounded-full bg-jct-yellow text-jct-charcoal font-bold px-3 py-1 text-xs">
                       {bill.category}
                     </span>
                     <span
-                      className={`rounded border px-2 py-0.5 text-[10px] font-bold ${pmBadge.badgeClass}`}
+                      className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${pmBadge.badgeClass}`}
                     >
                       {pmBadge.badge}
                     </span>
@@ -7546,7 +7546,7 @@ function SupplierHubView({
           }`}
         >
           <div className="flex items-center justify-between">
-            <h2 className="font-display font-extrabold text-2xl text-jct-charcoal dark:text-jct-offwhite flex items-center gap-2">
+            <h2 className="font-display font-extrabold text-2xl text-jct-charcoal dark:text-white tracking-tight flex items-center gap-2">
               <LockOpen className="text-jct-turquoise" /> The Private Vault
             </h2>
             <button
@@ -7620,7 +7620,7 @@ function SupplierHubView({
                             />
                           </td>
                           <td className="px-4 py-3">
-                            <span className={`rounded border px-2 py-0.5 text-[10px] font-bold ${pmBadge.badgeClass}`}>
+                            <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${pmBadge.badgeClass}`}>
                               {pmBadge.badge}
                             </span>
                           </td>
@@ -7706,7 +7706,7 @@ function FinancialPulseView({ metrics }: { metrics: LiveCrossModuleMetrics }) {
     <div className="flex flex-col gap-6 p-6 h-full overflow-y-auto w-full">
       <div className="flex items-center justify-between mb-2">
         <div className="flex flex-col gap-1.5">
-          <h2 className="font-display font-extrabold text-2xl text-jct-charcoal dark:text-jct-offwhite flex items-center gap-2">
+          <h2 className="font-display font-extrabold text-2xl text-jct-charcoal dark:text-white tracking-tight flex items-center gap-2">
             <Activity className="text-jct-turquoise" /> Sales &amp; Business Analytics Hub
           </h2>
           <p className="text-slate-500 dark:text-slate-400 font-semibold text-sm">
@@ -7928,7 +7928,7 @@ function BranchConsolidationView({ metrics }: { metrics: LiveCrossModuleMetrics 
     <div className="flex flex-col gap-6 p-6 h-full overflow-y-auto w-full">
       <div className="flex items-center justify-between mb-2">
         <div className="flex flex-col gap-1.5">
-          <h2 className="font-display font-extrabold text-2xl text-jct-charcoal dark:text-jct-offwhite flex items-center gap-2">
+          <h2 className="font-display font-extrabold text-2xl text-jct-charcoal dark:text-white tracking-tight flex items-center gap-2">
             <Building2 className="text-jct-turquoise" /> Branch Consolidation
           </h2>
           <p className="text-slate-500 dark:text-slate-400 font-semibold text-sm">
@@ -8176,7 +8176,7 @@ function NaumanAiView({ txns }: { txns: Txn[] }) {
     <div className="flex flex-col gap-6 p-6 h-full overflow-y-auto w-full">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-2">
         <div className="flex flex-col gap-1.5">
-          <h2 className="font-display font-extrabold text-2xl text-jct-charcoal dark:text-jct-offwhite flex items-center gap-2">
+          <h2 className="font-display font-extrabold text-2xl text-jct-charcoal dark:text-white tracking-tight flex items-center gap-2">
             <Sparkles className="text-jct-turquoise" /> Nauman AI &amp; Executive Pulse
           </h2>
           {aiInsights?.source === "GROQ_LIVE" && (
@@ -8892,7 +8892,7 @@ function AuditLibraryView({ profile }: { profile: UserProfile | null }) {
                         ) : (
                           <span className="font-bold text-jct-charcoal dark:text-jct-offwhite">{inf.title}</span>
                         )}
-                        <span className={`rounded border px-2 py-0.5 text-[10px] font-bold ${pBadge.cls}`}>
+                        <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${pBadge.cls}`}>
                           {pBadge.label}
                         </span>
                       </div>
@@ -8974,11 +8974,11 @@ function AuditLibraryView({ profile }: { profile: UserProfile | null }) {
                           <span className="font-bold text-jct-charcoal dark:text-jct-offwhite">{exp.title}</span>
                         )}
                         {exp.expenseCategory && (
-                          <span className="rounded bg-jct-yellow text-jct-charcoal font-bold px-2 py-0.5 text-[10px]">
+                          <span className="rounded-full bg-jct-yellow text-jct-charcoal font-bold px-2.5 py-0.5 text-[10px]">
                             {exp.expenseCategory}
                           </span>
                         )}
-                        <span className={`rounded border px-2 py-0.5 text-[10px] font-bold ${pBadge.cls}`}>
+                        <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${pBadge.cls}`}>
                           {pBadge.label}
                         </span>
                       </div>
@@ -9038,7 +9038,7 @@ function AuditLibraryView({ profile }: { profile: UserProfile | null }) {
                     <div key={idx} className="flex items-center justify-between rounded-xl border border-slate-200 dark:border-[#1F1F1F] bg-slate-50 dark:bg-[#111111] p-3 text-xs">
                       <div className="flex items-center gap-2">
                         <span className="font-bold text-jct-charcoal dark:text-jct-offwhite">Inv #{sw.invoiceNo}</span>
-                        <span className={`rounded border px-2 py-0.5 text-[10px] font-bold ${pBadge.cls}`}>
+                        <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${pBadge.cls}`}>
                           {pBadge.label}
                         </span>
                       </div>
@@ -9097,7 +9097,7 @@ function AuditLibraryView({ profile }: { profile: UserProfile | null }) {
         <div>
           <div className="flex items-center gap-2">
             <Archive className="text-jct-turquoise" size={24} />
-            <h2 className="text-2xl font-black text-jct-charcoal dark:text-jct-offwhite tracking-tight">Register Audit Library</h2>
+            <h2 className="text-2xl sm:text-3xl font-black text-jct-charcoal dark:text-white tracking-tight">Register Audit Library</h2>
           </div>
           <p className="mt-1 text-xs sm:text-sm text-slate-500 dark:text-slate-400">
             Historical daily reconciliations, drawer counts, and closing audits across store terminals.
@@ -9690,7 +9690,7 @@ function StaffPayrollView({ profile }: { profile: UserProfile | null }) {
               <Users size={20} strokeWidth={2.5} />
             </div>
             <div>
-              <h2 className="font-display font-extrabold text-2xl text-jct-charcoal dark:text-jct-offwhite tracking-tight flex items-center gap-2">
+              <h2 className="font-display font-extrabold text-2xl sm:text-3xl text-jct-charcoal dark:text-white tracking-tight flex items-center gap-2">
                 Staff Management &amp; Payroll Portal
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
@@ -10672,13 +10672,13 @@ function StaffPayrollView({ profile }: { profile: UserProfile | null }) {
                             <span className="font-mono text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
                               {log.date}
                             </span>
-                            <span className={`rounded px-2 py-0.5 text-[10px] font-bold border ${badgeCls}`}>
+                            <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold border ${badgeCls}`}>
                               {log.type}
                             </span>
-                            <span className="rounded bg-slate-100 dark:bg-[#111111] border border-slate-200 dark:border-[#1F1F1F] px-1.5 py-0.5 text-[10px] text-slate-600 dark:text-slate-300">
+                            <span className="rounded-full bg-slate-100 dark:bg-[#111111] border border-slate-200 dark:border-[#1F1F1F] px-2.5 py-0.5 text-[10px] text-slate-600 dark:text-slate-300 font-bold">
                               {sourceLabel}
                             </span>
-                            <span className={`rounded border px-2 py-0.5 text-[10px] font-bold ${modeBadge.cls}`}>
+                            <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${modeBadge.cls}`}>
                               {modeBadge.label}
                             </span>
                             {log.note && (

@@ -9,6 +9,9 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ["var(--font-jakarta)", "sans-serif"],
+      },
       colors: {
         jct: {
           yellow: "#FFDE59",
