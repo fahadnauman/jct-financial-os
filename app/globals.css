@@ -26,18 +26,18 @@
   color-scheme: light;
 }
 
-/* ---------- Dark Mode: Custom JCT Charcoal / Turquoise / Yellow Palette ---------- */
+/* ---------- Dark Mode: True Black + Custom JCT Turquoise / Yellow Palette ---------- */
 .dark {
-  --bg: #222021;
-  --card: #2F2D2E;
-  --card-solid: #2F2D2E;
-  --raised: #2A2829;
-  --line: #403e3f;
+  --bg: #000000;
+  --card: #0A0A0A;
+  --card-solid: #0A0A0A;
+  --raised: #111111;
+  --line: #1F1F1F;
   --line-strong: #2DE2E6;
   --fg: #F8F9FA;
   --muted: #94a3b8;
   --accent: #2DE2E6;
-  --accent-fg: #2F2D2E;
+  --accent-fg: #000000;
   --accent-soft: rgba(45, 226, 230, 0.18);
   --pos: #2DE2E6;
   --pos-soft: rgba(45, 226, 230, 0.14);
