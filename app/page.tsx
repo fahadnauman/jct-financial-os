@@ -495,6 +495,7 @@ export interface ErpInvoiceItem {
   overrideNote?: string;
   paymentMode: InvoicePaymentMode;
   posTerminal: PosTerminalBank;
+  posTerminalDevice?: "SAB" | "AL_RAJHI";
   bankPaymentMode?: string;
   isSplit?: boolean;
   splitCashAmount: number;
@@ -2058,6 +2059,47 @@ function DailyRegisterView({
             }
           : inv
       );
+    });
+  };
+
+  const handleSelectInvoicePosTerminal = (
+    invoiceNo: string,
+    terminal: "SAB" | "AL_RAJHI"
+  ) => {
+    setErpInvoices((prev) => {
+      const base = prev.length > 0 ? prev : buildMatchedErpList();
+      return base.map((inv) => {
+        if (inv.invoiceNo !== invoiceNo) return inv;
+        const currentNetwork = inv.posTerminal === "VISA_MC" ? "visa" : "mada";
+        const nextTerminal = currentNetwork === "visa" ? "VISA_MC" : terminal;
+        return {
+          ...inv,
+          posTerminalDevice: terminal,
+          posTerminal: nextTerminal,
+          splitPosTerminal: nextTerminal,
+        };
+      });
+    });
+  };
+
+  const handleSelectInvoiceCardNetwork = (
+    invoiceNo: string,
+    network: "mada" | "visa"
+  ) => {
+    setErpInvoices((prev) => {
+      const base = prev.length > 0 ? prev : buildMatchedErpList();
+      return base.map((inv) => {
+        if (inv.invoiceNo !== invoiceNo) return inv;
+        const currentDevice =
+          inv.posTerminalDevice || (inv.posTerminal === "AL_RAJHI" ? "AL_RAJHI" : "SAB");
+        const nextTerminal: PosTerminalBank = network === "visa" ? "VISA_MC" : currentDevice;
+        return {
+          ...inv,
+          posTerminalDevice: currentDevice,
+          posTerminal: nextTerminal,
+          splitPosTerminal: nextTerminal,
+        };
+      });
     });
   };
 
@@ -4215,14 +4257,11 @@ function DailyRegisterView({
               <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 pb-5 border-b border-slate-200 dark:border-[#1F1F1F]">
                 <div className="space-y-2">
                   <h2 className="font-display text-xl sm:text-2xl font-extrabold tracking-tight text-jct-charcoal dark:text-white">
-                    Verify Bank Swipes, Split Tenders &amp; Cash Sales
+                    Verify Sales Data
                   </h2>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">
-                    Reconciles 100% gross ERP invoice face value by default. Choose Cash Sale, Bank Transfer, Swipe (SAB / Al Rajhi), Split / Partial, or Credit Sale.
-                  </p>
                   {/* Clean Optional Toggle Switch: Estimate POS Merchant Fees (MDR) - Staff RBAC */}
                   {isOwner && (
-                    <div className="pt-0.5">
+                    <div className="pt-0.5 flex flex-wrap items-center">
                       <button
                         type="button"
                         role="switch"
@@ -4250,6 +4289,11 @@ function DailyRegisterView({
                           {trackPosFees ? "ON" : "OFF"}
                         </span>
                       </button>
+                      {trackPosFees && (
+                        <span className="text-sm text-slate-400 ml-4">
+                          Rates: mada (0.8%, Cap SAR 40) | Visa/MC (2.2%)
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>
@@ -4311,7 +4355,6 @@ function DailyRegisterView({
                   const isOtherRecd = inv.paymentMode === "OTHER_RECD";
                   const isCreditSaleInv = inv.paymentMode === "CREDIT_SALE";
                   const posFee = calcInvoicePosFee(inv);
-                  const termMeta = POS_TERMINAL_META[inv.posTerminal || "SAB"];
                   const splitTermMeta =
                     POS_TERMINAL_META[inv.splitPosTerminal || inv.posTerminal || "SAB"];
                   const pmBadge = formatPaymentModeBadge(
@@ -4458,7 +4501,7 @@ function DailyRegisterView({
                                   : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
                               }`}
                             >
-                              Swipe (POS)
+                              Swipe
                             </button>
                             <button
                               type="button"
@@ -4556,25 +4599,50 @@ function DailyRegisterView({
                                       : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
                                   }`}
                                 >
-                                  Bank Transfer (0%)
+                                  Bank Transfer
                                 </button>
-                                {(["SAB", "AL_RAJHI", "VISA_MC"] as PosTerminalBank[]).map((term) => (
-                                  <button
-                                    key={term}
-                                    type="button"
-                                    onClick={() =>
-                                      handleSetInvoiceSplitMethod(inv.invoiceNo, "POS_SWIPE", term)
-                                    }
-                                    className={`rounded-md px-2 py-0.5 text-xs font-semibold transition-colors ${
-                                      inv.splitBankMethod === "POS_SWIPE" &&
-                                      (inv.splitPosTerminal || inv.posTerminal) === term
-                                        ? "bg-jct-turquoise text-jct-charcoal font-bold"
-                                        : "text-slate-700 font-semibold hover:text-black dark:text-jct-yellow dark:font-normal dark:hover:brightness-110"
-                                    }`}
-                                  >
-                                    {POS_TERMINAL_META[term].badgeTag}
-                                  </button>
-                                ))}
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleSetInvoiceSplitMethod(inv.invoiceNo, "POS_SWIPE", "SAB")
+                                  }
+                                  className={`rounded-md px-2 py-0.5 text-xs font-semibold transition-colors ${
+                                    inv.splitBankMethod === "POS_SWIPE" &&
+                                    (inv.splitPosTerminal || inv.posTerminal) === "SAB"
+                                      ? "bg-jct-turquoise text-jct-charcoal font-bold"
+                                      : "text-slate-700 font-semibold hover:text-black dark:text-jct-yellow dark:font-normal dark:hover:brightness-110"
+                                  }`}
+                                >
+                                  {trackPosFees ? "mada · SAB (0.80% fee, cap SAR 40)" : "mada · SAB"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleSetInvoiceSplitMethod(inv.invoiceNo, "POS_SWIPE", "AL_RAJHI")
+                                  }
+                                  className={`rounded-md px-2 py-0.5 text-xs font-semibold transition-colors ${
+                                    inv.splitBankMethod === "POS_SWIPE" &&
+                                    (inv.splitPosTerminal || inv.posTerminal) === "AL_RAJHI"
+                                      ? "bg-jct-turquoise text-jct-charcoal font-bold"
+                                      : "text-slate-700 font-semibold hover:text-black dark:text-jct-yellow dark:font-normal dark:hover:brightness-110"
+                                  }`}
+                                >
+                                  {trackPosFees ? "mada · Al Rajhi (0.80% fee, cap SAR 40)" : "mada · Al Rajhi"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleSetInvoiceSplitMethod(inv.invoiceNo, "POS_SWIPE", "VISA_MC")
+                                  }
+                                  className={`rounded-md px-2 py-0.5 text-xs font-semibold transition-colors ${
+                                    inv.splitBankMethod === "POS_SWIPE" &&
+                                    (inv.splitPosTerminal || inv.posTerminal) === "VISA_MC"
+                                      ? "bg-jct-turquoise text-jct-charcoal font-bold"
+                                      : "text-slate-700 font-semibold hover:text-black dark:text-jct-yellow dark:font-normal dark:hover:brightness-110"
+                                  }`}
+                                >
+                                  {trackPosFees ? "Visa / MC (2.20%)" : "Visa / MC"}
+                                </button>
                               </div>
                             </div>
                           </div>
@@ -4602,32 +4670,72 @@ function DailyRegisterView({
                         </div>
                       )}
 
-                      {/* Progressive Disclosure Sub-Row for Swipe (POS): Card Method */}
+                      {/* Progressive Disclosure Sub-Row for Swipe (POS): Terminal -> Card Network Hierarchy */}
                       {isPosSwipe && (
-                        <div className="bg-slate-50 dark:bg-[#111111] rounded-lg mt-2 p-3 flex flex-wrap items-center justify-between gap-2.5 text-xs">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="font-medium text-slate-500 dark:text-slate-400">Card Method:</span>
-                            <div className="bg-white dark:bg-[#0A0A0A] p-0.5 rounded-lg flex flex-wrap gap-1.5">
-                              {(["SAB", "AL_RAJHI", "VISA_MC"] as PosTerminalBank[]).map((term) => (
+                        <div className="bg-slate-50 dark:bg-[#111111] rounded-lg mt-2 p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+                          <div className="flex flex-wrap items-center gap-4">
+                            {/* Level 2: Terminal Selection */}
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-semibold text-slate-500 dark:text-slate-400">Terminal:</span>
+                              <div className="bg-white dark:bg-[#0A0A0A] p-0.5 rounded-lg border border-slate-200 dark:border-[#222222] flex items-center gap-1">
+                                {(["SAB", "AL_RAJHI"] as const).map((term) => {
+                                  const isSelected =
+                                    (inv.posTerminalDevice || (inv.posTerminal === "AL_RAJHI" ? "AL_RAJHI" : "SAB")) === term;
+                                  return (
+                                    <button
+                                      key={term}
+                                      type="button"
+                                      onClick={() => handleSelectInvoicePosTerminal(inv.invoiceNo, term)}
+                                      className={`rounded-md px-2.5 py-1 text-xs font-bold transition-colors ${
+                                        isSelected
+                                          ? "bg-jct-turquoise text-jct-charcoal shadow-sm"
+                                          : "text-slate-600 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-white"
+                                      }`}
+                                    >
+                                      {term === "SAB" ? "SAB" : "Al Rajhi"}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            {/* Level 3: Card Network Selection */}
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-semibold text-slate-500 dark:text-slate-400">Card Network:</span>
+                              <div className="bg-white dark:bg-[#0A0A0A] p-0.5 rounded-lg border border-slate-200 dark:border-[#222222] flex items-center gap-1">
                                 <button
-                                  key={term}
                                   type="button"
-                                  onClick={() => handleSetInvoiceTerminal(inv.invoiceNo, term)}
-                                  className={`rounded-md px-2 py-0.5 text-xs font-semibold transition-colors ${
-                                    inv.posTerminal === term
-                                      ? "bg-jct-turquoise text-jct-charcoal font-bold"
-                                      : "text-slate-700 font-semibold hover:text-black dark:text-jct-yellow dark:font-normal dark:hover:brightness-110"
+                                  onClick={() => handleSelectInvoiceCardNetwork(inv.invoiceNo, "mada")}
+                                  className={`rounded-md px-2.5 py-1 text-xs font-bold transition-colors ${
+                                    inv.posTerminal !== "VISA_MC"
+                                      ? "bg-jct-turquoise text-jct-charcoal shadow-sm"
+                                      : "text-slate-600 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-white"
                                   }`}
                                 >
-                                  {POS_TERMINAL_META[term].badgeTag} ({POS_TERMINAL_META[term].feePctLabel})
+                                  {trackPosFees ? "mada (0.80% fee, cap SAR 40)" : "mada"}
                                 </button>
-                              ))}
+                                <button
+                                  type="button"
+                                  onClick={() => handleSelectInvoiceCardNetwork(inv.invoiceNo, "visa")}
+                                  className={`rounded-md px-2.5 py-1 text-xs font-bold transition-colors ${
+                                    inv.posTerminal === "VISA_MC"
+                                      ? "bg-jct-turquoise text-jct-charcoal shadow-sm"
+                                      : "text-slate-600 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-white"
+                                  }`}
+                                >
+                                  {trackPosFees ? "Visa / MC (2.20%)" : "Visa / MC"}
+                                </button>
+                              </div>
                             </div>
                           </div>
 
                           <div className="flex flex-col items-end gap-0.5 font-mono text-xs">
                             <span className="text-slate-700 font-semibold dark:text-jct-yellow dark:font-normal">
-                              {termMeta.badgeTag}: SAR {fmt(inv.amount)}
+                              {inv.posTerminal === "VISA_MC"
+                                ? `Visa / MC (${(inv.posTerminalDevice || "SAB") === "AL_RAJHI" ? "Al Rajhi" : "SAB"})`
+                                : inv.posTerminal === "AL_RAJHI"
+                                ? "mada · Al Rajhi"
+                                : "mada · SAB"}: SAR {fmt(inv.amount)}
                             </span>
                             {isOwner && trackPosFees && posFee > 0 && (
                               <span className="text-[10px] text-slate-500 dark:text-slate-400">
