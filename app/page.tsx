@@ -11,7 +11,7 @@ import {
   Wallet, Plus, Target, AlertTriangle, Mail, Bell,
   UploadCloud, Zap, ArrowLeft, ArrowRight, BarChart2, Eye, ArrowRightLeft, Trash2, Maximize2, Minimize2,
   Archive, Edit3, CheckCircle2, RotateCcw, Search,
-  Users, UserCheck, DollarSign, X, Banknote
+  Users, UserCheck, DollarSign, X, Banknote, Printer
 } from "lucide-react";
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -245,6 +245,57 @@ const nowHHMM = () => {
    COMPONENTS
    ════════════════════════════════════════════════════════════════════════ */
 
+function PrintReportHeader({ branch, date }: { branch: string; date: string }) {
+  const [timestamp, setTimestamp] = useState("");
+
+  useEffect(() => {
+    const handleBeforePrint = () => {
+      setTimestamp(new Date().toLocaleString());
+    };
+    const timer = setTimeout(() => {
+      setTimestamp(new Date().toLocaleString());
+    }, 0);
+    window.addEventListener("beforeprint", handleBeforePrint);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("beforeprint", handleBeforePrint);
+    };
+  }, []);
+
+  return (
+    <div className="hidden print:block mb-6 border-b-2 border-black pb-4 text-black">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-black uppercase tracking-tight text-black">
+            JCT Financial OS - Daily Register Report
+          </h1>
+          <p className="text-xs font-bold text-slate-700 mt-0.5">
+            Jubail Corp. Trading Est. · Wholesale Paint Distribution (Jotun, Hempel, Sigma)
+          </p>
+        </div>
+        <div className="text-right font-mono text-xs text-slate-800">
+          <p className="font-bold text-sm text-black">Branch: {branch}</p>
+          <p>Register Date: <strong className="text-black">{date}</strong></p>
+          <p className="text-[11px] text-slate-600 mt-0.5">Printed: {timestamp || "Live"}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PrintReportFooter() {
+  return (
+    <div className="hidden print:flex justify-between items-center mt-12 pt-8 border-t border-black text-black text-sm font-bold">
+      <div>
+        <span>Prepared By: ____________________</span>
+      </div>
+      <div>
+        <span>Audited By (Owner): ____________________</span>
+      </div>
+    </div>
+  );
+}
+
 function ThemeToggle({ dark, onToggle }: { dark: boolean; onToggle: () => void }) {
   return (
     <button
@@ -252,7 +303,7 @@ function ThemeToggle({ dark, onToggle }: { dark: boolean; onToggle: () => void }
       type="button"
       title={dark ? "Switch to Light Mode" : "Switch to Dark Mode"}
       aria-label={dark ? "Switch to Light Mode" : "Switch to Dark Mode"}
-      className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 dark:border-[#1F1F1F] bg-white dark:bg-[#0A0A0A] text-jct-charcoal dark:text-jct-offwhite hover:bg-jct-yellow hover:text-jct-charcoal dark:hover:bg-jct-yellow dark:hover:text-jct-charcoal shadow-sm transition-all"
+      className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 dark:border-[#1F1F1F] bg-white dark:bg-[#0A0A0A] text-jct-charcoal dark:text-jct-offwhite hover:bg-jct-yellow hover:text-jct-charcoal dark:hover:bg-jct-yellow dark:hover:text-jct-charcoal shadow-sm transition-all print:hidden"
     >
       {dark ? <Sun size={16} /> : <Moon size={16} />}
     </button>
@@ -271,7 +322,7 @@ function Sidebar({ tab, setTab, allowedTabs }: { tab: TabId; setTab: (t: TabId) 
     { id: "ai" as TabId, label: "Nauman AI", icon: Sparkles },
   ].filter((n) => allowedTabs.includes(n.id));
   return (
-    <aside className="hidden w-64 shrink-0 flex-col overflow-hidden bg-white dark:bg-[#0A0A0A] border-r border-slate-200 dark:border-[#1F1F1F] p-5 text-jct-charcoal dark:text-jct-offwhite lg:flex relative z-40">
+    <aside className="hidden w-64 shrink-0 flex-col overflow-hidden bg-white dark:bg-[#0A0A0A] border-r border-slate-200 dark:border-[#1F1F1F] p-5 text-jct-charcoal dark:text-jct-offwhite lg:flex relative z-40 print:hidden">
       <div className="relative flex items-center gap-3 px-1 pb-8 pt-1">
         <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-jct-turquoise font-display text-base font-black tracking-tight text-jct-charcoal shadow-sm">
           JCT
@@ -3710,9 +3761,9 @@ function DailyRegisterView({
           MODE 2: WIDESCREEN 5-STEP GUIDED WIZARD (trackingMode === 'wizard')
          ════════════════════════════════════════════════════════════════════ */}
       {trackingMode === "wizard" && (
-        <div className="relative z-10 max-w-7xl w-full mx-auto px-6 py-6 lg:py-8 flex flex-col gap-6">
+        <div className="relative z-10 max-w-7xl w-full mx-auto px-6 py-6 lg:py-8 flex flex-col gap-6 print:max-w-none print:w-full print:p-0 print:m-0 print:overflow-visible">
           {/* Calm Enterprise Top Step Navigation Bar */}
-          <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6">
+          <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 print:hidden">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <button
                 onClick={() => setTrackingMode("hub")}
@@ -5069,14 +5120,20 @@ function DailyRegisterView({
               STEP 5: FULL-WIDESCREEN EDITABLE AUDIT WORKBENCH WITH [⤢ EXPAND] ON ALL 3 BOXES
              ────────────────────────────────────────────────────────────── */}
           {wizardStep === 5 && (
-            <div className="flex flex-col gap-6 pb-8">
+            <div className="flex flex-col gap-6 pb-8 print:w-full print:p-0 print:m-0 print:bg-white print:text-black">
+              {/* Print-Only Report Header */}
+              <PrintReportHeader
+                branch={branchId === "JCT_HQ" ? "JCT Main HQ (Jubail)" : branchId}
+                date="12-09-2026"
+              />
+
               {/* 1. Consolidated Settlement & Merchant Fee Header Strip */}
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 print:shadow-none print:border-slate-300 print:bg-white print:text-black">
                 <div className="flex flex-wrap items-center gap-3">
                   <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                     Audit Settlement Mode:
                   </span>
-                  <div className="inline-flex rounded-xl bg-slate-100 dark:bg-black p-1 border border-slate-200 dark:border-[#1F1F1F] gap-1">
+                  <div className="inline-flex rounded-xl bg-slate-100 dark:bg-black p-1 border border-slate-200 dark:border-[#1F1F1F] gap-1 print:hidden">
                     <button
                       type="button"
                       onClick={() => setBankSettlementMode("GROSS")}
@@ -5116,7 +5173,7 @@ function DailyRegisterView({
               </div>
 
               {/* 2. Streamlined Hero Drawer Closing Card */}
-              <div className="w-full bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 mb-2">
+              <div className="w-full bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 mb-2 print:shadow-none print:border-slate-300 print:bg-white print:text-black">
                 <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-4">
                   <div>
                     <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-jct-yellow text-jct-charcoal text-xs font-bold uppercase tracking-wider">
@@ -5145,9 +5202,9 @@ function DailyRegisterView({
               </div>
 
               {/* 3. The 3 Financial Pillars Grid (Inflows · Bank/Swipes · Outflows) */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-2 print:grid-cols-3 print:gap-3">
                 {/* Card 1: Cash Inflows */}
-                <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 flex flex-col justify-between gap-3">
+                <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 flex flex-col justify-between gap-3 print:shadow-none print:border-slate-300 print:bg-white print:text-black">
                   <div>
                     <span className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                       Cash Inflows (Sales &amp; Receipts)
@@ -5162,7 +5219,7 @@ function DailyRegisterView({
                 </div>
 
                 {/* Card 2: Bank / Card Swipes */}
-                <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 flex flex-col justify-between gap-3">
+                <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 flex flex-col justify-between gap-3 print:shadow-none print:border-slate-300 print:bg-white print:text-black">
                   <div>
                     <div className="flex items-center justify-between gap-2">
                       <span className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
@@ -5173,7 +5230,7 @@ function DailyRegisterView({
                         onClick={() =>
                           setExpandedAuditBox(expandedAuditBox === "BANK_POS" ? "NONE" : "BANK_POS")
                         }
-                        className="rounded px-2 py-0.5 text-[11px] bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 transition-all"
+                        className="rounded px-2 py-0.5 text-[11px] bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 transition-all print:hidden"
                       >
                         {expandedAuditBox === "BANK_POS" ? "[Collapse]" : "[View Details]"}
                       </button>
@@ -5193,7 +5250,7 @@ function DailyRegisterView({
                 </div>
 
                 {/* Card 3: Cash Outflows */}
-                <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 flex flex-col justify-between gap-3">
+                <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 flex flex-col justify-between gap-3 print:shadow-none print:border-slate-300 print:bg-white print:text-black">
                   <div>
                     <span className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                       Cash Outflows (Shop Expenses)
@@ -5210,7 +5267,7 @@ function DailyRegisterView({
 
               {/* Expanded Mode Banner if a Box is Expanded */}
               {expandedAuditBox !== "NONE" && (
-                <div className="flex items-center justify-between rounded-xl bg-jct-yellow text-jct-charcoal font-bold px-5 py-3 shadow-sm">
+                <div className="flex items-center justify-between rounded-xl bg-jct-yellow text-jct-charcoal font-bold px-5 py-3 shadow-sm print:hidden">
                   <span className="text-xs sm:text-sm font-extrabold">
                     ⤢ Focused Full-Width Mode:{" "}
                     {expandedAuditBox === "MONEY_IN"
@@ -5240,7 +5297,7 @@ function DailyRegisterView({
                     BOX 1: Money In — Cash Sales & Receipts
                    ══════════════════════════════════════════════════════════ */}
                 {(expandedAuditBox === "NONE" || expandedAuditBox === "MONEY_IN") && (
-                  <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 flex flex-col gap-4">
+                  <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 flex flex-col gap-4 print:shadow-none print:border-slate-300 print:bg-white print:text-black">
                     <div className="flex items-center justify-between gap-3 border-b border-slate-200 dark:border-[#1F1F1F] pb-3.5">
                       <div>
                         <h3 className="font-display text-lg font-extrabold text-jct-charcoal dark:text-jct-offwhite">
@@ -5261,7 +5318,7 @@ function DailyRegisterView({
                               expandedAuditBox === "MONEY_IN" ? "NONE" : "MONEY_IN"
                             )
                           }
-                          className="flex items-center gap-1.5 rounded-lg bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-3 py-1.5 text-xs transition-all"
+                          className="flex items-center gap-1.5 rounded-lg bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-3 py-1.5 text-xs transition-all print:hidden"
                         >
                           {expandedAuditBox === "MONEY_IN" ? (
                             <>
@@ -5545,7 +5602,7 @@ function DailyRegisterView({
                         BOX 2: Shop Expenses & Supplier Purchases
                        ══════════════════════════════════════════════════════ */}
                     {(expandedAuditBox === "NONE" || expandedAuditBox === "EXPENSES") && (
-                      <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 flex flex-col gap-4">
+                      <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 flex flex-col gap-4 print:shadow-none print:border-slate-300 print:bg-white print:text-black">
                         <div className="flex items-center justify-between gap-3 border-b border-slate-200 dark:border-[#1F1F1F] pb-3.5">
                           <div>
                             <h3 className="font-display text-lg font-extrabold text-jct-charcoal dark:text-jct-offwhite">
@@ -5566,7 +5623,7 @@ function DailyRegisterView({
                                   expandedAuditBox === "EXPENSES" ? "NONE" : "EXPENSES"
                                 )
                               }
-                              className="flex items-center gap-1.5 rounded-lg bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-3 py-1.5 text-xs transition-all"
+                              className="flex items-center gap-1.5 rounded-lg bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-3 py-1.5 text-xs transition-all print:hidden"
                             >
                               {expandedAuditBox === "EXPENSES" ? (
                                 <>
@@ -5775,7 +5832,7 @@ function DailyRegisterView({
                         BOX 3: Bank / POS Transfers (mada · SAB / mada · Al Rajhi / Visa-MC / Bank)
                        ══════════════════════════════════════════════════════ */}
                     {(expandedAuditBox === "NONE" || expandedAuditBox === "BANK_POS") && (
-                      <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 flex flex-col gap-4">
+                      <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 flex flex-col gap-4 print:shadow-none print:border-slate-300 print:bg-white print:text-black">
                         <div className="flex items-center justify-between gap-3 border-b border-slate-200 dark:border-[#1F1F1F] pb-3.5">
                           <div>
                             <h3 className="font-display text-lg font-extrabold text-jct-charcoal dark:text-jct-offwhite">
@@ -5806,7 +5863,7 @@ function DailyRegisterView({
                                   expandedAuditBox === "BANK_POS" ? "NONE" : "BANK_POS"
                                 )
                               }
-                              className="flex items-center gap-1.5 rounded-lg bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-3 py-1.5 text-xs transition-all"
+                              className="flex items-center gap-1.5 rounded-lg bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-3 py-1.5 text-xs transition-all print:hidden"
                             >
                               {expandedAuditBox === "BANK_POS" ? (
                                 <>
@@ -6015,13 +6072,21 @@ function DailyRegisterView({
               </div>
 
               {/* 4. Clean Footer Bar */}
-              <div className="sticky bottom-4 z-20 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6">
+              <div className="sticky bottom-4 z-20 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 print:hidden">
                 <div className="flex items-center gap-2.5 text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400">
                   <span className="inline-flex h-2 w-2 rounded-full bg-jct-turquoise" />
                   <span>Ready to lock register for Jubail - Main Branch · 12-09-2026</span>
                 </div>
 
-                <div className="flex items-center justify-end">
+                <div className="flex items-center justify-end gap-3 print:hidden">
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    className="flex items-center justify-center gap-2 bg-jct-charcoal dark:bg-slate-800 text-white px-4 py-2 rounded-lg font-bold print:hidden hover:brightness-110 transition-all text-sm shadow-sm"
+                  >
+                    <Printer size={16} />
+                    <span>🖨️ Print Report</span>
+                  </button>
                   <button
                     type="button"
                     onClick={handleLockAndSaveDay}
@@ -6032,6 +6097,9 @@ function DailyRegisterView({
                   </button>
                 </div>
               </div>
+
+              {/* Print-Only Report Footer */}
+              <PrintReportFooter />
             </div>
           )}
         </div>
@@ -8667,9 +8735,15 @@ function AuditLibraryView({ profile }: { profile: UserProfile | null }) {
     const displayBankTotal = settlementMode === "NET" ? r2(editBankSwipes - estFees) : editBankSwipes;
 
     return (
-      <div className="flex flex-col h-full overflow-y-auto p-4 sm:p-6 w-full gap-6">
+      <div className="flex flex-col h-full overflow-y-auto p-4 sm:p-6 w-full gap-6 print:overflow-visible print:h-auto print:w-full print:p-0 print:m-0 print:bg-white print:text-black">
+        {/* Print-Only Report Header */}
+        <PrintReportHeader
+          branch={bInfo.name}
+          date={selectedRecord.date}
+        />
+
         {/* Top Header & Role Banner */}
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3 print:hidden">
           <div className="flex items-center justify-between gap-4">
             <button
               type="button"
@@ -8679,9 +8753,20 @@ function AuditLibraryView({ profile }: { profile: UserProfile | null }) {
               <ArrowLeft size={14} /> Back to Audit Library
             </button>
 
-            <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold border ${bInfo.color}`}>
-              {bInfo.name} · {selectedRecord.date}
-            </span>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="flex items-center justify-center gap-2 bg-jct-charcoal dark:bg-slate-800 text-white px-4 py-2 rounded-lg font-bold print:hidden hover:brightness-110 transition-all text-xs shadow-sm"
+              >
+                <Printer size={14} />
+                <span>🖨️ Print</span>
+              </button>
+
+              <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold border ${bInfo.color}`}>
+                {bInfo.name} · {selectedRecord.date}
+              </span>
+            </div>
           </div>
 
           {/* Role-Based Alert Banner */}
@@ -8716,12 +8801,12 @@ function AuditLibraryView({ profile }: { profile: UserProfile | null }) {
         </div>
 
         {/* 1. Settlement & Merchant Fee Header Strip */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 print:shadow-none print:border-slate-300 print:bg-white print:text-black">
           <div className="flex flex-wrap items-center gap-3">
             <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
               Audit Settlement Mode:
             </span>
-            <div className="inline-flex rounded-xl bg-slate-100 dark:bg-black p-1 border border-slate-200 dark:border-[#1F1F1F] gap-1">
+            <div className="inline-flex rounded-xl bg-slate-100 dark:bg-black p-1 border border-slate-200 dark:border-[#1F1F1F] gap-1 print:hidden">
               <button
                 type="button"
                 onClick={() => setSettlementMode("GROSS")}
@@ -8761,7 +8846,7 @@ function AuditLibraryView({ profile }: { profile: UserProfile | null }) {
         </div>
 
         {/* 2. Streamlined Hero Drawer Closing Card */}
-        <div className="w-full bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 mb-2">
+        <div className="w-full bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 mb-2 print:shadow-none print:border-slate-300 print:bg-white print:text-black">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-4">
             <div>
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-jct-yellow text-jct-charcoal text-xs font-bold uppercase tracking-wider">
@@ -8792,8 +8877,8 @@ function AuditLibraryView({ profile }: { profile: UserProfile | null }) {
         </div>
 
         {/* 3. The 3 Financial Pillars Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-2">
-          <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 flex flex-col justify-between gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-2 print:grid-cols-3 print:gap-3">
+          <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 flex flex-col justify-between gap-3 print:shadow-none print:border-slate-300 print:bg-white print:text-black">
             <div>
               <div className="flex items-center justify-between">
                 <span className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
@@ -8802,7 +8887,7 @@ function AuditLibraryView({ profile }: { profile: UserProfile | null }) {
                 <button
                   type="button"
                   onClick={() => setExpandedBox(expandedBox === "MONEY_IN" ? "NONE" : "MONEY_IN")}
-                  className="rounded px-2 py-0.5 text-[11px] bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95"
+                  className="rounded px-2 py-0.5 text-[11px] bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 print:hidden"
                 >
                   {expandedBox === "MONEY_IN" ? "[Collapse]" : "[Inspect Inflows]"}
                 </button>
@@ -8816,7 +8901,7 @@ function AuditLibraryView({ profile }: { profile: UserProfile | null }) {
             </span>
           </div>
 
-          <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 flex flex-col justify-between gap-3">
+          <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 flex flex-col justify-between gap-3 print:shadow-none print:border-slate-300 print:bg-white print:text-black">
             <div>
               <div className="flex items-center justify-between gap-2">
                 <span className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
@@ -8825,7 +8910,7 @@ function AuditLibraryView({ profile }: { profile: UserProfile | null }) {
                 <button
                   type="button"
                   onClick={() => setExpandedBox(expandedBox === "BANK_POS" ? "NONE" : "BANK_POS")}
-                  className="rounded px-2 py-0.5 text-[11px] bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95"
+                  className="rounded px-2 py-0.5 text-[11px] bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 print:hidden"
                 >
                   {expandedBox === "BANK_POS" ? "[Collapse]" : "[View Swipes]"}
                 </button>
@@ -8840,7 +8925,7 @@ function AuditLibraryView({ profile }: { profile: UserProfile | null }) {
             </div>
           </div>
 
-          <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 flex flex-col justify-between gap-3">
+          <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 flex flex-col justify-between gap-3 print:shadow-none print:border-slate-300 print:bg-white print:text-black">
             <div>
               <div className="flex items-center justify-between">
                 <span className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
@@ -8849,7 +8934,7 @@ function AuditLibraryView({ profile }: { profile: UserProfile | null }) {
                 <button
                   type="button"
                   onClick={() => setExpandedBox(expandedBox === "EXPENSES" ? "NONE" : "EXPENSES")}
-                  className="rounded px-2 py-0.5 text-[11px] bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95"
+                  className="rounded px-2 py-0.5 text-[11px] bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 print:hidden"
                 >
                   {expandedBox === "EXPENSES" ? "[Collapse]" : isOwner ? "[Edit Expenses]" : "[Inspect Outflows]"}
                 </button>
@@ -8939,7 +9024,7 @@ function AuditLibraryView({ profile }: { profile: UserProfile | null }) {
 
           {/* Detail Box: Expenses */}
           {(expandedBox === "EXPENSES" || expandedBox === "NONE") && (
-            <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6">
+            <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 print:shadow-none print:border-slate-300 print:bg-white print:text-black">
               <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#1F1F1F] pb-3 mb-3">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-bold uppercase tracking-wider text-jct-charcoal dark:text-jct-offwhite">Recorded Shop Expenses</span>
@@ -8949,7 +9034,7 @@ function AuditLibraryView({ profile }: { profile: UserProfile | null }) {
                   <button
                     type="button"
                     onClick={handleAddExpenseItem}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-jct-yellow text-jct-charcoal font-bold px-2.5 py-1 text-xs hover:brightness-95 transition-all"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-jct-yellow text-jct-charcoal font-bold px-2.5 py-1 text-xs hover:brightness-95 transition-all print:hidden"
                   >
                     <Plus size={13} /> Add Expense Line
                   </button>
@@ -9026,7 +9111,7 @@ function AuditLibraryView({ profile }: { profile: UserProfile | null }) {
 
           {/* Detail Box: Bank / POS */}
           {(expandedBox === "BANK_POS" || expandedBox === "NONE") && (
-            <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6">
+            <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 print:shadow-none print:border-slate-300 print:bg-white print:text-black">
               <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#1F1F1F] pb-3 mb-3">
                 <span className="text-xs font-bold uppercase tracking-wider text-jct-charcoal dark:text-jct-offwhite">Bank Swipes &amp; Transfers Settled</span>
                 <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">Total: SAR {fmt(editBankSwipes)}</span>
@@ -9052,7 +9137,7 @@ function AuditLibraryView({ profile }: { profile: UserProfile | null }) {
         </div>
 
         {/* 5. Sticky Bottom Action Bar */}
-        <div className="sticky bottom-4 z-20 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6">
+        <div className="sticky bottom-4 z-20 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 print:hidden">
           <div className="flex items-center gap-2.5 text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400">
             <span className="inline-flex h-2 w-2 rounded-full bg-jct-turquoise" />
             <span>
@@ -9060,7 +9145,15 @@ function AuditLibraryView({ profile }: { profile: UserProfile | null }) {
             </span>
           </div>
 
-          <div className="flex items-center justify-end gap-3">
+          <div className="flex items-center justify-end gap-3 print:hidden">
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="flex items-center justify-center gap-2 bg-jct-charcoal dark:bg-slate-800 text-white px-4 py-2 rounded-lg font-bold print:hidden hover:brightness-110 transition-all text-sm shadow-sm"
+            >
+              <Printer size={16} />
+              <span>🖨️ Print Report</span>
+            </button>
             {isOwner ? (
               <button
                 type="button"
@@ -9083,6 +9176,9 @@ function AuditLibraryView({ profile }: { profile: UserProfile | null }) {
             )}
           </div>
         </div>
+
+        {/* Print-Only Report Footer */}
+        <PrintReportFooter />
       </div>
     );
   }
@@ -9256,7 +9352,19 @@ function AuditLibraryView({ profile }: { profile: UserProfile | null }) {
                   </div>
 
                   {/* Right Column: Action Buttons (Role-Based CRUD) */}
-                  <div className="flex flex-wrap items-center justify-end gap-2">
+                  <div className="flex flex-wrap items-center justify-end gap-2 print:hidden">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleOpenSnapshot(r);
+                        setTimeout(() => window.print(), 100);
+                      }}
+                      className="rounded-lg bg-jct-charcoal dark:bg-slate-800 text-white px-3 py-2 text-xs font-bold hover:brightness-110 transition-all inline-flex items-center gap-1.5 shadow-sm"
+                      title="Print Daily Report"
+                    >
+                      <Printer size={13} />
+                      <span>🖨️ Print</span>
+                    </button>
                     {isOwner && (
                       <>
                         <button
@@ -11361,15 +11469,15 @@ export default function Page() {
 
   return (
     <div
-      className={`flex h-screen w-full bg-jct-offwhite dark:bg-black text-jct-charcoal dark:text-jct-offwhite antialiased overflow-hidden ${
+      className={`flex h-screen w-full bg-jct-offwhite dark:bg-black text-jct-charcoal dark:text-jct-offwhite antialiased overflow-hidden print:h-auto print:overflow-visible print:bg-white print:text-black ${
         dark ? "dark" : ""
       }`}
     >
       <Sidebar tab={safeTab} setTab={setTab} allowedTabs={allowedTabs} />
 
-      <div className="flex flex-1 flex-col overflow-hidden bg-jct-offwhite dark:bg-black">
+      <div className="flex flex-1 flex-col overflow-hidden bg-jct-offwhite dark:bg-black print:overflow-visible print:h-auto print:w-full print:p-0 print:m-0 print:bg-white print:text-black">
         {/* Top Header */}
-        <header className="flex shrink-0 flex-wrap items-center justify-between gap-4 border-b border-slate-200 dark:border-[#1F1F1F] bg-white dark:bg-[#0A0A0A] px-6 py-4 z-20 shadow-sm">
+        <header className="flex shrink-0 flex-wrap items-center justify-between gap-4 border-b border-slate-200 dark:border-[#1F1F1F] bg-white dark:bg-[#0A0A0A] px-6 py-4 z-20 shadow-sm print:hidden">
           <div className="flex items-center gap-4">
             <h1 className="text-jct-charcoal dark:text-jct-offwhite font-semibold text-base hidden sm:block">
               Good afternoon, {profile.greeting}
@@ -11430,11 +11538,11 @@ export default function Page() {
         </header>
 
         {/* Layout Wrapper */}
-        <div className="flex flex-1 overflow-hidden relative">
+        <div className="flex flex-1 overflow-hidden relative print:overflow-visible print:h-auto print:w-full print:p-0 print:m-0">
           {/* Center Canvas */}
-          <main className="flex-1 overflow-hidden flex flex-col relative z-10">
+          <main className="flex-1 overflow-hidden flex flex-col relative z-10 print:overflow-visible print:h-auto print:w-full print:p-0 print:m-0 print:bg-white print:text-black">
             {profile.isOwner && safeTab === "register" && trackingMode === "hub" && (
-              <div className="shrink-0 px-4 pt-4 sm:px-6">
+              <div className="shrink-0 px-4 pt-4 sm:px-6 print:hidden">
                 <BranchAuditRadar />
               </div>
             )}
