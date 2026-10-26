@@ -77,6 +77,10 @@ export async function POST(req: Request) {
         branch,
         type: String(body.type),
         amount,
+        originalAmount: body.originalAmount !== undefined && body.originalAmount !== null ? Number(body.originalAmount) : null,
+        isEdited: Boolean(body.isEdited),
+        overrideReason: str(body.overrideReason),
+        overrideNote: str(body.overrideNote),
         category: str(body.category),
         recipientName: str(body.recipientName),
         paymentSource,
@@ -108,6 +112,10 @@ export async function PUT(req: Request) {
   const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim().slice(0, 300) : null);
   const updateData: Record<string, unknown> = {};
   if (body.amount !== undefined) updateData.amount = Math.max(0, Number(body.amount) || 0);
+  if (body.originalAmount !== undefined) updateData.originalAmount = body.originalAmount !== null ? Number(body.originalAmount) : null;
+  if (body.isEdited !== undefined) updateData.isEdited = Boolean(body.isEdited);
+  if (body.overrideReason !== undefined) updateData.overrideReason = str(body.overrideReason);
+  if (body.overrideNote !== undefined) updateData.overrideNote = str(body.overrideNote);
   if (body.category !== undefined) updateData.category = str(body.category);
   if (body.recipientName !== undefined) updateData.recipientName = str(body.recipientName);
   if (typeof body.paymentSource === "string" && SOURCES.includes(body.paymentSource)) {

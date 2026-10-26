@@ -402,6 +402,7 @@ export const STRICT_EXPENSE_CATEGORIES = [
   "Cash Purchase",
   "Bank Purchase",
   "Personal Reasons",
+  "Business Commission",
 ] as const;
 
 export type StrictExpenseCategory = (typeof STRICT_EXPENSE_CATEGORIES)[number];
@@ -471,6 +472,9 @@ export interface PreLoggedEntry {
   note?: string;
   amount: number;
   originalAmount?: number;
+  isEdited?: boolean;
+  overrideReason?: OverrideReason;
+  overrideNote?: string;
   isSplit?: boolean;
   splitCashAmount?: number;
   splitBankAmount?: number;
@@ -479,11 +483,16 @@ export interface PreLoggedEntry {
   time: string;
 }
 
+export type OverrideReason = "BUSINESS_COMMISSION" | "BILL_MISTAKE" | "CUSTOM";
+
 export interface ErpInvoiceItem {
   invoiceNo: string;
   customer: string;
   amount: number;
   originalAmount?: number;
+  isEdited?: boolean;
+  overrideReason?: OverrideReason;
+  overrideNote?: string;
   paymentMode: InvoicePaymentMode;
   posTerminal: PosTerminalBank;
   bankPaymentMode?: string;
@@ -1087,6 +1096,8 @@ export const parseErpCsvText = (
         invoiceNo,
         customer,
         amount: grossAmt,
+        originalAmount: grossAmt,
+        isEdited: false,
         paymentMode: "SPLIT",
         posTerminal: terminal,
         isSplit: true,
@@ -1109,6 +1120,8 @@ export const parseErpCsvText = (
         invoiceNo,
         customer,
         amount: grossAmt,
+        originalAmount: grossAmt,
+        isEdited: false,
         paymentMode: mode,
         posTerminal: terminal,
         isSplit: false,
@@ -1701,6 +1714,8 @@ function DailyRegisterView({
 
       return {
         ...inv,
+        originalAmount: inv.amount,
+        isEdited: false,
         paymentMode: resolvedMode,
         posTerminal: matchedInfo?.posTerminal || resolvedSplitTerm,
         isSplit: resolvedMode === "SPLIT",
@@ -2725,12 +2740,17 @@ function DailyRegisterView({
       const base = prev.length > 0 ? prev : buildMatchedErpList();
       return base.map((inv) => {
         if (inv.invoiceNo !== invoiceNo) return inv;
+        const orig = inv.originalAmount ?? inv.amount;
+        const isEdited = val !== orig;
         const cashShare = inv.isSplit ? r2(val / 2) : inv.splitCashAmount;
         const bankShare = inv.isSplit ? r2(val - cashShare) : inv.splitBankAmount;
         return {
           ...inv,
-          originalAmount: inv.originalAmount ?? inv.amount,
+          originalAmount: orig,
           amount: val,
+          isEdited,
+          overrideReason: isEdited ? (inv.overrideReason || "BUSINESS_COMMISSION") : undefined,
+          overrideNote: isEdited ? inv.overrideNote : undefined,
           splitCashAmount: cashShare,
           splitBankAmount: bankShare,
           creditBalance:
@@ -2739,6 +2759,69 @@ function DailyRegisterView({
               : inv.creditBalance,
         };
       });
+    });
+  };
+
+  const handleEditErpInvoiceOverrideReason = (
+    invoiceNo: string,
+    reason: OverrideReason
+  ) => {
+    setErpInvoices((prev) => {
+      const base = prev.length > 0 ? prev : buildMatchedErpList();
+      return base.map((inv) =>
+        inv.invoiceNo === invoiceNo ? { ...inv, overrideReason: reason } : inv
+      );
+    });
+  };
+
+  const handleEditErpInvoiceOverrideNote = (invoiceNo: string, note: string) => {
+    setErpInvoices((prev) => {
+      const base = prev.length > 0 ? prev : buildMatchedErpList();
+      return base.map((inv) =>
+        inv.invoiceNo === invoiceNo ? { ...inv, overrideNote: note } : inv
+      );
+    });
+  };
+
+  const syncCommissionExpenses = (targetInvoices?: ErpInvoiceItem[]) => {
+    const invoices =
+      targetInvoices || (erpInvoices.length > 0 ? erpInvoices : buildMatchedErpList());
+    setPreLoggedEntries((prev) => {
+      let updated = [...prev];
+      for (const inv of invoices) {
+        const expId = `comm-exp-${inv.invoiceNo}`;
+        const orig = inv.originalAmount ?? inv.amount;
+        const diff = r2(orig - inv.amount);
+
+        if (inv.overrideReason === "BUSINESS_COMMISSION" && diff > 0) {
+          const existingIdx = updated.findIndex((e) => e.id === expId);
+          const commExpense: PreLoggedEntry = {
+            id: expId,
+            type: "EXPENSE",
+            title: `Business Commission (Inv #${inv.invoiceNo})`,
+            expenseCategory: "Business Commission",
+            amount: diff,
+            originalAmount: diff,
+            isEdited: false,
+            paymentMode: "CASH",
+            note: "Auto-synced from CSV invoice edit",
+            time: nowHHMM(),
+          };
+
+          if (existingIdx !== -1) {
+            updated[existingIdx] = {
+              ...updated[existingIdx],
+              amount: diff,
+              note: "Auto-synced from CSV invoice edit",
+            };
+          } else {
+            updated.push(commExpense);
+          }
+        } else {
+          updated = updated.filter((e) => e.id !== expId);
+        }
+      }
+      return updated;
     });
   };
 
@@ -2763,6 +2846,8 @@ function DailyRegisterView({
         invoiceNo: nextNo,
         customer: "New Walk-in / Manual Invoice",
         amount: 500,
+        originalAmount: 500,
+        isEdited: false,
         paymentMode: "CASH",
         posTerminal: "SAB",
         bankPaymentMode: "CASH",
@@ -2896,6 +2981,7 @@ function DailyRegisterView({
   const calculatedClosingBalance = r2(totalMoneyInDrawer - totalMoneyOutDrawer);
 
   const handleLockAndSaveDay = () => {
+    syncCommissionExpenses();
     const newSummary: CompletedDaySummary = {
       date: "12-09-2026",
       branch: "Jubail - Main Branch",
@@ -2910,6 +2996,35 @@ function DailyRegisterView({
     setJustCompletedToast(
       `Daily Register Closed — Closing Balance: SAR ${fmt(calculatedClosingBalance)} | Bank / POS Swipes (To Bank): SAR ${fmt(activeBankSettlementTotal)}`
     );
+
+    // Persist any auto-generated business commission expenses to Neon /api/pocket
+    activeErpList.forEach((inv) => {
+      const orig = inv.originalAmount ?? inv.amount;
+      const diff = r2(orig - inv.amount);
+      if (inv.overrideReason === "BUSINESS_COMMISSION" && diff > 0) {
+        fetch("/api/pocket", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-branch-id": branchId || "JCT_HQ",
+          },
+          body: JSON.stringify({
+            branch: branchId || "JCT_HQ",
+            type: "EXPENSE",
+            amount: diff,
+            originalAmount: orig,
+            isEdited: true,
+            overrideReason: "BUSINESS_COMMISSION",
+            overrideNote: inv.overrideNote || null,
+            category: "Business Commission",
+            paymentSource: "DRAWER_CASH",
+            paymentMode: "CASH",
+            note: `Auto-synced from CSV invoice edit (Inv #${inv.invoiceNo})`,
+            date: "2026-09-12",
+          }),
+        }).catch((e) => console.error("Error saving commission expense to pocket:", e));
+      }
+    });
 
     // Persist lock record to Neon PostgreSQL
     fetch("/api/archive", {
@@ -4016,6 +4131,7 @@ function DailyRegisterView({
                         if (erpInvoices.length === 0 && s > 1) {
                           setErpInvoices(buildMatchedErpList());
                         }
+                        syncCommissionExpenses();
                         setWizardStep(s);
                       }}
                       className={`rounded-lg px-3.5 py-2 text-xs font-bold transition-all ${
@@ -4252,17 +4368,61 @@ function DailyRegisterView({
 
                         <div className="flex flex-wrap items-center justify-between lg:justify-end gap-3 shrink-0">
                           {/* Editable Invoice Amount Input */}
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">SAR</span>
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={inv.amount}
-                              onChange={(e) =>
-                                handleEditErpInvoiceAmount(inv.invoiceNo, e.target.value)
-                              }
-                              className="w-28 font-mono text-sm font-semibold text-right bg-transparent border-transparent text-jct-charcoal dark:text-white placeholder-slate-400 focus:outline-none focus:ring-0 focus:border-b-2 focus:border-jct-turquoise transition-all rounded-none px-2 py-1"
-                            />
+                          <div className="flex flex-wrap items-center gap-2">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs font-medium text-slate-500 dark:text-slate-400">SAR</span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={inv.amount}
+                                onChange={(e) =>
+                                  handleEditErpInvoiceAmount(inv.invoiceNo, e.target.value)
+                                }
+                                className={`w-24 font-mono text-sm font-semibold text-right bg-transparent border-b text-jct-charcoal dark:text-white placeholder-slate-400 focus:outline-none focus:ring-0 px-1.5 py-0.5 transition-colors ${
+                                  inv.originalAmount !== undefined && inv.amount !== inv.originalAmount
+                                    ? "border-amber-500 text-amber-600 dark:text-amber-400 font-bold"
+                                    : "border-transparent focus:border-b-2 focus:border-jct-turquoise"
+                                }`}
+                              />
+                            </div>
+
+                            {/* Dynamic Mandatory Reason Dropdown on Amount Change */}
+                            {inv.originalAmount !== undefined && inv.amount !== inv.originalAmount && (
+                              <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs">
+                                <span className="text-[10px] font-mono font-bold text-amber-600 dark:text-amber-400 whitespace-nowrap">
+                                  Orig: SAR {fmt(inv.originalAmount)}
+                                </span>
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 whitespace-nowrap">
+                                  Reason *:
+                                </span>
+                                <select
+                                  value={inv.overrideReason || "BUSINESS_COMMISSION"}
+                                  onChange={(e) =>
+                                    handleEditErpInvoiceOverrideReason(
+                                      inv.invoiceNo,
+                                      e.target.value as OverrideReason
+                                    )
+                                  }
+                                  className="rounded bg-white dark:bg-black px-2 py-0.5 text-xs font-bold text-amber-600 dark:text-amber-400 border border-amber-500/40 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                                  title="Mandatory reason for changing ERP invoice amount"
+                                >
+                                  <option value="BUSINESS_COMMISSION">Business Commission</option>
+                                  <option value="BILL_MISTAKE">Bill Mistake</option>
+                                  <option value="CUSTOM">Custom Note</option>
+                                </select>
+                                {inv.overrideReason === "CUSTOM" && (
+                                  <input
+                                    type="text"
+                                    placeholder="Enter note..."
+                                    value={inv.overrideNote || ""}
+                                    onChange={(e) =>
+                                      handleEditErpInvoiceOverrideNote(inv.invoiceNo, e.target.value)
+                                    }
+                                    className="w-28 rounded bg-white dark:bg-black px-2 py-0.5 text-xs text-jct-charcoal dark:text-white border border-amber-500/40 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                                  />
+                                )}
+                              </div>
+                            )}
                           </div>
 
                           {/* Segmented Payment Type Selector */}
@@ -4579,7 +4739,10 @@ function DailyRegisterView({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setWizardStep(3)}
+                  onClick={() => {
+                    syncCommissionExpenses();
+                    setWizardStep(3);
+                  }}
                   className="flex items-center gap-2 bg-jct-turquoise text-jct-charcoal font-bold hover:brightness-95 transition-all shadow-sm rounded-lg px-5 py-2.5 text-sm"
                 >
                   <span>Continue to Cash Inflows</span>
@@ -5084,6 +5247,7 @@ function DailyRegisterView({
                         "Cash Purchase": "640",
                         "Bank Purchase": "1800",
                         "Personal Reasons": "200",
+                        "Business Commission": "150",
                       };
                       return (
                         <button
@@ -8470,7 +8634,15 @@ function BranchConsolidationView({ metrics }: { metrics: LiveCrossModuleMetrics 
   );
 }
 
-function NaumanAiView({ txns }: { txns: Txn[] }) {
+function NaumanAiView({
+  txns,
+  erpInvoices = [],
+  preLoggedEntries = [],
+}: {
+  txns: Txn[];
+  erpInvoices?: ErpInvoiceItem[];
+  preLoggedEntries?: PreLoggedEntry[];
+}) {
   const [aiInsights, setAiInsights] = useState<{
     summary?: {
       headline?: string;
@@ -8496,6 +8668,53 @@ function NaumanAiView({ txns }: { txns: Txn[] }) {
     out: outflows.reduce((a, b) => a + b.amount, 0),
   };
 
+  const totalOriginalAmount = erpInvoices.reduce(
+    (sum, inv) => sum + (inv.originalAmount ?? inv.amount),
+    0
+  );
+  const totalFinalAmount = erpInvoices.reduce((sum, inv) => sum + inv.amount, 0);
+  const billMistakesTotal = erpInvoices
+    .filter((inv) => inv.overrideReason === "BILL_MISTAKE")
+    .reduce(
+      (sum, inv) =>
+        sum + Math.max(0, (inv.originalAmount ?? inv.amount) - inv.amount),
+      0
+    );
+  const businessCommissionsTotal = erpInvoices
+    .filter((inv) => inv.overrideReason === "BUSINESS_COMMISSION")
+    .reduce(
+      (sum, inv) =>
+        sum + Math.max(0, (inv.originalAmount ?? inv.amount) - inv.amount),
+      0
+    );
+
+  const commissionInvoices = erpInvoices.filter(
+    (inv) =>
+      inv.overrideReason === "BUSINESS_COMMISSION" &&
+      (inv.originalAmount ?? inv.amount) > inv.amount
+  );
+
+  const autoGeneratedExpenses = commissionInvoices.map((inv) => {
+    const expectedDiff = r2((inv.originalAmount ?? inv.amount) - inv.amount);
+    const expId = `comm-exp-${inv.invoiceNo}`;
+    const found = preLoggedEntries.find(
+      (e) =>
+        e.id === expId ||
+        (e.expenseCategory === "Business Commission" &&
+          (e.title.includes(inv.invoiceNo) || Math.abs(e.amount - expectedDiff) < 0.01))
+    );
+    const isMissingOrAltered = !found || Math.abs(found.amount - expectedDiff) > 0.01;
+    return {
+      id: expId,
+      invoiceNo: inv.invoiceNo,
+      expectedAmount: expectedDiff,
+      currentAmount: found ? found.amount : 0,
+      category: "Business Commission",
+      note: "Auto-synced from CSV invoice edit",
+      isMissingOrAltered,
+    };
+  });
+
   const runAudit = async () => {
     setIsAnalyzing(true);
     setAiInsights(null);
@@ -8503,16 +8722,43 @@ function NaumanAiView({ txns }: { txns: Txn[] }) {
       const res = await fetch("/api/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ inflows, outflows, totals }),
+        body: JSON.stringify({
+          inflows,
+          outflows,
+          totals,
+          csvAuditContext: {
+            totalOriginalAmount: r2(totalOriginalAmount),
+            totalFinalAmount: r2(totalFinalAmount),
+            billMistakesTotal: r2(billMistakesTotal),
+            businessCommissionsTotal: r2(businessCommissionsTotal),
+            autoGeneratedExpenses,
+          },
+        }),
       });
 
       const data = await res.json();
       if (!res.ok || data.source === "KEY_MISSING_IN_ENV" || data.source === "GROQ_API_ERROR" || data.error) {
+        const commissionLeaks = autoGeneratedExpenses
+          .filter((item) => item.isMissingOrAltered)
+          .map((item) => ({
+            type: "Forensic Audit Mismatch",
+            severity: "red" as const,
+            message: `A Business Commission was logged in the CSV for Inv #${item.invoiceNo} (SAR ${item.expectedAmount.toFixed(2)}) but is missing or altered from the Expense ledger.`,
+          }));
         setAiInsights({
+          summary: {
+            headline: `Reconciled gross CSV sales (SAR ${fmt(totalOriginalAmount)}) minus commissions (SAR ${fmt(businessCommissionsTotal)}) and bill mistakes (SAR ${fmt(billMistakesTotal)}).`,
+            netCash: totals.in - totals.out,
+            inflowsTotal: totals.in,
+            outflowsTotal: totals.out,
+            healthScore: commissionLeaks.length > 0 ? "72/100 · Commission Discrepancy" : "94/100 · Strong Liquidity",
+          },
           error: data.error || `HTTP ${res.status}: Failed to reach audit server.`,
-          leaks: [],
+          leaks: commissionLeaks,
           trends: [],
-          advice: "",
+          advice: commissionLeaks.length > 0
+            ? "Immediately restore the auto-generated business commission expense in Step 4 to balance the register."
+            : "",
           source: data.source || "GROQ_API_ERROR",
           modelUsed: data.selectedModel || data.modelUsed,
           availableModels: data.availableModels || [],
@@ -12221,7 +12467,11 @@ export default function Page() {
             ) : safeTab === "payroll" ? (
               <StaffPayrollView profile={profile} />
             ) : safeTab === "ai" ? (
-              <NaumanAiView txns={liveAiTxns} />
+              <NaumanAiView
+                txns={liveAiTxns}
+                erpInvoices={erpInvoices}
+                preLoggedEntries={preLoggedEntries}
+              />
             ) : safeTab === "consolidation" ? (
               <div className="flex flex-1 flex-col overflow-y-auto">
                 <div className="px-4 pt-4 sm:px-6"><BranchAuditRadar /></div>
