@@ -3933,11 +3933,11 @@ function DailyRegisterView({
                   return (
                     <div
                       key={inv.invoiceNo}
-                      className="border-b border-slate-100 dark:border-[#1A1A1A] py-4 transition-colors"
+                      className="border-b border-slate-100 dark:border-[#1A1A1A] py-2.5 transition-colors"
                     >
-                      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                        <div className="flex flex-wrap items-center gap-3 min-w-0 flex-1">
-                          <span className="font-mono text-sm font-medium text-slate-500 shrink-0">
+                      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                        <div className="flex flex-wrap items-center gap-2.5 min-w-0 flex-1">
+                          <span className="font-mono text-xs font-medium text-slate-500 shrink-0">
                             #{inv.invoiceNo}
                           </span>
                           {/* Editable Customer / Description Input */}
@@ -3948,7 +3948,7 @@ function DailyRegisterView({
                               handleEditErpInvoiceCustomer(inv.invoiceNo, e.target.value)
                             }
                             placeholder="Customer / Description..."
-                            className="min-w-[200px] flex-1 max-w-sm text-base font-medium bg-transparent border-transparent text-jct-charcoal dark:text-white placeholder-slate-400 focus:outline-none focus:ring-0 focus:border-b-2 focus:border-jct-turquoise transition-all rounded-none px-2 py-1"
+                            className="min-w-[180px] flex-1 max-w-sm text-sm font-medium bg-transparent border-transparent text-jct-charcoal dark:text-white placeholder-slate-400 focus:outline-none focus:ring-0 focus:border-b-2 focus:border-jct-turquoise transition-all rounded-none px-2 py-1"
                           />
                           <span
                             className={`rounded border px-2 py-0.5 text-[10px] font-semibold shrink-0 ${pmBadge.badgeClass}`}
@@ -3972,7 +3972,7 @@ function DailyRegisterView({
                           )}
                         </div>
 
-                        <div className="flex flex-wrap items-center justify-between lg:justify-end gap-3.5 shrink-0">
+                        <div className="flex flex-wrap items-center justify-between lg:justify-end gap-3 shrink-0">
                           {/* Editable Invoice Amount Input */}
                           <div className="flex items-center gap-1.5">
                             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">SAR</span>
@@ -3983,7 +3983,7 @@ function DailyRegisterView({
                               onChange={(e) =>
                                 handleEditErpInvoiceAmount(inv.invoiceNo, e.target.value)
                               }
-                              className="w-32 font-mono text-lg font-semibold text-right bg-transparent border-transparent text-jct-charcoal dark:text-white placeholder-slate-400 focus:outline-none focus:ring-0 focus:border-b-2 focus:border-jct-turquoise transition-all rounded-none px-2 py-1"
+                              className="w-28 font-mono text-sm font-semibold text-right bg-transparent border-transparent text-jct-charcoal dark:text-white placeholder-slate-400 focus:outline-none focus:ring-0 focus:border-b-2 focus:border-jct-turquoise transition-all rounded-none px-2 py-1"
                             />
                           </div>
 
@@ -3992,7 +3992,7 @@ function DailyRegisterView({
                             <button
                               type="button"
                               onClick={() => handleSetInvoiceMode(inv.invoiceNo, "CASH")}
-                              className={`rounded-md px-3 py-1.5 text-sm font-semibold transition-colors ${
+                              className={`rounded-md px-2 py-1 text-xs font-semibold transition-colors ${
                                 inv.paymentMode === "CASH"
                                   ? "bg-jct-turquoise text-black font-bold"
                                   : "text-slate-500 dark:text-slate-400 font-medium hover:text-jct-charcoal dark:hover:text-white"
@@ -4003,7 +4003,7 @@ function DailyRegisterView({
                             <button
                               type="button"
                               onClick={() => handleSetInvoiceMode(inv.invoiceNo, "BANK_TRANSFER")}
-                              className={`rounded-md px-3 py-1.5 text-sm font-semibold transition-colors ${
+                              className={`rounded-md px-2 py-1 text-xs font-semibold transition-colors ${
                                 inv.paymentMode === "BANK_TRANSFER"
                                   ? "bg-jct-turquoise text-black font-bold"
                                   : "text-slate-500 dark:text-slate-400 font-medium hover:text-jct-charcoal dark:hover:text-white"
@@ -4014,7 +4014,7 @@ function DailyRegisterView({
                             <button
                               type="button"
                               onClick={() => handleSetInvoiceMode(inv.invoiceNo, "POS_SWIPE")}
-                              className={`rounded-md px-3 py-1.5 text-sm font-semibold transition-colors ${
+                              className={`rounded-md px-2 py-1 text-xs font-semibold transition-colors ${
                                 inv.paymentMode === "POS_SWIPE"
                                   ? "bg-jct-turquoise text-black font-bold"
                                   : "text-slate-500 dark:text-slate-400 font-medium hover:text-jct-charcoal dark:hover:text-white"
@@ -4025,7 +4025,7 @@ function DailyRegisterView({
                             <button
                               type="button"
                               onClick={() => handleSetInvoiceMode(inv.invoiceNo, "SPLIT")}
-                              className={`rounded-md px-3 py-1.5 text-sm font-semibold transition-colors ${
+                              className={`rounded-md px-2 py-1 text-xs font-semibold transition-colors ${
                                 inv.paymentMode === "SPLIT"
                                   ? "bg-jct-turquoise text-black font-bold"
                                   : "text-slate-500 dark:text-slate-400 font-medium hover:text-jct-charcoal dark:hover:text-white"
@@ -4036,7 +4036,7 @@ function DailyRegisterView({
                             <button
                               type="button"
                               onClick={() => setCreditModalInvNo(inv.invoiceNo)}
-                              className={`rounded-md px-3 py-1.5 text-sm font-semibold transition-colors ${
+                              className={`rounded-md px-2 py-1 text-xs font-semibold transition-colors ${
                                 inv.paymentMode === "CREDIT_SALE"
                                   ? "bg-jct-turquoise text-black font-bold"
                                   : "text-slate-500 dark:text-slate-400 font-medium hover:text-jct-charcoal dark:hover:text-white"
@@ -4050,21 +4050,21 @@ function DailyRegisterView({
                           <button
                             type="button"
                             onClick={() => handleRemoveErpInvoice(inv.invoiceNo)}
-                            className="text-slate-400 hover:text-rose-500 p-2 rounded-lg hover:bg-rose-500/10 transition-colors"
+                            className="text-slate-400 hover:text-rose-500 p-1.5 rounded-lg hover:bg-rose-500/10 transition-colors"
                             title="Delete invoice row"
                             aria-label={`Delete invoice ${inv.invoiceNo}`}
                           >
-                            <Trash2 size={16} />
+                            <Trash2 size={14} />
                           </button>
                         </div>
                       </div>
 
                       {/* Progressive Disclosure Sub-Row: Split/Partial Allocation & Card Method */}
                       {isSplitMode && (
-                        <div className="bg-slate-50 dark:bg-[#111111] rounded-lg mt-2 p-4 flex flex-col xl:flex-row xl:items-center justify-between gap-3 text-sm">
-                          <div className="flex flex-wrap items-center gap-3">
+                        <div className="bg-slate-50 dark:bg-[#111111] rounded-lg mt-1.5 p-3 flex flex-col xl:flex-row xl:items-center justify-between gap-2.5 text-xs">
+                          <div className="flex flex-wrap items-center gap-2.5">
                             {/* Cash Portion Input */}
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1.5">
                               <span className="font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">
                                 Cash Portion (SAR):
                               </span>
@@ -4079,12 +4079,12 @@ function DailyRegisterView({
                                     e.target.value
                                   )
                                 }
-                                className="w-24 font-mono text-sm font-semibold bg-transparent border-transparent text-jct-charcoal dark:text-white placeholder-slate-400 focus:outline-none focus:ring-0 focus:border-b-2 focus:border-jct-turquoise transition-all rounded-none px-2 py-1"
+                                className="w-20 font-mono text-xs font-semibold bg-transparent border-transparent text-jct-charcoal dark:text-white placeholder-slate-400 focus:outline-none focus:ring-0 focus:border-b-2 focus:border-jct-turquoise transition-all rounded-none px-2 py-1"
                               />
                             </div>
 
                             {/* Bank / Swipe Portion Input */}
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1.5">
                               <span className="font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">
                                 Bank / Swipe Portion (SAR):
                               </span>
@@ -4099,20 +4099,20 @@ function DailyRegisterView({
                                     e.target.value
                                   )
                                 }
-                                className="w-24 font-mono text-sm font-semibold bg-transparent border-transparent text-jct-charcoal dark:text-white placeholder-slate-400 focus:outline-none focus:ring-0 focus:border-b-2 focus:border-jct-turquoise transition-all rounded-none px-2 py-1"
+                                className="w-20 font-mono text-xs font-semibold bg-transparent border-transparent text-jct-charcoal dark:text-white placeholder-slate-400 focus:outline-none focus:ring-0 focus:border-b-2 focus:border-jct-turquoise transition-all rounded-none px-2 py-1"
                               />
                             </div>
 
                             {/* Card Method / Bank Selector */}
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1.5">
                               <span className="font-medium text-slate-500 dark:text-slate-400">Card Method:</span>
-                              <div className="bg-white dark:bg-[#0A0A0A] p-1 rounded-lg flex flex-wrap gap-2">
+                              <div className="bg-white dark:bg-[#0A0A0A] p-0.5 rounded-lg flex flex-wrap gap-1.5">
                                 <button
                                   type="button"
                                   onClick={() =>
                                     handleSetInvoiceSplitMethod(inv.invoiceNo, "BANK_TRANSFER")
                                   }
-                                  className={`rounded-md px-2.5 py-1 text-sm font-semibold transition-colors ${
+                                  className={`rounded-md px-2 py-0.5 text-xs font-semibold transition-colors ${
                                     inv.splitBankMethod === "BANK_TRANSFER"
                                       ? "bg-jct-turquoise text-black font-bold"
                                       : "text-slate-500 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-white"
@@ -4127,7 +4127,7 @@ function DailyRegisterView({
                                     onClick={() =>
                                       handleSetInvoiceSplitMethod(inv.invoiceNo, "POS_SWIPE", term)
                                     }
-                                    className={`rounded-md px-2.5 py-1 text-sm font-semibold transition-colors ${
+                                    className={`rounded-md px-2 py-0.5 text-xs font-semibold transition-colors ${
                                       inv.splitBankMethod === "POS_SWIPE" &&
                                       (inv.splitPosTerminal || inv.posTerminal) === term
                                         ? "bg-jct-turquoise text-black font-bold"
@@ -4142,7 +4142,7 @@ function DailyRegisterView({
                           </div>
 
                           {/* Split Row Summary */}
-                          <div className="flex flex-col items-end gap-0.5 font-mono text-sm">
+                          <div className="flex flex-col items-end gap-0.5 font-mono text-xs">
                             <div className="flex flex-wrap items-center gap-2 text-jct-charcoal dark:text-white">
                               <span className="text-emerald-600 dark:text-jct-turquoise font-semibold">
                                 Cash: SAR {fmt(inv.splitCashAmount)}
@@ -4153,7 +4153,7 @@ function DailyRegisterView({
                               </span>
                             </div>
                             {trackPosFees && inv.splitBankMethod === "POS_SWIPE" && posFee > 0 && (
-                              <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                              <span className="text-[10px] text-slate-500 dark:text-slate-400">
                                 {(() => {
                                   const fb = calcInvoiceFeeBreakdown(inv);
                                   return `Est. ${splitTermMeta.shortLabel} fee: -SAR ${fmt(fb.totalFee)} (MDR: SAR ${fmt(fb.mdrBase)} + 15% VAT: SAR ${fmt(fb.vatOnFee)})`;
@@ -4166,16 +4166,16 @@ function DailyRegisterView({
 
                       {/* Progressive Disclosure Sub-Row for Swipe (POS): Card Method */}
                       {isPosSwipe && (
-                        <div className="bg-slate-50 dark:bg-[#111111] rounded-lg mt-2 p-4 flex flex-wrap items-center justify-between gap-3 text-sm">
-                          <div className="flex flex-wrap items-center gap-2.5">
+                        <div className="bg-slate-50 dark:bg-[#111111] rounded-lg mt-1.5 p-3 flex flex-wrap items-center justify-between gap-2.5 text-xs">
+                          <div className="flex flex-wrap items-center gap-2">
                             <span className="font-medium text-slate-500 dark:text-slate-400">Card Method:</span>
-                            <div className="bg-white dark:bg-[#0A0A0A] p-1 rounded-lg flex flex-wrap gap-2">
+                            <div className="bg-white dark:bg-[#0A0A0A] p-0.5 rounded-lg flex flex-wrap gap-1.5">
                               {(["SAB", "AL_RAJHI", "VISA_MC"] as PosTerminalBank[]).map((term) => (
                                 <button
                                   key={term}
                                   type="button"
                                   onClick={() => handleSetInvoiceTerminal(inv.invoiceNo, term)}
-                                  className={`rounded-md px-2.5 py-1 text-sm font-semibold transition-colors ${
+                                  className={`rounded-md px-2 py-0.5 text-xs font-semibold transition-colors ${
                                     inv.posTerminal === term
                                       ? "bg-jct-turquoise text-black font-bold"
                                       : "text-jct-yellow hover:brightness-110"
@@ -4187,12 +4187,12 @@ function DailyRegisterView({
                             </div>
                           </div>
 
-                          <div className="flex flex-col items-end gap-0.5 font-mono text-sm">
+                          <div className="flex flex-col items-end gap-0.5 font-mono text-xs">
                             <span className="font-bold text-jct-charcoal dark:text-jct-yellow">
                               {termMeta.badgeTag}: SAR {fmt(inv.amount)}
                             </span>
                             {trackPosFees && posFee > 0 && (
-                              <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                              <span className="text-[10px] text-slate-500 dark:text-slate-400">
                                 {(() => {
                                   const fb = calcInvoiceFeeBreakdown(inv);
                                   return `MDR: -SAR ${fmt(fb.mdrBase)} | 15% VAT: -SAR ${fmt(fb.vatOnFee)} | Net: SAR ${fmt(fb.net)}`;
@@ -4205,7 +4205,7 @@ function DailyRegisterView({
 
                       {/* Credit Sale Summary Sub-Row (edit via popup modal) */}
                       {isCreditSaleInv && (
-                        <div className="bg-slate-50 dark:bg-[#111111] rounded-lg mt-2 p-4 flex flex-wrap items-center justify-between gap-2 text-sm">
+                        <div className="bg-slate-50 dark:bg-[#111111] rounded-lg mt-1.5 p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
                           <div className="flex flex-wrap items-center gap-2 font-mono">
                             <span className="text-jct-charcoal dark:text-white font-semibold">
                               Credit Balance: SAR {fmt(inv.creditBalance ?? inv.amount)}
@@ -4234,7 +4234,7 @@ function DailyRegisterView({
                           <button
                             type="button"
                             onClick={() => setCreditModalInvNo(inv.invoiceNo)}
-                            className="bg-jct-yellow text-black font-bold hover:brightness-95 transition-all rounded-md px-3 py-1 text-sm"
+                            className="bg-jct-yellow text-black font-bold hover:brightness-95 transition-all rounded-md px-2.5 py-0.5 text-xs"
                           >
                             Edit
                           </button>
@@ -4243,8 +4243,8 @@ function DailyRegisterView({
 
                       {/* Conditional Sub-Row for Bank Transfer (0% Fee) with Bank Mode of Payment Selector */}
                       {inv.paymentMode === "BANK_TRANSFER" && (
-                        <div className="bg-slate-50 dark:bg-[#111111] rounded-lg mt-2 p-4 flex flex-wrap items-center justify-between gap-2 text-sm">
-                          <div className="flex items-center gap-2.5">
+                        <div className="bg-slate-50 dark:bg-[#111111] rounded-lg mt-1.5 p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+                          <div className="flex items-center gap-2">
                             <span className="font-medium text-slate-500 dark:text-slate-400">
                               Mode of Payment (Bank):
                             </span>
@@ -4256,7 +4256,7 @@ function DailyRegisterView({
                                   e.target.value as UniversalPaymentMode
                                 )
                               }
-                              className="bg-transparent border-transparent text-jct-charcoal dark:text-white focus:outline-none focus:ring-0 focus:border-b-2 focus:border-jct-turquoise transition-all rounded-none px-2 py-1 text-sm font-medium"
+                              className="bg-transparent border-transparent text-jct-charcoal dark:text-white focus:outline-none focus:ring-0 focus:border-b-2 focus:border-jct-turquoise transition-all rounded-none px-2 py-0.5 text-xs font-medium"
                             >
                               {UNIVERSAL_PAYMENT_MODES.map((pm) => (
                                 <option key={pm.value} value={pm.value} className="bg-white dark:bg-[#0A0A0A]">
@@ -4273,8 +4273,8 @@ function DailyRegisterView({
 
                       {/* Conditional Sub-Row for Other Amt Recd: Inline Note / Cause Input */}
                       {isOtherRecd && (
-                        <div className="bg-slate-50 dark:bg-[#111111] rounded-lg mt-2 p-4 flex items-center gap-3 text-sm">
-                          <span className="text-xs font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                        <div className="bg-slate-50 dark:bg-[#111111] rounded-lg mt-1.5 p-3 flex items-center gap-2.5 text-xs">
+                          <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">
                             Cause / Note:
                           </span>
                           <input
@@ -4282,7 +4282,7 @@ function DailyRegisterView({
                             value={inv.otherNote || ""}
                             onChange={(e) => handleSetInvoiceOtherNote(inv.invoiceNo, e.target.value)}
                             placeholder="Add note / cause for this amount..."
-                            className="flex-1 bg-transparent border-transparent text-jct-charcoal dark:text-white placeholder-slate-400 focus:outline-none focus:ring-0 focus:border-b-2 focus:border-jct-turquoise transition-all rounded-none px-2 py-1 text-sm font-medium"
+                            className="flex-1 bg-transparent border-transparent text-jct-charcoal dark:text-white placeholder-slate-400 focus:outline-none focus:ring-0 focus:border-b-2 focus:border-jct-turquoise transition-all rounded-none px-2 py-0.5 text-xs font-medium"
                           />
                         </div>
                       )}
