@@ -29,6 +29,7 @@ export interface PocketTransaction {
   /** ADVANCE: staff name · CREDIT_COLLECTION: customer name */
   recipientName: string | null;
   paymentSource: PaymentSource;
+  paymentMode?: string | null;
   note: string | null;
   date: string;
   createdAt: string;

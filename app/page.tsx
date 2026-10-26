@@ -64,12 +64,69 @@ export interface SupplierPayableBrand {
   color: string;
 }
 
+export type UniversalPaymentMode =
+  | "CASH"
+  | "SAB"
+  | "AL_RAJHI"
+  | "SNB"
+  | "VISA"
+  | "MADA"
+  | "BANK_TRANSFER";
+
+export const UNIVERSAL_PAYMENT_MODES: {
+  value: UniversalPaymentMode;
+  label: string;
+  badge: string;
+  short: string;
+}[] = [
+  { value: "CASH", label: "Cash", badge: "💵 Cash", short: "💵 Cash" },
+  { value: "SAB", label: "SAB (Saudi Awwal Bank)", badge: "🏦 SAB", short: "🏦 SAB" },
+  { value: "AL_RAJHI", label: "Al Rajhi", badge: "🏦 Al Rajhi", short: "🏦 Al Rajhi" },
+  { value: "SNB", label: "SNB", badge: "🏦 SNB", short: "🏦 SNB" },
+  { value: "VISA", label: "VISA", badge: "💳 VISA", short: "💳 VISA" },
+  { value: "MADA", label: "Mada", badge: "💳 Mada", short: "💳 Mada" },
+  { value: "BANK_TRANSFER", label: "Bank Transfer", badge: "🏦 Bank Transfer", short: "🏦 Bank Transfer" },
+];
+
+export const formatPaymentModeBadge = (
+  mode?: string | null
+): { badge: string; badgeClass: string; label: string; cls: string } => {
+  const m = (mode || "CASH").toUpperCase();
+  if (m.includes("SAB")) {
+    const cls = "border-[#00BAC7]/40 bg-[#00BAC7]/15 text-[#22D3EE]";
+    return { badge: "🏦 SAB", badgeClass: cls, label: "🏦 SAB", cls };
+  }
+  if (m.includes("RAJHI")) {
+    const cls = "border-emerald-400/40 bg-emerald-500/15 text-emerald-300";
+    return { badge: "🏦 Al Rajhi", badgeClass: cls, label: "🏦 Al Rajhi", cls };
+  }
+  if (m.includes("SNB")) {
+    const cls = "border-teal-400/40 bg-teal-500/15 text-teal-300";
+    return { badge: "🏦 SNB", badgeClass: cls, label: "🏦 SNB", cls };
+  }
+  if (m.includes("VISA") || m.includes("MC")) {
+    const cls = "border-purple-400/40 bg-purple-500/15 text-purple-300";
+    return { badge: "💳 VISA", badgeClass: cls, label: "💳 VISA", cls };
+  }
+  if (m.includes("MADA")) {
+    const cls = "border-sky-400/40 bg-sky-500/15 text-sky-300";
+    return { badge: "💳 Mada", badgeClass: cls, label: "💳 Mada", cls };
+  }
+  if (m.includes("BANK") || m.includes("TRANSFER")) {
+    const cls = "border-[#FFD200]/40 bg-[#FFD200]/15 text-[#FFD200]";
+    return { badge: "🏦 Bank Transfer", badgeClass: cls, label: "🏦 Bank Transfer", cls };
+  }
+  const cls = "border-white/20 bg-white/10 text-slate-200";
+  return { badge: "💵 Cash", badgeClass: cls, label: "💵 Cash", cls };
+};
+
 export interface SupplierBillItem {
   id: string;
   supplierName: string;
   amount: number;
   dueDate: string;
   category: "Credit Purchase" | "Cash Purchase" | "Bank Purchase" | "Return";
+  paymentMode?: string;
   createdAt: string;
   source: "Daily Register" | "Supplier Hub";
 }
@@ -97,6 +154,7 @@ export interface PayrollLogItem {
   branch: string;
   note: string | null;
   source: string;
+  paymentMode?: string | null;
   createdAt: string;
   staff?: {
     id: string;
@@ -159,6 +217,7 @@ const INITIAL_SUPPLIER_BILLS: SupplierBillItem[] = [
     amount: 12000,
     dueDate: "2026-09-18",
     category: "Credit Purchase",
+    paymentMode: "SAB",
     createdAt: "10-09-2026",
     source: "Supplier Hub",
   },
@@ -168,6 +227,7 @@ const INITIAL_SUPPLIER_BILLS: SupplierBillItem[] = [
     amount: 5400,
     dueDate: "2026-09-22",
     category: "Credit Purchase",
+    paymentMode: "AL_RAJHI",
     createdAt: "11-09-2026",
     source: "Supplier Hub",
   },
@@ -562,6 +622,7 @@ export interface PreLoggedEntry {
   receiptNo?: string;
   staffId?: string;
   staffName?: string;
+  paymentMode?: string;
   note?: string;
   amount: number;
   originalAmount?: number;
@@ -580,6 +641,7 @@ export interface ErpInvoiceItem {
   originalAmount?: number;
   paymentMode: InvoicePaymentMode;
   posTerminal: PosTerminalBank;
+  bankPaymentMode?: string;
   isSplit?: boolean;
   splitCashAmount: number;
   splitBankAmount: number;
@@ -1423,7 +1485,8 @@ interface DailyRegisterViewProps {
     supplierName: string,
     amount: number,
     dueDate: string,
-    category: "Credit Purchase" | "Cash Purchase" | "Bank Purchase"
+    category: "Credit Purchase" | "Cash Purchase" | "Bank Purchase",
+    paymentMode?: string
   ) => void;
   onSyncCreditCustomer: (
     customerName: string,
@@ -1495,6 +1558,7 @@ function DailyRegisterView({
   // Hub Quick-Logger Form State (Expenses & Cash-In & Split Payment)
   const [entryType, setEntryType] = useState<PreLoggedEntryType>("EXPENSE");
   const [hubExpenseCat, setHubExpenseCat] = useState<StrictExpenseCategory>("Food");
+  const [hubPaymentMode, setHubPaymentMode] = useState<UniversalPaymentMode>("CASH");
   const [entryTitle, setEntryTitle] = useState("");
   const [entryAmount, setEntryAmount] = useState("");
   const [hubSupplierName, setHubSupplierName] = useState("Jotun");
@@ -1517,6 +1581,7 @@ function DailyRegisterView({
   const [step3Kind, setStep3Kind] = useState<
     "CREDIT_RECD" | "CREDIT_SALE" | "SPLIT_SALE" | "LOAN_IN" | "OTHER_IN"
   >("CREDIT_RECD");
+  const [step3PaymentMode, setStep3PaymentMode] = useState<UniversalPaymentMode>("CASH");
   const [step3SplitEnabled, setStep3SplitEnabled] = useState(false);
   const [step3Title, setStep3Title] = useState("");
   const [step3FollowUpDate, setStep3FollowUpDate] = useState("2026-09-20");
@@ -1531,6 +1596,7 @@ function DailyRegisterView({
 
   // Step 4 (Expenses & Purchases — Strict 7 Categories) State
   const [step4Category, setStep4Category] = useState<StrictExpenseCategory>("Food");
+  const [step4PaymentMode, setStep4PaymentMode] = useState<UniversalPaymentMode>("CASH");
   const [step4SupplierName, setStep4SupplierName] = useState("Jotun");
   const [step4DueDate, setStep4DueDate] = useState("2026-09-25");
   const [step4Note, setStep4Note] = useState("");
@@ -1542,12 +1608,19 @@ function DailyRegisterView({
   >("NONE");
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [editingRowVal, setEditingRowVal] = useState("");
+  const [editingEntryModal, setEditingEntryModal] = useState<PreLoggedEntry | null>(null);
+  const [editModalTitle, setEditModalTitle] = useState("");
+  const [editModalAmount, setEditModalAmount] = useState("");
+  const [editModalPaymentMode, setEditModalPaymentMode] = useState<string>("CASH");
+  const [editModalCategory, setEditModalCategory] = useState<StrictExpenseCategory>("Food");
   const [missingInflowTitle, setMissingInflowTitle] = useState("");
   const [missingInflowAmt, setMissingInflowAmt] = useState("");
+  const [missingInflowMode, setMissingInflowMode] = useState<UniversalPaymentMode>("CASH");
   const [missingExpenseCat, setMissingExpenseCat] = useState<StrictExpenseCategory>("Food");
   const [missingExpenseSupplier, setMissingExpenseSupplier] = useState("");
   const [missingExpenseDueDate, setMissingExpenseDueDate] = useState("2026-09-25");
   const [missingExpenseAmt, setMissingExpenseAmt] = useState("");
+  const [missingExpenseMode, setMissingExpenseMode] = useState<UniversalPaymentMode>("CASH");
 
   // Classic Digital Data Sheet State (15 Pre-Populated Rows matching client paper ledger)
   const [sheetRows, setSheetRows] = useState<DataSheetRow[]>(INITIAL_DATASHEET_ROWS);
@@ -1646,6 +1719,7 @@ function DailyRegisterView({
           customerName: newEntry.customerName || existing.customerName,
           followUpDate: newEntry.followUpDate || existing.followUpDate,
           receiptNo: newEntry.receiptNo || existing.receiptNo,
+          paymentMode: newEntry.paymentMode || existing.paymentMode || "CASH",
           note: newEntry.note || existing.note,
           isSplit: newEntry.isSplit ?? existing.isSplit,
           splitCashAmount: newEntry.splitCashAmount ?? existing.splitCashAmount,
@@ -2223,13 +2297,20 @@ function DailyRegisterView({
         dueDate: isCreditPurchase ? hubDueDate : undefined,
         staffId: isStaffExpense ? step4StaffId : undefined,
         staffName: isStaffExpense ? staffName : undefined,
+        paymentMode: hubExpenseCat === "Bank Purchase" && hubPaymentMode === "CASH" ? "SAB" : hubPaymentMode,
         title: displayTitle,
         amount: val,
         time: nowHHMM(),
       });
 
       if (isPurchase) {
-        onSyncCreditPurchase(supplierClean, val, hubDueDate || "2026-09-25", hubExpenseCat);
+        onSyncCreditPurchase(
+          supplierClean,
+          val,
+          hubDueDate || "2026-09-25",
+          hubExpenseCat,
+          hubExpenseCat === "Bank Purchase" && hubPaymentMode === "CASH" ? "SAB" : hubPaymentMode
+        );
         setSyncBannerMsg({
           text: `${hubExpenseCat} (${supplierClean} · SAR ${fmt(val)}${isCreditPurchase ? ` · Due ${hubDueDate}` : ""}) synced live to Suppliers & Payables`,
           targetTab: "suppliers",
@@ -2248,7 +2329,8 @@ function DailyRegisterView({
             branch: branchId,
             date: new Date().toISOString().slice(0, 10),
             note: entryTitle.trim() || `${hubExpenseCat} logged via Hub Quick Logger`,
-            source: "REGISTER_DRAWER",
+            source: hubPaymentMode === "CASH" ? "REGISTER_DRAWER" : "BANK_TRANSFER",
+            paymentMode: hubPaymentMode,
           }),
         }).catch((err) => console.error("Error creating PayrollLog from hub:", err));
 
@@ -2286,6 +2368,7 @@ function DailyRegisterView({
       customerName: isCreditCustomer ? custName : undefined,
       followUpDate: isCreditCustomer ? hubFollowUpDate : undefined,
       receiptNo: formattedInv,
+      paymentMode: hubPaymentMode,
       title: custName,
       amount: val,
       time: nowHHMM(),
@@ -2458,6 +2541,7 @@ function DailyRegisterView({
       customerName: isCredit ? cleanCustomer : undefined,
       followUpDate: isCredit ? step3FollowUpDate : undefined,
       receiptNo: formattedReceiptNo,
+      paymentMode: step3PaymentMode,
       title: cleanCustomer,
       amount: val,
       time: nowHHMM(),
@@ -2525,6 +2609,11 @@ function DailyRegisterView({
       ? `${step4Category} (${step4Note.trim()})`
       : step4Category;
 
+    const effectiveStep4Mode =
+      step4Category === "Bank Purchase" && step4PaymentMode === "CASH"
+        ? "SAB"
+        : step4PaymentMode;
+
     upsertEntry({
       id: isSupplierPurchase
         ? `ple-${step4Category.toLowerCase().replace(/\s+/g, "-")}-${cleanSupplier.toLowerCase().replace(/\s+/g, "-")}`
@@ -2537,6 +2626,7 @@ function DailyRegisterView({
       dueDate: isCreditPurchase ? step4DueDate : undefined,
       staffId: isStaffExpense ? step4StaffId : undefined,
       staffName: isStaffExpense ? staffName : undefined,
+      paymentMode: effectiveStep4Mode,
       note: step4Note.trim() || undefined,
       title: displayTitle,
       amount: val,
@@ -2548,7 +2638,8 @@ function DailyRegisterView({
         cleanSupplier,
         val,
         step4DueDate || "2026-09-25",
-        step4Category
+        step4Category,
+        effectiveStep4Mode
       );
       setSyncBannerMsg({
         text: `${step4Category}: ${cleanSupplier} (SAR ${fmt(val)}${isCreditPurchase ? ` · Due: ${step4DueDate}` : ""}) synced live to Suppliers & Payables`,
@@ -2568,7 +2659,8 @@ function DailyRegisterView({
           branch: branchId,
           date: new Date().toISOString().slice(0, 10),
           note: step4Note.trim() || `${step4Category} logged in Daily Register drawer`,
-          source: "REGISTER_DRAWER",
+          source: effectiveStep4Mode === "CASH" ? "REGISTER_DRAWER" : "BANK_TRANSFER",
+          paymentMode: effectiveStep4Mode,
         }),
       }).catch((err) => console.error("Error creating PayrollLog:", err));
 
@@ -2645,6 +2737,119 @@ function DailyRegisterView({
     setEditingRowId(null);
   };
 
+  const handleOpenEditEntryModal = (entry: PreLoggedEntry) => {
+    setEditingEntryModal(entry);
+    setEditModalTitle(entry.title);
+    setEditModalAmount(String(entry.amount));
+    setEditModalPaymentMode(entry.paymentMode || "CASH");
+    setEditModalCategory(entry.expenseCategory || "Food");
+  };
+
+  const handleSaveEditEntryModal = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingEntryModal) return;
+    const nextAmt = Math.max(0, parseFloat(editModalAmount) || 0);
+    const nextTitle = editModalTitle.trim() || editingEntryModal.title;
+    setPreLoggedEntries((prev) =>
+      prev.map((item) =>
+        item.id === editingEntryModal.id
+          ? {
+              ...item,
+              title: nextTitle,
+              amount: nextAmt,
+              originalAmount: item.originalAmount ?? item.amount,
+              paymentMode: editModalPaymentMode,
+              expenseCategory:
+                item.type === "EXPENSE" ? editModalCategory : item.expenseCategory,
+            }
+          : item
+      )
+    );
+    // If this entry came from PocketTransaction (`pk-...`), also persist via PUT /api/pocket
+    if (editingEntryModal.id.startsWith("pk-")) {
+      const pocketId = editingEntryModal.id.replace(/^pk-/, "");
+      fetch("/api/pocket", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: pocketId,
+          amount: nextAmt,
+          category: nextTitle,
+          paymentMode: editModalPaymentMode,
+        }),
+      }).catch((err) => console.error("Failed to update pocket txn", err));
+    }
+    setEditingEntryModal(null);
+  };
+
+  const handleEditErpInvoiceCustomer = (invoiceNo: string, nextCustomer: string) => {
+    setErpInvoices((prev) => {
+      const base = prev.length > 0 ? prev : buildMatchedErpList();
+      return base.map((inv) =>
+        inv.invoiceNo === invoiceNo ? { ...inv, customer: nextCustomer } : inv
+      );
+    });
+  };
+
+  const handleEditErpInvoiceAmount = (invoiceNo: string, rawVal: string) => {
+    const val = Math.max(0, parseFloat(rawVal) || 0);
+    setErpInvoices((prev) => {
+      const base = prev.length > 0 ? prev : buildMatchedErpList();
+      return base.map((inv) => {
+        if (inv.invoiceNo !== invoiceNo) return inv;
+        const cashShare = inv.isSplit ? r2(val / 2) : inv.splitCashAmount;
+        const bankShare = inv.isSplit ? r2(val - cashShare) : inv.splitBankAmount;
+        return {
+          ...inv,
+          originalAmount: inv.originalAmount ?? inv.amount,
+          amount: val,
+          splitCashAmount: cashShare,
+          splitBankAmount: bankShare,
+          creditBalance:
+            inv.paymentMode === "CREDIT_SALE"
+              ? Math.max(0, r2(val - (inv.creditDownAmount || 0)))
+              : inv.creditBalance,
+        };
+      });
+    });
+  };
+
+  const handleEditErpInvoiceBankMode = (invoiceNo: string, nextBankMode: string) => {
+    setErpInvoices((prev) => {
+      const base = prev.length > 0 ? prev : buildMatchedErpList();
+      return base.map((inv) =>
+        inv.invoiceNo === invoiceNo ? { ...inv, bankPaymentMode: nextBankMode } : inv
+      );
+    });
+  };
+
+  const handleAddManualErpInvoice = () => {
+    setErpInvoices((prev) => {
+      const base = prev.length > 0 ? prev : buildMatchedErpList();
+      const maxNo = base.reduce(
+        (m, i) => Math.max(m, parseInt(i.invoiceNo, 10) || 30079),
+        30079
+      );
+      const nextNo = String(maxNo + 1);
+      const newRow: ErpInvoiceItem = {
+        invoiceNo: nextNo,
+        customer: "New Walk-in / Manual Invoice",
+        amount: 500,
+        paymentMode: "CASH",
+        posTerminal: "SAB",
+        bankPaymentMode: "CASH",
+        isSplit: false,
+        splitCashAmount: 250,
+        splitBankAmount: 250,
+        splitBankMethod: "POS_SWIPE",
+        splitPosTerminal: "SAB",
+        autoMatched: false,
+        time: nowHHMM(),
+      };
+      return [...base, newRow];
+    });
+  };
+
   const handleAddMissingInflow = (e: React.FormEvent) => {
     e.preventDefault();
     const val = parseFloat(missingInflowAmt);
@@ -2654,6 +2859,7 @@ function DailyRegisterView({
       type: "CREDIT_RECD",
       customerName: missingInflowTitle.trim(),
       followUpDate: "2026-09-20",
+      paymentMode: missingInflowMode,
       title: missingInflowTitle.trim(),
       amount: val,
       time: nowHHMM(),
@@ -2685,13 +2891,14 @@ function DailyRegisterView({
       expenseCategory: missingExpenseCat,
       supplierName: isPurchase ? supplier : undefined,
       dueDate: isCreditPurchase ? missingExpenseDueDate : undefined,
+      paymentMode: missingExpenseMode,
       title,
       amount: val,
       time: nowHHMM(),
     });
 
     if (isPurchase) {
-      onSyncCreditPurchase(supplier, val, missingExpenseDueDate || "2026-09-25", missingExpenseCat);
+      onSyncCreditPurchase(supplier, val, missingExpenseDueDate || "2026-09-25", missingExpenseCat, missingExpenseMode);
     }
     setMissingExpenseSupplier("");
     setMissingExpenseAmt("");
@@ -3409,6 +3616,20 @@ function DailyRegisterView({
                       />
                     )}
 
+                    <select
+                      value={hubPaymentMode}
+                      onChange={(e) => setHubPaymentMode(e.target.value as UniversalPaymentMode)}
+                      required
+                      className="bg-[#061416] border border-[#00BAC7]/40 focus:border-[#FFD200] text-[#22D3EE] text-xs font-bold rounded-xl px-3 py-2.5 outline-none transition"
+                      title="Mode of Payment"
+                    >
+                      {UNIVERSAL_PAYMENT_MODES.map((pm) => (
+                        <option key={pm.value} value={pm.value}>
+                          {pm.badge} · {pm.label}
+                        </option>
+                      ))}
+                    </select>
+
                     <input
                       type="number"
                       step="0.01"
@@ -3511,6 +3732,7 @@ function DailyRegisterView({
                   <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-white/5">
                     {preLoggedEntries.map((entry) => {
                       const meta = entryTypeMeta[entry.type];
+                      const pmBadge = formatPaymentModeBadge(entry.paymentMode);
                       return (
                         <div
                           key={entry.id}
@@ -3518,6 +3740,9 @@ function DailyRegisterView({
                         >
                           <span className={`rounded border px-1.5 py-0.5 text-[10px] font-bold ${meta.badgeClass}`}>
                             {entry.expenseCategory || meta.label}
+                          </span>
+                          <span className={`rounded border px-1.5 py-0.5 text-[10px] font-bold ${pmBadge.badgeClass}`}>
+                            {pmBadge.badge}
                           </span>
                           {entry.receiptNo && (
                             <span className="font-mono text-[11px] font-bold text-[#FFD200]">
@@ -3530,11 +3755,19 @@ function DailyRegisterView({
                           </span>
                           <button
                             type="button"
+                            onClick={() => handleOpenEditEntryModal(entry)}
+                            className="rounded bg-white/10 hover:bg-white/20 px-1.5 py-0.5 text-[10px] font-bold text-[#FFD200] transition"
+                            title="Edit entry"
+                          >
+                            ✏️ Edit
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => handleRemoveEntry(entry.id)}
-                            className="text-slate-500 hover:text-rose-400 transition ml-0.5"
+                            className="rounded bg-rose-500/15 hover:bg-rose-500/30 px-1.5 py-0.5 text-[10px] font-bold text-rose-300 transition"
                             title="Delete entry"
                           >
-                            <Trash2 size={12} />
+                            🗑️ Delete
                           </button>
                         </div>
                       );
@@ -3563,6 +3796,103 @@ function DailyRegisterView({
                 </span>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Universal Entry Edit Modal (Hub, Step 3, Step 4, Step 5) */}
+      {editingEntryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md">
+          <div className="w-full max-w-md rounded-3xl border border-[#00BAC7]/40 bg-[#071618] p-6 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3 mb-4">
+              <h3 className="font-display text-lg font-extrabold text-white">
+                ✏️ Edit Register Entry
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingEntryModal(null)}
+                className="rounded-lg bg-white/10 px-2.5 py-1 text-xs font-bold text-slate-300 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+            <form onSubmit={handleSaveEditEntryModal} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  Description / Customer / Supplier
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editModalTitle}
+                  onChange={(e) => setEditModalTitle(e.target.value)}
+                  className="w-full rounded-xl border border-white/15 bg-black/50 px-3.5 py-2.5 text-sm font-semibold text-white outline-none focus:border-[#FFD200]"
+                />
+              </div>
+              {editingEntryModal.type === "EXPENSE" && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                    Expense Category
+                  </label>
+                  <select
+                    value={editModalCategory}
+                    onChange={(e) => setEditModalCategory(e.target.value as StrictExpenseCategory)}
+                    className="w-full rounded-xl border border-white/15 bg-[#061113] px-3.5 py-2.5 text-sm font-bold text-[#FFD200] outline-none focus:border-[#FFD200]"
+                  >
+                    {STRICT_EXPENSE_CATEGORIES.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  Mode of Payment (Required)
+                </label>
+                <select
+                  value={editModalPaymentMode}
+                  onChange={(e) => setEditModalPaymentMode(e.target.value as UniversalPaymentMode)}
+                  required
+                  className="w-full rounded-xl border border-[#00BAC7]/40 bg-[#061113] px-3.5 py-2.5 text-sm font-bold text-[#22D3EE] outline-none focus:border-[#FFD200]"
+                >
+                  {UNIVERSAL_PAYMENT_MODES.map((pm) => (
+                    <option key={pm.value} value={pm.value}>
+                      {pm.badge} · {pm.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  Amount (SAR)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  required
+                  value={editModalAmount}
+                  onChange={(e) => setEditModalAmount(e.target.value)}
+                  className="w-full rounded-xl border border-white/15 bg-black/50 px-3.5 py-2.5 font-mono text-base font-extrabold text-white outline-none focus:border-emerald-400"
+                />
+              </div>
+              <div className="flex items-center justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingEntryModal(null)}
+                  className="rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-xs font-bold text-slate-300 hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-xl bg-gradient-to-r from-[#FFD200] to-[#00BAC7] px-5 py-2.5 text-xs font-black text-black shadow-lg"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -3779,7 +4109,22 @@ function DailyRegisterView({
                 </div>
               </div>
 
-              {/* Clean Table of 18 Invoices with 5 Payment Options (including [⚡ Split / Partial]) */}
+              {/* Editable CSV Grid Header + Add Row Button */}
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#00BAC7]/25 bg-black/40 px-4 py-2.5 text-xs">
+                <span className="font-semibold text-slate-300">
+                  ✏️ <strong className="text-white">Editable CSV Grid:</strong> Click any Customer Name or Amount below to override directly, select Mode of Payment, or delete rows before saving.
+                </span>
+                <button
+                  type="button"
+                  onClick={handleAddManualErpInvoice}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-[#00BAC7] to-[#0284C7] px-3.5 py-1.5 text-xs font-extrabold text-white shadow-sm hover:brightness-110 transition"
+                >
+                  <Plus size={14} />
+                  <span>+ Add Invoice Row</span>
+                </button>
+              </div>
+
+              {/* Clean Editable Table of Imported Invoices with Payment Options & Delete */}
               <div className="flex flex-col gap-3">
                 {activeErpList.map((inv) => {
                   const isBankOrPos =
@@ -3792,6 +4137,15 @@ function DailyRegisterView({
                   const termMeta = POS_TERMINAL_META[inv.posTerminal || "SAB"];
                   const splitTermMeta =
                     POS_TERMINAL_META[inv.splitPosTerminal || inv.posTerminal || "SAB"];
+                  const pmBadge = formatPaymentModeBadge(
+                    inv.paymentMode === "CASH"
+                      ? "CASH"
+                      : inv.paymentMode === "POS_SWIPE"
+                      ? inv.posTerminal === "VISA_MC"
+                        ? "VISA"
+                        : inv.posTerminal || "SAB"
+                      : inv.bankPaymentMode || "BANK_TRANSFER"
+                  );
 
                   // Dynamic color-coded ambient outline per payment mode (functional clarity)
                   const rowOutline =
@@ -3813,12 +4167,24 @@ function DailyRegisterView({
                       className={`flex flex-col gap-2.5 rounded-2xl border px-5 py-3.5 transition-all duration-200 ease-in-out ${rowOutline}`}
                     >
                       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-                        <div className="flex flex-wrap items-center gap-2.5 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2.5 min-w-0 flex-1">
                           <span className="font-mono text-sm font-extrabold text-[#FFD200] w-16 shrink-0">
                             #{inv.invoiceNo}
                           </span>
-                          <span className="text-sm font-semibold text-white truncate">
-                            {inv.customer}
+                          {/* Editable Customer / Description Input */}
+                          <input
+                            type="text"
+                            value={inv.customer}
+                            onChange={(e) =>
+                              handleEditErpInvoiceCustomer(inv.invoiceNo, e.target.value)
+                            }
+                            placeholder="Customer / Description..."
+                            className="min-w-[180px] flex-1 max-w-xs rounded-xl border border-white/15 bg-black/45 px-3 py-1.5 text-sm font-semibold text-white outline-none focus:border-[#FFD200]"
+                          />
+                          <span
+                            className={`rounded border px-2 py-0.5 text-[10px] font-bold shrink-0 ${pmBadge.badgeClass}`}
+                          >
+                            {pmBadge.badge}
                           </span>
                           {isSplitMode && (
                             <span className="rounded-full bg-[#FFD200]/25 border border-[#FFD200]/60 px-2.5 py-0.5 text-[10px] font-extrabold text-[#FFD200] shrink-0 shadow-[0_0_15px_rgba(255,210,0,0.25)]">
@@ -3837,24 +4203,32 @@ function DailyRegisterView({
                           )}
                         </div>
 
-                        <div className="flex flex-wrap items-center justify-between lg:justify-end gap-4 shrink-0">
-                          <span
-                            className={`font-display text-sm font-extrabold w-28 text-right whitespace-nowrap ${
-                              isSplitMode
-                                ? "text-rose-300"
-                                : inv.paymentMode === "BANK_TRANSFER"
-                                ? "text-[#22D3EE]"
-                                : isBankOrPos
-                                ? "text-[#FFD200]"
-                                : isCreditSaleInv
-                                ? "text-blue-300"
-                                : isOtherRecd
-                                ? "text-[#22D3EE]"
-                                : "text-emerald-300"
-                            }`}
-                          >
-                            SAR {fmt(inv.amount)}
-                          </span>
+                        <div className="flex flex-wrap items-center justify-between lg:justify-end gap-3 shrink-0">
+                          {/* Editable Invoice Amount Input */}
+                          <div className="flex items-center gap-1.5 rounded-xl border border-white/15 bg-black/50 px-2.5 py-1">
+                            <span className="text-[11px] font-bold text-slate-400">SAR</span>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={inv.amount}
+                              onChange={(e) =>
+                                handleEditErpInvoiceAmount(inv.invoiceNo, e.target.value)
+                              }
+                              className={`w-24 bg-transparent font-display text-sm font-extrabold text-right outline-none ${
+                                isSplitMode
+                                  ? "text-rose-300"
+                                  : inv.paymentMode === "BANK_TRANSFER"
+                                  ? "text-[#22D3EE]"
+                                  : isBankOrPos
+                                  ? "text-[#FFD200]"
+                                  : isCreditSaleInv
+                                  ? "text-blue-300"
+                                  : isOtherRecd
+                                  ? "text-[#22D3EE]"
+                                  : "text-emerald-300"
+                              }`}
+                            />
+                          </div>
 
                           {/* 5-Option Payment Method Selector including [⚡ Split / Partial] */}
                           <div className="inline-flex flex-wrap rounded-xl bg-black/50 p-1 border border-white/10 gap-0.5">
@@ -3914,6 +4288,17 @@ function DailyRegisterView({
                               Credit Sale (New Credit)
                             </button>
                           </div>
+
+                          {/* Explicit [🗑️ Delete] Button on every CSV Row */}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveErpInvoice(inv.invoiceNo)}
+                            className="inline-flex items-center gap-1 rounded-xl border border-rose-500/35 bg-rose-500/15 hover:bg-rose-500/30 px-2.5 py-1.5 text-xs font-extrabold text-rose-300 transition"
+                            title="Delete CSV invoice row"
+                          >
+                            <Trash2 size={13} />
+                            <span>Delete</span>
+                          </button>
                         </div>
                       </div>
 
@@ -4096,14 +4481,32 @@ function DailyRegisterView({
                         </div>
                       )}
 
-                      {/* Conditional Sub-Row for Bank Transfer (0% Fee) */}
+                      {/* Conditional Sub-Row for Bank Transfer (0% Fee) with Bank Mode of Payment Selector */}
                       {inv.paymentMode === "BANK_TRANSFER" && (
-                        <div className="flex items-center justify-between rounded-xl border border-sky-400/25 bg-black/40 px-4 py-1.5 text-xs">
-                          <span className="font-semibold text-sky-300">
-                            Direct Bank Transfer
-                          </span>
+                        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-sky-400/25 bg-black/40 px-4 py-2 text-xs">
+                          <div className="flex items-center gap-2.5">
+                            <span className="font-semibold text-sky-300">
+                              Mode of Payment (Bank):
+                            </span>
+                            <select
+                              value={inv.bankPaymentMode || "BANK_TRANSFER"}
+                              onChange={(e) =>
+                                handleEditErpInvoiceBankMode(
+                                  inv.invoiceNo,
+                                  e.target.value as UniversalPaymentMode
+                                )
+                              }
+                              className="rounded-lg border border-sky-400/40 bg-[#061113] px-2.5 py-1 text-xs font-extrabold text-[#22D3EE] outline-none"
+                            >
+                              {UNIVERSAL_PAYMENT_MODES.map((pm) => (
+                                <option key={pm.value} value={pm.value}>
+                                  {pm.badge} · {pm.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
                           <span className="font-mono font-extrabold text-sky-200">
-                            Bank Transfer: SAR {fmt(inv.amount)}
+                            {formatPaymentModeBadge(inv.bankPaymentMode || "BANK_TRANSFER").badge}: SAR {fmt(inv.amount)}
                           </span>
                         </div>
                       )}
@@ -4338,7 +4741,28 @@ function DailyRegisterView({
                       </div>
                     )}
 
-                    {/* 5. Amount (SAR) + Split Tender Toggle */}
+                    {/* 5. Required Mode of Payment Dropdown (Step 3 Inflows) */}
+                    {!step3SplitEnabled && (
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-bold text-[#22D3EE]">
+                          Mode of Payment (Required)
+                        </label>
+                        <select
+                          value={step3PaymentMode}
+                          onChange={(e) => setStep3PaymentMode(e.target.value as UniversalPaymentMode)}
+                          required
+                          className="w-full rounded-xl border border-[#00BAC7]/40 bg-[#061113] px-3.5 py-3 text-sm font-bold text-[#22D3EE] outline-none focus:border-[#FFD200]"
+                        >
+                          {UNIVERSAL_PAYMENT_MODES.map((pm) => (
+                            <option key={pm.value} value={pm.value}>
+                              {pm.badge} · {pm.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {/* 6. Amount (SAR) + Split Tender Toggle */}
                     <div className="space-y-2">
                       <label className="block text-xs font-bold text-white/70">
                         Amount (SAR)
@@ -4435,7 +4859,7 @@ function DailyRegisterView({
                       </div>
                     )}
 
-                    {/* 6. Full-Width [+ Save & Sync] Button */}
+                    {/* 7. Full-Width [+ Save & Sync] Button */}
                     <button
                       type="submit"
                       className="w-full rounded-xl bg-gradient-to-r from-[#00A8B5] to-[#0284C7] hover:brightness-110 px-6 py-3.5 text-sm font-black text-white shadow-[0_0_20px_rgba(0,168,181,0.35)] transition"
@@ -4467,6 +4891,7 @@ function DailyRegisterView({
                         const isEditing = editingRowId === item.id;
                         const isCreditSaleRow = item.type === "CREDIT_SALE";
                         const isSplitSaleRow = item.type === "SPLIT_SALE";
+                        const pmBadge = formatPaymentModeBadge(item.paymentMode);
                         return (
                           <div key={item.id} className="flex items-center justify-between gap-3 py-3">
                             <div className="min-w-0">
@@ -4477,6 +4902,11 @@ function DailyRegisterView({
                                   </span>
                                 )}
                                 <p className="text-sm font-bold text-white truncate">{item.title}</p>
+                                <span
+                                  className={`rounded border px-2 py-0.5 text-[10px] font-bold ${pmBadge.badgeClass}`}
+                                >
+                                  {pmBadge.badge}
+                                </span>
                                 {isCreditSaleRow && (
                                   <span className="rounded bg-indigo-500/25 border border-indigo-400/40 px-2 py-0.5 text-[10px] font-extrabold text-indigo-200">
                                     CREDIT INV. AMOUNT
@@ -4501,7 +4931,7 @@ function DailyRegisterView({
                               </p>
                             </div>
 
-                            <div className="flex items-center gap-2.5 shrink-0">
+                            <div className="flex items-center gap-2 shrink-0">
                               {isEditing ? (
                                 <>
                                   <input
@@ -4531,20 +4961,17 @@ function DailyRegisterView({
                                   </span>
                                   <button
                                     type="button"
-                                    onClick={() => {
-                                      setEditingRowId(item.id);
-                                      setEditingRowVal(String(item.amount));
-                                    }}
-                                    className="rounded-lg bg-white/10 px-2.5 py-1 text-xs font-bold text-white/70 hover:text-white"
+                                    onClick={() => handleOpenEditEntryModal(item)}
+                                    className="rounded-lg bg-white/10 px-2.5 py-1 text-xs font-bold text-[#FFD200] hover:bg-white/20"
                                   >
-                                    Edit
+                                    ✏️ Edit
                                   </button>
                                   <button
                                     type="button"
                                     onClick={() => handleRemoveEntry(item.id)}
-                                    className="text-white/35 hover:text-rose-400 p-1"
+                                    className="rounded-lg bg-rose-500/15 hover:bg-rose-500/30 px-2 py-1 text-xs font-bold text-rose-300 transition"
                                   >
-                                    <Trash2 size={14} />
+                                    🗑️ Delete
                                   </button>
                                 </>
                               )}
@@ -4627,6 +5054,11 @@ function DailyRegisterView({
                           type="button"
                           onClick={() => {
                             setStep4Category(category);
+                            if (category === "Bank Purchase" && step4PaymentMode === "CASH") {
+                              setStep4PaymentMode("SAB");
+                            } else if (category === "Cash Purchase") {
+                              setStep4PaymentMode("CASH");
+                            }
                             setStep4Amount(
                               existing ? String(existing.amount) : defaultAmts[category]
                             );
@@ -4646,6 +5078,25 @@ function DailyRegisterView({
                   </div>
 
                   <form onSubmit={handleAddStep4Expense} className="space-y-3 pt-2">
+                    {/* Required Mode of Payment Dropdown (Step 4 Outflows/Purchases) */}
+                    <div>
+                      <label className="block text-[11px] font-bold text-[#22D3EE] mb-1">
+                        Mode of Payment (Required)
+                      </label>
+                      <select
+                        value={step4PaymentMode}
+                        onChange={(e) => setStep4PaymentMode(e.target.value as UniversalPaymentMode)}
+                        required
+                        className="w-full rounded-xl border border-[#00BAC7]/40 bg-[#061113] px-3.5 py-2.5 text-sm font-bold text-[#22D3EE] outline-none focus:border-[#FFD200]"
+                      >
+                        {UNIVERSAL_PAYMENT_MODES.map((pm) => (
+                          <option key={pm.value} value={pm.value}>
+                            {pm.badge} · {pm.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
                     {/* Show Supplier Name when Credit Purchase, Cash Purchase, or Bank Purchase is selected */}
                     {(step4Category === "Credit Purchase" ||
                       step4Category === "Cash Purchase" ||
@@ -4759,12 +5210,18 @@ function DailyRegisterView({
                     <div className="divide-y divide-white/10 mt-2">
                       {expenseEntries.map((item) => {
                         const isEditing = editingRowId === item.id;
+                        const pmBadge = formatPaymentModeBadge(item.paymentMode);
                         return (
                           <div key={item.id} className="flex items-center justify-between gap-3 py-3">
                             <div className="min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span className="rounded bg-rose-500/20 border border-rose-400/30 px-2 py-0.5 text-[10px] font-extrabold text-rose-300">
                                   {item.expenseCategory || "Food"}
+                                </span>
+                                <span
+                                  className={`rounded border px-2 py-0.5 text-[10px] font-bold ${pmBadge.badgeClass}`}
+                                >
+                                  {pmBadge.badge}
                                 </span>
                                 <p className="text-sm font-bold text-white truncate">{item.title}</p>
                                 {item.dueDate && (
@@ -4779,7 +5236,7 @@ function DailyRegisterView({
                               </p>
                             </div>
 
-                            <div className="flex items-center gap-2.5 shrink-0">
+                            <div className="flex items-center gap-2 shrink-0">
                               {isEditing ? (
                                 <>
                                   <input
@@ -4805,20 +5262,17 @@ function DailyRegisterView({
                                   </span>
                                   <button
                                     type="button"
-                                    onClick={() => {
-                                      setEditingRowId(item.id);
-                                      setEditingRowVal(String(item.amount));
-                                    }}
-                                    className="rounded-lg bg-white/10 px-2.5 py-1 text-xs font-bold text-white/70 hover:text-white"
+                                    onClick={() => handleOpenEditEntryModal(item)}
+                                    className="rounded-lg bg-white/10 px-2.5 py-1 text-xs font-bold text-[#FFD200] hover:bg-white/20"
                                   >
-                                    Edit
+                                    ✏️ Edit
                                   </button>
                                   <button
                                     type="button"
                                     onClick={() => handleRemoveEntry(item.id)}
-                                    className="text-white/35 hover:text-rose-400 p-1"
+                                    className="rounded-lg bg-rose-500/15 hover:bg-rose-500/30 px-2 py-1 text-xs font-bold text-rose-300 transition"
                                   >
-                                    <Trash2 size={14} />
+                                    🗑️ Delete
                                   </button>
                                 </>
                               )}
@@ -5178,346 +5632,384 @@ function DailyRegisterView({
                                   <span className="font-display text-xs font-extrabold text-emerald-400 w-24 text-right whitespace-nowrap">
                                     +SAR {fmt(cashAmt)}
                                   </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setEditingRowId(rowKey);
-                                      setEditingRowVal(String(cashAmt));
-                                    }}
-                                    className="rounded bg-white/10 px-2 py-0.5 text-[10px] font-bold text-white/75 hover:bg-white/20 hover:text-white"
-                                  >
-                                    Edit
-                                  </button>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-
-                      {/* Credit & Other Cash Receipts */}
-                      {cashInflowEntries.map((entry) => {
-                        const isEditing = editingRowId === entry.id;
-                        return (
-                          <div
-                            key={entry.id}
-                            className="flex items-center justify-between gap-2 px-4 py-2.5 bg-emerald-500/[0.04] hover:bg-emerald-500/[0.08] transition"
-                          >
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              <span className="font-mono text-xs font-extrabold text-teal-300 w-16 shrink-0">
-                                {entry.receiptNo || "RECEIPT"}
-                              </span>
-                              <span className="text-xs font-bold text-white truncate">
-                                {entry.title}
-                              </span>
-                              {entry.followUpDate && (
-                                <span className="rounded bg-emerald-500/20 border border-emerald-400/30 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300 shrink-0">
-                                  Follow-up: {entry.followUpDate}
-                                </span>
-                              )}
-                              {entry.originalAmount !== undefined && (
-                                <span className="rounded bg-amber-500/20 border border-amber-400/40 px-1.5 py-0.5 text-[10px] font-bold text-amber-300 shrink-0">
-                                  Orig: SAR {fmt(entry.originalAmount)}
-                                </span>
-                              )}
-                            </div>
-
-                            <div className="flex items-center gap-2.5 shrink-0">
-                              {isEditing ? (
-                                <div className="flex items-center gap-1.5">
-                                  <input
-                                    type="number"
-                                    step="0.01"
-                                    value={editingRowVal}
-                                    onChange={(e) => setEditingRowVal(e.target.value)}
-                                    className="w-24 rounded-lg border border-amber-400 bg-black/70 px-2 py-1 text-right text-xs font-extrabold text-white outline-none"
-                                    autoFocus
-                                  />
-                                  <button
-                                    type="button"
-                                    onClick={() => handleSaveInlineEdit(entry.id)}
-                                    className="rounded-lg bg-emerald-400 px-2 py-1 text-[10px] font-extrabold text-slate-950"
-                                  >
-                                    Save
-                                  </button>
-                                </div>
-                              ) : (
-                                <>
-                                  <span className="font-display text-xs font-extrabold text-emerald-300 whitespace-nowrap">
-                                    +SAR {fmt(entry.amount)}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setEditingRowId(entry.id);
-                                      setEditingRowVal(String(entry.amount));
-                                    }}
-                                    className="rounded bg-white/10 px-2 py-0.5 text-[10px] font-bold text-white/75 hover:bg-white/20 hover:text-white"
-                                  >
-                                    Edit
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemoveEntry(entry.id)}
-                                    className="text-white/35 hover:text-rose-400 text-xs font-bold px-1"
-                                    title="Delete inflow"
-                                  >
-                                    ×
-                                  </button>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    {/* [+ Add Missing Inflow] Row at Bottom */}
-                    <form onSubmit={handleAddMissingInflow} className="flex items-center gap-2 pt-1">
-                      <input
-                        type="text"
-                        value={missingInflowTitle}
-                        onChange={(e) => setMissingInflowTitle(e.target.value)}
-                        placeholder="Missing receipt or customer name..."
-                        className="flex-1 rounded-xl border border-white/15 bg-black/35 px-3.5 py-2 text-xs font-semibold text-white placeholder:text-white/35 outline-none"
-                      />
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={missingInflowAmt}
-                        onChange={(e) => setMissingInflowAmt(e.target.value)}
-                        placeholder="SAR"
-                        className="w-28 rounded-xl border border-white/15 bg-black/35 px-3 py-2 text-xs font-bold text-white placeholder:text-white/35 outline-none"
-                      />
-                      <button
-                        type="submit"
-                        className="rounded-xl border border-emerald-400/40 bg-emerald-500/15 hover:bg-emerald-500/25 px-3.5 py-2 text-xs font-extrabold text-emerald-300 transition whitespace-nowrap"
-                      >
-                        + Add Missing Inflow
-                      </button>
-                    </form>
-                  </div>
-                )}
-
-                {/* RIGHT STACK (OR FULL-WIDTH WHEN EXPANDED): BOX 2 & BOX 3 */}
-                {(expandedAuditBox === "NONE" ||
-                  expandedAuditBox === "EXPENSES" ||
-                  expandedAuditBox === "BANK_POS") && (
-                  <div className="flex flex-col gap-6">
-                    {/* ══════════════════════════════════════════════════════
-                        BOX 2: Shop Expenses & Supplier Purchases
-                       ══════════════════════════════════════════════════════ */}
-                    {(expandedAuditBox === "NONE" || expandedAuditBox === "EXPENSES") && (
-                      <div className="rounded-3xl border border-white/15 bg-white/[0.04] p-6 backdrop-blur-2xl shadow-xl flex flex-col gap-4">
-                        <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-3.5">
-                          <div>
-                            <h3 className="font-display text-lg font-extrabold text-white">
-                              Shop Expenses &amp; Supplier Purchases ({expenseEntries.length})
-                            </h3>
-                            <p className="text-xs text-white/50">
-                              7 official categories · Credit Purchases sync to Suppliers &amp; Payables
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-3 shrink-0">
-                            <span className="font-display text-base font-extrabold text-rose-400 whitespace-nowrap">
-                              -SAR {fmt(totalMoneyOutDrawer)}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setExpandedAuditBox(
-                                  expandedAuditBox === "EXPENSES" ? "NONE" : "EXPENSES"
-                                )
-                              }
-                              className="flex items-center gap-1.5 rounded-xl border border-white/20 bg-white/10 hover:bg-white/20 px-3 py-1.5 text-xs font-extrabold text-white transition"
-                            >
-                              {expandedAuditBox === "EXPENSES" ? (
-                                <>
-                                  <Minimize2 size={13} />
-                                  <span>⤡ Collapse</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Maximize2 size={13} />
-                                  <span>⤢ Expand</span>
-                                </>
-                              )}
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="divide-y divide-white/10 rounded-2xl border border-white/10 bg-black/30 overflow-hidden">
-                          {expenseEntries.map((entry) => {
-                            const isEditing = editingRowId === entry.id;
-                            return (
-                              <div
-                                key={entry.id}
-                                className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 hover:bg-white/[0.02] transition"
-                              >
-                                <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                                  <span className="rounded bg-rose-500/20 border border-rose-400/30 px-2 py-0.5 text-[10px] font-bold text-rose-300 shrink-0">
-                                    {entry.expenseCategory || "Food"}
-                                  </span>
-                                  <span className="text-xs font-bold text-white truncate">
-                                    {entry.title}
-                                  </span>
-                                  {entry.dueDate && (
-                                    <span className="rounded bg-teal-500/20 border border-teal-400/40 px-1.5 py-0.5 text-[10px] font-bold text-teal-200 shrink-0">
-                                      Due: {entry.dueDate}
-                                    </span>
-                                  )}
-                                  {entry.originalAmount !== undefined && (
-                                    <span className="rounded bg-amber-500/20 border border-amber-400/40 px-1.5 py-0.5 text-[10px] font-bold text-amber-300 shrink-0">
-                                      Orig: SAR {fmt(entry.originalAmount)}
-                                    </span>
-                                  )}
-                                </div>
-
-                                {expandedAuditBox === "EXPENSES" && (
-                                  <div className="flex items-center gap-2">
-                                    <select
-                                      value={entry.expenseCategory || "Food"}
-                                      onChange={(e) => {
-                                        const newCat = e.target.value as StrictExpenseCategory;
-                                        setPreLoggedEntries((prev) =>
-                                          prev.map((it) =>
-                                            it.id === entry.id
-                                              ? { ...it, expenseCategory: newCat }
-                                              : it
-                                          )
-                                        );
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingRowId(rowKey);
+                                        setEditingRowVal(String(cashAmt));
                                       }}
-                                      className="rounded-lg border border-[#00BAC7]/30 bg-[#061113] px-2 py-1 text-xs font-bold text-[#FFD200] outline-none"
+                                      className="rounded bg-white/10 px-2 py-0.5 text-[10px] font-bold text-[#FFD200] hover:bg-white/20"
                                     >
-                                      {STRICT_EXPENSE_CATEGORIES.map((c) => (
-                                        <option key={c} value={c}>
-                                          {c}
-                                        </option>
-                                      ))}
-                                    </select>
-                                    {entry.expenseCategory === "Credit Purchase" && (
-                                      <input
-                                        type="date"
-                                        value={entry.dueDate || "2026-09-25"}
+                                      ✏️ Edit
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveErpInvoice(inv.invoiceNo)}
+                                      className="rounded bg-rose-500/15 hover:bg-rose-500/30 px-2 py-0.5 text-[10px] font-bold text-rose-300 transition"
+                                      title="Delete invoice"
+                                    >
+                                      🗑️ Delete
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+
+                        {/* Credit & Other Cash Receipts */}
+                        {cashInflowEntries.map((entry) => {
+                          const isEditing = editingRowId === entry.id;
+                          const pmBadge = formatPaymentModeBadge(entry.paymentMode);
+                          return (
+                            <div
+                              key={entry.id}
+                              className="flex items-center justify-between gap-2 px-4 py-2.5 bg-emerald-500/[0.04] hover:bg-emerald-500/[0.08] transition"
+                            >
+                              <div className="flex flex-wrap items-center gap-2 min-w-0">
+                                <span className="font-mono text-xs font-extrabold text-teal-300 w-16 shrink-0">
+                                  {entry.receiptNo || "RECEIPT"}
+                                </span>
+                                <span
+                                  className={`rounded border px-1.5 py-0.5 text-[10px] font-bold shrink-0 ${pmBadge.badgeClass}`}
+                                >
+                                  {pmBadge.badge}
+                                </span>
+                                <span className="text-xs font-bold text-white truncate">
+                                  {entry.title}
+                                </span>
+                                {entry.followUpDate && (
+                                  <span className="rounded bg-emerald-500/20 border border-emerald-400/30 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300 shrink-0">
+                                    Follow-up: {entry.followUpDate}
+                                  </span>
+                                )}
+                                {entry.originalAmount !== undefined && (
+                                  <span className="rounded bg-amber-500/20 border border-amber-400/40 px-1.5 py-0.5 text-[10px] font-bold text-amber-300 shrink-0">
+                                    Orig: SAR {fmt(entry.originalAmount)}
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="flex items-center gap-2 shrink-0">
+                                {isEditing ? (
+                                  <div className="flex items-center gap-1.5">
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      value={editingRowVal}
+                                      onChange={(e) => setEditingRowVal(e.target.value)}
+                                      className="w-24 rounded-lg border border-amber-400 bg-black/70 px-2 py-1 text-right text-xs font-extrabold text-white outline-none"
+                                      autoFocus
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSaveInlineEdit(entry.id)}
+                                      className="rounded-lg bg-emerald-400 px-2 py-1 text-[10px] font-extrabold text-slate-950"
+                                    >
+                                      Save
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <span className="font-display text-xs font-extrabold text-emerald-300 whitespace-nowrap">
+                                      +SAR {fmt(entry.amount)}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenEditEntryModal(entry)}
+                                      className="rounded bg-white/10 px-2 py-0.5 text-[10px] font-bold text-[#FFD200] hover:bg-white/20"
+                                    >
+                                      ✏️ Edit
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveEntry(entry.id)}
+                                      className="rounded bg-rose-500/15 hover:bg-rose-500/30 px-2 py-0.5 text-[10px] font-bold text-rose-300 transition"
+                                      title="Delete inflow"
+                                    >
+                                      🗑️ Delete
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* [+ Add Missing Inflow] Row at Bottom */}
+                      <form onSubmit={handleAddMissingInflow} className="flex flex-wrap items-center gap-2 pt-1">
+                        <input
+                          type="text"
+                          value={missingInflowTitle}
+                          onChange={(e) => setMissingInflowTitle(e.target.value)}
+                          placeholder="Missing receipt or customer name..."
+                          className="flex-1 min-w-[140px] rounded-xl border border-white/15 bg-black/35 px-3.5 py-2 text-xs font-semibold text-white placeholder:text-white/35 outline-none"
+                        />
+                        <select
+                          value={missingInflowMode}
+                          onChange={(e) => setMissingInflowMode(e.target.value as UniversalPaymentMode)}
+                          required
+                          className="rounded-xl border border-[#00BAC7]/40 bg-[#061113] px-2.5 py-2 text-xs font-bold text-[#22D3EE] outline-none"
+                        >
+                          {UNIVERSAL_PAYMENT_MODES.map((pm) => (
+                            <option key={pm.value} value={pm.value}>
+                              {pm.badge} · {pm.label}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={missingInflowAmt}
+                          onChange={(e) => setMissingInflowAmt(e.target.value)}
+                          placeholder="SAR"
+                          className="w-24 rounded-xl border border-white/15 bg-black/35 px-3 py-2 text-xs font-bold text-white placeholder:text-white/35 outline-none"
+                        />
+                        <button
+                          type="submit"
+                          className="rounded-xl border border-emerald-400/40 bg-emerald-500/15 hover:bg-emerald-500/25 px-3.5 py-2 text-xs font-extrabold text-emerald-300 transition whitespace-nowrap"
+                        >
+                          + Add Missing Inflow
+                        </button>
+                      </form>
+                    </div>
+                  )}
+
+                  {/* RIGHT STACK (OR FULL-WIDTH WHEN EXPANDED): BOX 2 & BOX 3 */}
+                  {(expandedAuditBox === "NONE" ||
+                    expandedAuditBox === "EXPENSES" ||
+                    expandedAuditBox === "BANK_POS") && (
+                    <div className="flex flex-col gap-6">
+                      {/* ══════════════════════════════════════════════════════
+                          BOX 2: Shop Expenses & Supplier Purchases
+                         ══════════════════════════════════════════════════════ */}
+                      {(expandedAuditBox === "NONE" || expandedAuditBox === "EXPENSES") && (
+                        <div className="rounded-3xl border border-white/15 bg-white/[0.04] p-6 backdrop-blur-2xl shadow-xl flex flex-col gap-4">
+                          <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-3.5">
+                            <div>
+                              <h3 className="font-display text-lg font-extrabold text-white">
+                                Shop Expenses &amp; Supplier Purchases ({expenseEntries.length})
+                              </h3>
+                              <p className="text-xs text-white/50">
+                                7 official categories · Credit Purchases sync to Suppliers &amp; Payables
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-3 shrink-0">
+                              <span className="font-display text-base font-extrabold text-rose-400 whitespace-nowrap">
+                                -SAR {fmt(totalMoneyOutDrawer)}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setExpandedAuditBox(
+                                    expandedAuditBox === "EXPENSES" ? "NONE" : "EXPENSES"
+                                  )
+                                }
+                                className="flex items-center gap-1.5 rounded-xl border border-white/20 bg-white/10 hover:bg-white/20 px-3 py-1.5 text-xs font-extrabold text-white transition"
+                              >
+                                {expandedAuditBox === "EXPENSES" ? (
+                                  <>
+                                    <Minimize2 size={13} />
+                                    <span>⤡ Collapse</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Maximize2 size={13} />
+                                    <span>⤢ Expand</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="divide-y divide-white/10 rounded-2xl border border-white/10 bg-black/30 overflow-hidden">
+                            {expenseEntries.map((entry) => {
+                              const isEditing = editingRowId === entry.id;
+                              const pmBadge = formatPaymentModeBadge(entry.paymentMode);
+                              return (
+                                <div
+                                  key={entry.id}
+                                  className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 hover:bg-white/[0.02] transition"
+                                >
+                                  <div className="flex flex-wrap items-center gap-2 min-w-0 flex-1">
+                                    <span className="rounded bg-rose-500/20 border border-rose-400/30 px-2 py-0.5 text-[10px] font-bold text-rose-300 shrink-0">
+                                      {entry.expenseCategory || "Food"}
+                                    </span>
+                                    <span
+                                      className={`rounded border px-1.5 py-0.5 text-[10px] font-bold shrink-0 ${pmBadge.badgeClass}`}
+                                    >
+                                      {pmBadge.badge}
+                                    </span>
+                                    <span className="text-xs font-bold text-white truncate">
+                                      {entry.title}
+                                    </span>
+                                    {entry.dueDate && (
+                                      <span className="rounded bg-teal-500/20 border border-teal-400/40 px-1.5 py-0.5 text-[10px] font-bold text-teal-200 shrink-0">
+                                        Due: {entry.dueDate}
+                                      </span>
+                                    )}
+                                    {entry.originalAmount !== undefined && (
+                                      <span className="rounded bg-amber-500/20 border border-amber-400/40 px-1.5 py-0.5 text-[10px] font-bold text-amber-300 shrink-0">
+                                        Orig: SAR {fmt(entry.originalAmount)}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {expandedAuditBox === "EXPENSES" && (
+                                    <div className="flex items-center gap-2">
+                                      <select
+                                        value={entry.expenseCategory || "Food"}
                                         onChange={(e) => {
-                                          const newDate = e.target.value;
+                                          const newCat = e.target.value as StrictExpenseCategory;
                                           setPreLoggedEntries((prev) =>
                                             prev.map((it) =>
                                               it.id === entry.id
-                                                ? { ...it, dueDate: newDate }
+                                                ? { ...it, expenseCategory: newCat }
                                                 : it
                                             )
                                           );
                                         }}
-                                        className="rounded-lg border border-white/15 bg-black/60 px-2 py-1 text-xs font-bold text-white outline-none"
-                                      />
+                                        className="rounded-lg border border-[#00BAC7]/30 bg-[#061113] px-2 py-1 text-xs font-bold text-[#FFD200] outline-none"
+                                      >
+                                        {STRICT_EXPENSE_CATEGORIES.map((c) => (
+                                          <option key={c} value={c}>
+                                            {c}
+                                          </option>
+                                        ))}
+                                      </select>
+                                      {entry.expenseCategory === "Credit Purchase" && (
+                                        <input
+                                          type="date"
+                                          value={entry.dueDate || "2026-09-25"}
+                                          onChange={(e) => {
+                                            const newDate = e.target.value;
+                                            setPreLoggedEntries((prev) =>
+                                              prev.map((it) =>
+                                                it.id === entry.id
+                                                  ? { ...it, dueDate: newDate }
+                                                  : it
+                                              )
+                                            );
+                                          }}
+                                          className="rounded-lg border border-white/15 bg-black/60 px-2 py-1 text-xs font-bold text-white outline-none"
+                                        />
+                                      )}
+                                    </div>
+                                  )}
+
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    {isEditing ? (
+                                      <div className="flex items-center gap-1.5">
+                                        <input
+                                          type="number"
+                                          step="0.01"
+                                          value={editingRowVal}
+                                          onChange={(e) => setEditingRowVal(e.target.value)}
+                                          className="w-24 rounded-lg border border-amber-400 bg-black/70 px-2 py-1 text-right text-xs font-extrabold text-white outline-none"
+                                          autoFocus
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => handleSaveInlineEdit(entry.id)}
+                                          className="rounded-lg bg-emerald-400 px-2 py-1 text-[10px] font-extrabold text-slate-950"
+                                        >
+                                          Save
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <>
+                                        <span className="font-display text-xs font-extrabold text-rose-400 whitespace-nowrap">
+                                          -SAR {fmt(entry.amount)}
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleOpenEditEntryModal(entry)}
+                                          className="rounded bg-white/10 px-2 py-0.5 text-[10px] font-bold text-[#FFD200] hover:bg-white/20"
+                                        >
+                                          ✏️ Edit
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRemoveEntry(entry.id)}
+                                          className="rounded bg-rose-500/15 hover:bg-rose-500/30 px-2 py-0.5 text-[10px] font-bold text-rose-300 transition"
+                                          title="Delete expense"
+                                        >
+                                          🗑️ Delete
+                                        </button>
+                                      </>
                                     )}
                                   </div>
-                                )}
-
-                                <div className="flex items-center gap-2.5 shrink-0">
-                                  {isEditing ? (
-                                    <div className="flex items-center gap-1.5">
-                                      <input
-                                        type="number"
-                                        step="0.01"
-                                        value={editingRowVal}
-                                        onChange={(e) => setEditingRowVal(e.target.value)}
-                                        className="w-24 rounded-lg border border-amber-400 bg-black/70 px-2 py-1 text-right text-xs font-extrabold text-white outline-none"
-                                        autoFocus
-                                      />
-                                      <button
-                                        type="button"
-                                        onClick={() => handleSaveInlineEdit(entry.id)}
-                                        className="rounded-lg bg-emerald-400 px-2 py-1 text-[10px] font-extrabold text-slate-950"
-                                      >
-                                        Save
-                                      </button>
-                                    </div>
-                                  ) : (
-                                    <>
-                                      <span className="font-display text-xs font-extrabold text-rose-400 whitespace-nowrap">
-                                        -SAR {fmt(entry.amount)}
-                                      </span>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setEditingRowId(entry.id);
-                                          setEditingRowVal(String(entry.amount));
-                                        }}
-                                        className="rounded bg-white/10 px-2 py-0.5 text-[10px] font-bold text-white/75 hover:bg-white/20 hover:text-white"
-                                      >
-                                        Edit
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleRemoveEntry(entry.id)}
-                                        className="text-white/35 hover:text-rose-400 text-xs font-bold px-1"
-                                        title="Delete expense"
-                                      >
-                                        ×
-                                      </button>
-                                    </>
-                                  )}
                                 </div>
-                              </div>
-                            );
-                          })}
-                        </div>
+                              );
+                            })}
+                          </div>
 
-                        {/* [+ Add Missing Expense] Row at Bottom */}
-                        <form onSubmit={handleAddMissingExpense} className="flex flex-wrap items-center gap-2 pt-1">
-                          <select
-                            value={missingExpenseCat}
-                            onChange={(e) =>
-                              setMissingExpenseCat(e.target.value as StrictExpenseCategory)
-                            }
-                            className="rounded-xl border border-[#00BAC7]/30 bg-[#061113] px-3 py-2 text-xs font-bold text-[#FFD200] outline-none"
-                          >
-                            {STRICT_EXPENSE_CATEGORIES.map((c) => (
-                              <option key={c} value={c}>
-                                {c}
-                              </option>
-                            ))}
-                          </select>
-                          <input
-                            type="text"
-                            value={missingExpenseSupplier}
-                            onChange={(e) => setMissingExpenseSupplier(e.target.value)}
-                            placeholder={
-                              missingExpenseCat === "Credit Purchase" ||
-                              missingExpenseCat === "Cash Purchase" ||
-                              missingExpenseCat === "Bank Purchase"
-                                ? "Supplier Name (e.g. Jotun)..."
-                                : "Note / Details..."
-                            }
-                            className="flex-1 min-w-[140px] rounded-xl border border-white/15 bg-black/35 px-3.5 py-2 text-xs font-semibold text-white placeholder:text-white/35 outline-none"
-                          />
-                          {missingExpenseCat === "Credit Purchase" && (
+                          {/* [+ Add Missing Expense] Row at Bottom */}
+                          <form onSubmit={handleAddMissingExpense} className="flex flex-wrap items-center gap-2 pt-1">
+                            <select
+                              value={missingExpenseCat}
+                              onChange={(e) =>
+                                setMissingExpenseCat(e.target.value as StrictExpenseCategory)
+                              }
+                              className="rounded-xl border border-[#00BAC7]/30 bg-[#061113] px-3 py-2 text-xs font-bold text-[#FFD200] outline-none"
+                            >
+                              {STRICT_EXPENSE_CATEGORIES.map((c) => (
+                                <option key={c} value={c}>
+                                  {c}
+                                </option>
+                              ))}
+                            </select>
+                            <select
+                              value={missingExpenseMode}
+                              onChange={(e) => setMissingExpenseMode(e.target.value as UniversalPaymentMode)}
+                              required
+                              className="rounded-xl border border-[#00BAC7]/40 bg-[#061113] px-2.5 py-2 text-xs font-bold text-[#22D3EE] outline-none"
+                            >
+                              {UNIVERSAL_PAYMENT_MODES.map((pm) => (
+                                <option key={pm.value} value={pm.value}>
+                                  {pm.badge} · {pm.label}
+                                </option>
+                              ))}
+                            </select>
                             <input
-                              type="date"
-                              value={missingExpenseDueDate}
-                              onChange={(e) => setMissingExpenseDueDate(e.target.value)}
-                              className="rounded-xl border border-amber-400/40 bg-black/35 px-2.5 py-2 text-xs font-bold text-white outline-none"
+                              type="text"
+                              value={missingExpenseSupplier}
+                              onChange={(e) => setMissingExpenseSupplier(e.target.value)}
+                              placeholder={
+                                missingExpenseCat === "Credit Purchase" ||
+                                missingExpenseCat === "Cash Purchase" ||
+                                missingExpenseCat === "Bank Purchase"
+                                  ? "Supplier Name (e.g. Jotun)..."
+                                  : "Note / Details..."
+                              }
+                              className="flex-1 min-w-[140px] rounded-xl border border-white/15 bg-black/35 px-3.5 py-2 text-xs font-semibold text-white placeholder:text-white/35 outline-none"
                             />
-                          )}
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={missingExpenseAmt}
-                            onChange={(e) => setMissingExpenseAmt(e.target.value)}
-                            placeholder="SAR"
-                            className="w-24 rounded-xl border border-white/15 bg-black/35 px-3 py-2 text-xs font-bold text-white placeholder:text-white/35 outline-none"
-                          />
-                          <button
-                            type="submit"
-                            className="rounded-xl border border-rose-400/40 bg-rose-500/15 hover:bg-rose-500/25 px-3.5 py-2 text-xs font-extrabold text-rose-300 transition whitespace-nowrap"
-                          >
-                            + Add Expense
-                          </button>
-                        </form>
-                      </div>
-                    )}
+                            {missingExpenseCat === "Credit Purchase" && (
+                              <input
+                                type="date"
+                                value={missingExpenseDueDate}
+                                onChange={(e) => setMissingExpenseDueDate(e.target.value)}
+                                className="rounded-xl border border-amber-400/40 bg-black/35 px-2.5 py-2 text-xs font-bold text-white outline-none"
+                              />
+                            )}
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={missingExpenseAmt}
+                              onChange={(e) => setMissingExpenseAmt(e.target.value)}
+                              placeholder="SAR"
+                              className="w-24 rounded-xl border border-white/15 bg-black/35 px-3 py-2 text-xs font-bold text-white placeholder:text-white/35 outline-none"
+                            />
+                            <button
+                              type="submit"
+                              className="rounded-xl border border-rose-400/40 bg-rose-500/15 hover:bg-rose-500/25 px-3.5 py-2 text-xs font-extrabold text-rose-300 transition whitespace-nowrap"
+                            >
+                              + Add Expense
+                            </button>
+                          </form>
+                        </div>
+                      )}
 
                     {/* ══════════════════════════════════════════════════════
                         BOX 3: Bank / POS Transfers (mada · SAB / mada · Al Rajhi / Visa-MC / Bank)
@@ -6385,6 +6877,9 @@ function DailyRegisterView({
 function CreditRadarView({
   customers,
   onIssueCredit,
+  isOwner = false,
+  onUpdateCustomer,
+  onDeleteCustomer,
 }: {
   customers: ContractorAccount[];
   onIssueCredit: (
@@ -6394,17 +6889,47 @@ function CreditRadarView({
     receiptNo?: string,
     mode?: "CREDIT_RECD" | "CREDIT_SALE"
   ) => void;
+  isOwner?: boolean;
+  onUpdateCustomer?: (updated: ContractorAccount) => void;
+  onDeleteCustomer?: (id: string) => void;
 }) {
   const [activeId, setActiveId] = useState(customers[0]?.id || "c1");
   const [contractorInput, setContractorInput] = useState("");
   const [amountInput, setAmountInput] = useState("");
   const [receiptInput, setReceiptInput] = useState("");
   const [dueDateInput, setDueDateInput] = useState("2026-09-25");
+  const [editingCustomer, setEditingCustomer] = useState<ContractorAccount | null>(null);
+  const [editCustName, setEditCustName] = useState("");
+  const [editCustAmount, setEditCustAmount] = useState("");
+  const [editCustDate, setEditCustDate] = useState("");
 
   const active = customers.find((c) => c.id === activeId) || customers[0];
   const reminderAccounts = customers.filter(
     (c) => Boolean(c.followUpDate || c.dueDate) && c.outstanding > 0
   );
+
+  const handleOpenEditCustomer = (c: ContractorAccount, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingCustomer(c);
+    setEditCustName(c.name);
+    setEditCustAmount(String(c.outstanding));
+    setEditCustDate(c.followUpDate || c.dueDate);
+  };
+
+  const handleSaveEditCustomer = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCustomer || !onUpdateCustomer) return;
+    const val = parseFloat(editCustAmount);
+    if (Number.isNaN(val) || val < 0) return;
+    onUpdateCustomer({
+      ...editingCustomer,
+      name: editCustName.trim() || editingCustomer.name,
+      outstanding: val,
+      dueDate: editCustDate || editingCustomer.dueDate,
+      followUpDate: editCustDate || editingCustomer.followUpDate,
+    });
+    setEditingCustomer(null);
+  };
 
   const handleCreateCredit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -6424,6 +6949,79 @@ function CreditRadarView({
 
   return (
     <div className="flex flex-col h-full w-full gap-5 p-6 overflow-hidden">
+      {/* Owner Edit Customer Modal */}
+      {isOwner && editingCustomer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md">
+          <div className="w-full max-w-md rounded-3xl border border-[#00BAC7]/40 bg-[#071618] p-6 shadow-2xl text-white">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3 mb-4">
+              <h3 className="font-display text-lg font-extrabold text-white">
+                ✏️ Edit Credit Account (Owner Override)
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingCustomer(null)}
+                className="rounded-lg bg-white/10 px-2.5 py-1 text-xs font-bold text-slate-300 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+            <form onSubmit={handleSaveEditCustomer} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  Contractor / Customer Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editCustName}
+                  onChange={(e) => setEditCustName(e.target.value)}
+                  className="w-full rounded-xl border border-white/15 bg-black/50 px-3.5 py-2.5 text-sm font-semibold text-white outline-none focus:border-[#FFD200]"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  Outstanding Debt (SAR)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  required
+                  value={editCustAmount}
+                  onChange={(e) => setEditCustAmount(e.target.value)}
+                  className="w-full rounded-xl border border-white/15 bg-black/50 px-3.5 py-2.5 font-mono text-base font-extrabold text-white outline-none focus:border-emerald-400"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  Follow-up Reminder Date
+                </label>
+                <input
+                  type="date"
+                  value={editCustDate}
+                  onChange={(e) => setEditCustDate(e.target.value)}
+                  className="w-full rounded-xl border border-white/15 bg-black/50 px-3.5 py-2.5 text-sm font-bold text-white outline-none focus:border-[#FFD200]"
+                />
+              </div>
+              <div className="flex items-center justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingCustomer(null)}
+                  className="rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-xs font-bold text-slate-300 hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-xl bg-gradient-to-r from-[#FFD200] to-[#00BAC7] px-5 py-2.5 text-xs font-black text-black shadow-lg"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Prominent Top Banner: Upcoming Follow-Up Reminders */}
       <div className="rounded-2xl border border-teal-800/40 bg-gradient-to-r from-teal-500/10 via-amber-500/10 to-teal-500/10 p-4 shadow-sm shrink-0 dark:border-teal-700/40">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
@@ -6547,11 +7145,11 @@ function CreditRadarView({
                 : "#30064";
               const remDate = c.followUpDate || c.dueDate;
               return (
-                <button
+                <div
                   key={c.id}
                   onClick={() => setActiveId(c.id)}
-                  className={`w-full text-left flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-2xl ring-1 transition-all gap-4 ${
-                    active.id === c.id
+                  className={`cursor-pointer w-full text-left flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-2xl ring-1 transition-all gap-4 ${
+                    active?.id === c.id
                       ? "bg-white ring-teal-500 shadow-md dark:bg-[#0D2322] dark:ring-teal-400"
                       : "bg-white ring-slate-900/5 hover:shadow-sm dark:bg-[#0F2927] dark:ring-teal-800/30 hover:dark:bg-[#132F2D]"
                   }`}
@@ -6559,7 +7157,7 @@ function CreditRadarView({
                   <div className="flex items-center gap-4">
                     <div
                       className={`h-12 w-12 rounded-full flex items-center justify-center font-display font-extrabold text-xl text-white shadow-sm shrink-0 ${
-                        active.id === c.id
+                        active?.id === c.id
                           ? "bg-gradient-to-br from-teal-400 to-amber-400 text-slate-950"
                           : "bg-slate-300 dark:bg-slate-700"
                       }`}
@@ -6582,27 +7180,54 @@ function CreditRadarView({
                       </div>
                     </div>
                   </div>
-                  <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-3 w-full sm:w-auto">
+                  <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-2 w-full sm:w-auto">
                     <span className="font-display font-extrabold text-xl text-slate-900 dark:text-white">
                       {fmt(c.outstanding)} <span className="text-xs text-slate-400">SAR</span>
                     </span>
-                    {c.status === "overdue" && (
-                      <span className="px-2.5 py-1 bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-400 rounded-md text-[10px] font-extrabold uppercase tracking-wide shrink-0">
-                        Overdue ({c.daysLate}d late)
-                      </span>
-                    )}
-                    {c.status === "due_soon" && (
-                      <span className="px-2.5 py-1 bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400 rounded-md text-[10px] font-extrabold uppercase tracking-wide shrink-0">
-                        Due This Week
-                      </span>
-                    )}
-                    {c.status === "on_track" && (
-                      <span className="px-2.5 py-1 bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-slate-300 rounded-md text-[10px] font-extrabold uppercase tracking-wide shrink-0">
-                        On Track
-                      </span>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {c.status === "overdue" && (
+                        <span className="px-2.5 py-1 bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-400 rounded-md text-[10px] font-extrabold uppercase tracking-wide shrink-0">
+                          Overdue ({c.daysLate}d late)
+                        </span>
+                      )}
+                      {c.status === "due_soon" && (
+                        <span className="px-2.5 py-1 bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400 rounded-md text-[10px] font-extrabold uppercase tracking-wide shrink-0">
+                          Due This Week
+                        </span>
+                      )}
+                      {c.status === "on_track" && (
+                        <span className="px-2.5 py-1 bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-slate-300 rounded-md text-[10px] font-extrabold uppercase tracking-wide shrink-0">
+                          On Track
+                        </span>
+                      )}
+                      {isOwner && (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={(e) => handleOpenEditCustomer(c, e)}
+                            className="rounded-lg bg-white/10 hover:bg-white/20 px-2 py-1 text-[10px] font-bold text-[#FFD200] transition"
+                            title="Owner Edit Credit Account"
+                          >
+                            ✏️ Edit
+                          </button>
+                          {onDeleteCustomer && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onDeleteCustomer(c.id);
+                              }}
+                              className="rounded-lg bg-rose-500/15 hover:bg-rose-500/30 px-2 py-1 text-[10px] font-bold text-rose-300 transition"
+                              title="Owner Delete Credit Account"
+                            >
+                              🗑️ Delete
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </button>
+                </div>
               );
             })}
           </div>
@@ -6765,6 +7390,9 @@ function SupplierHubView({
   supplierBrands,
   supplierBills,
   onLogSupplierPurchase,
+  isOwner = false,
+  onUpdateBill,
+  onDeleteBill,
 }: {
   supplierBrands: SupplierPayableBrand[];
   supplierBills: SupplierBillItem[];
@@ -6772,8 +7400,12 @@ function SupplierHubView({
     supplierName: string,
     amount: number,
     dueDate: string,
-    category: "Credit Purchase" | "Cash Purchase" | "Bank Purchase" | "Return"
+    category: "Credit Purchase" | "Cash Purchase" | "Bank Purchase" | "Return",
+    paymentMode?: UniversalPaymentMode
   ) => void;
+  isOwner?: boolean;
+  onUpdateBill?: (updated: SupplierBillItem) => void;
+  onDeleteBill?: (id: string) => void;
 }) {
   const [unlocked, setUnlocked] = useState(false);
   const [pin, setPin] = useState("");
@@ -6787,27 +7419,148 @@ function SupplierHubView({
     }
   };
 
-  const privateCommissions = [
-    { id: 1, name: "Ali R. (Broker)", dealRef: "Jubail Port Proj.", amount: 15000, date: "2026-09-01" },
-    { id: 2, name: "Saad Contractor", dealRef: "Al-Noor Complex", amount: 8500, date: "2026-09-10" },
-  ];
+  const [privateCommissions, setPrivateCommissions] = useState([
+    { id: 1, name: "Ali R. (Broker)", dealRef: "Jubail Port Proj.", amount: 15000, date: "2026-09-01", paymentMode: "CASH" as UniversalPaymentMode },
+    { id: 2, name: "Saad Contractor", dealRef: "Al-Noor Complex", amount: 8500, date: "2026-09-10", paymentMode: "AL_RAJHI" as UniversalPaymentMode },
+  ]);
 
   const [supplierSearch, setSupplierSearch] = useState("");
   const [logAmount, setLogAmount] = useState("");
-  const [logType, setLogType] = useState<"Credit Purchase" | "Cash Purchase" | "Return">("Credit Purchase");
+  const [logType, setLogType] = useState<"Credit Purchase" | "Cash Purchase" | "Bank Purchase" | "Return">("Credit Purchase");
+  const [logPaymentMode, setLogPaymentMode] = useState<UniversalPaymentMode>("SAB");
   const [logDate, setLogDate] = useState("2026-09-25");
+
+  // Owner Edit Supplier Bill Modal State
+  const [editingBill, setEditingBill] = useState<SupplierBillItem | null>(null);
+  const [editBillSupplier, setEditBillSupplier] = useState("");
+  const [editBillAmount, setEditBillAmount] = useState("");
+  const [editBillDueDate, setEditBillDueDate] = useState("");
+  const [editBillPaymentMode, setEditBillPaymentMode] = useState<UniversalPaymentMode>("SAB");
+
+  const handleOpenEditBill = (bill: SupplierBillItem) => {
+    setEditingBill(bill);
+    setEditBillSupplier(bill.supplierName);
+    setEditBillAmount(String(bill.amount));
+    setEditBillDueDate(bill.dueDate);
+    setEditBillPaymentMode((bill.paymentMode as UniversalPaymentMode) || "SAB");
+  };
+
+  const handleSaveEditBill = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingBill || !onUpdateBill) return;
+    const val = parseFloat(editBillAmount);
+    if (Number.isNaN(val) || val <= 0) return;
+    onUpdateBill({
+      ...editingBill,
+      supplierName: editBillSupplier.trim() || editingBill.supplierName,
+      amount: val,
+      dueDate: editBillDueDate || editingBill.dueDate,
+      paymentMode: editBillPaymentMode,
+    });
+    setEditingBill(null);
+  };
 
   const handleLogSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const val = parseFloat(logAmount);
     if (!supplierSearch.trim() || Number.isNaN(val) || val <= 0) return;
-    onLogSupplierPurchase(supplierSearch.trim(), val, logDate || "2026-09-25", logType);
+    onLogSupplierPurchase(supplierSearch.trim(), val, logDate || "2026-09-25", logType, logPaymentMode);
     setSupplierSearch("");
     setLogAmount("");
   };
 
   return (
     <div className="flex flex-col gap-6 p-6 h-full overflow-y-auto w-full">
+      {/* Owner Edit Supplier Bill Modal */}
+      {isOwner && editingBill && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md">
+          <div className="w-full max-w-md rounded-3xl border border-[#00BAC7]/40 bg-[#071618] p-6 shadow-2xl text-white">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3 mb-4">
+              <h3 className="font-display text-lg font-extrabold text-white">
+                ✏️ Edit Supplier Bill (Owner Override)
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingBill(null)}
+                className="rounded-lg bg-white/10 px-2.5 py-1 text-xs font-bold text-slate-300 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+            <form onSubmit={handleSaveEditBill} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  Supplier Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editBillSupplier}
+                  onChange={(e) => setEditBillSupplier(e.target.value)}
+                  className="w-full rounded-xl border border-white/15 bg-black/50 px-3.5 py-2.5 text-sm font-semibold text-white outline-none focus:border-[#FFD200]"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  Mode of Payment (Required)
+                </label>
+                <select
+                  value={editBillPaymentMode}
+                  onChange={(e) => setEditBillPaymentMode(e.target.value as UniversalPaymentMode)}
+                  required
+                  className="w-full rounded-xl border border-[#00BAC7]/40 bg-[#061113] px-3.5 py-2.5 text-sm font-bold text-[#22D3EE] outline-none focus:border-[#FFD200]"
+                >
+                  {UNIVERSAL_PAYMENT_MODES.map((pm) => (
+                    <option key={pm.value} value={pm.value}>
+                      {pm.badge} · {pm.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  Amount (SAR)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  required
+                  value={editBillAmount}
+                  onChange={(e) => setEditBillAmount(e.target.value)}
+                  className="w-full rounded-xl border border-white/15 bg-black/50 px-3.5 py-2.5 font-mono text-base font-extrabold text-white outline-none focus:border-emerald-400"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  Due Date
+                </label>
+                <input
+                  type="date"
+                  value={editBillDueDate}
+                  onChange={(e) => setEditBillDueDate(e.target.value)}
+                  className="w-full rounded-xl border border-white/15 bg-black/50 px-3.5 py-2.5 text-sm font-bold text-white outline-none focus:border-[#FFD200]"
+                />
+              </div>
+              <div className="flex items-center justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingBill(null)}
+                  className="rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-xs font-bold text-slate-300 hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-xl bg-gradient-to-r from-[#FFD200] to-[#00BAC7] px-5 py-2.5 text-xs font-black text-black shadow-lg"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Top section: Official Brand Payables */}
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
@@ -6852,7 +7605,7 @@ function SupplierHubView({
             <select
               value={logType}
               onChange={(e) =>
-                setLogType(e.target.value as "Credit Purchase" | "Cash Purchase" | "Return")
+                setLogType(e.target.value as "Credit Purchase" | "Cash Purchase" | "Bank Purchase" | "Return")
               }
               className={`flex-1 min-w-[150px] px-4 py-2.5 rounded-xl ring-1 outline-none font-bold text-sm transition-shadow ${
                 logType === "Return"
@@ -6862,7 +7615,21 @@ function SupplierHubView({
             >
               <option value="Credit Purchase">Credit Purchase</option>
               <option value="Cash Purchase">Cash Purchase</option>
+              <option value="Bank Purchase">Bank Purchase</option>
               <option value="Return">Return / Refund</option>
+            </select>
+            {/* Required Mode of Payment Dropdown */}
+            <select
+              value={logPaymentMode}
+              onChange={(e) => setLogPaymentMode(e.target.value as UniversalPaymentMode)}
+              required
+              className="flex-1 min-w-[160px] px-4 py-2.5 rounded-xl ring-1 ring-[#00BAC7]/40 bg-[#061113] text-[#22D3EE] font-bold text-sm outline-none"
+            >
+              {UNIVERSAL_PAYMENT_MODES.map((pm) => (
+                <option key={pm.value} value={pm.value}>
+                  {pm.badge} · {pm.label}
+                </option>
+              ))}
             </select>
             <input
               type="date"
@@ -6935,34 +7702,62 @@ function SupplierHubView({
             </span>
           </div>
           <div className="divide-y divide-slate-100 dark:divide-white/5">
-            {supplierBills.map((bill) => (
-              <div
-                key={bill.id}
-                className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="font-extrabold text-slate-900 dark:text-white">
-                    {bill.supplierName}
-                  </span>
-                  <span className="rounded-md bg-teal-100 dark:bg-teal-500/20 px-2 py-0.5 text-xs font-bold text-teal-800 dark:text-teal-300">
-                    {bill.category}
-                  </span>
-                  {bill.source === "Daily Register" && (
-                    <span className="rounded-full bg-emerald-100 dark:bg-emerald-500/20 px-2.5 py-0.5 text-[10px] font-extrabold text-emerald-700 dark:text-emerald-300">
-                      ✓ Synced from Daily Register
+            {supplierBills.map((bill) => {
+              const pmBadge = formatPaymentModeBadge(bill.paymentMode);
+              return (
+                <div
+                  key={bill.id}
+                  className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm"
+                >
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <span className="font-extrabold text-slate-900 dark:text-white">
+                      {bill.supplierName}
                     </span>
-                  )}
+                    <span className="rounded-md bg-teal-100 dark:bg-teal-500/20 px-2 py-0.5 text-xs font-bold text-teal-800 dark:text-teal-300">
+                      {bill.category}
+                    </span>
+                    <span
+                      className={`rounded border px-2 py-0.5 text-[10px] font-bold ${pmBadge.badgeClass}`}
+                    >
+                      {pmBadge.badge}
+                    </span>
+                    {bill.source === "Daily Register" && (
+                      <span className="rounded-full bg-emerald-100 dark:bg-emerald-500/20 px-2.5 py-0.5 text-[10px] font-extrabold text-emerald-700 dark:text-emerald-300">
+                        ✓ Synced from Daily Register
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-bold text-amber-600 dark:text-amber-400">
+                      Due Date: {bill.dueDate}
+                    </span>
+                    <span className="font-display font-extrabold text-slate-900 dark:text-white">
+                      SAR {fmt(bill.amount)}
+                    </span>
+                    {isOwner && (
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditBill(bill)}
+                          className="rounded-lg bg-white/10 hover:bg-white/20 px-2 py-1 text-xs font-bold text-[#FFD200] transition"
+                        >
+                          ✏️ Edit
+                        </button>
+                        {onDeleteBill && (
+                          <button
+                            type="button"
+                            onClick={() => onDeleteBill(bill.id)}
+                            className="rounded-lg bg-rose-500/15 hover:bg-rose-500/30 px-2 py-1 text-xs font-bold text-rose-300 transition"
+                          >
+                            🗑️ Delete
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-5">
-                  <span className="text-xs font-bold text-amber-600 dark:text-amber-400">
-                    Due Date: {bill.dueDate}
-                  </span>
-                  <span className="font-display font-extrabold text-slate-900 dark:text-white">
-                    SAR {fmt(bill.amount)}
-                  </span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>
@@ -7032,7 +7827,9 @@ function SupplierHubView({
                   <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">
                     Total Dispensed
                   </p>
-                  <p className="font-display font-extrabold text-2xl text-emerald-400">SAR 23,500</p>
+                  <p className="font-display font-extrabold text-2xl text-emerald-400">
+                    SAR {fmt(privateCommissions.reduce((s, c) => s + c.amount, 0))}
+                  </p>
                 </div>
               </div>
 
@@ -7042,32 +7839,99 @@ function SupplierHubView({
                     <tr>
                       <th className="px-4 py-3">Recipient Name</th>
                       <th className="px-4 py-3">Deal Reference</th>
+                      <th className="px-4 py-3">Mode</th>
                       <th className="px-4 py-3">Date</th>
                       <th className="px-4 py-3 text-right">Amount</th>
+                      {isOwner && <th className="px-4 py-3 text-right">Actions</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5 font-medium">
-                    {privateCommissions.map((c) => (
-                      <tr key={c.id} className="hover:bg-white/[0.02] transition-colors">
-                        <td className="px-4 py-3 text-white flex items-center gap-2">
-                          <div className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center text-xs font-bold">
-                            {c.name.charAt(0)}
-                          </div>
-                          {c.name}
-                        </td>
-                        <td className="px-4 py-3 text-slate-300">{c.dealRef}</td>
-                        <td className="px-4 py-3 text-slate-400">{c.date}</td>
-                        <td className="px-4 py-3 text-right font-bold text-emerald-400">
-                          SAR {fmt(c.amount)}
-                        </td>
-                      </tr>
-                    ))}
+                    {privateCommissions.map((c) => {
+                      const pmBadge = formatPaymentModeBadge(c.paymentMode);
+                      return (
+                        <tr key={c.id} className="hover:bg-white/[0.02] transition-colors">
+                          <td className="px-4 py-3 text-white">
+                            <input
+                              type="text"
+                              value={c.name}
+                              onChange={(e) =>
+                                setPrivateCommissions((prev) =>
+                                  prev.map((it) => (it.id === c.id ? { ...it, name: e.target.value } : it))
+                                )
+                              }
+                              className="bg-transparent font-semibold text-white outline-none focus:border-b focus:border-[#FFD200]"
+                            />
+                          </td>
+                          <td className="px-4 py-3 text-slate-300">
+                            <input
+                              type="text"
+                              value={c.dealRef}
+                              onChange={(e) =>
+                                setPrivateCommissions((prev) =>
+                                  prev.map((it) => (it.id === c.id ? { ...it, dealRef: e.target.value } : it))
+                                )
+                              }
+                              className="bg-transparent text-slate-300 outline-none focus:border-b focus:border-[#FFD200]"
+                            />
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`rounded border px-2 py-0.5 text-[10px] font-bold ${pmBadge.badgeClass}`}>
+                              {pmBadge.badge}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-slate-400">{c.date}</td>
+                          <td className="px-4 py-3 text-right font-bold text-emerald-400">
+                            <input
+                              type="number"
+                              value={c.amount}
+                              onChange={(e) =>
+                                setPrivateCommissions((prev) =>
+                                  prev.map((it) =>
+                                    it.id === c.id ? { ...it, amount: parseFloat(e.target.value) || 0 } : it
+                                  )
+                                )
+                              }
+                              className="w-24 bg-transparent text-right font-mono font-bold text-emerald-400 outline-none focus:border-b focus:border-[#FFD200]"
+                            />
+                          </td>
+                          {isOwner && (
+                            <td className="px-4 py-3 text-right">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setPrivateCommissions((prev) => prev.filter((it) => it.id !== c.id))
+                                }
+                                className="rounded bg-rose-500/15 hover:bg-rose-500/30 px-2 py-1 text-xs font-bold text-rose-300"
+                              >
+                                🗑️ Delete
+                              </button>
+                            </td>
+                          )}
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
 
               <div className="flex justify-end px-4 sm:px-0">
-                <button className="flex items-center gap-2 px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold text-sm transition-colors ring-1 ring-white/20 shadow-lg">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPrivateCommissions((prev) => [
+                      ...prev,
+                      {
+                        id: Date.now(),
+                        name: "New Broker",
+                        dealRef: "Project Commission",
+                        amount: 5000,
+                        date: "2026-09-12",
+                        paymentMode: "CASH",
+                      },
+                    ])
+                  }
+                  className="flex items-center gap-2 px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold text-sm transition-colors ring-1 ring-white/20 shadow-lg"
+                >
                   <Plus size={16} /> Add Commission Entry
                 </button>
               </div>
@@ -7808,6 +8672,7 @@ interface ParsedExpenseItem {
   amount: number;
   time: string;
   expenseCategory?: string;
+  paymentMode?: string;
 }
 
 interface ParsedInflowItem {
@@ -7816,6 +8681,7 @@ interface ParsedInflowItem {
   amount: number;
   customer?: string;
   time?: string;
+  paymentMode?: string;
 }
 
 interface ParsedSwipeItem {
@@ -7918,19 +8784,19 @@ function AuditLibraryView({ profile }: { profile: UserProfile | null }) {
 
     if (pExpenses.length === 0) {
       pExpenses = [
-        { id: "e-d-1", title: "Shop Consumables & Maintenance", amount: r2(record.outflows * 0.45) || 350, time: "11:20", expenseCategory: "Shop Maintenance" },
-        { id: "e-d-2", title: "Delivery Van Fuel & Transit", amount: r2(record.outflows * 0.55) || 510, time: "15:40", expenseCategory: "Fuel / Vehicle" },
+        { id: "e-d-1", title: "Shop Consumables & Maintenance", amount: r2(record.outflows * 0.45) || 350, time: "11:20", expenseCategory: "Shop Maintenance", paymentMode: "CASH" },
+        { id: "e-d-2", title: "Delivery Van Fuel & Transit", amount: r2(record.outflows * 0.55) || 510, time: "15:40", expenseCategory: "Fuel / Vehicle", paymentMode: "CASH" },
       ];
     }
     if (pInflows.length === 0) {
       pInflows = [
-        { id: "i-d-1", title: "Cash Inflow Register Summary", amount: record.inflows || 38900, customer: "Retail & Contractor Cash", time: "17:00" },
+        { id: "i-d-1", title: "Cash Inflow Register Summary", amount: record.inflows || 38900, customer: "Retail & Contractor Cash", time: "17:00", paymentMode: "CASH" },
       ];
     }
     if (pSwipes.length === 0) {
       pSwipes = [
-        { invoiceNo: "30063", amount: r2(record.bankSwipes * 0.4) || 4500, paymentMode: "POS_SWIPE", posTerminal: "SAB", time: "10:30" },
-        { invoiceNo: "30068", amount: r2(record.bankSwipes * 0.6) || 6700, paymentMode: "POS_SWIPE", posTerminal: "AL_RAJHI", time: "14:15" },
+        { invoiceNo: "30063", amount: r2(record.bankSwipes * 0.4) || 4500, paymentMode: "SAB", posTerminal: "SAB", time: "10:30" },
+        { invoiceNo: "30068", amount: r2(record.bankSwipes * 0.6) || 6700, paymentMode: "AL_RAJHI", posTerminal: "AL_RAJHI", time: "14:15" },
       ];
     }
 
@@ -7939,9 +8805,9 @@ function AuditLibraryView({ profile }: { profile: UserProfile | null }) {
     setEditSwipes(pSwipes);
   };
 
-  const handleUpdateExpenseAmt = (id: string, newAmt: number) => {
+  const handleUpdateExpenseField = (id: string, field: keyof ParsedExpenseItem, value: string | number) => {
     if (!isOwner) return;
-    const updated = editExpenses.map((e) => (e.id === id ? { ...e, amount: Math.max(0, newAmt) } : e));
+    const updated = editExpenses.map((e) => (e.id === id ? { ...e, [field]: value } : e));
     setEditExpenses(updated);
     const newOutflow = r2(updated.reduce((s, e) => s + (Number(e.amount) || 0), 0));
     setEditOutflows(newOutflow);
@@ -7957,6 +8823,7 @@ function AuditLibraryView({ profile }: { profile: UserProfile | null }) {
       amount: 150,
       time: "16:00",
       expenseCategory: "Shop Maintenance",
+      paymentMode: "CASH",
     };
     const updated = [...editExpenses, newExp];
     setEditExpenses(updated);
@@ -7972,6 +8839,37 @@ function AuditLibraryView({ profile }: { profile: UserProfile | null }) {
     const newOutflow = r2(updated.reduce((s, e) => s + (Number(e.amount) || 0), 0));
     setEditOutflows(newOutflow);
     setEditClosingCash(r2(editOpeningCash + editInflows - newOutflow));
+  };
+
+  const handleUpdateInflowItem = (id: string, field: keyof ParsedInflowItem, value: string | number) => {
+    if (!isOwner) return;
+    const updated = editInflowItems.map((i) => (i.id === id ? { ...i, [field]: value } : i));
+    setEditInflowItems(updated);
+    const newInflow = r2(updated.reduce((s, i) => s + (Number(i.amount) || 0), 0));
+    setEditInflows(newInflow);
+    setEditClosingCash(r2(editOpeningCash + newInflow - editOutflows));
+  };
+
+  const handleDeleteInflowItem = (id: string) => {
+    if (!isOwner) return;
+    const updated = editInflowItems.filter((i) => i.id !== id);
+    setEditInflowItems(updated);
+    const newInflow = r2(updated.reduce((s, i) => s + (Number(i.amount) || 0), 0));
+    setEditInflows(newInflow);
+    setEditClosingCash(r2(editOpeningCash + newInflow - editOutflows));
+  };
+
+  const handleDeleteArchiveRecord = async (id: string) => {
+    if (!isOwner) return;
+    try {
+      const res = await fetch(`/api/archive?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      if (res.ok) {
+        setRecords((prev) => prev.filter((r) => r.id !== id));
+        if (selectedRecord?.id === id) setSelectedRecord(null);
+      }
+    } catch (e) {
+      console.error("Failed to delete archive record:", e);
+    }
   };
 
   const handleSaveHistoricalAudit = async () => {
@@ -8236,6 +9134,77 @@ function AuditLibraryView({ profile }: { profile: UserProfile | null }) {
 
         {/* 4. Expandable Detail Drilldown Boxes */}
         <div className="flex flex-col gap-4">
+          {/* Detail Box: Inflows */}
+          {(expandedBox === "MONEY_IN" || expandedBox === "NONE") && (
+            <div className="rounded-2xl border border-white/10 bg-[#061113]/90 p-5 backdrop-blur-md">
+              <div className="flex items-center justify-between border-b border-white/10 pb-3 mb-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">Recorded Cash Inflows</span>
+                  <span className="text-xs text-slate-400">({editInflowItems.length} items)</span>
+                </div>
+              </div>
+              <div className="flex flex-col gap-2">
+                {editInflowItems.map((inf) => {
+                  const pBadge = formatPaymentModeBadge(inf.paymentMode || "CASH");
+                  return (
+                    <div key={inf.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-xl border border-white/5 bg-[#040D0E] p-3 text-xs">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono text-slate-400 text-[11px]">{inf.time || "12:00"}</span>
+                        {isOwner ? (
+                          <input
+                            type="text"
+                            value={inf.title}
+                            onChange={(e) => handleUpdateInflowItem(inf.id, "title", e.target.value)}
+                            className="rounded-lg border border-white/15 bg-black/50 px-2 py-1 text-xs font-bold text-white outline-none focus:border-emerald-400"
+                          />
+                        ) : (
+                          <span className="font-bold text-white">{inf.title}</span>
+                        )}
+                        <span className={`rounded border px-2 py-0.5 text-[10px] font-bold ${pBadge.cls}`}>
+                          {pBadge.label}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {isOwner ? (
+                          <>
+                            <select
+                              value={inf.paymentMode || "CASH"}
+                              onChange={(e) => handleUpdateInflowItem(inf.id, "paymentMode", e.target.value)}
+                              className="rounded-lg border border-white/15 bg-black/50 px-2 py-1 text-[11px] font-bold text-white outline-none"
+                            >
+                              {UNIVERSAL_PAYMENT_MODES.map((m) => (
+                                <option key={m.value} value={m.value} className="bg-[#0B1E21]">
+                                  {m.short}
+                                </option>
+                              ))}
+                            </select>
+                            <span className="text-slate-400 text-[11px]">SAR</span>
+                            <input
+                              type="number"
+                              value={inf.amount}
+                              onChange={(e) => handleUpdateInflowItem(inf.id, "amount", parseFloat(e.target.value) || 0)}
+                              className="w-24 rounded-lg border border-emerald-500/30 bg-[#0B1E21] px-2 py-1 font-mono text-xs font-bold text-white outline-none focus:border-emerald-400"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteInflowItem(inf.id)}
+                              className="rounded border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 px-2 py-1 text-[10px] font-bold text-rose-300"
+                              title="Delete inflow line"
+                            >
+                              🗑️ Delete
+                            </button>
+                          </>
+                        ) : (
+                          <span className="font-mono font-bold text-emerald-300">SAR {fmt(inf.amount)}</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Detail Box: Expenses */}
           {(expandedBox === "EXPENSES" || expandedBox === "NONE") && (
             <div className="rounded-2xl border border-white/10 bg-[#061113]/90 p-5 backdrop-blur-md">
@@ -8256,43 +9225,69 @@ function AuditLibraryView({ profile }: { profile: UserProfile | null }) {
               </div>
 
               <div className="flex flex-col gap-2">
-                {editExpenses.map((exp) => (
-                  <div key={exp.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-xl border border-white/5 bg-[#040D0E] p-3 text-xs">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-slate-400 text-[11px]">{exp.time || "12:00"}</span>
-                      <span className="font-bold text-white">{exp.title}</span>
-                      {exp.expenseCategory && (
-                        <span className="rounded border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-slate-400">
-                          {exp.expenseCategory}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      {isOwner ? (
-                        <div className="flex items-center gap-2">
-                          <span className="text-slate-400 text-[11px]">SAR</span>
+                {editExpenses.map((exp) => {
+                  const pBadge = formatPaymentModeBadge(exp.paymentMode || "CASH");
+                  return (
+                    <div key={exp.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-xl border border-white/5 bg-[#040D0E] p-3 text-xs">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono text-slate-400 text-[11px]">{exp.time || "12:00"}</span>
+                        {isOwner ? (
                           <input
-                            type="number"
-                            value={exp.amount}
-                            onChange={(e) => handleUpdateExpenseAmt(exp.id, parseFloat(e.target.value) || 0)}
-                            className="w-24 rounded-lg border border-[#00BAC7]/30 bg-[#0B1E21] px-2 py-1 font-mono text-xs font-bold text-white outline-none focus:border-[#00BAC7]"
+                            type="text"
+                            value={exp.title}
+                            onChange={(e) => handleUpdateExpenseField(exp.id, "title", e.target.value)}
+                            className="rounded-lg border border-white/15 bg-black/50 px-2 py-1 text-xs font-bold text-white outline-none focus:border-[#00BAC7]"
                           />
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteExpenseItem(exp.id)}
-                            className="text-slate-500 hover:text-rose-400 p-1"
-                            title="Remove line"
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        </div>
-                      ) : (
-                        <span className="font-mono font-bold text-rose-300">SAR {fmt(exp.amount)}</span>
-                      )}
+                        ) : (
+                          <span className="font-bold text-white">{exp.title}</span>
+                        )}
+                        {exp.expenseCategory && (
+                          <span className="rounded border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-slate-400">
+                            {exp.expenseCategory}
+                          </span>
+                        )}
+                        <span className={`rounded border px-2 py-0.5 text-[10px] font-bold ${pBadge.cls}`}>
+                          {pBadge.label}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {isOwner ? (
+                          <div className="flex flex-wrap items-center gap-2">
+                            <select
+                              value={exp.paymentMode || "CASH"}
+                              onChange={(e) => handleUpdateExpenseField(exp.id, "paymentMode", e.target.value)}
+                              className="rounded-lg border border-white/15 bg-black/50 px-2 py-1 text-[11px] font-bold text-white outline-none"
+                            >
+                              {UNIVERSAL_PAYMENT_MODES.map((m) => (
+                                <option key={m.value} value={m.value} className="bg-[#0B1E21]">
+                                  {m.short}
+                                </option>
+                              ))}
+                            </select>
+                            <span className="text-slate-400 text-[11px]">SAR</span>
+                            <input
+                              type="number"
+                              value={exp.amount}
+                              onChange={(e) => handleUpdateExpenseField(exp.id, "amount", Math.max(0, parseFloat(e.target.value) || 0))}
+                              className="w-24 rounded-lg border border-[#00BAC7]/30 bg-[#0B1E21] px-2 py-1 font-mono text-xs font-bold text-white outline-none focus:border-[#00BAC7]"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteExpenseItem(exp.id)}
+                              className="rounded border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 px-2 py-1 text-[10px] font-bold text-rose-300"
+                              title="Remove line"
+                            >
+                              🗑️ Delete
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="font-mono font-bold text-rose-300">SAR {fmt(exp.amount)}</span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
@@ -8305,17 +9300,20 @@ function AuditLibraryView({ profile }: { profile: UserProfile | null }) {
                 <span className="text-xs text-slate-400 font-mono">Total: SAR {fmt(editBankSwipes)}</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {editSwipes.map((sw, idx) => (
-                  <div key={idx} className="flex items-center justify-between rounded-xl border border-white/5 bg-[#040D0E] p-3 text-xs">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-white">Inv #{sw.invoiceNo}</span>
-                      <span className="rounded border border-[#00BAC7]/30 bg-[#00BAC7]/10 px-2 py-0.5 text-[10px] text-[#22D3EE]">
-                        {sw.posTerminal || "SAB"}
-                      </span>
+                {editSwipes.map((sw, idx) => {
+                  const pBadge = formatPaymentModeBadge(sw.posTerminal || sw.paymentMode || "SAB");
+                  return (
+                    <div key={idx} className="flex items-center justify-between rounded-xl border border-white/5 bg-[#040D0E] p-3 text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-white">Inv #{sw.invoiceNo}</span>
+                        <span className={`rounded border px-2 py-0.5 text-[10px] font-bold ${pBadge.cls}`}>
+                          {pBadge.label}
+                        </span>
+                      </div>
+                      <span className="font-mono font-bold text-[#FFD200]">SAR {fmt(sw.amount)}</span>
                     </div>
-                    <span className="font-mono font-bold text-[#FFD200]">SAR {fmt(sw.amount)}</span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
@@ -8525,14 +9523,32 @@ function AuditLibraryView({ profile }: { profile: UserProfile | null }) {
                     </div>
                   </div>
 
-                  {/* Right Column: Action Button */}
-                  <div className="flex items-center justify-end">
+                  {/* Right Column: Action Buttons (Role-Based CRUD) */}
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    {isOwner && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenSnapshot(r)}
+                          className="rounded-xl border border-[#FFD200]/40 bg-[#FFD200]/10 hover:bg-[#FFD200]/20 px-3 py-2 text-xs font-bold text-[#FFD200] transition"
+                        >
+                          ✏️ Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteArchiveRecord(r.id)}
+                          className="rounded-xl border border-rose-500/40 bg-rose-500/10 hover:bg-rose-500/20 px-3 py-2 text-xs font-bold text-rose-300 transition"
+                        >
+                          🗑️ Delete
+                        </button>
+                      </>
+                    )}
                     <button
                       type="button"
                       onClick={() => handleOpenSnapshot(r)}
                       className="inline-flex items-center gap-2 rounded-xl border border-[#00BAC7]/40 bg-[#00BAC7]/15 hover:bg-[#00BAC7] hover:text-black text-[#22D3EE] font-bold text-xs px-4 py-2.5 transition shadow-[0_0_15px_rgba(0,186,199,0.15)] whitespace-nowrap"
                     >
-                      <span>Open Audit Snapshot</span>
+                      <span>{isOwner ? "Inspect Snapshot" : "Open Audit Snapshot"}</span>
                       <ArrowRight size={13} />
                     </button>
                   </div>
@@ -8573,9 +9589,20 @@ function StaffPayrollView({ profile }: { profile: UserProfile | null }) {
   const [newStaffIqama, setNewStaffIqama] = useState("");
   const [isSubmittingStaff, setIsSubmittingStaff] = useState(false);
 
+  // Edit Staff Modal State (Owner CRUD)
+  const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null);
+  const [editStaffName, setEditStaffName] = useState("");
+  const [editStaffBranch, setEditStaffBranch] = useState("JCT_HQ");
+  const [editStaffRole, setEditStaffRole] = useState("");
+  const [editStaffSalary, setEditStaffSalary] = useState("");
+  const [editStaffPhone, setEditStaffPhone] = useState("");
+  const [editStaffIqama, setEditStaffIqama] = useState("");
+  const [isSavingEditStaff, setIsSavingEditStaff] = useState(false);
+
   // Disburse Form inside modal
   const [disburseAmount, setDisburseAmount] = useState("");
   const [disburseSource, setDisburseSource] = useState<"BANK_TRANSFER" | "REGISTER_DRAWER" | "OWNER_POCKET">("BANK_TRANSFER");
+  const [disbursePaymentMode, setDisbursePaymentMode] = useState<UniversalPaymentMode>("SAB");
   const [disburseNote, setDisburseNote] = useState("");
   const [isSubmittingDisburse, setIsSubmittingDisburse] = useState(false);
 
@@ -8584,8 +9611,17 @@ function StaffPayrollView({ profile }: { profile: UserProfile | null }) {
   const [adjType, setAdjType] = useState<"ADVANCE" | "BONUS" | "DEDUCTION">("ADVANCE");
   const [adjAmount, setAdjAmount] = useState("");
   const [adjSource, setAdjSource] = useState<"REGISTER_DRAWER" | "OWNER_POCKET" | "BANK_TRANSFER">("REGISTER_DRAWER");
+  const [adjPaymentMode, setAdjPaymentMode] = useState<UniversalPaymentMode>("CASH");
   const [adjNote, setAdjNote] = useState("");
   const [isSubmittingAdj, setIsSubmittingAdj] = useState(false);
+
+  // Edit PayrollLog Entry State (Owner CRUD)
+  const [editingPayrollLog, setEditingPayrollLog] = useState<PayrollLogItem | null>(null);
+  const [editLogType, setEditLogType] = useState<string>("ADVANCE");
+  const [editLogAmount, setEditLogAmount] = useState<string>("");
+  const [editLogPaymentMode, setEditLogPaymentMode] = useState<UniversalPaymentMode>("CASH");
+  const [editLogNote, setEditLogNote] = useState<string>("");
+  const [isSavingLogEdit, setIsSavingLogEdit] = useState(false);
 
   // Fetch staff list
   const loadStaff = async () => {
@@ -8722,6 +9758,51 @@ function StaffPayrollView({ profile }: { profile: UserProfile | null }) {
     }
   };
 
+  // Save Edit Staff (Owner CRUD)
+  const handleSaveEditStaff = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingStaff || !isOwner) return;
+    setIsSavingEditStaff(true);
+    try {
+      const res = await fetch("/api/staff", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editingStaff.id,
+          name: editStaffName.trim() || editingStaff.name,
+          branch: editStaffBranch,
+          role: editStaffRole.trim() || "Staff",
+          baseSalary: parseFloat(editStaffSalary) || 0,
+          phone: editStaffPhone.trim() || null,
+          iqamaNumber: editStaffIqama.trim() || null,
+        }),
+      });
+      if (res.ok) {
+        setEditingStaff(null);
+        await loadStaff();
+      }
+    } catch (e) {
+      console.error("Error updating staff:", e);
+    } finally {
+      setIsSavingEditStaff(false);
+    }
+  };
+
+  // Delete Staff Permanently (Owner CRUD)
+  const handleDeleteStaff = async (staffId: string) => {
+    if (!isOwner) return;
+    try {
+      const res = await fetch(`/api/staff?id=${encodeURIComponent(staffId)}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        await loadStaff();
+      }
+    } catch (e) {
+      console.error("Error deleting staff:", e);
+    }
+  };
+
   // Disburse Salary Submit
   const handleDisburseSalary = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -8739,6 +9820,7 @@ function StaffPayrollView({ profile }: { profile: UserProfile | null }) {
           type: "SALARY_PAYOUT",
           amount,
           source: disburseSource,
+          paymentMode: disbursePaymentMode,
           date: new Date().toISOString().slice(0, 10),
           note: disburseNote.trim() || `Salary settlement for ${selectedMonth}`,
         }),
@@ -8774,6 +9856,7 @@ function StaffPayrollView({ profile }: { profile: UserProfile | null }) {
           type: adjType,
           amount,
           source: adjSource,
+          paymentMode: adjPaymentMode,
           date: new Date().toISOString().slice(0, 10),
           note: adjNote.trim() || `${adjType} recorded directly by owner`,
         }),
@@ -8790,6 +9873,51 @@ function StaffPayrollView({ profile }: { profile: UserProfile | null }) {
       console.error("Error adding adjustment:", e);
     } finally {
       setIsSubmittingAdj(false);
+    }
+  };
+
+  // Update PayrollLog Entry (Owner CRUD)
+  const handleSavePayrollLogEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPayrollLog || !isOwner || !selectedStaffForLedger) return;
+    setIsSavingLogEdit(true);
+    try {
+      const res = await fetch("/api/payroll", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editingPayrollLog.id,
+          type: editLogType,
+          amount: parseFloat(editLogAmount) || 0,
+          paymentMode: editLogPaymentMode,
+          note: editLogNote.trim() || null,
+        }),
+      });
+      if (res.ok) {
+        setEditingPayrollLog(null);
+        await loadStaff();
+        openStaffLedger(selectedStaffForLedger);
+      }
+    } catch (e) {
+      console.error("Error updating payroll log:", e);
+    } finally {
+      setIsSavingLogEdit(false);
+    }
+  };
+
+  // Delete PayrollLog Entry (Owner CRUD)
+  const handleDeletePayrollLog = async (logId: string) => {
+    if (!isOwner || !selectedStaffForLedger) return;
+    try {
+      const res = await fetch(`/api/payroll?id=${encodeURIComponent(logId)}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        await loadStaff();
+        openStaffLedger(selectedStaffForLedger);
+      }
+    } catch (e) {
+      console.error("Error deleting payroll log:", e);
     }
   };
 
@@ -9084,7 +10212,7 @@ function StaffPayrollView({ profile }: { profile: UserProfile | null }) {
 
                       {/* Actions */}
                       <td className="py-3.5 px-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
+                        <div className="flex items-center justify-end gap-1.5">
                           <button
                             type="button"
                             onClick={() => openStaffLedger(staff)}
@@ -9094,14 +10222,33 @@ function StaffPayrollView({ profile }: { profile: UserProfile | null }) {
                             <ArrowRight size={12} />
                           </button>
 
-                          <button
-                            type="button"
-                            onClick={() => handleToggleArchive(staff)}
-                            title={staff.status === "ACTIVE" ? "Archive employee" : "Restore employee"}
-                            className="rounded-lg border border-white/10 hover:border-rose-400/30 hover:bg-rose-500/10 p-1.5 text-slate-400 hover:text-rose-300 transition"
-                          >
-                            <Trash2 size={13} />
-                          </button>
+                          {isOwner && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingStaff(staff);
+                                  setEditStaffName(staff.name);
+                                  setEditStaffBranch(staff.branch);
+                                  setEditStaffRole(staff.role || "Cashier");
+                                  setEditStaffSalary(String(staff.baseSalary));
+                                  setEditStaffPhone(staff.phone || "");
+                                  setEditStaffIqama(staff.iqamaNumber || "");
+                                }}
+                                className="rounded-lg border border-[#FFD200]/30 bg-[#FFD200]/10 hover:bg-[#FFD200]/20 px-2.5 py-1.5 text-[11px] font-bold text-[#FFD200] transition"
+                              >
+                                ✏️ Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteStaff(staff.id)}
+                                title="Delete employee"
+                                className="rounded-lg border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 px-2.5 py-1.5 text-[11px] font-bold text-rose-300 transition"
+                              >
+                                🗑️ Delete
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -9112,6 +10259,145 @@ function StaffPayrollView({ profile }: { profile: UserProfile | null }) {
           </div>
         )}
       </div>
+
+      {/* ──────────────────────────────────────────────────────────────
+          MODAL 0: EDIT STAFF MEMBER (OWNER PRIVILEGE)
+         ────────────────────────────────────────────────────────────── */}
+      {editingStaff && isOwner && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-[#FFD200]/40 bg-[#061113] p-6 shadow-2xl text-white flex flex-col gap-5">
+            <div className="flex items-center justify-between border-b border-white/10 pb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#FFD200] to-[#F59E0B] text-black">
+                  <Edit3 size={18} strokeWidth={2.5} />
+                </div>
+                <h3 className="font-display font-extrabold text-lg">✏️ Edit Employee Record</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingStaff(null)}
+                className="text-slate-400 hover:text-white p-1"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditStaff} className="flex flex-col gap-3.5">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-300 uppercase mb-1">
+                  Employee Full Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editStaffName}
+                  onChange={(e) => setEditStaffName(e.target.value)}
+                  className="w-full rounded-xl border border-white/15 bg-black/50 px-3.5 py-2.5 text-sm font-semibold text-white outline-none focus:border-[#FFD200]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-300 uppercase mb-1">
+                    Branch Assignment *
+                  </label>
+                  <select
+                    value={editStaffBranch}
+                    onChange={(e) => setEditStaffBranch(e.target.value)}
+                    className="w-full rounded-xl border border-white/15 bg-black/50 px-3 py-2.5 text-xs font-bold text-white outline-none focus:border-[#FFD200]"
+                  >
+                    <option value="JCT_HQ">JCT Main HQ</option>
+                    <option value="HEMPEL_JUBAIL">Hempel Jubail</option>
+                    <option value="JOTUN_DAMMAM">Jotun Dammam</option>
+                    <option value="SIGMA_JUBAIL">Sigma Jubail</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-300 uppercase mb-1">
+                    Job Role
+                  </label>
+                  <input
+                    type="text"
+                    value={editStaffRole}
+                    onChange={(e) => setEditStaffRole(e.target.value)}
+                    className="w-full rounded-xl border border-white/15 bg-black/50 px-3.5 py-2.5 text-xs font-semibold text-white outline-none focus:border-[#FFD200]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-300 uppercase mb-1">
+                  Monthly Base Salary (SAR) *
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  required
+                  value={editStaffSalary}
+                  onChange={(e) => setEditStaffSalary(e.target.value)}
+                  className="w-full rounded-xl border border-white/15 bg-black/50 px-3.5 py-2.5 font-mono text-sm font-bold text-white outline-none focus:border-[#FFD200]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-300 uppercase mb-1">
+                    Phone
+                  </label>
+                  <input
+                    type="text"
+                    value={editStaffPhone}
+                    onChange={(e) => setEditStaffPhone(e.target.value)}
+                    className="w-full rounded-xl border border-white/15 bg-black/50 px-3.5 py-2 text-xs text-white outline-none focus:border-[#FFD200]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-300 uppercase mb-1">
+                    Iqama / ID
+                  </label>
+                  <input
+                    type="text"
+                    value={editStaffIqama}
+                    onChange={(e) => setEditStaffIqama(e.target.value)}
+                    className="w-full rounded-xl border border-white/15 bg-black/50 px-3.5 py-2 text-xs text-white outline-none focus:border-[#FFD200]"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-3 border-t border-white/10 mt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleToggleArchive(editingStaff);
+                    setEditingStaff(null);
+                  }}
+                  className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-bold text-amber-300"
+                >
+                  {editingStaff.status === "ACTIVE" ? "Archive Staff" : "Restore Staff"}
+                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingStaff(null)}
+                    className="rounded-xl border border-white/15 px-4 py-2 text-xs font-bold text-slate-300 hover:text-white"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSavingEditStaff}
+                    className="rounded-xl bg-gradient-to-r from-[#FFD200] to-[#F59E0B] px-5 py-2 text-xs font-extrabold text-black hover:brightness-105 disabled:opacity-50 transition"
+                  >
+                    {isSavingEditStaff ? "Saving..." : "💾 Save Changes"}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* ──────────────────────────────────────────────────────────────
           MODAL 1: ADD NEW STAFF MEMBER
@@ -9371,7 +10657,7 @@ function StaffPayrollView({ profile }: { profile: UserProfile | null }) {
                   <span className="text-xs font-bold text-[#22D3EE]">
                     Record Direct Staff Ledger Entry
                   </span>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
                     <div>
                       <label className="block text-[10px] text-slate-400 mb-1">Type</label>
                       <select
@@ -9402,12 +10688,36 @@ function StaffPayrollView({ profile }: { profile: UserProfile | null }) {
                       <label className="block text-[10px] text-slate-400 mb-1">Payment Source</label>
                       <select
                         value={adjSource}
-                        onChange={(e) => setAdjSource(e.target.value as "REGISTER_DRAWER" | "OWNER_POCKET" | "BANK_TRANSFER")}
+                        onChange={(e) => {
+                          const v = e.target.value as "REGISTER_DRAWER" | "OWNER_POCKET" | "BANK_TRANSFER";
+                          setAdjSource(v);
+                          if (v === "BANK_TRANSFER" && adjPaymentMode === "CASH") {
+                            setAdjPaymentMode("SAB");
+                          } else if (v === "REGISTER_DRAWER") {
+                            setAdjPaymentMode("CASH");
+                          }
+                        }}
                         className="w-full rounded-lg border border-white/15 bg-black/60 px-2.5 py-1.5 text-xs font-bold text-white outline-none"
                       >
                         <option value="REGISTER_DRAWER">Cash Drawer</option>
                         <option value="OWNER_POCKET">Owner Pocket</option>
                         <option value="BANK_TRANSFER">Bank Transfer</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] text-[#FFD200] font-bold mb-1">Mode of Payment *</label>
+                      <select
+                        required
+                        value={adjPaymentMode}
+                        onChange={(e) => setAdjPaymentMode(e.target.value as UniversalPaymentMode)}
+                        className="w-full rounded-lg border border-[#FFD200]/40 bg-black/60 px-2.5 py-1.5 text-xs font-bold text-[#FFD200] outline-none"
+                      >
+                        {UNIVERSAL_PAYMENT_MODES.map((m) => (
+                          <option key={m.value} value={m.value} className="bg-[#0B1E21] text-white">
+                            {m.label}
+                          </option>
+                        ))}
                       </select>
                     </div>
                   </div>
@@ -9447,7 +10757,7 @@ function StaffPayrollView({ profile }: { profile: UserProfile | null }) {
                     </button>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
                       <label className="block text-[10px] text-amber-200/80 mb-1">Disbursement Amount (SAR)</label>
                       <input
@@ -9461,15 +10771,36 @@ function StaffPayrollView({ profile }: { profile: UserProfile | null }) {
                     </div>
 
                     <div>
-                      <label className="block text-[10px] text-amber-200/80 mb-1">Payment Method</label>
+                      <label className="block text-[10px] text-amber-200/80 mb-1">Payment Source</label>
                       <select
                         value={disburseSource}
-                        onChange={(e) => setDisburseSource(e.target.value as "BANK_TRANSFER" | "REGISTER_DRAWER" | "OWNER_POCKET")}
+                        onChange={(e) => {
+                          const v = e.target.value as "BANK_TRANSFER" | "REGISTER_DRAWER" | "OWNER_POCKET";
+                          setDisburseSource(v);
+                          if (v === "REGISTER_DRAWER") setDisbursePaymentMode("CASH");
+                          else if (v === "BANK_TRANSFER" && disbursePaymentMode === "CASH") setDisbursePaymentMode("SAB");
+                        }}
                         className="w-full rounded-lg border border-[#FFD200]/40 bg-black/70 px-3 py-2 text-xs font-bold text-white outline-none"
                       >
-                        <option value="BANK_TRANSFER">Bank Wire / Transfer (Company Account)</option>
-                        <option value="REGISTER_DRAWER">Cash Drawer (Daily Register)</option>
-                        <option value="OWNER_POCKET">Owner Pocket (Nazim / Nadeem Personal)</option>
+                        <option value="BANK_TRANSFER">Bank Wire / Transfer</option>
+                        <option value="REGISTER_DRAWER">Cash Drawer (Register)</option>
+                        <option value="OWNER_POCKET">Owner Pocket</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] text-[#FFD200] font-bold mb-1">Mode of Payment *</label>
+                      <select
+                        required
+                        value={disbursePaymentMode}
+                        onChange={(e) => setDisbursePaymentMode(e.target.value as UniversalPaymentMode)}
+                        className="w-full rounded-lg border border-[#FFD200]/60 bg-black/70 px-3 py-2 text-xs font-bold text-[#FFD200] outline-none"
+                      >
+                        {UNIVERSAL_PAYMENT_MODES.map((m) => (
+                          <option key={m.value} value={m.value} className="bg-[#0B1E21] text-white">
+                            {m.label}
+                          </option>
+                        ))}
                       </select>
                     </div>
                   </div>
@@ -9488,6 +10819,80 @@ function StaffPayrollView({ profile }: { profile: UserProfile | null }) {
                       className="rounded-lg bg-[#FFD200] hover:bg-amber-400 px-5 py-2 text-xs font-black text-black transition shrink-0 shadow-sm"
                     >
                       {isSubmittingDisburse ? "Processing..." : "Disburse & Zero Balance"}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* Inline Edit Payroll Log Form (Owner CRUD) */}
+              {editingPayrollLog && isOwner && (
+                <form onSubmit={handleSavePayrollLogEdit} className="rounded-xl border border-[#FFD200]/50 bg-[#0B1E21] p-4 flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-extrabold text-[#FFD200]">
+                      👑 Edit Payroll Ledger Entry ({editingPayrollLog.date})
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setEditingPayrollLog(null)}
+                      className="text-xs text-slate-400 hover:text-white"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div>
+                      <label className="block text-[10px] text-slate-400 mb-1">Entry Type</label>
+                      <select
+                        value={editLogType}
+                        onChange={(e) => setEditLogType(e.target.value)}
+                        className="w-full rounded-lg border border-white/15 bg-black/60 px-2.5 py-1.5 text-xs font-bold text-white outline-none"
+                      >
+                        <option value="ADVANCE">ADVANCE</option>
+                        <option value="SALARY_PAYOUT">SALARY_PAYOUT</option>
+                        <option value="BONUS">BONUS</option>
+                        <option value="DEDUCTION">DEDUCTION</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-slate-400 mb-1">Amount (SAR)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        required
+                        value={editLogAmount}
+                        onChange={(e) => setEditLogAmount(e.target.value)}
+                        className="w-full rounded-lg border border-white/15 bg-black/60 px-2.5 py-1.5 font-mono text-xs font-bold text-white outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-[#FFD200] font-bold mb-1">Mode of Payment</label>
+                      <select
+                        value={editLogPaymentMode}
+                        onChange={(e) => setEditLogPaymentMode(e.target.value as UniversalPaymentMode)}
+                        className="w-full rounded-lg border border-[#FFD200]/40 bg-black/60 px-2.5 py-1.5 text-xs font-bold text-[#FFD200] outline-none"
+                      >
+                        {UNIVERSAL_PAYMENT_MODES.map((m) => (
+                          <option key={m.value} value={m.value} className="bg-[#0B1E21] text-white">
+                            {m.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={editLogNote}
+                      onChange={(e) => setEditLogNote(e.target.value)}
+                      placeholder="Memo / note..."
+                      className="flex-1 rounded-lg border border-white/15 bg-black/60 px-3 py-1.5 text-xs text-white outline-none"
+                    />
+                    <button
+                      type="submit"
+                      disabled={isSavingLogEdit}
+                      className="rounded-lg bg-[#FFD200] hover:bg-amber-400 px-4 py-1.5 text-xs font-black text-black transition shrink-0"
+                    >
+                      {isSavingLogEdit ? "Saving..." : "💾 Update Entry"}
                     </button>
                   </div>
                 </form>
@@ -9525,9 +10930,13 @@ function StaffPayrollView({ profile }: { profile: UserProfile | null }) {
                           ? "Owner Pocket"
                           : "Bank Transfer";
 
+                      const modeBadge = formatPaymentModeBadge(
+                        log.paymentMode || (log.source === "BANK_TRANSFER" ? "BANK_TRANSFER" : "CASH")
+                      );
+
                       return (
-                        <div key={log.id} className="flex items-center justify-between p-3.5 hover:bg-white/[0.02] transition gap-3">
-                          <div className="flex items-center gap-3">
+                        <div key={log.id} className="flex flex-wrap items-center justify-between p-3.5 hover:bg-white/[0.02] transition gap-3">
+                          <div className="flex flex-wrap items-center gap-2">
                             <span className="font-mono text-xs text-slate-400 whitespace-nowrap">
                               {log.date}
                             </span>
@@ -9537,6 +10946,9 @@ function StaffPayrollView({ profile }: { profile: UserProfile | null }) {
                             <span className="rounded bg-black/40 border border-white/10 px-1.5 py-0.5 text-[10px] text-slate-400">
                               {sourceLabel}
                             </span>
+                            <span className={`rounded border px-2 py-0.5 text-[10px] font-bold ${modeBadge.cls}`}>
+                              {modeBadge.label}
+                            </span>
                             {log.note && (
                               <span className="text-xs text-slate-300 truncate max-w-xs">
                                 {log.note}
@@ -9544,16 +10956,45 @@ function StaffPayrollView({ profile }: { profile: UserProfile | null }) {
                             )}
                           </div>
 
-                          <div className="text-right font-mono font-bold whitespace-nowrap">
-                            <span
-                              className={
-                                isPayout || isBonus
-                                  ? "text-emerald-400"
-                                  : "text-rose-400"
-                              }
-                            >
-                              {isPayout || isBonus ? "+" : "-"}SAR {fmt(log.amount)}
-                            </span>
+                          <div className="flex items-center gap-2">
+                            <div className="text-right font-mono font-bold whitespace-nowrap">
+                              <span
+                                className={
+                                  isPayout || isBonus
+                                    ? "text-emerald-400"
+                                    : "text-rose-400"
+                                }
+                              >
+                                {isPayout || isBonus ? "+" : "-"}SAR {fmt(log.amount)}
+                              </span>
+                            </div>
+                            {isOwner && (
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingPayrollLog(log);
+                                    setEditLogType(log.type);
+                                    setEditLogAmount(String(log.amount));
+                                    setEditLogPaymentMode(
+                                      (log.paymentMode as UniversalPaymentMode) ||
+                                        (log.source === "BANK_TRANSFER" ? "BANK_TRANSFER" : "CASH")
+                                    );
+                                    setEditLogNote(log.note || "");
+                                  }}
+                                  className="rounded border border-[#FFD200]/30 bg-[#FFD200]/10 hover:bg-[#FFD200]/20 px-2 py-0.5 text-[10px] font-bold text-[#FFD200]"
+                                >
+                                  ✏️ Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeletePayrollLog(log.id)}
+                                  className="rounded border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 px-2 py-0.5 text-[10px] font-bold text-rose-300"
+                                >
+                                  🗑️ Delete
+                                </button>
+                              </div>
+                            )}
                           </div>
                         </div>
                       );
@@ -9844,7 +11285,8 @@ export default function Page() {
     supplierName: string,
     amount: number,
     dueDate: string,
-    category: "Credit Purchase" | "Cash Purchase" | "Bank Purchase" | "Return"
+    category: "Credit Purchase" | "Cash Purchase" | "Bank Purchase" | "Return",
+    paymentMode?: UniversalPaymentMode | string
   ) => {
     const cleanName = supplierName.trim() || "Jotun";
     const newBill: SupplierBillItem = {
@@ -9853,6 +11295,7 @@ export default function Page() {
       amount,
       dueDate: dueDate || "2026-09-25",
       category,
+      paymentMode: paymentMode || (category === "Bank Purchase" ? "SAB" : "CASH"),
       createdAt: "12-09-2026",
       source: "Daily Register",
     };
@@ -9893,6 +11336,22 @@ export default function Page() {
         },
       ];
     });
+  };
+
+  const handleUpdateCreditCustomer = (updated: ContractorAccount) => {
+    setCreditCustomers((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+  };
+
+  const handleDeleteCreditCustomer = (id: string) => {
+    setCreditCustomers((prev) => prev.filter((c) => c.id !== id));
+  };
+
+  const handleUpdateSupplierBill = (updated: SupplierBillItem) => {
+    setSupplierBills((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
+  };
+
+  const handleDeleteSupplierBill = (id: string) => {
+    setSupplierBills((prev) => prev.filter((b) => b.id !== id));
   };
 
   // Cross-Module Sync 2: Credit Sale / Credit Sale Amt Recd -> Credit Radar
@@ -10112,6 +11571,7 @@ export default function Page() {
           note: [tag, t.note].filter(Boolean).join(" · "),
           amount: t.amount,
           time,
+          paymentMode: (t.paymentMode as UniversalPaymentMode) || "CASH",
         });
       } else if (t.type === "ADVANCE") {
         injected.push({
@@ -10122,6 +11582,7 @@ export default function Page() {
           note: `${tag} · Staff Payables / Advances`,
           amount: t.amount,
           time,
+          paymentMode: (t.paymentMode as UniversalPaymentMode) || "CASH",
         });
       } else {
         const followUp = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
@@ -10136,6 +11597,7 @@ export default function Page() {
             note: [tag, t.note].filter(Boolean).join(" · "),
             amount: t.amount,
             time,
+            paymentMode: (t.paymentMode as UniversalPaymentMode) || "CASH",
           });
         }
         if (t.recipientName) {
@@ -10267,12 +11729,18 @@ export default function Page() {
               <CreditRadarView
                 customers={creditCustomers}
                 onIssueCredit={handleSyncCreditCustomer}
+                isOwner={Boolean(profile?.isOwner)}
+                onUpdateCustomer={handleUpdateCreditCustomer}
+                onDeleteCustomer={handleDeleteCreditCustomer}
               />
             ) : safeTab === "suppliers" ? (
               <SupplierHubView
                 supplierBrands={supplierBrands}
                 supplierBills={supplierBills}
                 onLogSupplierPurchase={handleSyncCreditPurchase}
+                isOwner={Boolean(profile?.isOwner)}
+                onUpdateBill={handleUpdateSupplierBill}
+                onDeleteBill={handleDeleteSupplierBill}
               />
             ) : safeTab === "payroll" ? (
               <StaffPayrollView profile={profile} />

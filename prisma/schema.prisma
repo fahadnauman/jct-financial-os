@@ -15,6 +15,7 @@ model PocketTransaction {
   category      String?
   recipientName String?
   paymentSource String   // DRAWER_CASH | OWNER_POCKET | BANK_TRANSFER
+  paymentMode   String?  // e.g., "SAB", "AL_RAJHI", "SNB", "VISA", "MADA", "BANK_TRANSFER", "CASH"
   note          String?
   date          String   // YYYY-MM-DD
   createdAt     DateTime @default(now())
@@ -50,6 +51,7 @@ model DailyRegister {
   cashIn      Float    @default(0)
   cashOut     Float    @default(0)
   closingCash Float    @default(0)
+  paymentMode String?  // e.g., "SAB", "AL_RAJHI", "SNB", "VISA", "MADA", "BANK_TRANSFER", "CASH"
   notes       String?
   createdAt   DateTime @default(now())
 }
@@ -71,6 +73,7 @@ model SupplierBill {
   amount      Float
   dueDate     DateTime
   isPaid      Boolean  @default(false)
+  paymentMode String?  // e.g., "SAB", "AL_RAJHI", "SNB", "VISA", "MADA", "BANK_TRANSFER", "CASH"
   createdAt   DateTime @default(now())
 }
 
@@ -99,6 +102,7 @@ model PayrollLog {
   branch      String
   note        String?
   source      String   @default("REGISTER_DRAWER") // or "BANK_TRANSFER", "OWNER_POCKET"
+  paymentMode String?  // e.g., "SAB", "AL_RAJHI", "SNB", "VISA", "MADA", "BANK_TRANSFER", "CASH"
   createdAt   DateTime @default(now())
 
   @@index([staffId])

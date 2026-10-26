@@ -292,3 +292,29 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: "Failed to update archive record" }, { status: 500 });
   }
 }
+
+export async function DELETE(req: Request) {
+  const { searchParams } = new URL(req.url);
+  let id = searchParams.get("id") || "";
+  if (!id) {
+    try {
+      const body = await req.json();
+      if (typeof body.id === "string") id = body.id.trim();
+    } catch {
+      // ignore
+    }
+  }
+  if (!id) {
+    return NextResponse.json({ error: "Record ID is required" }, { status: 400 });
+  }
+
+  try {
+    await prisma.dailyRegisterLock.delete({
+      where: { id: String(id) },
+    });
+    return NextResponse.json({ deleted: true, id });
+  } catch (err) {
+    console.error("DELETE /api/archive error:", err);
+    return NextResponse.json({ error: "Failed to delete archive record" }, { status: 500 });
+  }
+}

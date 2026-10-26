@@ -56,6 +56,11 @@ export async function POST(req: Request) {
   const source = typeof body.source === "string" && VALID_SOURCES.includes(body.source.trim())
     ? body.source.trim()
     : "REGISTER_DRAWER";
+  const paymentMode = typeof body.paymentMode === "string" && body.paymentMode.trim()
+    ? body.paymentMode.trim()
+    : source === "BANK_TRANSFER"
+    ? "SAB"
+    : "CASH";
   const date = typeof body.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.date.trim())
     ? body.date.trim()
     : new Date().toISOString().slice(0, 10);
@@ -90,6 +95,7 @@ export async function POST(req: Request) {
         branch,
         note,
         source,
+        paymentMode,
       },
       include: {
         staff: true,
@@ -100,5 +106,75 @@ export async function POST(req: Request) {
   } catch (err) {
     console.error("POST /api/payroll failed", err);
     return NextResponse.json({ error: "Failed to create payroll log" }, { status: 500 });
+  }
+}
+
+export async function PUT(req: Request) {
+  let body: Record<string, unknown>;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+
+  const id = typeof body.id === "string" ? body.id.trim() : "";
+  if (!id) {
+    return NextResponse.json({ error: "PayrollLog ID is required" }, { status: 400 });
+  }
+
+  const updateData: Record<string, unknown> = {};
+  if (typeof body.type === "string" && VALID_TYPES.includes(body.type.trim())) {
+    updateData.type = body.type.trim();
+  }
+  if (body.amount !== undefined) {
+    updateData.amount = Math.max(0, Number(body.amount) || 0);
+  }
+  if (body.note !== undefined) {
+    updateData.note = typeof body.note === "string" && body.note.trim() ? body.note.trim() : null;
+  }
+  if (typeof body.source === "string" && VALID_SOURCES.includes(body.source.trim())) {
+    updateData.source = body.source.trim();
+  }
+  if (body.paymentMode !== undefined) {
+    updateData.paymentMode = typeof body.paymentMode === "string" && body.paymentMode.trim() ? body.paymentMode.trim() : null;
+  }
+  if (typeof body.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.date.trim())) {
+    updateData.date = body.date.trim();
+  }
+
+  try {
+    const updated = await prisma.payrollLog.update({
+      where: { id },
+      data: updateData,
+      include: { staff: true },
+    });
+    return NextResponse.json({ log: updated });
+  } catch (err) {
+    console.error("PUT /api/payroll failed", err);
+    return NextResponse.json({ error: "Failed to update payroll log" }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: Request) {
+  const { searchParams } = new URL(req.url);
+  let id = searchParams.get("id") || "";
+  if (!id) {
+    try {
+      const body = await req.json();
+      if (typeof body.id === "string") id = body.id.trim();
+    } catch {
+      // ignore
+    }
+  }
+  if (!id) {
+    return NextResponse.json({ error: "PayrollLog ID is required" }, { status: 400 });
+  }
+
+  try {
+    await prisma.payrollLog.delete({ where: { id } });
+    return NextResponse.json({ deleted: true, id });
+  } catch (err) {
+    console.error("DELETE /api/payroll failed", err);
+    return NextResponse.json({ error: "Failed to delete payroll log" }, { status: 500 });
   }
 }

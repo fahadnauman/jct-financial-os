@@ -25,6 +25,29 @@ const EXPENSE_CATEGORIES = ["Fuel / Vehicle", "Shop Maintenance", "Food & Refres
 const ADVANCE_PURPOSES = ["Salary Advance", "Daily Lunch / Travel Allowance", "Shop Runner Float"];
 const FALLBACK_CUSTOMERS = ["Al-Hamad Contracting", "Gulf Coast Painters", "Eastern Province Builders"];
 
+type UniversalPaymentMode = "CASH" | "SAB" | "AL_RAJHI" | "SNB" | "VISA" | "MADA" | "BANK_TRANSFER";
+
+const UNIVERSAL_PAYMENT_MODES: { value: UniversalPaymentMode; label: string; short: string }[] = [
+  { value: "CASH", label: "💵 Cash", short: "💵 Cash" },
+  { value: "SAB", label: "🏦 SAB (Saudi Awwal Bank)", short: "🏦 SAB" },
+  { value: "AL_RAJHI", label: "🏦 Al Rajhi", short: "🏦 Al Rajhi" },
+  { value: "SNB", label: "🏦 SNB", short: "🏦 SNB" },
+  { value: "VISA", label: "💳 VISA", short: "💳 VISA" },
+  { value: "MADA", label: "💳 Mada", short: "💳 Mada" },
+  { value: "BANK_TRANSFER", label: "🏦 Bank Transfer", short: "🏦 Bank Transfer" },
+];
+
+function formatPaymentModeBadge(mode?: string | null): { label: string; cls: string } {
+  const m = (mode || "CASH").toUpperCase();
+  if (m === "SAB") return { label: "🏦 SAB", cls: "border-[#00BAC7]/40 bg-[#00BAC7]/15 text-[#22D3EE]" };
+  if (m === "AL_RAJHI") return { label: "🏦 Al Rajhi", cls: "border-emerald-400/40 bg-emerald-500/15 text-emerald-300" };
+  if (m === "SNB") return { label: "🏦 SNB", cls: "border-teal-400/40 bg-teal-500/15 text-teal-300" };
+  if (m === "VISA") return { label: "💳 VISA", cls: "border-purple-400/40 bg-purple-500/15 text-purple-300" };
+  if (m === "MADA") return { label: "💳 Mada", cls: "border-sky-400/40 bg-sky-500/15 text-sky-300" };
+  if (m === "BANK_TRANSFER") return { label: "🏦 Bank Transfer", cls: "border-[#FFD200]/40 bg-[#FFD200]/15 text-[#FFD200]" };
+  return { label: "💵 Cash", cls: "border-white/20 bg-white/10 text-slate-200" };
+}
+
 interface StaffMember {
   id: string;
   name: string;
@@ -47,6 +70,7 @@ interface PayrollLogItem {
   branch: string;
   note: string | null;
   source: string;
+  paymentMode?: string | null;
   createdAt: string;
 }
 
@@ -173,6 +197,7 @@ export default function OwnerPocketPage() {
   const [eAmount, setEAmount] = useState("");
   const [eCat, setECat] = useState(EXPENSE_CATEGORIES[0]);
   const [eSource, setESource] = useState<"DRAWER" | "POCKET">("DRAWER");
+  const [ePaymentMode, setEPaymentMode] = useState<UniversalPaymentMode>("CASH");
   const [eNote, setENote] = useState("");
 
   // Advance form
@@ -181,6 +206,7 @@ export default function OwnerPocketPage() {
   const [aStaffId, setAStaffId] = useState("");
   const [aAmount, setAAmount] = useState("");
   const [aPurpose, setAPurpose] = useState(ADVANCE_PURPOSES[0]);
+  const [aPaymentMode, setAPaymentMode] = useState<UniversalPaymentMode>("CASH");
   const [branchStaffList, setBranchStaffList] = useState<StaffMember[]>([]);
 
   // Collection form
@@ -189,8 +215,16 @@ export default function OwnerPocketPage() {
   const [cRef, setCRef] = useState("");
   const [cAmount, setCAmount] = useState("");
   const [cTender, setCTender] = useState<"CASH_TO_OWNER" | "BANK_TRANSFER">("CASH_TO_OWNER");
+  const [cPaymentMode, setCPaymentMode] = useState<UniversalPaymentMode>("CASH");
 
   const [saving, setSaving] = useState(false);
+
+  // Edit Pocket Transaction State
+  const [editingPocketTx, setEditingPocketTx] = useState<PocketTransaction | null>(null);
+  const [editPocketAmt, setEditPocketAmt] = useState("");
+  const [editPocketCat, setEditPocketCat] = useState("");
+  const [editPocketMode, setEditPocketMode] = useState<UniversalPaymentMode>("CASH");
+  const [editPocketNote, setEditPocketNote] = useState("");
 
   // ────────────────────────────────────────────────────────────────────────
   // PAYROLL PORTAL STATE
@@ -210,6 +244,7 @@ export default function OwnerPocketPage() {
   // Disburse Form
   const [disburseAmount, setDisburseAmount] = useState("");
   const [disburseSource, setDisburseSource] = useState<"BANK_TRANSFER" | "REGISTER_DRAWER" | "OWNER_POCKET">("BANK_TRANSFER");
+  const [disbursePaymentMode, setDisbursePaymentMode] = useState<UniversalPaymentMode>("SAB");
   const [disburseNote, setDisburseNote] = useState("");
   const [isSubmittingDisburse, setIsSubmittingDisburse] = useState(false);
 
@@ -218,8 +253,15 @@ export default function OwnerPocketPage() {
   const [adjType, setAdjType] = useState<"ADVANCE" | "BONUS" | "DEDUCTION">("ADVANCE");
   const [adjAmount, setAdjAmount] = useState("");
   const [adjSource, setAdjSource] = useState<"REGISTER_DRAWER" | "OWNER_POCKET" | "BANK_TRANSFER">("REGISTER_DRAWER");
+  const [adjPaymentMode, setAdjPaymentMode] = useState<UniversalPaymentMode>("CASH");
   const [adjNote, setAdjNote] = useState("");
   const [isSavingAdj, setIsSavingAdj] = useState(false);
+
+  // Edit PayrollLog on Mobile
+  const [editingPayrollLog, setEditingPayrollLog] = useState<PayrollLogItem | null>(null);
+  const [editLogAmt, setEditLogAmt] = useState("");
+  const [editLogMode, setEditLogMode] = useState<UniversalPaymentMode>("CASH");
+  const [editLogNote, setEditLogNote] = useState("");
 
   // Add Staff Form
   const [newName, setNewName] = useState("");
@@ -334,6 +376,7 @@ export default function OwnerPocketPage() {
         category: eCat,
         recipientName: null,
         paymentSource: eSource === "POCKET" ? "OWNER_POCKET" : "DRAWER_CASH",
+        paymentMode: ePaymentMode,
         note: eNote.trim() || null,
         date: todayIso(),
       },
@@ -358,6 +401,7 @@ export default function OwnerPocketPage() {
         category: aPurpose,
         recipientName: aName.trim(),
         paymentSource: "DRAWER_CASH",
+        paymentMode: aPaymentMode,
         note: null,
         date: todayIso(),
       },
@@ -377,6 +421,7 @@ export default function OwnerPocketPage() {
           date: todayIso(),
           note: `Mobile Owner Pocket: ${aPurpose}`,
           source: "DRAWER_CASH",
+          paymentMode: aPaymentMode,
         }),
       }).catch((e) => console.error("Error creating payroll log from pocket:", e));
     }
@@ -399,6 +444,7 @@ export default function OwnerPocketPage() {
         category: cRef.trim() || null,
         recipientName: cName.trim(),
         paymentSource: cTender === "CASH_TO_OWNER" ? "DRAWER_CASH" : "BANK_TRANSFER",
+        paymentMode: cPaymentMode,
         note: cTender === "CASH_TO_OWNER" ? "Cash Handed to Owner" : "Bank Transfer to SAB / Rajhi",
         date: todayIso(),
       },
@@ -408,6 +454,45 @@ export default function OwnerPocketPage() {
       setCAmount("");
       setCName("");
       setCRef("");
+    }
+  };
+
+  const handleSavePocketTxEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPocketTx) return;
+    try {
+      const res = await fetch("/api/pocket", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editingPocketTx.id,
+          amount: parseFloat(editPocketAmt) || editingPocketTx.amount,
+          category: editPocketCat || editingPocketTx.category,
+          paymentMode: editPocketMode,
+          note: editPocketNote || null,
+        }),
+      });
+      if (res.ok) {
+        setEditingPocketTx(null);
+        refresh();
+        setToast("Transaction updated!");
+        setTimeout(() => setToast(null), 3000);
+      }
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const handleDeletePocketTx = async (id: string) => {
+    try {
+      const res = await fetch(`/api/pocket?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      if (res.ok) {
+        refresh();
+        setToast("Transaction deleted.");
+        setTimeout(() => setToast(null), 3000);
+      }
+    } catch {
+      /* ignore */
     }
   };
 
@@ -444,6 +529,7 @@ export default function OwnerPocketPage() {
     setSelectedStaffForLedger(staff);
     setLoadingLedger(true);
     setShowAdjustForm(false);
+    setEditingPayrollLog(null);
     try {
       const res = await fetch(`/api/payroll?staffId=${staff.id}`);
       const data = await res.json();
@@ -476,6 +562,7 @@ export default function OwnerPocketPage() {
           type: "SALARY_PAYOUT",
           amount,
           source: disburseSource,
+          paymentMode: disbursePaymentMode,
           date: todayIso(),
           note: disburseNote.trim() || `Mobile Salary Disbursed (${selectedMonth})`,
         }),
@@ -514,6 +601,7 @@ export default function OwnerPocketPage() {
           type: adjType,
           amount,
           source: adjSource,
+          paymentMode: adjPaymentMode,
           date: todayIso(),
           note: adjNote.trim() || `${adjType} recorded from mobile portal`,
         }),
@@ -533,6 +621,47 @@ export default function OwnerPocketPage() {
       setTimeout(() => setToast(null), 3500);
     } finally {
       setIsSavingAdj(false);
+    }
+  };
+
+  const handleSavePayrollLogEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPayrollLog || !selectedStaffForLedger) return;
+    try {
+      const res = await fetch("/api/payroll", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editingPayrollLog.id,
+          amount: parseFloat(editLogAmt) || editingPayrollLog.amount,
+          paymentMode: editLogMode,
+          note: editLogNote.trim() || null,
+        }),
+      });
+      if (res.ok) {
+        setEditingPayrollLog(null);
+        await loadAllStaff();
+        openStaffLedger(selectedStaffForLedger);
+        setToast("Ledger entry updated!");
+        setTimeout(() => setToast(null), 3000);
+      }
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const handleDeletePayrollLog = async (id: string) => {
+    if (!selectedStaffForLedger) return;
+    try {
+      const res = await fetch(`/api/payroll?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      if (res.ok) {
+        await loadAllStaff();
+        openStaffLedger(selectedStaffForLedger);
+        setToast("Ledger entry deleted.");
+        setTimeout(() => setToast(null), 3000);
+      }
+    } catch {
+      /* ignore */
     }
   };
 
@@ -768,6 +897,23 @@ export default function OwnerPocketPage() {
                   )}
                 </div>
                 <div>
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-[#FFD200]">
+                    Mode of Payment *
+                  </label>
+                  <select
+                    required
+                    value={ePaymentMode}
+                    onChange={(e) => setEPaymentMode(e.target.value as UniversalPaymentMode)}
+                    className={`${inputCls} border-[#FFD200]/40 text-[#FFD200] font-bold text-sm`}
+                  >
+                    {UNIVERSAL_PAYMENT_MODES.map((m) => (
+                      <option key={m.value} value={m.value} className="bg-[#0B1E21] text-white">
+                        {m.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
                   <label className={labelCls}>Note</label>
                   <input value={eNote} onChange={(e) => setENote(e.target.value)} placeholder="Short remark" className={inputCls} />
                 </div>
@@ -861,6 +1007,24 @@ export default function OwnerPocketPage() {
                   <Pills options={ADVANCE_PURPOSES} value={aPurpose} onChange={setAPurpose} />
                 </div>
 
+                <div>
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-[#FFD200]">
+                    Mode of Payment *
+                  </label>
+                  <select
+                    required
+                    value={aPaymentMode}
+                    onChange={(e) => setAPaymentMode(e.target.value as UniversalPaymentMode)}
+                    className={`${inputCls} border-[#FFD200]/40 text-[#FFD200] font-bold text-sm`}
+                  >
+                    {UNIVERSAL_PAYMENT_MODES.map((m) => (
+                      <option key={m.value} value={m.value} className="bg-[#0B1E21] text-white">
+                        {m.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <div className="flex gap-2">
                   <button type="button" onClick={() => setAction(null)} className="rounded-xl border border-white/10 px-4 py-3 text-sm font-bold text-slate-300">
                     Cancel
@@ -917,9 +1081,30 @@ export default function OwnerPocketPage() {
                   <Pills
                     options={["CASH_TO_OWNER", "BANK_TRANSFER"] as const}
                     value={cTender}
-                    onChange={setCTender}
+                    onChange={(v) => {
+                      setCTender(v);
+                      if (v === "BANK_TRANSFER" && cPaymentMode === "CASH") setCPaymentMode("SAB");
+                      else if (v === "CASH_TO_OWNER") setCPaymentMode("CASH");
+                    }}
                     render={(v) => (v === "CASH_TO_OWNER" ? "Cash Handed to Owner" : "Bank Transfer to SAB / Rajhi")}
                   />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-[#FFD200]">
+                    Mode of Payment *
+                  </label>
+                  <select
+                    required
+                    value={cPaymentMode}
+                    onChange={(e) => setCPaymentMode(e.target.value as UniversalPaymentMode)}
+                    className={`${inputCls} border-[#FFD200]/40 text-[#FFD200] font-bold text-sm`}
+                  >
+                    {UNIVERSAL_PAYMENT_MODES.map((m) => (
+                      <option key={m.value} value={m.value} className="bg-[#0B1E21] text-white">
+                        {m.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div className="flex gap-2">
                   <button type="button" onClick={() => setAction(null)} className="rounded-xl border border-white/10 px-4 py-3 text-sm font-bold text-slate-300">
@@ -932,6 +1117,50 @@ export default function OwnerPocketPage() {
               </section>
             )}
 
+            {/* Edit Pocket Transaction Modal */}
+            {editingPocketTx && (
+              <form onSubmit={handleSavePocketTxEdit} className="space-y-3 rounded-2xl border border-[#FFD200]/50 bg-[#081517] p-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-extrabold text-[#FFD200]">👑 Edit Mobile Entry</span>
+                  <button type="button" onClick={() => setEditingPocketTx(null)} className="text-xs text-slate-400">
+                    Cancel
+                  </button>
+                </div>
+                <div>
+                  <label className={labelCls}>Amount (SAR)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    value={editPocketAmt}
+                    onChange={(e) => setEditPocketAmt(e.target.value)}
+                    className={`${inputCls} font-mono font-bold`}
+                  />
+                </div>
+                <div>
+                  <label className={labelCls}>Mode of Payment</label>
+                  <select
+                    value={editPocketMode}
+                    onChange={(e) => setEditPocketMode(e.target.value as UniversalPaymentMode)}
+                    className={`${inputCls} border-[#FFD200]/40 text-[#FFD200] font-bold text-sm`}
+                  >
+                    {UNIVERSAL_PAYMENT_MODES.map((m) => (
+                      <option key={m.value} value={m.value} className="bg-[#0B1E21] text-white">
+                        {m.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className={labelCls}>Note</label>
+                  <input value={editPocketNote} onChange={(e) => setEditPocketNote(e.target.value)} className={inputCls} />
+                </div>
+                <button type="submit" className="w-full rounded-xl bg-[#FFD200] py-2.5 text-xs font-extrabold text-black">
+                  💾 Update Entry
+                </button>
+              </form>
+            )}
+
             {/* Activity feed */}
             <section className="mt-6 space-y-2 pb-2">
               <h3 className="text-xs font-bold uppercase tracking-wider text-[#00BAC7]/80">Recent Mobile Activity</h3>
@@ -940,24 +1169,54 @@ export default function OwnerPocketPage() {
                   Nothing logged today yet.
                 </p>
               ) : (
-                recent.map((e) => (
-                  <div key={e.id} className="rounded-xl border border-white/5 bg-[#061416] p-3">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="font-bold">
-                        {kindLabel(e.type)} · SAR {fmt(e.amount)}
-                      </span>
-                      <span className="text-[11px] text-slate-500">{hhmm(e.createdAt)}</span>
+                recent.map((e) => {
+                  const pBadge = formatPaymentModeBadge(e.paymentMode || (e.paymentSource === "BANK_TRANSFER" ? "BANK_TRANSFER" : "CASH"));
+                  return (
+                    <div key={e.id} className="rounded-xl border border-white/5 bg-[#061416] p-3">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="font-bold">
+                          {kindLabel(e.type)} · SAR {fmt(e.amount)}
+                        </span>
+                        <span className="text-[11px] text-slate-500">{hhmm(e.createdAt)}</span>
+                      </div>
+                      <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-[10px] font-bold">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="rounded-full border border-[#00BAC7]/30 bg-[#00BAC7]/10 px-2 py-0.5 text-[#22D3EE]">
+                            {branchFull(e.branch)}
+                          </span>
+                          <span className={`rounded-full border px-2 py-0.5 ${pBadge.cls}`}>
+                            {pBadge.label}
+                          </span>
+                          <span className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2 py-0.5 text-emerald-300">
+                            {statusFor(e)}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingPocketTx(e);
+                              setEditPocketAmt(String(e.amount));
+                              setEditPocketCat(e.category || "");
+                              setEditPocketMode((e.paymentMode as UniversalPaymentMode) || "CASH");
+                              setEditPocketNote(e.note || "");
+                            }}
+                            className="rounded border border-[#FFD200]/30 bg-[#FFD200]/10 px-2 py-0.5 text-[10px] font-bold text-[#FFD200]"
+                          >
+                            ✏️ Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeletePocketTx(e.id)}
+                            className="rounded border border-rose-500/30 bg-rose-500/10 px-2 py-0.5 text-[10px] font-bold text-rose-300"
+                          >
+                            🗑️ Delete
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                    <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[10px] font-bold">
-                      <span className="rounded-full border border-[#00BAC7]/30 bg-[#00BAC7]/10 px-2 py-0.5 text-[#22D3EE]">
-                        {branchFull(e.branch)}
-                      </span>
-                      <span className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2 py-0.5 text-emerald-300">
-                        {statusFor(e)}
-                      </span>
-                    </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </section>
           </>
@@ -1394,7 +1653,11 @@ export default function OwnerPocketPage() {
                   <Pills
                     options={["REGISTER_DRAWER", "OWNER_POCKET", "BANK_TRANSFER"] as const}
                     value={adjSource}
-                    onChange={setAdjSource}
+                    onChange={(v) => {
+                      setAdjSource(v);
+                      if (v === "BANK_TRANSFER" && adjPaymentMode === "CASH") setAdjPaymentMode("SAB");
+                      else if (v === "REGISTER_DRAWER") setAdjPaymentMode("CASH");
+                    }}
                     render={(v) =>
                       v === "REGISTER_DRAWER"
                         ? "Drawer"
@@ -1403,6 +1666,19 @@ export default function OwnerPocketPage() {
                         : "Bank"
                     }
                   />
+
+                  <select
+                    required
+                    value={adjPaymentMode}
+                    onChange={(e) => setAdjPaymentMode(e.target.value as UniversalPaymentMode)}
+                    className="w-full rounded-lg border border-[#FFD200]/40 bg-black/60 px-2.5 py-1.5 text-xs font-bold text-[#FFD200]"
+                  >
+                    {UNIVERSAL_PAYMENT_MODES.map((m) => (
+                      <option key={m.value} value={m.value} className="bg-[#0B1E21] text-white">
+                        {m.label}
+                      </option>
+                    ))}
+                  </select>
 
                   <input
                     type="text"
@@ -1450,7 +1726,11 @@ export default function OwnerPocketPage() {
                   <Pills
                     options={["BANK_TRANSFER", "REGISTER_DRAWER", "OWNER_POCKET"] as const}
                     value={disburseSource}
-                    onChange={setDisburseSource}
+                    onChange={(v) => {
+                      setDisburseSource(v);
+                      if (v === "REGISTER_DRAWER") setDisbursePaymentMode("CASH");
+                      else if (v === "BANK_TRANSFER" && disbursePaymentMode === "CASH") setDisbursePaymentMode("SAB");
+                    }}
                     render={(v) =>
                       v === "BANK_TRANSFER"
                         ? "Bank Wire"
@@ -1460,12 +1740,68 @@ export default function OwnerPocketPage() {
                     }
                   />
 
+                  <select
+                    required
+                    value={disbursePaymentMode}
+                    onChange={(e) => setDisbursePaymentMode(e.target.value as UniversalPaymentMode)}
+                    className="w-full rounded-lg border border-[#FFD200]/60 bg-black/70 px-2.5 py-2 text-xs font-bold text-[#FFD200]"
+                  >
+                    {UNIVERSAL_PAYMENT_MODES.map((m) => (
+                      <option key={m.value} value={m.value} className="bg-[#0B1E21] text-white">
+                        {m.label}
+                      </option>
+                    ))}
+                  </select>
+
                   <button
                     type="submit"
                     disabled={isSubmittingDisburse}
                     className="w-full rounded-lg bg-[#FFD200] py-2.5 text-xs font-black text-black"
                   >
                     {isSubmittingDisburse ? "Disbursing…" : "Confirm Disbursement"}
+                  </button>
+                </form>
+              )}
+
+              {/* Inline Edit Payroll Log Form */}
+              {editingPayrollLog && (
+                <form onSubmit={handleSavePayrollLogEdit} className="rounded-xl border border-[#FFD200]/50 bg-[#0B1E21] p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-extrabold text-[#FFD200]">👑 Edit Payroll Entry</span>
+                    <button type="button" onClick={() => setEditingPayrollLog(null)} className="text-xs text-slate-400">
+                      Cancel
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="number"
+                      step="0.01"
+                      required
+                      value={editLogAmt}
+                      onChange={(e) => setEditLogAmt(e.target.value)}
+                      className="rounded-lg border border-white/15 bg-black/60 px-2.5 py-1.5 font-mono text-xs font-bold text-white"
+                    />
+                    <select
+                      value={editLogMode}
+                      onChange={(e) => setEditLogMode(e.target.value as UniversalPaymentMode)}
+                      className="rounded-lg border border-[#FFD200]/40 bg-black/60 px-2 py-1.5 text-xs font-bold text-[#FFD200]"
+                    >
+                      {UNIVERSAL_PAYMENT_MODES.map((m) => (
+                        <option key={m.value} value={m.value} className="bg-[#0B1E21] text-white">
+                          {m.short}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <input
+                    type="text"
+                    value={editLogNote}
+                    onChange={(e) => setEditLogNote(e.target.value)}
+                    placeholder="Memo…"
+                    className="w-full rounded-lg border border-white/15 bg-black/60 px-2.5 py-1.5 text-xs text-white"
+                  />
+                  <button type="submit" className="w-full rounded-lg bg-[#FFD200] py-1.5 text-xs font-extrabold text-black">
+                    💾 Save Changes
                   </button>
                 </form>
               )}
@@ -1487,14 +1823,17 @@ export default function OwnerPocketPage() {
                     const isAdv = log.type === "ADVANCE";
                     const isPay = log.type === "SALARY_PAYOUT";
                     const isBon = log.type === "BONUS";
+                    const mBadge = formatPaymentModeBadge(
+                      log.paymentMode || (log.source === "BANK_TRANSFER" ? "BANK_TRANSFER" : "CASH")
+                    );
 
                     return (
                       <div
                         key={log.id}
-                        className="rounded-xl border border-white/5 bg-[#040C0E] p-2.5 flex items-center justify-between text-xs"
+                        className="rounded-xl border border-white/5 bg-[#040C0E] p-2.5 flex items-center justify-between text-xs gap-2"
                       >
                         <div>
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex flex-wrap items-center gap-1.5">
                             <span className="font-mono text-[11px] text-slate-400">{log.date}</span>
                             <span
                               className={`rounded px-1.5 py-0.2 text-[9px] font-bold border ${
@@ -1509,21 +1848,45 @@ export default function OwnerPocketPage() {
                             >
                               {log.type}
                             </span>
+                            <span className={`rounded border px-1.5 py-0.2 text-[9px] font-bold ${mBadge.cls}`}>
+                              {mBadge.label}
+                            </span>
                           </div>
                           {log.note && (
-                            <p className="text-[11px] text-slate-400 mt-0.5 truncate max-w-[200px]">
+                            <p className="text-[11px] text-slate-400 mt-0.5 truncate max-w-[180px]">
                               {log.note}
                             </p>
                           )}
                         </div>
 
-                        <span
-                          className={`font-mono font-bold ${
-                            isPay || isBon ? "text-emerald-400" : "text-rose-400"
-                          }`}
-                        >
-                          {isPay || isBon ? "+" : "-"}SAR {fmt(log.amount)}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={`font-mono font-bold ${
+                              isPay || isBon ? "text-emerald-400" : "text-rose-400"
+                            }`}
+                          >
+                            {isPay || isBon ? "+" : "-"}SAR {fmt(log.amount)}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingPayrollLog(log);
+                              setEditLogAmt(String(log.amount));
+                              setEditLogMode((log.paymentMode as UniversalPaymentMode) || "CASH");
+                              setEditLogNote(log.note || "");
+                            }}
+                            className="rounded border border-[#FFD200]/30 bg-[#FFD200]/10 px-1.5 py-0.5 text-[9px] font-bold text-[#FFD200]"
+                          >
+                            ✏️
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeletePayrollLog(log.id)}
+                            className="rounded border border-rose-500/30 bg-rose-500/10 px-1.5 py-0.5 text-[9px] font-bold text-rose-300"
+                          >
+                            🗑️
+                          </button>
+                        </div>
                       </div>
                     );
                   })
