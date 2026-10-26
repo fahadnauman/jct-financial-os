@@ -463,7 +463,11 @@ export default function OwnerPocketPage() {
     try {
       const res = await fetch("/api/pocket", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-is-owner": "true",
+          "x-user-role": "OWNER",
+        },
         body: JSON.stringify({
           id: editingPocketTx.id,
           amount: parseFloat(editPocketAmt) || editingPocketTx.amount,
@@ -485,7 +489,13 @@ export default function OwnerPocketPage() {
 
   const handleDeletePocketTx = async (id: string) => {
     try {
-      const res = await fetch(`/api/pocket?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      const res = await fetch(`/api/pocket?id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        headers: {
+          "x-user-is-owner": "true",
+          "x-user-role": "OWNER",
+        },
+      });
       if (res.ok) {
         refresh();
         setToast("Transaction deleted.");
@@ -556,7 +566,11 @@ export default function OwnerPocketPage() {
     try {
       const res = await fetch("/api/payroll", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-is-owner": "true",
+          "x-user-role": "OWNER",
+        },
         body: JSON.stringify({
           staffId: selectedStaffForLedger.id,
           type: "SALARY_PAYOUT",
@@ -595,7 +609,11 @@ export default function OwnerPocketPage() {
     try {
       const res = await fetch("/api/payroll", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-is-owner": "true",
+          "x-user-role": "OWNER",
+        },
         body: JSON.stringify({
           staffId: selectedStaffForLedger.id,
           type: adjType,
@@ -630,7 +648,11 @@ export default function OwnerPocketPage() {
     try {
       const res = await fetch("/api/payroll", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-is-owner": "true",
+          "x-user-role": "OWNER",
+        },
         body: JSON.stringify({
           id: editingPayrollLog.id,
           amount: parseFloat(editLogAmt) || editingPayrollLog.amount,
@@ -653,7 +675,13 @@ export default function OwnerPocketPage() {
   const handleDeletePayrollLog = async (id: string) => {
     if (!selectedStaffForLedger) return;
     try {
-      const res = await fetch(`/api/payroll?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      const res = await fetch(`/api/payroll?id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        headers: {
+          "x-user-is-owner": "true",
+          "x-user-role": "OWNER",
+        },
+      });
       if (res.ok) {
         await loadAllStaff();
         openStaffLedger(selectedStaffForLedger);
@@ -674,7 +702,11 @@ export default function OwnerPocketPage() {
     try {
       const res = await fetch("/api/staff", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-is-owner": "true",
+          "x-user-role": "OWNER",
+        },
         body: JSON.stringify({
           name: newName.trim(),
           branch: newBranch,
@@ -684,7 +716,6 @@ export default function OwnerPocketPage() {
           iqamaNumber: newIqama.trim() || undefined,
         }),
       });
-
       if (res.ok) {
         setShowAddStaffModal(false);
         setNewName("");
@@ -708,7 +739,11 @@ export default function OwnerPocketPage() {
     try {
       const res = await fetch("/api/staff", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-is-owner": "true",
+          "x-user-role": "OWNER",
+        },
         body: JSON.stringify({ id: staff.id, status: nextStatus }),
       });
       if (res.ok) {

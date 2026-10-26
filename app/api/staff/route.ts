@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { prisma } from "../../../lib/prisma";
+import { checkIsOwner, normalizeBranch } from "../../../lib/auth-audit";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
-  const branch = searchParams.get("branch");
+  const rawBranch = searchParams.get("branch") || searchParams.get("branchId");
+  const branch = rawBranch && rawBranch !== "ALL" ? normalizeBranch(rawBranch) : rawBranch;
   const includeArchived = searchParams.get("includeArchived") === "true";
 
   try {
@@ -38,8 +40,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
+  if (!checkIsOwner(req, body)) {
+    return NextResponse.json({ error: "Owner authorization required to create staff members" }, { status: 403 });
+  }
+
   const name = typeof body.name === "string" ? body.name.trim() : "";
-  const branch = typeof body.branch === "string" ? body.branch.trim() : "";
+  const rawBranch = body.branch || body.branchId || req.headers.get("x-branch-id");
+  const branch = normalizeBranch(rawBranch);
   const role = typeof body.role === "string" ? body.role.trim() : null;
   const baseSalary = typeof body.baseSalary === "number" ? body.baseSalary : Number(body.baseSalary) || 0;
   const phone = typeof body.phone === "string" ? body.phone.trim() : null;
@@ -82,10 +89,15 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: "Staff ID is required" }, { status: 400 });
   }
 
+  // Modifying salary or editing core staff profile requires Owner privileges
+  if (body.baseSalary !== undefined && !checkIsOwner(req, body)) {
+    return NextResponse.json({ error: "Owner authorization required to adjust base salary" }, { status: 403 });
+  }
+
   const updateData: Record<string, unknown> = {};
 
   if (typeof body.name === "string" && body.name.trim()) updateData.name = body.name.trim();
-  if (typeof body.branch === "string" && body.branch.trim()) updateData.branch = body.branch.trim();
+  if (body.branch || body.branchId) updateData.branch = normalizeBranch(body.branch || body.branchId);
   if (body.role !== undefined) updateData.role = typeof body.role === "string" && body.role.trim() ? body.role.trim() : null;
   if (body.baseSalary !== undefined) updateData.baseSalary = Math.max(0, Number(body.baseSalary) || 0);
   if (body.phone !== undefined) updateData.phone = typeof body.phone === "string" && body.phone.trim() ? body.phone.trim() : null;
@@ -108,16 +120,23 @@ export async function PUT(req: Request) {
 }
 
 export async function DELETE(req: Request) {
+  let body: Record<string, unknown> | null = null;
   const { searchParams } = new URL(req.url);
   let id = searchParams.get("id") || "";
+
   if (!id) {
     try {
-      const body = await req.json();
-      if (typeof body.id === "string") id = body.id.trim();
+      body = await req.json();
+      if (typeof body?.id === "string") id = body.id.trim();
     } catch {
       // ignore
     }
   }
+
+  if (!checkIsOwner(req, body)) {
+    return NextResponse.json({ error: "Owner authorization required to delete staff records" }, { status: 403 });
+  }
+
   if (!id) {
     return NextResponse.json({ error: "Staff ID is required" }, { status: 400 });
   }

@@ -1341,6 +1341,7 @@ interface DailyRegisterViewProps {
   ) => void;
   onSwitchTab: (tab: TabId) => void;
   branchId?: string;
+  isOwner?: boolean;
 }
 
 function DailyRegisterView({
@@ -1362,6 +1363,7 @@ function DailyRegisterView({
   onSyncCreditCustomer,
   onSwitchTab,
   branchId = "JCT_HQ",
+  isOwner = false,
 }: DailyRegisterViewProps) {
   const [activeLoggerTab, setActiveLoggerTab] = useState<"bank" | "expense">("bank");
   const [showManualEntry, setShowManualEntry] = useState(false);
@@ -2831,9 +2833,14 @@ function DailyRegisterView({
     // Persist lock record to Neon PostgreSQL
     fetch("/api/archive", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "x-user-is-owner": String(isOwner),
+        "x-branch-id": branchId || "JCT_HQ",
+      },
       body: JSON.stringify({
-        branch: "JCT_HQ",
+        branch: branchId || "JCT_HQ",
+        branchId: branchId || "JCT_HQ",
         date: "12-09-2026",
         closingCash: calculatedClosingBalance,
         openingCash: openingBalance,
@@ -2843,7 +2850,7 @@ function DailyRegisterView({
         posFees: totalPosFees,
         madaFees: totalMadaFees,
         ccFees: totalCcFees,
-        lockedBy: "JCT_HQ",
+        lockedBy: isOwner ? "BONGSI" : (branchId || "JCT_HQ"),
         status: "LOCKED",
         dataJson: JSON.stringify({
           expenses: expenseEntries,
@@ -8775,7 +8782,13 @@ function AuditLibraryView({ profile }: { profile: UserProfile | null }) {
   const handleDeleteArchiveRecord = async (id: string) => {
     if (!isOwner) return;
     try {
-      const res = await fetch(`/api/archive?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      const res = await fetch(`/api/archive?id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        headers: {
+          "x-user-is-owner": "true",
+          "x-user-role": "OWNER",
+        },
+      });
       if (res.ok) {
         setRecords((prev) => prev.filter((r) => r.id !== id));
         if (selectedRecord?.id === id) setSelectedRecord(null);
@@ -8791,9 +8804,14 @@ function AuditLibraryView({ profile }: { profile: UserProfile | null }) {
     try {
       const res = await fetch("/api/archive", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-is-owner": "true",
+          "x-user-role": "OWNER",
+        },
         body: JSON.stringify({
           id: selectedRecord.id,
+          isOwner: true,
           closingCash: editClosingCash,
           openingCash: editOpeningCash,
           inflows: editInflows,
@@ -9878,7 +9896,11 @@ function StaffPayrollView({ profile }: { profile: UserProfile | null }) {
     try {
       const res = await fetch("/api/staff", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-is-owner": String(isOwner),
+          "x-user-role": isOwner ? "OWNER" : "STAFF",
+        },
         body: JSON.stringify({
           name: newStaffName.trim(),
           branch: newStaffBranch,
@@ -9908,7 +9930,11 @@ function StaffPayrollView({ profile }: { profile: UserProfile | null }) {
     try {
       const res = await fetch("/api/staff", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-is-owner": String(isOwner),
+          "x-user-role": isOwner ? "OWNER" : "STAFF",
+        },
         body: JSON.stringify({ id: staff.id, status: nextStatus }),
       });
       if (res.ok) {
@@ -9927,7 +9953,11 @@ function StaffPayrollView({ profile }: { profile: UserProfile | null }) {
     try {
       const res = await fetch("/api/staff", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-is-owner": "true",
+          "x-user-role": "OWNER",
+        },
         body: JSON.stringify({
           id: editingStaff.id,
           name: editStaffName.trim() || editingStaff.name,
@@ -9955,6 +9985,10 @@ function StaffPayrollView({ profile }: { profile: UserProfile | null }) {
     try {
       const res = await fetch(`/api/staff?id=${encodeURIComponent(staffId)}`, {
         method: "DELETE",
+        headers: {
+          "x-user-is-owner": "true",
+          "x-user-role": "OWNER",
+        },
       });
       if (res.ok) {
         await loadStaff();
@@ -9975,7 +10009,11 @@ function StaffPayrollView({ profile }: { profile: UserProfile | null }) {
     try {
       const res = await fetch("/api/payroll", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-is-owner": String(isOwner),
+          "x-user-role": isOwner ? "OWNER" : "STAFF",
+        },
         body: JSON.stringify({
           staffId: selectedStaffForLedger.id,
           type: "SALARY_PAYOUT",
@@ -10011,7 +10049,11 @@ function StaffPayrollView({ profile }: { profile: UserProfile | null }) {
     try {
       const res = await fetch("/api/payroll", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-is-owner": String(isOwner),
+          "x-user-role": isOwner ? "OWNER" : "STAFF",
+        },
         body: JSON.stringify({
           staffId: selectedStaffForLedger.id,
           type: adjType,
@@ -10045,7 +10087,11 @@ function StaffPayrollView({ profile }: { profile: UserProfile | null }) {
     try {
       const res = await fetch("/api/payroll", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-is-owner": "true",
+          "x-user-role": "OWNER",
+        },
         body: JSON.stringify({
           id: editingPayrollLog.id,
           type: editLogType,
@@ -10072,6 +10118,10 @@ function StaffPayrollView({ profile }: { profile: UserProfile | null }) {
     try {
       const res = await fetch(`/api/payroll?id=${encodeURIComponent(logId)}`, {
         method: "DELETE",
+        headers: {
+          "x-user-is-owner": "true",
+          "x-user-role": "OWNER",
+        },
       });
       if (res.ok) {
         await loadStaff();
@@ -11887,6 +11937,7 @@ export default function Page() {
                 onSyncCreditCustomer={handleSyncCreditCustomer}
                 onSwitchTab={setTab}
                 branchId={activePocketBranch === "ALL" ? "JCT_HQ" : activePocketBranch}
+                isOwner={Boolean(profile?.isOwner)}
               />
             ) : safeTab === "archive" ? (
               <AuditLibraryView profile={profile} />

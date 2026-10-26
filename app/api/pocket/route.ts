@@ -1,16 +1,18 @@
 import { NextResponse } from "next/server";
 import { prisma } from "../../../lib/prisma";
+import { checkIsOwner, normalizeBranch, normalizePaymentMode, VALID_BRANCHES } from "../../../lib/auth-audit";
 
 export const dynamic = "force-dynamic";
 
-const BRANCHES = ["JCT_HQ", "HEMPEL_JUBAIL", "JOTUN_DAMMAM", "SIGMA_JUBAIL"];
 const TYPES = ["EXPENSE", "ADVANCE", "CREDIT_COLLECTION"];
 const SOURCES = ["DRAWER_CASH", "OWNER_POCKET", "BANK_TRANSFER"];
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
-  const branch = searchParams.get("branch");
+  const rawBranch = searchParams.get("branch") || searchParams.get("branchId");
+  const branch = rawBranch && rawBranch !== "ALL" ? normalizeBranch(rawBranch) : rawBranch;
   const date = searchParams.get("date");
+
   try {
     const rows = await prisma.pocketTransaction.findMany({
       where: {
@@ -34,27 +36,39 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
+
+  const rawBranch = body.branch || body.branchId || req.headers.get("x-branch-id");
+  const branch = normalizeBranch(rawBranch);
   const amount = Number(body.amount);
+  const paymentSource = String(body.paymentSource);
+
   if (
-    !BRANCHES.includes(String(body.branch)) ||
+    !VALID_BRANCHES.includes(branch) ||
     !TYPES.includes(String(body.type)) ||
-    !SOURCES.includes(String(body.paymentSource)) ||
+    !SOURCES.includes(paymentSource) ||
     !(amount > 0) ||
     !/^\d{4}-\d{2}-\d{2}$/.test(String(body.date))
   ) {
-    return NextResponse.json({ error: "Invalid transaction" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid transaction parameters or branch" }, { status: 400 });
   }
+
+  const paymentMode = normalizePaymentMode(
+    body.paymentMode,
+    paymentSource === "BANK_TRANSFER" ? "SAB" : "CASH"
+  );
+
   const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim().slice(0, 300) : null);
+
   try {
     const row = await prisma.pocketTransaction.create({
       data: {
-        branch: String(body.branch),
+        branch,
         type: String(body.type),
         amount,
         category: str(body.category),
         recipientName: str(body.recipientName),
-        paymentSource: String(body.paymentSource),
-        paymentMode: str(body.paymentMode) ?? (body.paymentSource === "BANK_TRANSFER" ? "SAB" : "CASH"),
+        paymentSource,
+        paymentMode,
         note: str(body.note),
         date: String(body.date),
       },
@@ -87,7 +101,12 @@ export async function PUT(req: Request) {
   if (typeof body.paymentSource === "string" && SOURCES.includes(body.paymentSource)) {
     updateData.paymentSource = body.paymentSource;
   }
-  if (body.paymentMode !== undefined) updateData.paymentMode = str(body.paymentMode);
+  if (body.paymentMode !== undefined) {
+    updateData.paymentMode = normalizePaymentMode(body.paymentMode);
+  }
+  if (body.branch || body.branchId) {
+    updateData.branch = normalizeBranch(body.branch || body.branchId);
+  }
   if (body.note !== undefined) updateData.note = str(body.note);
   if (typeof body.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.date)) {
     updateData.date = body.date;
@@ -106,16 +125,23 @@ export async function PUT(req: Request) {
 }
 
 export async function DELETE(req: Request) {
+  let body: Record<string, unknown> | null = null;
   const { searchParams } = new URL(req.url);
   let id = searchParams.get("id") || "";
+
   if (!id) {
     try {
-      const body = await req.json();
-      if (typeof body.id === "string") id = body.id.trim();
+      body = await req.json();
+      if (typeof body?.id === "string") id = body.id.trim();
     } catch {
       // ignore
     }
   }
+
+  if (!checkIsOwner(req, body)) {
+    return NextResponse.json({ error: "Owner authorization required to delete pocket transactions" }, { status: 403 });
+  }
+
   if (!id) {
     return NextResponse.json({ error: "Transaction ID is required" }, { status: 400 });
   }

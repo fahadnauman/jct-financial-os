@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "../../../lib/prisma";
+import { checkIsOwner, normalizeBranch, normalizePaymentMode } from "../../../lib/auth-audit";
 
 export const dynamic = "force-dynamic";
 
@@ -157,7 +158,8 @@ const SEED_LOCKS = [
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
-  const branch = searchParams.get("branch");
+  const rawBranch = searchParams.get("branch") || searchParams.get("branchId");
+  const branch = rawBranch && rawBranch !== "ALL" ? normalizeBranch(rawBranch) : rawBranch;
 
   try {
     // Check if table has rows, if completely empty, seed initial historical locks
@@ -190,8 +192,10 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
+    const rawBranch = body.branch || body.branchId || req.headers.get("x-branch-id");
+    const branch = rawBranch ? normalizeBranch(rawBranch) : null;
+
     const {
-      branch,
       date,
       closingCash,
       openingCash = 2634,
@@ -208,6 +212,34 @@ export async function POST(req: Request) {
 
     if (!branch || !date) {
       return NextResponse.json({ error: "Branch and date are required" }, { status: 400 });
+    }
+
+    let sanitizedDataJson = dataJson ? String(dataJson) : null;
+    if (sanitizedDataJson) {
+      try {
+        const parsed = JSON.parse(sanitizedDataJson);
+        if (Array.isArray(parsed.bankSwipes)) {
+          parsed.bankSwipes = parsed.bankSwipes.map((s: Record<string, unknown>) => ({
+            ...s,
+            paymentMode: normalizePaymentMode(s.paymentMode, "POS_SWIPE"),
+          }));
+        }
+        if (Array.isArray(parsed.inflows)) {
+          parsed.inflows = parsed.inflows.map((i: Record<string, unknown>) => ({
+            ...i,
+            paymentMode: normalizePaymentMode(i.paymentMode, "CASH"),
+          }));
+        }
+        if (Array.isArray(parsed.expenses)) {
+          parsed.expenses = parsed.expenses.map((e: Record<string, unknown>) => ({
+            ...e,
+            paymentMode: normalizePaymentMode(e.paymentMode, "CASH"),
+          }));
+        }
+        sanitizedDataJson = JSON.stringify(parsed);
+      } catch {
+        // preserve original string if parse fails
+      }
     }
 
     // Upsert lock record
@@ -230,7 +262,7 @@ export async function POST(req: Request) {
           ccFees: Number(ccFees),
           lockedBy: String(lockedBy),
           status: String(status),
-          dataJson: dataJson ? String(dataJson) : existing.dataJson,
+          dataJson: sanitizedDataJson !== null ? sanitizedDataJson : existing.dataJson,
           lockedAt: new Date(),
         },
       });
@@ -249,7 +281,7 @@ export async function POST(req: Request) {
           ccFees: Number(ccFees),
           lockedBy: String(lockedBy),
           status: String(status),
-          dataJson: dataJson ? String(dataJson) : null,
+          dataJson: sanitizedDataJson,
         },
       });
     }
@@ -264,10 +296,42 @@ export async function POST(req: Request) {
 export async function PUT(req: Request) {
   try {
     const body = await req.json();
+    if (!checkIsOwner(req, body)) {
+      return NextResponse.json({ error: "Owner authorization required to update historical audit records" }, { status: 403 });
+    }
+
     const { id, closingCash, openingCash, inflows, bankSwipes, outflows, posFees, madaFees, ccFees, status, dataJson } = body;
 
     if (!id) {
       return NextResponse.json({ error: "Record ID required" }, { status: 400 });
+    }
+
+    let sanitizedDataJson = dataJson !== undefined ? String(dataJson) : undefined;
+    if (sanitizedDataJson) {
+      try {
+        const parsed = JSON.parse(sanitizedDataJson);
+        if (Array.isArray(parsed.bankSwipes)) {
+          parsed.bankSwipes = parsed.bankSwipes.map((s: Record<string, unknown>) => ({
+            ...s,
+            paymentMode: normalizePaymentMode(s.paymentMode, "POS_SWIPE"),
+          }));
+        }
+        if (Array.isArray(parsed.inflows)) {
+          parsed.inflows = parsed.inflows.map((i: Record<string, unknown>) => ({
+            ...i,
+            paymentMode: normalizePaymentMode(i.paymentMode, "CASH"),
+          }));
+        }
+        if (Array.isArray(parsed.expenses)) {
+          parsed.expenses = parsed.expenses.map((e: Record<string, unknown>) => ({
+            ...e,
+            paymentMode: normalizePaymentMode(e.paymentMode, "CASH"),
+          }));
+        }
+        sanitizedDataJson = JSON.stringify(parsed);
+      } catch {
+        // preserve original
+      }
     }
 
     const updated = await prisma.dailyRegisterLock.update({
@@ -282,7 +346,7 @@ export async function PUT(req: Request) {
         ...(madaFees !== undefined ? { madaFees: Number(madaFees) } : {}),
         ...(ccFees !== undefined ? { ccFees: Number(ccFees) } : {}),
         ...(status ? { status: String(status) } : {}),
-        ...(dataJson !== undefined ? { dataJson: String(dataJson) } : {}),
+        ...(sanitizedDataJson !== undefined ? { dataJson: sanitizedDataJson } : {}),
       },
     });
 
@@ -294,16 +358,23 @@ export async function PUT(req: Request) {
 }
 
 export async function DELETE(req: Request) {
+  let body: Record<string, unknown> | null = null;
   const { searchParams } = new URL(req.url);
   let id = searchParams.get("id") || "";
+
   if (!id) {
     try {
-      const body = await req.json();
-      if (typeof body.id === "string") id = body.id.trim();
+      body = await req.json();
+      if (typeof body?.id === "string") id = body.id.trim();
     } catch {
       // ignore
     }
   }
+
+  if (!checkIsOwner(req, body)) {
+    return NextResponse.json({ error: "Owner authorization required to delete archive records" }, { status: 403 });
+  }
+
   if (!id) {
     return NextResponse.json({ error: "Record ID is required" }, { status: 400 });
   }

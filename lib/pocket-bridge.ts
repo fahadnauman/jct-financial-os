@@ -52,7 +52,12 @@ export const todayIso = (): string => {
 export async function postPocketTransaction(tx: NewPocketTransaction): Promise<PocketTransaction> {
   const res = await fetch("/api/pocket", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "x-user-is-owner": "true",
+      "x-user-role": "OWNER",
+      "x-branch-id": tx.branch,
+    },
     body: JSON.stringify(tx),
   });
   if (!res.ok) throw new Error("Could not save to the database");

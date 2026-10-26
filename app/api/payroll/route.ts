@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "../../../lib/prisma";
+import { checkIsOwner, normalizeBranch, normalizePaymentMode } from "../../../lib/auth-audit";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +11,8 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const staffId = searchParams.get("staffId");
   const month = searchParams.get("month"); // e.g. "2026-10"
-  const branch = searchParams.get("branch");
+  const rawBranch = searchParams.get("branch") || searchParams.get("branchId");
+  const branch = rawBranch && rawBranch !== "ALL" ? normalizeBranch(rawBranch) : rawBranch;
 
   try {
     const logs = await prisma.payrollLog.findMany({
@@ -56,11 +58,12 @@ export async function POST(req: Request) {
   const source = typeof body.source === "string" && VALID_SOURCES.includes(body.source.trim())
     ? body.source.trim()
     : "REGISTER_DRAWER";
-  const paymentMode = typeof body.paymentMode === "string" && body.paymentMode.trim()
-    ? body.paymentMode.trim()
-    : source === "BANK_TRANSFER"
-    ? "SAB"
-    : "CASH";
+
+  const paymentMode = normalizePaymentMode(
+    body.paymentMode,
+    source === "BANK_TRANSFER" ? "SAB" : "CASH"
+  );
+
   const date = typeof body.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.date.trim())
     ? body.date.trim()
     : new Date().toISOString().slice(0, 10);
@@ -84,7 +87,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Staff member not found" }, { status: 404 });
     }
 
-    const branch = typeof body.branch === "string" && body.branch.trim() ? body.branch.trim() : staff.branch;
+    const rawBranch = body.branch || body.branchId || req.headers.get("x-branch-id") || staff.branch;
+    const branch = normalizeBranch(rawBranch, normalizeBranch(staff.branch));
 
     const log = await prisma.payrollLog.create({
       data: {
@@ -136,10 +140,13 @@ export async function PUT(req: Request) {
     updateData.source = body.source.trim();
   }
   if (body.paymentMode !== undefined) {
-    updateData.paymentMode = typeof body.paymentMode === "string" && body.paymentMode.trim() ? body.paymentMode.trim() : null;
+    updateData.paymentMode = normalizePaymentMode(body.paymentMode);
   }
   if (typeof body.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.date.trim())) {
     updateData.date = body.date.trim();
+  }
+  if (body.branch || body.branchId) {
+    updateData.branch = normalizeBranch(body.branch || body.branchId);
   }
 
   try {
@@ -156,16 +163,23 @@ export async function PUT(req: Request) {
 }
 
 export async function DELETE(req: Request) {
+  let body: Record<string, unknown> | null = null;
   const { searchParams } = new URL(req.url);
   let id = searchParams.get("id") || "";
+
   if (!id) {
     try {
-      const body = await req.json();
-      if (typeof body.id === "string") id = body.id.trim();
+      body = await req.json();
+      if (typeof body?.id === "string") id = body.id.trim();
     } catch {
       // ignore
     }
   }
+
+  if (!checkIsOwner(req, body)) {
+    return NextResponse.json({ error: "Owner authorization required to delete payroll records" }, { status: 403 });
+  }
+
   if (!id) {
     return NextResponse.json({ error: "PayrollLog ID is required" }, { status: 400 });
   }
