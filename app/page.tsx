@@ -3386,7 +3386,7 @@ function DailyRegisterView({
   };
 
   return (
-    <div className="relative flex-1 h-full w-full overflow-y-auto bg-jct-offwhite dark:bg-black text-jct-charcoal dark:text-jct-offwhite select-none">
+    <div className="relative flex-1 h-full w-full overflow-y-auto bg-slate-50 dark:bg-black text-jct-charcoal dark:text-jct-offwhite select-none">
       {/* Live Cross-Module Sync Toast Banner */}
       {syncBannerMsg && (
         <div className="relative z-30 max-w-7xl w-full mx-auto px-6 pt-5 print:hidden">
@@ -3492,7 +3492,7 @@ function DailyRegisterView({
 
           {/* Top Dashboard Metrics (3 Values) */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 sm:gap-4">
-            <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-5 sm:p-6 transition-all duration-300">
+            <div className="bg-white dark:bg-[#0A0A0A] border border-white/80 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-shadow duration-300 rounded-2xl p-5 sm:p-6">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
                   Prev Day Received Amount
@@ -3501,7 +3501,7 @@ function DailyRegisterView({
                   <ArrowDownLeft size={14} />
                 </span>
               </div>
-              <span className="text-xl sm:text-2xl font-black text-jct-charcoal dark:text-jct-offwhite mt-2 block font-mono">
+              <span className="text-xl sm:text-2xl font-black mt-2 block font-mono bg-clip-text text-transparent bg-gradient-to-br from-slate-800 to-slate-500 dark:from-white dark:to-slate-400">
                 SAR {fmt(prevDayReceivedAmount)}
               </span>
               <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 block">
@@ -3509,7 +3509,7 @@ function DailyRegisterView({
               </span>
             </div>
 
-            <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-5 sm:p-6 transition-all duration-300">
+            <div className="bg-white dark:bg-[#0A0A0A] border border-white/80 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-shadow duration-300 rounded-2xl p-5 sm:p-6">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
                   Opening Balance
@@ -3518,7 +3518,7 @@ function DailyRegisterView({
                   <Wallet size={14} />
                 </span>
               </div>
-              <span className="text-xl sm:text-2xl font-black text-jct-charcoal dark:text-jct-offwhite mt-2 block font-mono">
+              <span className="text-xl sm:text-2xl font-black mt-2 block font-mono bg-clip-text text-transparent bg-gradient-to-br from-slate-800 to-slate-500 dark:from-white dark:to-slate-400">
                 SAR {fmt(yesterdayClosingBalance)}
               </span>
               <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 block">
@@ -3526,7 +3526,7 @@ function DailyRegisterView({
               </span>
             </div>
 
-            <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-5 sm:p-6 transition-all duration-300">
+            <div className="bg-white dark:bg-[#0A0A0A] border border-white/80 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-shadow duration-300 rounded-2xl p-5 sm:p-6">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
                   Cash Drawer Amount
@@ -3535,7 +3535,7 @@ function DailyRegisterView({
                   <Coins size={14} />
                 </span>
               </div>
-              <span className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-jct-turquoise mt-2 block font-mono">
+              <span className="text-xl sm:text-2xl font-black mt-2 block font-mono bg-clip-text text-transparent bg-gradient-to-br from-slate-800 to-slate-500 dark:from-white dark:to-slate-400">
                 SAR {fmt(calculatedClosingBalance)}
               </span>
               <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 block">
@@ -3545,7 +3545,7 @@ function DailyRegisterView({
           </div>
 
           {/* End-of-Day Hero Card */}
-          <div className="relative overflow-hidden bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 transition-all duration-300">
+          <div className="relative overflow-hidden bg-gradient-to-r from-jct-turquoise/10 via-white/60 to-jct-yellow/10 backdrop-blur-xl border border-white/80 shadow-sm dark:bg-gradient-to-r dark:from-jct-turquoise/5 dark:via-black/60 dark:to-jct-yellow/5 dark:backdrop-blur-xl dark:border-white/10 rounded-2xl p-6 sm:p-8 transition-all duration-300">
             <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
               <div className="max-w-2xl space-y-1.5">
                 <h2 className="font-display text-xl sm:text-2xl font-extrabold tracking-tight text-jct-charcoal dark:text-white">
@@ -12031,24 +12031,52 @@ function ProfileGate({ onSelect }: { onSelect: (p: UserProfile) => void }) {
 
 function BranchAuditRadar() {
   const branches = [
-    { name: "JCT Main HQ", status: "🟢 AUDITED & LOCKED", detail: "SAR 43,092 locked at 10:14 PM", cls: "border-slate-200 dark:border-[#1F1F1F] hover:border-jct-turquoise/70 hover:shadow-[0_0_12px_rgba(45,226,230,0.1)] bg-slate-50 dark:bg-[#111111] transition-all duration-300" },
-    { name: "Hempel Jubail", status: "🟡 REGISTER ACTIVE", detail: "Staff logged in, 18 invoices matched", cls: "border-jct-yellow/40 hover:border-jct-yellow hover:shadow-[0_0_12px_rgba(255,222,89,0.15)] bg-jct-yellow/15 transition-all duration-300" },
-    { name: "Jotun Dammam", status: "🟢 AUDITED & LOCKED", detail: "Locked at 10:02 PM", cls: "border-slate-200 dark:border-[#1F1F1F] hover:border-jct-turquoise/70 hover:shadow-[0_0_12px_rgba(45,226,230,0.1)] bg-slate-50 dark:bg-[#111111] transition-all duration-300" },
-    { name: "Sigma Paints Jubail", status: "🔴 AUDIT PENDING", detail: "Closing time passed, register still unlocked", cls: "border-rose-300 dark:border-rose-500/40 hover:border-rose-500 hover:shadow-[0_0_12px_rgba(244,63,94,0.15)] bg-rose-50 dark:bg-rose-500/10 transition-all duration-300" },
+    {
+      name: "JCT Main HQ",
+      status: "🟢 AUDITED & LOCKED",
+      detail: "SAR 43,092 locked at 10:14 PM",
+      cls: "bg-emerald-500/10 border-emerald-500/20 text-emerald-800 dark:text-emerald-300",
+    },
+    {
+      name: "Hempel Jubail",
+      status: "🟡 REGISTER ACTIVE",
+      detail: "Staff logged in, 18 invoices matched",
+      cls: "bg-jct-yellow/15 border-jct-yellow/30 text-amber-800 dark:text-jct-yellow",
+    },
+    {
+      name: "Jotun Dammam",
+      status: "🟢 AUDITED & LOCKED",
+      detail: "Locked at 10:02 PM",
+      cls: "bg-emerald-500/10 border-emerald-500/20 text-emerald-800 dark:text-emerald-300",
+    },
+    {
+      name: "Sigma Paints Jubail",
+      status: "🔴 AUDIT PENDING",
+      detail: "Closing time passed, register still unlocked",
+      cls: "bg-rose-500/10 border-rose-500/20 text-rose-800 dark:text-rose-300",
+    },
   ];
   return (
-    <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 transition-all duration-300">
-      <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-jct-charcoal dark:text-jct-turquoise">
-        <Eye size={14} /> Real-Time Branch Audit Radar
-      </div>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {branches.map((b) => (
-          <div key={b.name} className={`rounded-xl border px-4 py-3 ${b.cls}`}>
-            <p className="text-sm font-bold text-jct-charcoal dark:text-jct-offwhite">{b.name}</p>
-            <p className="mt-1 text-xs font-extrabold text-jct-charcoal dark:text-jct-offwhite">{b.status}</p>
-            <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">{b.detail}</p>
+    <div className="w-full">
+      <div className="overflow-x-auto pb-1 scrollbar-none">
+        <div className="bg-white/50 dark:bg-[#0A0A0A]/50 backdrop-blur-md p-2 rounded-full border border-slate-200/50 dark:border-white/5 flex gap-2 items-center min-w-max shadow-sm">
+          <div className="flex items-center gap-1.5 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 shrink-0">
+            <Eye size={13} className="text-jct-turquoise" />
+            <span>Branch Radar</span>
           </div>
-        ))}
+          {branches.map((b) => (
+            <div
+              key={b.name}
+              title={`${b.name} · ${b.status} (${b.detail})`}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full border text-xs transition-all hover:scale-[1.02] cursor-default shrink-0 ${b.cls}`}
+            >
+              <span className="font-bold text-jct-charcoal dark:text-jct-offwhite">{b.name}</span>
+              <span className="opacity-30">·</span>
+              <span className="font-extrabold text-[11px]">{b.status}</span>
+              <span className="text-[10px] opacity-75 hidden 2xl:inline font-mono">({b.detail})</span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -12501,7 +12529,7 @@ export default function Page() {
   }, [creditCustomers]);
 
   if (!profileLoaded) {
-    return <div className="h-screen w-full bg-jct-offwhite dark:bg-black" />;
+    return <div className="h-screen w-full bg-slate-50 dark:bg-black" />;
   }
   if (!profile) {
     return <ProfileGate onSelect={handleSelectProfile} />;
@@ -12510,13 +12538,13 @@ export default function Page() {
 
   return (
     <div
-      className={`flex h-screen w-full bg-jct-offwhite dark:bg-black text-jct-charcoal dark:text-jct-offwhite antialiased overflow-hidden print:h-auto print:overflow-visible print:bg-white print:text-black ${
+      className={`flex h-screen w-full bg-slate-50 dark:bg-black text-jct-charcoal dark:text-jct-offwhite antialiased overflow-hidden print:h-auto print:overflow-visible print:bg-white print:text-black ${
         dark ? "dark" : ""
       }`}
     >
       <Sidebar tab={safeTab} setTab={setTab} allowedTabs={allowedTabs} />
 
-      <div className="flex flex-1 flex-col overflow-hidden bg-jct-offwhite dark:bg-black print:overflow-visible print:h-auto print:w-full print:p-0 print:m-0 print:bg-white print:text-black">
+      <div className="flex flex-1 flex-col overflow-hidden bg-slate-50 dark:bg-black print:overflow-visible print:h-auto print:w-full print:p-0 print:m-0 print:bg-white print:text-black">
         {/* Top Header */}
         <header className="flex shrink-0 flex-wrap items-center justify-between gap-4 border-b border-slate-200 dark:border-[#1F1F1F] bg-white dark:bg-[#0A0A0A] px-6 py-4 z-20 shadow-sm print:hidden">
           <div className="flex items-center gap-4">

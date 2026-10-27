@@ -47,7 +47,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />
       </head>
-      <body className={`${jakarta.variable} font-sans min-h-full bg-jct-offwhite dark:bg-black text-jct-charcoal dark:text-jct-offwhite selection:bg-jct-turquoise selection:text-jct-charcoal`}>
+      <body className={`${jakarta.variable} font-sans min-h-full bg-slate-50 dark:bg-black text-jct-charcoal dark:text-jct-offwhite selection:bg-jct-turquoise selection:text-jct-charcoal`}>
         {children}
       </body>
     </html>
