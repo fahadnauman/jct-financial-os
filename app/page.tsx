@@ -1247,8 +1247,14 @@ export function ClassicDataSheetTable({
     (totalCashPurchase + totalCreditPurchasePayment + totalExpense + totalToBank + totalLoanOut) +
     totalExcessAmt;
 
+  const thClass = "text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-wider px-4 py-3 print:text-[9px] print:p-1 print:text-black print:border print:border-black print:text-center whitespace-nowrap";
+  const tdBase = "text-xs text-slate-200 px-4 py-3 print:text-[10px] print:p-1 print:text-black print:border print:border-black whitespace-nowrap";
+  const tdRight = "text-xs text-slate-200 font-mono text-right px-4 py-3 print:text-[10px] print:p-1 print:text-black print:border print:border-black whitespace-nowrap";
+  const tdTotalAmt = "text-xs text-right font-mono px-4 py-3 bg-jct-yellow/5 text-jct-yellow font-semibold print:bg-transparent print:text-black print:text-[10px] print:p-1 print:border print:border-black whitespace-nowrap";
+  const tdClosing = "text-xs text-right font-mono font-bold text-jct-turquoise bg-jct-turquoise/5 px-4 py-3 print:bg-transparent print:text-black print:text-[10px] print:p-1 print:border print:border-black whitespace-nowrap";
+
   return (
-    <div className={`w-full text-black ${className}`}>
+    <div className={`w-full text-slate-200 print:text-black print:w-full print:bg-white ${className}`}>
       {/* Global Print Style for Landscape A4 Orientation */}
       <style
         dangerouslySetInnerHTML={{
@@ -1268,46 +1274,46 @@ export function ClassicDataSheetTable({
       />
 
       {/* Header with Date at Top Left and Exact Text */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2 pb-2 border-b-2 border-black text-black">
-        <div className="text-left font-bold text-xs font-mono">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2 pb-2 border-b border-white/10 print:border-b-2 print:border-black text-white print:text-black">
+        <div className="text-left font-bold text-xs font-mono text-slate-400 print:text-black">
           Date: {date || new Date().toLocaleDateString()}
         </div>
-        <div className="text-center font-black tracking-tight text-sm sm:text-base uppercase font-display">
+        <div className="text-center font-black tracking-tight text-sm sm:text-base uppercase font-display text-white print:text-black">
           DAILY DATA SHEET : JUBAIL CORP. TRADING EST.
         </div>
-        <div className="text-right text-xs font-semibold text-slate-700 print:text-black">
+        <div className="text-right text-xs font-semibold text-slate-400 print:text-black">
           Branch: {branchName}
         </div>
       </div>
 
-      {/* Exact 19-Column Dense Table */}
-      <div className="overflow-x-auto w-full">
-        <table className="w-full border-collapse border border-black text-[10px] leading-tight text-black font-mono">
+      {/* Native Dark Mode Table Wrapper */}
+      <div className="w-full overflow-x-auto hide-scrollbar bg-[#0A0A0A] border border-white/10 rounded-2xl shadow-2xl mt-4 print:bg-white print:border-none print:shadow-none print:mt-0 print:overflow-visible">
+        <table className="w-full text-left border-collapse whitespace-nowrap print:border print:border-black print:text-[10px] print:leading-tight print:font-mono">
           <thead>
-            <tr className="bg-slate-100 print:bg-slate-200 border-b border-black text-[9px] font-black uppercase tracking-tight text-center">
-              <th className="border border-black p-1 whitespace-nowrap">1. INVOICE NO.</th>
-              <th className="border border-black p-1 whitespace-nowrap">2. AMT CASH SALE</th>
-              <th className="border border-black p-1 whitespace-nowrap">3. CREDIT INV. AMOUNT</th>
-              <th className="border border-black p-1 whitespace-nowrap">4. RECEIPT NO.</th>
-              <th className="border border-black p-1 whitespace-nowrap">5. CREDIT AMT RECD</th>
-              <th className="border border-black p-1 whitespace-nowrap">6. OPEN BAL</th>
-              <th className="border border-black p-1 whitespace-nowrap">7. LOAN IN</th>
-              <th className="border border-black p-1 whitespace-nowrap">8. OTHER AMT RECD</th>
-              <th className="border border-black p-1 whitespace-nowrap">9. FROM BANK</th>
-              <th className="border border-black p-1 whitespace-nowrap bg-yellow-100 print:bg-yellow-200 font-black">
+            <tr className="bg-slate-900 border-b border-slate-700 print:bg-slate-200 print:border-black">
+              <th className={thClass}>1. INVOICE NO.</th>
+              <th className={thClass}>2. AMT CASH SALE</th>
+              <th className={thClass}>3. CREDIT INV. AMOUNT</th>
+              <th className={thClass}>4. RECEIPT NO.</th>
+              <th className={thClass}>5. CREDIT AMT RECD</th>
+              <th className={thClass}>6. OPEN BAL</th>
+              <th className={thClass}>7. LOAN IN</th>
+              <th className={thClass}>8. OTHER AMT RECD</th>
+              <th className={thClass}>9. FROM BANK</th>
+              <th className={`${thClass} text-jct-yellow print:text-black print:bg-yellow-100`}>
                 10. TOTAL AMT
               </th>
-              <th className="border border-black p-1 whitespace-nowrap">11. CREDIT PURCHASE</th>
-              <th className="border border-black p-1 whitespace-nowrap">12. CASH PURCHASE</th>
-              <th className="border border-black p-1 whitespace-nowrap">13. CREDIT PURCHASE PAYMENT</th>
-              <th className="border border-black p-1 whitespace-nowrap">14. CR NOTE</th>
-              <th className="border border-black p-1 whitespace-nowrap">
+              <th className={thClass}>11. CREDIT PURCHASE</th>
+              <th className={thClass}>12. CASH PURCHASE</th>
+              <th className={thClass}>13. CREDIT PURCHASE PAYMENT</th>
+              <th className={thClass}>14. CR NOTE</th>
+              <th className={thClass}>
                 15. EXPENSE (Format: Name/Note - Amount)
               </th>
-              <th className="border border-black p-1 whitespace-nowrap">16. TO BANK</th>
-              <th className="border border-black p-1 whitespace-nowrap">17. LOAN OUT</th>
-              <th className="border border-black p-1 whitespace-nowrap">18. EXCESS AMT</th>
-              <th className="border border-black p-1 whitespace-nowrap bg-emerald-100 print:bg-emerald-200 font-black">
+              <th className={thClass}>16. TO BANK</th>
+              <th className={thClass}>17. LOAN OUT</th>
+              <th className={thClass}>18. EXCESS AMT</th>
+              <th className={`${thClass} text-jct-turquoise print:text-black print:bg-emerald-100`}>
                 19. CLOSING BALANCE
               </th>
             </tr>
@@ -1316,130 +1322,130 @@ export function ClassicDataSheetTable({
             {mappedRows.map((row, idx) => (
               <tr
                 key={`ds-row-${idx}`}
-                className="border-b border-slate-300 print:border-black print:break-inside-avoid hover:bg-slate-50 transition-colors"
+                className="border-b border-white/5 hover:bg-white/[0.02] transition-colors print:border-b print:border-black print:break-inside-avoid print:hover:bg-transparent"
               >
                 {/* 1. INVOICE NO. */}
-                <td className="border border-slate-400 dark:border-white/20 print:border-black p-1 text-center font-bold">
+                <td className={`${tdBase} text-center font-mono font-medium`}>
                   {row.invoiceNo ? `#${row.invoiceNo}` : null}
                 </td>
 
                 {/* 2. AMT CASH SALE */}
-                <td className="border border-slate-400 dark:border-white/20 print:border-black p-1 text-right font-mono font-bold">
+                <td className={tdRight}>
                   {row.amtCashSale ? fmt(row.amtCashSale) : null}
                 </td>
 
                 {/* 3. CREDIT INV. AMOUNT */}
-                <td className="border border-slate-400 dark:border-white/20 print:border-black p-1 text-right font-mono font-bold">
+                <td className={tdRight}>
                   {row.creditInvAmt ? fmt(row.creditInvAmt) : null}
                 </td>
 
                 {/* 4. RECEIPT NO. */}
-                <td className="border border-slate-400 dark:border-white/20 print:border-black p-1 text-left">
+                <td className={tdBase}>
                   {row.receiptNo || null}
                 </td>
 
                 {/* 5. CREDIT AMT RECD */}
-                <td className="border border-slate-400 dark:border-white/20 print:border-black p-1 text-right font-mono font-bold">
+                <td className={tdRight}>
                   {row.creditAmtRecd ? fmt(row.creditAmtRecd) : null}
                 </td>
 
                 {/* 6. OPEN BAL */}
-                <td className="border border-slate-400 dark:border-white/20 print:border-black p-1 text-right font-mono font-bold">
+                <td className={tdRight}>
                   {row.openBal ? fmt(row.openBal) : null}
                 </td>
 
                 {/* 7. LOAN IN */}
-                <td className="border border-slate-400 dark:border-white/20 print:border-black p-1 text-right font-mono font-bold">
+                <td className={tdRight}>
                   {row.loanIn ? fmt(row.loanIn) : null}
                 </td>
 
                 {/* 8. OTHER AMT RECD */}
-                <td className="border border-slate-400 dark:border-white/20 print:border-black p-1 text-right font-mono font-bold">
+                <td className={tdRight}>
                   {row.otherAmtRecd ? fmt(row.otherAmtRecd) : null}
                 </td>
 
                 {/* 9. FROM BANK */}
-                <td className="border border-slate-400 dark:border-white/20 print:border-black p-1 text-right font-mono font-bold">
+                <td className={tdRight}>
                   {row.fromBank ? fmt(row.fromBank) : null}
                 </td>
 
-                {/* 10. TOTAL AMT */}
-                <td className="border border-slate-400 dark:border-white/20 print:border-black p-1 text-right font-mono font-black bg-yellow-50/50 print:bg-yellow-50">
+                {/* 10. TOTAL AMT (Highlighted Column) */}
+                <td className={tdTotalAmt}>
                   {row.totalAmt ? fmt(row.totalAmt) : null}
                 </td>
 
                 {/* 11. CREDIT PURCHASE */}
-                <td className="border border-slate-400 dark:border-white/20 print:border-black p-1 text-left text-[9px]">
+                <td className={`${tdBase} text-[11px] text-slate-300`}>
                   {row.creditPurchase || null}
                 </td>
 
                 {/* 12. CASH PURCHASE */}
-                <td className="border border-slate-400 dark:border-white/20 print:border-black p-1 text-right font-mono">
+                <td className={tdRight}>
                   {row.cashPurchase ? fmt(row.cashPurchase) : null}
                 </td>
 
                 {/* 13. CREDIT PURCHASE PAYMENT */}
-                <td className="border border-slate-400 dark:border-white/20 print:border-black p-1 text-right font-mono">
+                <td className={tdRight}>
                   {row.creditPurchasePayment ? fmt(row.creditPurchasePayment) : null}
                 </td>
 
                 {/* 14. CR NOTE */}
-                <td className="border border-slate-400 dark:border-white/20 print:border-black p-1 text-right font-mono">
+                <td className={tdRight}>
                   {row.crNote ? fmt(row.crNote) : null}
                 </td>
 
                 {/* 15. EXPENSE (Format: Name/Note - Amount) */}
-                <td className="border border-slate-400 dark:border-white/20 print:border-black p-1 text-left text-[9px]">
+                <td className={`${tdBase} text-[11px] text-slate-300`}>
                   {row.expense || null}
                 </td>
 
                 {/* 16. TO BANK */}
-                <td className="border border-slate-400 dark:border-white/20 print:border-black p-1 text-left text-[9px]">
+                <td className={`${tdBase} text-[11px] text-slate-300`}>
                   {row.toBank || null}
                 </td>
 
                 {/* 17. LOAN OUT */}
-                <td className="border border-slate-400 dark:border-white/20 print:border-black p-1 text-right font-mono">
+                <td className={tdRight}>
                   {row.loanOut ? fmt(row.loanOut) : null}
                 </td>
 
                 {/* 18. EXCESS AMT */}
-                <td className="border border-slate-400 dark:border-white/20 print:border-black p-1 text-right font-mono">
+                <td className={tdRight}>
                   {row.excessAmt ? fmt(row.excessAmt) : null}
                 </td>
 
                 {/* 19. CLOSING BALANCE */}
-                <td className="border border-slate-400 dark:border-white/20 print:border-black p-1 text-right font-mono font-black bg-emerald-50/50 print:bg-emerald-50">
+                <td className={tdClosing}>
                   {row.closingBalance ? fmt(row.closingBalance) : null}
                 </td>
               </tr>
             ))}
           </tbody>
           <tfoot>
-            <tr className="bg-slate-100 print:bg-slate-200 border-t-2 border-black font-black text-[9px] uppercase tracking-tight text-right">
-              <td className="border border-black p-1 text-center font-black">TOTAL</td>
-              <td className="border border-black p-1 font-mono">{totalCashSale > 0 ? fmt(totalCashSale) : null}</td>
-              <td className="border border-black p-1 font-mono">{totalCreditInvAmt > 0 ? fmt(totalCreditInvAmt) : null}</td>
-              <td className="border border-black p-1"></td>
-              <td className="border border-black p-1 font-mono">{totalCreditAmtRecd > 0 ? fmt(totalCreditAmtRecd) : null}</td>
-              <td className="border border-black p-1 font-mono">{totalOpenBal > 0 ? fmt(totalOpenBal) : null}</td>
-              <td className="border border-black p-1 font-mono">{totalLoanIn > 0 ? fmt(totalLoanIn) : null}</td>
-              <td className="border border-black p-1 font-mono">{totalOtherAmtRecd > 0 ? fmt(totalOtherAmtRecd) : null}</td>
-              <td className="border border-black p-1 font-mono">{totalFromBank > 0 ? fmt(totalFromBank) : null}</td>
-              <td className="border border-black p-1 font-mono bg-yellow-100 print:bg-yellow-200 font-black">
+            <tr className="bg-slate-900 border-t-2 border-slate-700 font-bold text-xs print:bg-slate-200 print:border-black print:text-black print:text-[9px]">
+              <td className="px-4 py-3 text-center font-bold text-slate-400 print:text-black print:p-1 print:border print:border-black">TOTAL</td>
+              <td className="px-4 py-3 text-right font-mono text-slate-200 print:text-black print:p-1 print:border print:border-black">{totalCashSale > 0 ? fmt(totalCashSale) : null}</td>
+              <td className="px-4 py-3 text-right font-mono text-slate-200 print:text-black print:p-1 print:border print:border-black">{totalCreditInvAmt > 0 ? fmt(totalCreditInvAmt) : null}</td>
+              <td className="px-4 py-3 print:p-1 print:border print:border-black"></td>
+              <td className="px-4 py-3 text-right font-mono text-slate-200 print:text-black print:p-1 print:border print:border-black">{totalCreditAmtRecd > 0 ? fmt(totalCreditAmtRecd) : null}</td>
+              <td className="px-4 py-3 text-right font-mono text-slate-200 print:text-black print:p-1 print:border print:border-black">{totalOpenBal > 0 ? fmt(totalOpenBal) : null}</td>
+              <td className="px-4 py-3 text-right font-mono text-slate-200 print:text-black print:p-1 print:border print:border-black">{totalLoanIn > 0 ? fmt(totalLoanIn) : null}</td>
+              <td className="px-4 py-3 text-right font-mono text-slate-200 print:text-black print:p-1 print:border print:border-black">{totalOtherAmtRecd > 0 ? fmt(totalOtherAmtRecd) : null}</td>
+              <td className="px-4 py-3 text-right font-mono text-slate-200 print:text-black print:p-1 print:border print:border-black">{totalFromBank > 0 ? fmt(totalFromBank) : null}</td>
+              <td className="px-4 py-3 text-right font-mono font-bold bg-jct-yellow/10 text-jct-yellow print:bg-yellow-200 print:text-black print:p-1 print:border print:border-black">
                 {totalTotalAmt > 0 ? fmt(totalTotalAmt) : null}
               </td>
-              <td className="border border-black p-1 font-mono">{totalCreditPurchase > 0 ? fmt(totalCreditPurchase) : null}</td>
-              <td className="border border-black p-1 font-mono">{totalCashPurchase > 0 ? fmt(totalCashPurchase) : null}</td>
-              <td className="border border-black p-1 font-mono">
+              <td className="px-4 py-3 text-right font-mono text-slate-200 print:text-black print:p-1 print:border print:border-black">{totalCreditPurchase > 0 ? fmt(totalCreditPurchase) : null}</td>
+              <td className="px-4 py-3 text-right font-mono text-slate-200 print:text-black print:p-1 print:border print:border-black">{totalCashPurchase > 0 ? fmt(totalCashPurchase) : null}</td>
+              <td className="px-4 py-3 text-right font-mono text-slate-200 print:text-black print:p-1 print:border print:border-black">
                 {totalCreditPurchasePayment > 0 ? fmt(totalCreditPurchasePayment) : null}
               </td>
-              <td className="border border-black p-1 font-mono">{totalCrNote > 0 ? fmt(totalCrNote) : null}</td>
-              <td className="border border-black p-1 font-mono">{totalExpense > 0 ? fmt(totalExpense) : null}</td>
-              <td className="border border-black p-1 font-mono">{totalToBank > 0 ? fmt(totalToBank) : null}</td>
-              <td className="border border-black p-1 font-mono">{totalLoanOut > 0 ? fmt(totalLoanOut) : null}</td>
-              <td className="border border-black p-1 font-mono">{totalExcessAmt > 0 ? fmt(totalExcessAmt) : null}</td>
-              <td className="border border-black p-1 font-mono bg-emerald-100 print:bg-emerald-200 font-black">
+              <td className="px-4 py-3 text-right font-mono text-slate-200 print:text-black print:p-1 print:border print:border-black">{totalCrNote > 0 ? fmt(totalCrNote) : null}</td>
+              <td className="px-4 py-3 text-right font-mono text-slate-200 print:text-black print:p-1 print:border print:border-black">{totalExpense > 0 ? fmt(totalExpense) : null}</td>
+              <td className="px-4 py-3 text-right font-mono text-slate-200 print:text-black print:p-1 print:border print:border-black">{totalToBank > 0 ? fmt(totalToBank) : null}</td>
+              <td className="px-4 py-3 text-right font-mono text-slate-200 print:text-black print:p-1 print:border print:border-black">{totalLoanOut > 0 ? fmt(totalLoanOut) : null}</td>
+              <td className="px-4 py-3 text-right font-mono text-slate-200 print:text-black print:p-1 print:border print:border-black">{totalExcessAmt > 0 ? fmt(totalExcessAmt) : null}</td>
+              <td className="px-4 py-3 text-right font-mono font-bold bg-jct-turquoise/10 text-jct-turquoise print:bg-emerald-200 print:text-black print:p-1 print:border print:border-black">
                 {fmt(finalClosingBalance)}
               </td>
             </tr>
