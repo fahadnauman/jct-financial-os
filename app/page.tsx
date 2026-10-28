@@ -264,20 +264,21 @@ function PrintReportHeader({ branch, date }: { branch: string; date: string }) {
   }, []);
 
   return (
-    <div className="hidden print:block text-black print:mb-8">
-      <div className="flex items-center justify-between print:border-b-4 print:border-black print:pb-4 print:mb-8 border-b-4 border-black pb-4 mb-6">
+    <div className="hidden print:block text-black">
+      <h1 className="print:text-4xl print:font-black print:tracking-tighter print:uppercase print:mb-2 print:text-black">
+        JCT FINANCIAL OS — DAILY REGISTER REPORT
+      </h1>
+      <div className="print:flex print:items-center print:justify-between print:text-lg print:font-semibold print:tracking-tight print:text-slate-600 print:mb-8 print:border-b-2 print:border-black print:pb-4">
         <div>
-          <h1 className="text-2xl print:text-3xl print:font-black print:tracking-tighter print:uppercase font-black uppercase tracking-tight text-black">
-            JCT FINANCIAL OS - DAILY REGISTER REPORT
-          </h1>
-          <p className="text-xs font-bold text-slate-700 mt-0.5 print:text-black">
-            Jubail Corp. Trading Est. · Wholesale Paint Distribution (Jotun, Hempel, Sigma)
-          </p>
+          <span>Branch: </span>
+          <strong className="print:text-black">{branch}</strong>
+          <span className="print:mx-2">•</span>
+          <span>Jubail Corp. Trading Est.</span>
         </div>
-        <div className="text-right font-mono text-xs text-slate-800 print:text-black">
-          <p className="font-bold text-sm text-black">Branch: {branch}</p>
-          <p>Register Date: <strong className="text-black">{date}</strong></p>
-          <p className="text-[11px] text-slate-600 mt-0.5 print:text-black">Printed: {timestamp || "Live"}</p>
+        <div className="print:text-right print:font-mono print:text-sm">
+          <span>Register Date: </span>
+          <strong className="print:text-black">{date}</strong>
+          <span className="print:text-xs print:text-slate-500 print:ml-2">(Printed: {timestamp || "Live"})</span>
         </div>
       </div>
     </div>
@@ -286,7 +287,7 @@ function PrintReportHeader({ branch, date }: { branch: string; date: string }) {
 
 function PrintReportFooter() {
   return (
-    <div className="hidden print:flex justify-between mt-16 pt-8 border-t-2 border-black text-sm font-bold text-black">
+    <div className="hidden print:flex print:justify-between print:mt-16 print:pt-8 print:border-t-2 print:border-black print:text-sm print:font-bold print:text-black print:page-break-inside-avoid">
       <div>PREPARED BY (STAFF): _________________________</div>
       <div>DATE / TIME: _________________________</div>
       <div>AUDITED BY (OWNER): _________________________</div>
@@ -5673,7 +5674,7 @@ function DailyRegisterView({
               STEP 5: FULL-WIDESCREEN EDITABLE AUDIT WORKBENCH WITH [⤢ EXPAND] ON ALL 3 BOXES
              ────────────────────────────────────────────────────────────── */}
           {wizardStep === 5 && (
-            <div className="flex flex-col gap-6 pb-8 print:border-2 print:border-black print:p-8 print:m-0 print:block print:w-full print:bg-white print:text-black">
+            <div className="flex flex-col gap-6 pb-8 print:block print:w-full print:bg-white print:text-black print:p-0 print:m-0">
               {/* Print-Only Report Header */}
               <PrintReportHeader
                 branch={branchId === "JCT_HQ" ? "JCT Main HQ (Jubail)" : branchId}
@@ -5728,10 +5729,10 @@ function DailyRegisterView({
               )}
 
               {/* 2. Streamlined Hero Drawer Closing Card */}
-              <div className="w-full bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-yellow/20 dark:border-jct-yellow/30 hover:border-jct-yellow/80 hover:shadow-[0_0_15px_rgba(255,222,89,0.1)] rounded-xl p-6 mb-2 transition-all duration-300 print:shadow-none print:border print:border-black print:rounded-none print:bg-white print:text-black print:p-6 print:mb-4">
+              <div className="w-full bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-yellow/20 dark:border-jct-yellow/30 hover:border-jct-yellow/80 hover:shadow-[0_0_15px_rgba(255,222,89,0.1)] rounded-xl p-6 mb-2 transition-all duration-300 print:shadow-none print:border print:border-black print:rounded-none print:bg-white print:text-black print:p-6 print:mb-4 print:break-inside-avoid">
                 <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-4">
                   <div>
-                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-jct-yellow text-jct-charcoal text-xs font-bold uppercase tracking-wider print:border print:border-black print:bg-white print:text-black">
+                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-jct-yellow text-jct-charcoal text-xs font-bold uppercase tracking-wider print:border print:border-black print:bg-white print:text-black print:text-xs print:font-bold print:uppercase">
                       <Wallet size={14} className="text-jct-charcoal print:text-black" />
                       <span>💵 PHYSICAL CASH DRAWER CLOSING BALANCE</span>
                     </div>
@@ -5739,7 +5740,7 @@ function DailyRegisterView({
                       Count physical cash in register before locking.
                     </p>
                   </div>
-                  <div className="text-3xl md:text-4xl font-black text-jct-charcoal dark:text-jct-offwhite tracking-tight print:text-black">
+                  <div className="text-3xl md:text-4xl font-black text-jct-charcoal dark:text-jct-offwhite tracking-tight print:text-black print:text-2xl print:font-bold">
                     SAR {fmt(calculatedClosingBalance)}
                   </div>
                 </div>
@@ -5757,14 +5758,14 @@ function DailyRegisterView({
               </div>
 
               {/* 3. The 3 Financial Pillars Grid (Inflows · Bank/Swipes · Outflows) */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-2 print:grid-cols-3 print:gap-4 print:mb-6">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-2 print:grid-cols-3 print:gap-4 print:mb-6 print:break-inside-avoid">
                 {/* Card 1: Cash Inflows */}
                 <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 flex flex-col justify-between gap-3 transition-all duration-300 print:shadow-none print:border print:border-black print:rounded-none print:bg-white print:text-black">
                   <div>
-                    <span className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider print:text-black">
+                    <span className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider print:text-black print:text-xs print:font-bold print:uppercase">
                       Cash Inflows (Sales &amp; Receipts)
                     </span>
-                    <span className="mt-2 block font-mono text-2xl font-black text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap print:text-black">
+                    <span className="mt-2 block font-mono text-2xl font-black text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap print:text-black print:text-2xl print:font-bold">
                       SAR {fmt(totalCashInSalesAndReceipts)}
                     </span>
                   </div>
@@ -5777,7 +5778,7 @@ function DailyRegisterView({
                 <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-yellow/20 dark:border-jct-yellow/30 hover:border-jct-yellow/80 hover:shadow-[0_0_15px_rgba(255,222,89,0.1)] rounded-xl p-6 flex flex-col justify-between gap-3 transition-all duration-300 print:shadow-none print:border print:border-black print:rounded-none print:bg-white print:text-black">
                   <div>
                     <div className="flex items-center justify-between gap-2">
-                      <span className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider print:text-black">
+                      <span className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider print:text-black print:text-xs print:font-bold print:uppercase">
                         Bank &amp; Card Swipes
                       </span>
                       <button
@@ -5790,7 +5791,7 @@ function DailyRegisterView({
                         {expandedAuditBox === "BANK_POS" ? "[Collapse]" : "[View Details]"}
                       </button>
                     </div>
-                    <span className="mt-2 block font-mono text-2xl font-black text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap print:text-black">
+                    <span className="mt-2 block font-mono text-2xl font-black text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap print:text-black print:text-2xl print:font-bold">
                       SAR {fmt(activeBankSettlementTotal)}
                     </span>
                   </div>
@@ -5807,10 +5808,10 @@ function DailyRegisterView({
                 {/* Card 3: Cash Outflows */}
                 <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 flex flex-col justify-between gap-3 transition-all duration-300 print:shadow-none print:border print:border-black print:rounded-none print:bg-white print:text-black">
                   <div>
-                    <span className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider print:text-black">
+                    <span className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider print:text-black print:text-xs print:font-bold print:uppercase">
                       Cash Outflows (Shop Expenses)
                     </span>
-                    <span className="mt-2 block font-mono text-2xl font-black text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap print:text-black">
+                    <span className="mt-2 block font-mono text-2xl font-black text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap print:text-black print:text-2xl print:font-bold">
                       SAR {fmt(totalMoneyOutDrawer)}
                     </span>
                   </div>
@@ -5819,9 +5820,6 @@ function DailyRegisterView({
                   </span>
                 </div>
               </div>
-
-              {/* Print-Only Signature Footer at bottom of visible summary */}
-              <PrintReportFooter />
 
               {/* Expanded Mode Banner if a Box is Expanded */}
               {expandedAuditBox !== "NONE" && (
@@ -5845,27 +5843,27 @@ function DailyRegisterView({
                 </div>
               )}
 
-              {/* Main Body — 3 Expandable Boxes (Hidden in Print) */}
+              {/* Main Body — 3 Expandable Boxes */}
               <div
                 className={`grid grid-cols-1 ${
                   expandedAuditBox === "NONE" ? "lg:grid-cols-2" : "lg:grid-cols-1"
-                } gap-6 items-start print:hidden`}
+                } gap-6 items-start print:block print:w-full print:space-y-6`}
               >
                 {/* ══════════════════════════════════════════════════════════
                     BOX 1: Money In — Cash Sales & Receipts
                    ══════════════════════════════════════════════════════════ */}
                 {(expandedAuditBox === "NONE" || expandedAuditBox === "MONEY_IN") && (
-                  <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 flex flex-col gap-4 transition-all duration-300 print:shadow-none print:border-slate-300 print:bg-white print:text-black">
-                    <div className="flex items-center justify-between gap-3 border-b border-slate-200 dark:border-[#1F1F1F] pb-3.5">
-                      <div>
-                        <h3 className="font-display text-lg font-extrabold text-jct-charcoal dark:text-jct-offwhite">
-                          Money In — Cash Sales &amp; Receipts
+                  <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 flex flex-col gap-4 transition-all duration-300 print:shadow-none print:border-none print:p-0 print:bg-white print:text-black">
+                    <div className="flex items-center justify-between gap-3 border-b border-slate-200 dark:border-[#1F1F1F] pb-3.5 print:border-none print:pb-0">
+                      <div className="w-full">
+                        <h3 className="font-display text-lg font-extrabold text-jct-charcoal dark:text-jct-offwhite print:text-xl print:font-extrabold print:tracking-tight print:mt-10 print:mb-4 print:border-b print:border-slate-300 print:pb-2 print:text-black">
+                          Cash Inflows (Sales &amp; Receipts)
                         </h3>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                        <p className="text-xs text-slate-500 dark:text-slate-400 print:hidden">
                           Includes 15% Saudi VAT breakdown, notes, and inline amount editing
                         </p>
                       </div>
-                      <div className="flex items-center gap-3 shrink-0">
+                      <div className="flex items-center gap-3 shrink-0 print:hidden">
                         <span className="font-display text-base font-extrabold text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap">
                           +SAR {fmt(totalMoneyInDrawer)}
                         </span>
@@ -5893,23 +5891,23 @@ function DailyRegisterView({
                       </div>
                     </div>
 
-                    <div className="divide-y divide-slate-200 dark:divide-[#1F1F1F] rounded-xl border border-slate-200 dark:border-[#1F1F1F] bg-slate-50/50 dark:bg-black overflow-hidden">
+                    <div className="divide-y divide-slate-200 dark:divide-[#1F1F1F] rounded-xl border border-slate-200 dark:border-[#1F1F1F] bg-slate-50/50 dark:bg-black overflow-hidden print:border print:border-slate-300 print:rounded-none print:bg-white print:divide-slate-200">
                       {/* Opening Float Row */}
-                      <div className="flex items-center justify-between gap-2 px-4 py-2.5 bg-slate-50 dark:bg-[#111111]">
+                      <div className="flex items-center justify-between gap-2 px-4 py-2.5 bg-slate-50 dark:bg-[#111111] print:flex print:justify-between print:py-2 print:border-b print:border-slate-200 print:text-sm print:text-black print:bg-white print:break-inside-avoid">
                         <div className="flex items-center gap-2.5 min-w-0">
-                          <span className="font-mono text-xs font-bold text-slate-500 dark:text-slate-400 w-16 shrink-0">
+                          <span className="font-mono text-xs font-bold text-slate-500 dark:text-slate-400 w-16 shrink-0 print:text-black print:font-bold print:w-20">
                             FLOAT
                           </span>
-                          <span className="text-xs font-bold text-jct-charcoal dark:text-jct-offwhite truncate">
+                          <span className="text-xs font-bold text-jct-charcoal dark:text-jct-offwhite truncate print:text-black print:text-sm">
                             Opening Drawer Balance
                           </span>
                           {openingBalanceOriginal !== undefined && (
-                            <span className="rounded bg-jct-yellow text-jct-charcoal px-1.5 py-0.5 text-[10px] font-bold">
+                            <span className="rounded bg-jct-yellow text-jct-charcoal px-1.5 py-0.5 text-[10px] font-bold print:hidden">
                               Orig: SAR {fmt(openingBalanceOriginal)}
                             </span>
                           )}
                         </div>
-                        <span className="font-display text-xs font-extrabold text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap">
+                        <span className="font-display text-xs font-extrabold text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap print:text-black print:text-sm print:font-bold">
                           +SAR {fmt(openingBalance)}
                         </span>
                       </div>
@@ -5926,38 +5924,38 @@ function DailyRegisterView({
                         return (
                           <div
                             key={`cash-${inv.invoiceNo}`}
-                            className={`flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-4 py-2.5 transition ${
+                            className={`flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-4 py-2.5 transition print:flex print:flex-row print:justify-between print:py-2 print:border-b print:border-slate-200 print:text-sm print:text-black print:bg-white print:break-inside-avoid ${
                               isSplitRow
                                 ? "bg-jct-yellow/15 hover:bg-jct-yellow/25"
                                 : "hover:bg-slate-100/70 dark:hover:bg-[#111111]"
                             }`}
                           >
                             <div className="flex flex-wrap items-center gap-2.5 min-w-0 flex-1">
-                              <span className="font-mono text-xs font-extrabold text-slate-500 dark:text-slate-400 w-16 shrink-0">
+                              <span className="font-mono text-xs font-extrabold text-slate-500 dark:text-slate-400 w-16 shrink-0 print:text-black print:font-bold print:w-20">
                                 #{inv.invoiceNo}
                               </span>
-                              <span className="text-xs font-semibold text-jct-charcoal dark:text-jct-offwhite truncate">
+                              <span className="text-xs font-semibold text-jct-charcoal dark:text-jct-offwhite truncate print:text-black print:text-sm">
                                 {inv.customer}
                               </span>
                               {isSplitRow && (
-                                <span className="rounded bg-jct-yellow text-jct-charcoal font-bold px-2 py-0.5 text-[10px] shrink-0">
+                                <span className="rounded bg-jct-yellow text-jct-charcoal font-bold px-2 py-0.5 text-[10px] shrink-0 print:border print:border-black print:bg-white print:text-black">
                                   Split (Cash Share: SAR {fmt(cashAmt)})
                                 </span>
                               )}
                               {inv.paymentMode === "OTHER_RECD" && (
-                                <span className="rounded bg-jct-turquoise/25 border border-jct-turquoise/40 px-2 py-0.5 text-[10px] font-bold text-jct-charcoal dark:text-jct-offwhite shrink-0">
+                                <span className="rounded bg-jct-turquoise/25 border border-jct-turquoise/40 px-2 py-0.5 text-[10px] font-bold text-jct-charcoal dark:text-jct-offwhite shrink-0 print:border-black print:text-black">
                                   Other Recd{inv.otherNote ? `: ${inv.otherNote}` : ""}
                                 </span>
                               )}
                               {inv.originalAmount !== undefined && (
-                                <span className="rounded bg-jct-yellow text-jct-charcoal font-bold px-1.5 py-0.5 text-[10px] shrink-0">
+                                <span className="rounded bg-jct-yellow text-jct-charcoal font-bold px-1.5 py-0.5 text-[10px] shrink-0 print:hidden">
                                   Orig: SAR {fmt(inv.originalAmount)}
                                 </span>
                               )}
                             </div>
 
                             {expandedAuditBox === "MONEY_IN" && (
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 print:hidden">
                                 <input
                                   type="text"
                                   value={inv.otherNote || ""}
@@ -5980,12 +5978,12 @@ function DailyRegisterView({
                             )}
 
                             <div className="flex items-center justify-end gap-3 shrink-0">
-                              <span className="text-[11px] text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                              <span className="text-[11px] text-slate-500 dark:text-slate-400 whitespace-nowrap print:hidden">
                                 Excl. 15% VAT: SAR {fmt(netExclVat)}
                               </span>
 
                               {isEditing ? (
-                                <div className="flex items-center gap-1.5">
+                                <div className="flex items-center gap-1.5 print:hidden">
                                   <input
                                     type="number"
                                     step="0.01"
@@ -6004,7 +6002,7 @@ function DailyRegisterView({
                                 </div>
                               ) : (
                                 <>
-                                  <span className="font-display text-xs font-extrabold text-jct-charcoal dark:text-jct-offwhite w-24 text-right whitespace-nowrap">
+                                  <span className="font-display text-xs font-extrabold text-jct-charcoal dark:text-jct-offwhite w-24 text-right whitespace-nowrap print:text-black print:text-sm print:font-bold">
                                     +SAR {fmt(cashAmt)}
                                   </span>
                                   <button
@@ -6013,14 +6011,14 @@ function DailyRegisterView({
                                       setEditingRowId(rowKey);
                                       setEditingRowVal(String(cashAmt));
                                     }}
-                                    className="rounded bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-2 py-0.5 text-[10px]"
+                                    className="rounded bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-2 py-0.5 text-[10px] print:hidden"
                                   >
                                     ✏️ Edit
                                   </button>
                                   <button
                                     type="button"
                                     onClick={() => handleRemoveErpInvoice(inv.invoiceNo)}
-                                    className="rounded border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-600 dark:text-rose-400 transition"
+                                    className="rounded border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-600 dark:text-rose-400 transition print:hidden"
                                     title="Delete invoice"
                                   >
                                     🗑️ Delete
@@ -6039,27 +6037,27 @@ function DailyRegisterView({
                         return (
                           <div
                             key={entry.id}
-                            className="flex items-center justify-between gap-2 px-4 py-2.5 hover:bg-slate-100/70 dark:hover:bg-[#111111] transition"
+                            className="flex items-center justify-between gap-2 px-4 py-2.5 hover:bg-slate-100/70 dark:hover:bg-[#111111] transition print:flex print:justify-between print:py-2 print:border-b print:border-slate-200 print:text-sm print:text-black print:bg-white print:break-inside-avoid"
                           >
-                            <div className="flex flex-wrap items-center gap-2 min-w-0">
-                              <span className="font-mono text-xs font-extrabold text-slate-500 dark:text-slate-400 w-16 shrink-0">
+                            <div className="flex flex-wrap items-center gap-2 min-w-0 flex-1">
+                              <span className="font-mono text-xs font-extrabold text-slate-500 dark:text-slate-400 w-16 shrink-0 print:text-black print:font-bold print:w-20">
                                 {entry.receiptNo || "RECEIPT"}
                               </span>
                               <span
-                                className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold shrink-0 ${pmBadge.badgeClass}`}
+                                className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold shrink-0 print:border-black print:text-black ${pmBadge.badgeClass}`}
                               >
                                 {pmBadge.badge}
                               </span>
-                              <span className="text-xs font-bold text-jct-charcoal dark:text-jct-offwhite truncate">
+                              <span className="text-xs font-bold text-jct-charcoal dark:text-jct-offwhite truncate print:text-black print:text-sm">
                                 {entry.title}
                               </span>
                               {entry.followUpDate && (
-                                <span className="rounded-full bg-jct-turquoise/25 border border-jct-turquoise/40 px-2.5 py-0.5 text-[10px] font-bold text-jct-charcoal dark:text-jct-offwhite shrink-0">
+                                <span className="rounded-full bg-jct-turquoise/25 border border-jct-turquoise/40 px-2.5 py-0.5 text-[10px] font-bold text-jct-charcoal dark:text-jct-offwhite shrink-0 print:border-black print:text-black">
                                   Follow-up: {entry.followUpDate}
                                 </span>
                               )}
                               {entry.originalAmount !== undefined && (
-                                <span className="rounded bg-jct-yellow text-jct-charcoal font-bold px-1.5 py-0.5 text-[10px] shrink-0">
+                                <span className="rounded bg-jct-yellow text-jct-charcoal font-bold px-1.5 py-0.5 text-[10px] shrink-0 print:hidden">
                                   Orig: SAR {fmt(entry.originalAmount)}
                                 </span>
                               )}
@@ -6067,7 +6065,7 @@ function DailyRegisterView({
 
                             <div className="flex items-center gap-2 shrink-0">
                               {isEditing ? (
-                                <div className="flex items-center gap-1.5">
+                                <div className="flex items-center gap-1.5 print:hidden">
                                   <input
                                     type="number"
                                     step="0.01"
@@ -6086,20 +6084,20 @@ function DailyRegisterView({
                                 </div>
                               ) : (
                                 <>
-                                  <span className="font-display text-xs font-extrabold text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap">
+                                  <span className="font-display text-xs font-extrabold text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap print:text-black print:text-sm print:font-bold">
                                     +SAR {fmt(entry.amount)}
                                   </span>
                                   <button
                                     type="button"
                                     onClick={() => handleOpenEditEntryModal(entry)}
-                                    className="rounded bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-2 py-0.5 text-[10px]"
+                                    className="rounded bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-2 py-0.5 text-[10px] print:hidden"
                                   >
                                     ✏️ Edit
                                   </button>
                                   <button
                                     type="button"
                                     onClick={() => handleRemoveEntry(entry.id)}
-                                    className="rounded border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-600 dark:text-rose-400 transition"
+                                    className="rounded border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-600 dark:text-rose-400 transition print:hidden"
                                     title="Delete inflow"
                                   >
                                     🗑️ Delete
@@ -6113,7 +6111,7 @@ function DailyRegisterView({
                     </div>
 
                     {/* [+ Add Missing Inflow] Row at Bottom */}
-                    <form onSubmit={handleAddMissingInflow} className="flex flex-wrap items-center gap-2 pt-1">
+                    <form onSubmit={handleAddMissingInflow} className="flex flex-wrap items-center gap-2 pt-1 print:hidden">
                       <input
                         type="text"
                         value={missingInflowTitle}
@@ -6155,22 +6153,22 @@ function DailyRegisterView({
                 {(expandedAuditBox === "NONE" ||
                   expandedAuditBox === "EXPENSES" ||
                   expandedAuditBox === "BANK_POS") && (
-                  <div className="flex flex-col gap-6">
+                  <div className="flex flex-col gap-6 print:w-full">
                     {/* ══════════════════════════════════════════════════════
                         BOX 2: Shop Expenses & Supplier Purchases
                        ══════════════════════════════════════════════════════ */}
                     {(expandedAuditBox === "NONE" || expandedAuditBox === "EXPENSES") && (
-                      <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-yellow/20 dark:border-jct-yellow/30 hover:border-jct-yellow/80 hover:shadow-[0_0_15px_rgba(255,222,89,0.1)] rounded-xl p-6 flex flex-col gap-4 transition-all duration-300 print:shadow-none print:border-slate-300 print:bg-white print:text-black">
-                        <div className="flex items-center justify-between gap-3 border-b border-slate-200 dark:border-[#1F1F1F] pb-3.5">
-                          <div>
-                            <h3 className="font-display text-lg font-extrabold text-jct-charcoal dark:text-jct-offwhite">
-                              Shop Expenses &amp; Supplier Purchases ({expenseEntries.length})
+                      <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-yellow/20 dark:border-jct-yellow/30 hover:border-jct-yellow/80 hover:shadow-[0_0_15px_rgba(255,222,89,0.1)] rounded-xl p-6 flex flex-col gap-4 transition-all duration-300 print:shadow-none print:border-none print:p-0 print:bg-white print:text-black">
+                        <div className="flex items-center justify-between gap-3 border-b border-slate-200 dark:border-[#1F1F1F] pb-3.5 print:border-none print:pb-0">
+                          <div className="w-full">
+                            <h3 className="font-display text-lg font-extrabold text-jct-charcoal dark:text-jct-offwhite print:text-xl print:font-extrabold print:tracking-tight print:mt-10 print:mb-4 print:border-b print:border-slate-300 print:pb-2 print:text-black">
+                              Cash Outflows (Shop Expenses)
                             </h3>
-                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                            <p className="text-xs text-slate-500 dark:text-slate-400 print:hidden">
                               7 official categories · Credit Purchases sync to Suppliers &amp; Payables
                             </p>
                           </div>
-                          <div className="flex items-center gap-3 shrink-0">
+                          <div className="flex items-center gap-3 shrink-0 print:hidden">
                             <span className="font-display text-base font-extrabold text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap">
                               -SAR {fmt(totalMoneyOutDrawer)}
                             </span>
@@ -6178,464 +6176,474 @@ function DailyRegisterView({
                               type="button"
                               onClick={() =>
                                 setExpandedAuditBox(
-                                  expandedAuditBox === "EXPENSES" ? "NONE" : "EXPENSES"
-                                )
-                              }
-                              className="flex items-center gap-1.5 rounded-lg bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-3 py-1.5 text-xs transition-all print:hidden"
-                            >
-                              {expandedAuditBox === "EXPENSES" ? (
-                                <>
-                                  <Minimize2 size={13} />
-                                  <span>⤡ Collapse</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Maximize2 size={13} />
-                                  <span>⤢ Expand</span>
-                                </>
-                              )}
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="divide-y divide-slate-200 dark:divide-[#1F1F1F] rounded-xl border border-slate-200 dark:border-[#1F1F1F] bg-slate-50/50 dark:bg-black overflow-hidden">
-                          {expenseEntries.map((entry) => {
-                            const isEditing = editingRowId === entry.id;
-                            const pmBadge = formatPaymentModeBadge(entry.paymentMode);
-                            return (
-                              <div
-                                key={entry.id}
-                                className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 hover:bg-slate-100/70 dark:hover:bg-[#111111] transition"
-                              >
-                                <div className="flex flex-wrap items-center gap-2 min-w-0 flex-1">
-                                  <span className="rounded-full bg-jct-yellow text-jct-charcoal font-bold px-2.5 py-0.5 text-[10px] shrink-0">
-                                    {entry.expenseCategory || "Food"}
-                                  </span>
-                                  <span
-                                    className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold shrink-0 ${pmBadge.badgeClass}`}
-                                  >
-                                    {pmBadge.badge}
-                                  </span>
-                                  <span className="text-xs font-bold text-jct-charcoal dark:text-jct-offwhite truncate">
-                                    {entry.title}
-                                  </span>
-                                  {entry.dueDate && (
-                                    <span className="rounded-full bg-jct-turquoise/25 border border-jct-turquoise/40 px-2.5 py-0.5 text-[10px] font-bold text-jct-charcoal dark:text-jct-offwhite shrink-0">
-                                      Due: {entry.dueDate}
-                                    </span>
-                                  )}
-                                  {entry.originalAmount !== undefined && (
-                                    <span className="rounded-full bg-jct-yellow text-jct-charcoal font-bold px-2.5 py-0.5 text-[10px] shrink-0">
-                                      Orig: SAR {fmt(entry.originalAmount)}
-                                    </span>
-                                  )}
-                                </div>
-
-                                {expandedAuditBox === "EXPENSES" && (
-                                  <div className="flex items-center gap-2">
-                                    <select
-                                      value={entry.expenseCategory || "Food"}
-                                      onChange={(e) => {
-                                        const newCat = e.target.value as StrictExpenseCategory;
-                                        setPreLoggedEntries((prev) =>
-                                          prev.map((it) =>
-                                            it.id === entry.id
-                                              ? { ...it, expenseCategory: newCat }
-                                              : it
-                                          )
-                                        );
-                                      }}
-                                      className="bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-2 py-1 text-xs font-bold outline-none"
-                                    >
-                                      {STRICT_EXPENSE_CATEGORIES.map((c) => (
-                                        <option key={c} value={c} className="bg-white dark:bg-[#0A0A0A]">
-                                          {c}
-                                        </option>
-                                      ))}
-                                    </select>
-                                    {entry.expenseCategory === "Credit Purchase" && (
-                                      <input
-                                        type="date"
-                                        value={entry.dueDate || "2026-09-25"}
-                                        onChange={(e) => {
-                                          const newDate = e.target.value;
-                                          setPreLoggedEntries((prev) =>
-                                            prev.map((it) =>
-                                              it.id === entry.id
-                                                ? { ...it, dueDate: newDate }
-                                                : it
-                                            )
-                                          );
-                                        }}
-                                        className="bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-2 py-1 text-xs font-bold outline-none"
-                                      />
-                                    )}
-                                  </div>
-                                )}
-
-                                <div className="flex items-center gap-2 shrink-0">
-                                  {isEditing ? (
-                                    <div className="flex items-center gap-1.5">
-                                      <input
-                                        type="number"
-                                        step="0.01"
-                                        value={editingRowVal}
-                                        onChange={(e) => setEditingRowVal(e.target.value)}
-                                        className="w-24 bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-2 py-1 text-right text-xs font-extrabold outline-none"
-                                        autoFocus
-                                      />
-                                      <button
-                                        type="button"
-                                        onClick={() => handleSaveInlineEdit(entry.id)}
-                                        className="rounded-lg bg-jct-turquoise text-jct-charcoal font-bold px-2 py-1 text-[10px]"
-                                      >
-                                        Save
-                                      </button>
-                                    </div>
-                                  ) : (
-                                    <>
-                                      <span className="font-display text-xs font-extrabold text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap">
-                                        -SAR {fmt(entry.amount)}
-                                      </span>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleOpenEditEntryModal(entry)}
-                                        className="rounded bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-2 py-0.5 text-[10px]"
-                                      >
-                                        ✏️ Edit
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleRemoveEntry(entry.id)}
-                                        className="rounded border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-600 dark:text-rose-400 transition"
-                                        title="Delete expense"
-                                      >
-                                        🗑️ Delete
-                                      </button>
-                                    </>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-
-                        {/* [+ Add Missing Expense] Row at Bottom */}
-                        <form onSubmit={handleAddMissingExpense} className="flex flex-wrap items-center gap-2 pt-1">
-                          <select
-                            value={missingExpenseCat}
-                            onChange={(e) =>
-                              setMissingExpenseCat(e.target.value as StrictExpenseCategory)
-                            }
-                            className="bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-3 py-2 text-xs font-bold outline-none"
-                          >
-                            {STRICT_EXPENSE_CATEGORIES.map((c) => (
-                              <option key={c} value={c} className="bg-white dark:bg-[#0A0A0A]">
-                                {c}
-                              </option>
-                            ))}
-                          </select>
-                          <select
-                            value={missingExpenseMode}
-                            onChange={(e) => setMissingExpenseMode(e.target.value as UniversalPaymentMode)}
-                            required
-                            className="bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-2.5 py-2 text-xs font-bold outline-none"
-                          >
-                            {UNIVERSAL_PAYMENT_MODES.map((pm) => (
-                              <option key={pm.value} value={pm.value} className="bg-white dark:bg-[#0A0A0A]">
-                                {pm.badge} · {pm.label}
-                              </option>
-                            ))}
-                          </select>
-                          <input
-                            type="text"
-                            value={missingExpenseSupplier}
-                            onChange={(e) => setMissingExpenseSupplier(e.target.value)}
-                            placeholder={
-                              missingExpenseCat === "Credit Purchase" ||
-                              missingExpenseCat === "Cash Purchase" ||
-                              missingExpenseCat === "Bank Purchase"
-                                ? "Supplier Name (e.g. Jotun)..."
-                                : "Note / Details..."
-                            }
-                            className="flex-1 min-w-[140px] bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-3.5 py-2 text-xs font-semibold placeholder:text-slate-400 outline-none"
-                          />
-                          {missingExpenseCat === "Credit Purchase" && (
-                            <input
-                              type="date"
-                              value={missingExpenseDueDate}
-                              onChange={(e) => setMissingExpenseDueDate(e.target.value)}
-                              className="bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-2.5 py-2 text-xs font-bold outline-none"
-                            />
+                              expandedAuditBox === "EXPENSES" ? "NONE" : "EXPENSES"
+                            )
+                          }
+                          className="flex items-center gap-1.5 rounded-lg bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-3 py-1.5 text-xs transition-all print:hidden"
+                        >
+                          {expandedAuditBox === "EXPENSES" ? (
+                            <>
+                              <Minimize2 size={13} />
+                              <span>⤡ Collapse</span>
+                            </>
+                          ) : (
+                            <>
+                              <Maximize2 size={13} />
+                              <span>⤢ Expand</span>
+                            </>
                           )}
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={missingExpenseAmt}
-                            onChange={(e) => setMissingExpenseAmt(e.target.value)}
-                            placeholder="SAR"
-                            className="w-24 bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-3 py-2 text-xs font-bold placeholder:text-slate-400 outline-none"
-                          />
-                          <button
-                            type="submit"
-                            className="bg-jct-turquoise text-jct-charcoal font-bold hover:brightness-95 transition-all shadow-sm rounded-lg px-3.5 py-2 text-xs whitespace-nowrap"
-                          >
-                            + Add Expense
-                          </button>
-                        </form>
+                        </button>
                       </div>
-                    )}
+                    </div>
 
-                    {/* ══════════════════════════════════════════════════════
-                        BOX 3: Bank / POS Transfers (mada · SAB / mada · Al Rajhi / Visa-MC / Bank)
-                       ══════════════════════════════════════════════════════ */}
-                    {(expandedAuditBox === "NONE" || expandedAuditBox === "BANK_POS") && (
-                      <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 flex flex-col gap-4 transition-all duration-300 print:shadow-none print:border-slate-300 print:bg-white print:text-black">
-                        <div className="flex items-center justify-between gap-3 border-b border-slate-200 dark:border-[#1F1F1F] pb-3.5">
-                          <div>
-                            <h3 className="font-display text-lg font-extrabold text-jct-charcoal dark:text-jct-offwhite">
-                              Bank / POS Transfers ({bankSwipeInvoices.length})
-                            </h3>
-                            <p className="text-xs text-slate-500 dark:text-slate-400">
-                              {isOwner && bankSettlementMode === "NET"
-                                ? "Net bank settlement after SAMA mada / Credit Card MDR & 15% ZATCA VAT"
-                                : isOwner
-                                ? "100% gross face value reconciled · Expand to inspect MDR + 15% VAT breakdown"
-                                : "100% gross face value reconciled"}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-3 shrink-0">
-                            <div className="text-right">
-                              <span className="block font-display text-base font-extrabold text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap">
-                                {isOwner && bankSettlementMode === "NET" ? "Net: " : ""}SAR{" "}
-                                {fmt(activeBankSettlementTotal)}
+                    <div className="divide-y divide-slate-200 dark:divide-[#1F1F1F] rounded-xl border border-slate-200 dark:border-[#1F1F1F] bg-slate-50/50 dark:bg-black overflow-hidden print:border print:border-slate-300 print:rounded-none print:bg-white print:divide-slate-200">
+                      {expenseEntries.map((entry) => {
+                        const isEditing = editingRowId === entry.id;
+                        const pmBadge = formatPaymentModeBadge(entry.paymentMode);
+                        return (
+                          <div
+                            key={entry.id}
+                            className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 hover:bg-slate-100/70 dark:hover:bg-[#111111] transition print:flex print:justify-between print:py-2 print:border-b print:border-slate-200 print:text-sm print:text-black print:bg-white print:break-inside-avoid"
+                          >
+                            <div className="flex flex-wrap items-center gap-2 min-w-0 flex-1">
+                              <span className="rounded-full bg-jct-yellow text-jct-charcoal font-bold px-2.5 py-0.5 text-[10px] shrink-0 print:border print:border-black print:bg-white print:text-black print:w-24 print:rounded-none print:text-center print:font-bold">
+                                {entry.expenseCategory || "Food"}
                               </span>
-                              {isOwner && (
-                                <span className="block text-[10px] font-medium text-slate-500 dark:text-slate-400">
-                                  {bankSettlementMode === "NET"
-                                    ? `Gross: SAR ${fmt(bankSwipeGrossTotal)} · Fees: -SAR ${fmt(totalPosFees)}`
-                                    : `Est. MDR + VAT: -SAR ${fmt(totalPosFees)}`}
+                              <span
+                                className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold shrink-0 print:border-black print:text-black ${pmBadge.badgeClass}`}
+                              >
+                                {pmBadge.badge}
+                              </span>
+                              <span className="text-xs font-bold text-jct-charcoal dark:text-jct-offwhite truncate print:text-black print:text-sm">
+                                {entry.title}
+                              </span>
+                              {entry.dueDate && (
+                                <span className="rounded-full bg-jct-turquoise/25 border border-jct-turquoise/40 px-2.5 py-0.5 text-[10px] font-bold text-jct-charcoal dark:text-jct-offwhite shrink-0 print:border-black print:text-black">
+                                  Due: {entry.dueDate}
+                                </span>
+                              )}
+                              {entry.originalAmount !== undefined && (
+                                <span className="rounded-full bg-jct-yellow text-jct-charcoal font-bold px-2.5 py-0.5 text-[10px] shrink-0 print:hidden">
+                                  Orig: SAR {fmt(entry.originalAmount)}
                                 </span>
                               )}
                             </div>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setExpandedAuditBox(
-                                  expandedAuditBox === "BANK_POS" ? "NONE" : "BANK_POS"
-                                )
-                              }
-                              className="flex items-center gap-1.5 rounded-lg bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-3 py-1.5 text-xs transition-all print:hidden"
-                            >
-                              {expandedAuditBox === "BANK_POS" ? (
-                                <>
-                                  <Minimize2 size={13} />
-                                  <span>⤡ Collapse</span>
-                                </>
+
+                            {expandedAuditBox === "EXPENSES" && (
+                              <div className="flex items-center gap-2 print:hidden">
+                                <select
+                                  value={entry.expenseCategory || "Food"}
+                                  onChange={(e) => {
+                                    const newCat = e.target.value as StrictExpenseCategory;
+                                    setPreLoggedEntries((prev) =>
+                                      prev.map((it) =>
+                                        it.id === entry.id
+                                          ? { ...it, expenseCategory: newCat }
+                                          : it
+                                      )
+                                    );
+                                  }}
+                                  className="bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-2 py-1 text-xs font-bold outline-none"
+                                >
+                                  {STRICT_EXPENSE_CATEGORIES.map((c) => (
+                                    <option key={c} value={c} className="bg-white dark:bg-[#0A0A0A]">
+                                      {c}
+                                    </option>
+                                  ))}
+                                </select>
+                                {entry.expenseCategory === "Credit Purchase" && (
+                                  <input
+                                    type="date"
+                                    value={entry.dueDate || "2026-09-25"}
+                                    onChange={(e) => {
+                                      const newDate = e.target.value;
+                                      setPreLoggedEntries((prev) =>
+                                        prev.map((it) =>
+                                          it.id === entry.id
+                                            ? { ...it, dueDate: newDate }
+                                            : it
+                                        )
+                                      );
+                                    }}
+                                    className="bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-2 py-1 text-xs font-bold outline-none"
+                                  />
+                                )}
+                              </div>
+                            )}
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              {isEditing ? (
+                                <div className="flex items-center gap-1.5 print:hidden">
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    value={editingRowVal}
+                                    onChange={(e) => setEditingRowVal(e.target.value)}
+                                    className="w-24 bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-2 py-1 text-right text-xs font-extrabold outline-none"
+                                    autoFocus
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSaveInlineEdit(entry.id)}
+                                    className="rounded-lg bg-jct-turquoise text-jct-charcoal font-bold px-2 py-1 text-[10px]"
+                                  >
+                                    Save
+                                  </button>
+                                </div>
                               ) : (
                                 <>
-                                  <Maximize2 size={13} />
-                                  <span>⤢ Expand</span>
+                                  <span className="font-display text-xs font-extrabold text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap print:text-black print:text-sm print:font-bold">
+                                    -SAR {fmt(entry.amount)}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenEditEntryModal(entry)}
+                                    className="rounded bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-2 py-0.5 text-[10px] print:hidden"
+                                  >
+                                    ✏️ Edit
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveEntry(entry.id)}
+                                    className="rounded border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-600 dark:text-rose-400 transition print:hidden"
+                                    title="Delete expense"
+                                  >
+                                    🗑️ Delete
+                                  </button>
                                 </>
                               )}
-                            </button>
+                            </div>
                           </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* [+ Add Missing Expense] Row at Bottom */}
+                    <form onSubmit={handleAddMissingExpense} className="flex flex-wrap items-center gap-2 pt-1 print:hidden">
+                      <select
+                        value={missingExpenseCat}
+                        onChange={(e) =>
+                          setMissingExpenseCat(e.target.value as StrictExpenseCategory)
+                        }
+                        className="bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-3 py-2 text-xs font-bold outline-none"
+                      >
+                        {STRICT_EXPENSE_CATEGORIES.map((c) => (
+                          <option key={c} value={c} className="bg-white dark:bg-[#0A0A0A]">
+                            {c}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={missingExpenseMode}
+                        onChange={(e) => setMissingExpenseMode(e.target.value as UniversalPaymentMode)}
+                        required
+                        className="bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-2.5 py-2 text-xs font-bold outline-none"
+                      >
+                        {UNIVERSAL_PAYMENT_MODES.map((pm) => (
+                          <option key={pm.value} value={pm.value} className="bg-white dark:bg-[#0A0A0A]">
+                            {pm.badge} · {pm.label}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="text"
+                        value={missingExpenseSupplier}
+                        onChange={(e) => setMissingExpenseSupplier(e.target.value)}
+                        placeholder={
+                          missingExpenseCat === "Credit Purchase" ||
+                          missingExpenseCat === "Cash Purchase" ||
+                          missingExpenseCat === "Bank Purchase"
+                            ? "Supplier Name (e.g. Jotun)..."
+                            : "Note / Details..."
+                        }
+                        className="flex-1 min-w-[140px] bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-3.5 py-2 text-xs font-semibold placeholder:text-slate-400 outline-none"
+                      />
+                      {missingExpenseCat === "Credit Purchase" && (
+                        <input
+                          type="date"
+                          value={missingExpenseDueDate}
+                          onChange={(e) => setMissingExpenseDueDate(e.target.value)}
+                          className="bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-2.5 py-2 text-xs font-bold outline-none"
+                        />
+                      )}
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={missingExpenseAmt}
+                        onChange={(e) => setMissingExpenseAmt(e.target.value)}
+                        placeholder="SAR"
+                        className="w-24 bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-3 py-2 text-xs font-bold placeholder:text-slate-400 outline-none"
+                      />
+                      <button
+                        type="submit"
+                        className="bg-jct-turquoise text-jct-charcoal font-bold hover:brightness-95 transition-all shadow-sm rounded-lg px-3.5 py-2 text-xs whitespace-nowrap"
+                      >
+                        + Add Expense
+                      </button>
+                    </form>
+                  </div>
+                )}
+
+                {/* ══════════════════════════════════════════════════════
+                    BOX 3: Bank / POS Transfers (mada · SAB / mada · Al Rajhi / Visa-MC / Bank)
+                   ══════════════════════════════════════════════════════ */}
+                {(expandedAuditBox === "NONE" || expandedAuditBox === "BANK_POS") && (
+                  <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 flex flex-col gap-4 transition-all duration-300 print:shadow-none print:border-none print:p-0 print:bg-white print:text-black print:break-before-page">
+                    <div className="flex items-center justify-between gap-3 border-b border-slate-200 dark:border-[#1F1F1F] pb-3.5 print:border-none print:pb-0">
+                      <div className="w-full">
+                        <h3 className="font-display text-lg font-extrabold text-jct-charcoal dark:text-jct-offwhite print:text-xl print:font-extrabold print:tracking-tight print:mt-10 print:mb-4 print:border-b print:border-slate-300 print:pb-2 print:text-black">
+                          Bank &amp; Card Swipes
+                        </h3>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 print:hidden">
+                          {isOwner && bankSettlementMode === "NET"
+                            ? "Net bank settlement after SAMA mada / Credit Card MDR & 15% ZATCA VAT"
+                            : isOwner
+                            ? "100% gross face value reconciled · Expand to inspect MDR + 15% VAT breakdown"
+                            : "100% gross face value reconciled"}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0 print:hidden">
+                        <div className="text-right">
+                          <span className="block font-display text-base font-extrabold text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap">
+                            {isOwner && bankSettlementMode === "NET" ? "Net: " : ""}SAR{" "}
+                            {fmt(activeBankSettlementTotal)}
+                          </span>
+                          {isOwner && (
+                            <span className="block text-[10px] font-medium text-slate-500 dark:text-slate-400">
+                              {bankSettlementMode === "NET"
+                                ? `Gross: SAR ${fmt(bankSwipeGrossTotal)} · Fees: -SAR ${fmt(totalPosFees)}`
+                                : `Est. MDR + VAT: -SAR ${fmt(totalPosFees)}`}
+                            </span>
+                          )}
                         </div>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setExpandedAuditBox(
+                              expandedAuditBox === "BANK_POS" ? "NONE" : "BANK_POS"
+                            )
+                          }
+                          className="flex items-center gap-1.5 rounded-lg bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-3 py-1.5 text-xs transition-all print:hidden"
+                        >
+                          {expandedAuditBox === "BANK_POS" ? (
+                            <>
+                              <Minimize2 size={13} />
+                              <span>⤡ Collapse</span>
+                            </>
+                          ) : (
+                            <>
+                              <Maximize2 size={13} />
+                              <span>⤢ Expand</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
 
-                        <div className="divide-y divide-slate-200 dark:divide-[#1F1F1F] rounded-xl border border-slate-200 dark:border-[#1F1F1F] bg-slate-50/50 dark:bg-black overflow-hidden">
-                          {bankSwipeInvoices.map((inv) => {
-                            const isSplitRow = inv.paymentMode === "SPLIT";
-                            const bankGross = calcInvoiceBankGrossPortion(inv);
-                            const rowKey = isSplitRow
-                              ? `erp-bank-${inv.invoiceNo}`
-                              : `erp-${inv.invoiceNo}`;
-                            const isEditing = editingRowId === rowKey;
-                            const fb = calcInvoiceFeeBreakdown(inv);
-                            const activeTerm: PosTerminalBank = isSplitRow
-                              ? inv.splitPosTerminal || inv.posTerminal || "SAB"
-                              : inv.posTerminal || "SAB";
-                            const termMeta = POS_TERMINAL_META[activeTerm];
-                            const isBankTransferRow = isSplitRow
-                              ? inv.splitBankMethod === "BANK_TRANSFER"
-                              : inv.paymentMode === "BANK_TRANSFER";
-                            const showExpandedFeeBreakdown =
-                              isOwner && (
-                                expandedAuditBox === "BANK_POS" ||
-                                bankSettlementMode === "NET" ||
-                                trackPosFees
-                              );
+                    <div className="divide-y divide-slate-200 dark:divide-[#1F1F1F] rounded-xl border border-slate-200 dark:border-[#1F1F1F] bg-slate-50/50 dark:bg-black overflow-hidden print:border print:border-slate-300 print:rounded-none print:bg-white print:divide-slate-200">
+                      {bankSwipeInvoices.map((inv) => {
+                        const isSplitRow = inv.paymentMode === "SPLIT";
+                        const bankGross = calcInvoiceBankGrossPortion(inv);
+                        const rowKey = isSplitRow
+                          ? `erp-bank-${inv.invoiceNo}`
+                          : `erp-${inv.invoiceNo}`;
+                        const isEditing = editingRowId === rowKey;
+                        const fb = calcInvoiceFeeBreakdown(inv);
+                        const activeTerm: PosTerminalBank = isSplitRow
+                          ? inv.splitPosTerminal || inv.posTerminal || "SAB"
+                          : inv.posTerminal || "SAB";
+                        const termMeta = POS_TERMINAL_META[activeTerm];
+                        const isBankTransferRow = isSplitRow
+                          ? inv.splitBankMethod === "BANK_TRANSFER"
+                          : inv.paymentMode === "BANK_TRANSFER";
+                        const showExpandedFeeBreakdown =
+                          isOwner && (
+                            expandedAuditBox === "BANK_POS" ||
+                            bankSettlementMode === "NET" ||
+                            trackPosFees
+                          );
 
-                            return (
-                              <div
-                                key={`bank-${inv.invoiceNo}`}
-                                className="flex flex-col gap-2 px-4 py-3 hover:bg-slate-100/70 dark:hover:bg-[#111111] transition"
-                              >
-                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                                  <div className="flex flex-wrap items-center gap-2.5 min-w-0 flex-1">
-                                    <span className="font-mono text-xs font-extrabold text-slate-500 dark:text-slate-400 w-14 shrink-0">
-                                      #{inv.invoiceNo}
-                                    </span>
-                                    <span className="text-xs font-semibold text-jct-charcoal dark:text-jct-offwhite truncate">
-                                      {inv.customer}
-                                    </span>
+                        return (
+                          <div
+                            key={`bank-${inv.invoiceNo}`}
+                            className="flex flex-col gap-2 px-4 py-3 hover:bg-slate-100/70 dark:hover:bg-[#111111] transition print:flex print:flex-row print:justify-between print:py-2 print:border-b print:border-slate-200 print:text-sm print:text-black print:bg-white print:break-inside-avoid"
+                          >
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 print:flex print:flex-row print:justify-between print:items-center print:w-full">
+                              <div className="flex flex-wrap items-center gap-2.5 min-w-0 flex-1">
+                                <span className="font-mono text-xs font-extrabold text-slate-500 dark:text-slate-400 w-14 shrink-0 print:text-black print:font-bold print:w-20">
+                                  #{inv.invoiceNo}
+                                </span>
+                                <span className="text-xs font-semibold text-jct-charcoal dark:text-jct-offwhite truncate print:text-black print:text-sm">
+                                  {inv.customer}
+                                </span>
 
-                                    {/* Card Type Tag: [mada · SAB], [mada · Al Rajhi], [💳 Visa / MC], or [Bank Transfer] */}
-                                    <span
-                                      className={`rounded px-2 py-0.5 font-mono text-[10px] font-bold shrink-0 ${
-                                        isBankTransferRow
-                                          ? "bg-jct-turquoise/25 border border-jct-turquoise/40 text-jct-charcoal dark:text-jct-offwhite"
-                                          : "bg-jct-yellow text-jct-charcoal"
-                                      }`}
-                                    >
-                                      [
-                                      {isBankTransferRow
-                                        ? "Bank Transfer"
-                                        : termMeta.badgeTag}
-                                      ]
-                                    </span>
+                                {/* Card Type Tag: [mada · SAB], [mada · Al Rajhi], [💳 Visa / MC], or [Bank Transfer] */}
+                                <span
+                                  className={`rounded px-2 py-0.5 font-mono text-[10px] font-bold shrink-0 print:border print:border-black print:bg-white print:text-black ${
+                                    isBankTransferRow
+                                      ? "bg-jct-turquoise/25 border border-jct-turquoise/40 text-jct-charcoal dark:text-jct-offwhite"
+                                      : "bg-jct-yellow text-jct-charcoal"
+                                  }`}
+                                >
+                                  [
+                                  {isBankTransferRow
+                                    ? "Bank Transfer"
+                                    : termMeta.badgeTag}
+                                  ]
+                                </span>
 
-                                    {isSplitRow && (
-                                      <span className="rounded bg-jct-turquoise/25 border border-jct-turquoise/40 px-2 py-0.5 text-[10px] font-extrabold text-jct-charcoal dark:text-jct-offwhite shrink-0">
-                                        Split Card Share: SAR {fmt(bankGross)}
-                                      </span>
-                                    )}
-                                    {inv.originalAmount !== undefined && (
-                                      <span className="rounded bg-jct-yellow text-jct-charcoal font-bold px-1.5 py-0.5 text-[10px] shrink-0">
-                                        Orig: SAR {fmt(inv.originalAmount)}
-                                      </span>
-                                    )}
-                                  </div>
+                                {isSplitRow && (
+                                  <span className="rounded bg-jct-turquoise/25 border border-jct-turquoise/40 px-2 py-0.5 text-[10px] font-extrabold text-jct-charcoal dark:text-jct-offwhite shrink-0 print:border-black print:text-black">
+                                    Split Card Share: SAR {fmt(bankGross)}
+                                  </span>
+                                )}
+                                {inv.originalAmount !== undefined && (
+                                  <span className="rounded bg-jct-yellow text-jct-charcoal font-bold px-1.5 py-0.5 text-[10px] shrink-0 print:hidden">
+                                    Orig: SAR {fmt(inv.originalAmount)}
+                                  </span>
+                                )}
+                              </div>
 
-                                  {/* Terminal Switcher Pill (mada · SAB, mada · Al Rajhi, 💳 Visa / MC, Bank) */}
-                                  <div className="flex flex-wrap items-center gap-2 shrink-0">
-                                    <div className="inline-flex flex-wrap rounded-lg bg-white dark:bg-[#0A0A0A] p-0.5 border border-slate-200 dark:border-[#1F1F1F] gap-0.5">
-                                      {(["SAB", "AL_RAJHI", "VISA_MC"] as PosTerminalBank[]).map(
-                                        (term) => (
-                                          <button
-                                            key={term}
-                                            type="button"
-                                            onClick={() =>
-                                              isSplitRow
-                                                ? handleSetInvoiceSplitMethod(
-                                                    inv.invoiceNo,
-                                                    "POS_SWIPE",
-                                                    term
-                                                  )
-                                                : handleSetInvoiceTerminal(inv.invoiceNo, term)
-                                            }
-                                            className={`rounded px-2 py-0.5 text-[10px] font-bold transition ${
-                                              (isSplitRow
-                                                ? inv.splitBankMethod === "POS_SWIPE" &&
-                                                  activeTerm === term
-                                                : inv.paymentMode === "POS_SWIPE" &&
-                                                  inv.posTerminal === term)
-                                                ? "bg-jct-turquoise text-jct-charcoal"
-                                                : "text-slate-500 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-jct-offwhite"
-                                            }`}
-                                          >
-                                            {POS_TERMINAL_META[term].badgeTag}
-                                          </button>
-                                        )
-                                      )}
+                              {/* Terminal Switcher Pill (mada · SAB, mada · Al Rajhi, 💳 Visa / MC, Bank) */}
+                              <div className="flex flex-wrap items-center gap-2 shrink-0 print:hidden">
+                                <div className="inline-flex flex-wrap rounded-lg bg-white dark:bg-[#0A0A0A] p-0.5 border border-slate-200 dark:border-[#1F1F1F] gap-0.5">
+                                  {(["SAB", "AL_RAJHI", "VISA_MC"] as PosTerminalBank[]).map(
+                                    (term) => (
                                       <button
+                                        key={term}
                                         type="button"
                                         onClick={() =>
                                           isSplitRow
                                             ? handleSetInvoiceSplitMethod(
                                                 inv.invoiceNo,
-                                                "BANK_TRANSFER"
+                                                "POS_SWIPE",
+                                                term
                                               )
-                                            : handleSetInvoiceMode(inv.invoiceNo, "BANK_TRANSFER")
+                                            : handleSetInvoiceTerminal(inv.invoiceNo, term)
                                         }
                                         className={`rounded px-2 py-0.5 text-[10px] font-bold transition ${
-                                          isBankTransferRow
+                                          (isSplitRow
+                                            ? inv.splitBankMethod === "POS_SWIPE" &&
+                                              activeTerm === term
+                                            : inv.paymentMode === "POS_SWIPE" &&
+                                              inv.posTerminal === term)
                                             ? "bg-jct-turquoise text-jct-charcoal"
                                             : "text-slate-500 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-jct-offwhite"
                                         }`}
                                       >
-                                        Bank
+                                        {POS_TERMINAL_META[term].badgeTag}
                                       </button>
-                                    </div>
-
-                                    {isEditing ? (
-                                      <div className="flex items-center gap-1.5">
-                                        <input
-                                          type="number"
-                                          step="0.01"
-                                          value={editingRowVal}
-                                          onChange={(e) => setEditingRowVal(e.target.value)}
-                                          className="w-24 bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-2 py-1 text-right text-xs font-extrabold outline-none"
-                                          autoFocus
-                                        />
-                                        <button
-                                          type="button"
-                                          onClick={() => handleSaveInlineEdit(rowKey)}
-                                          className="rounded-lg bg-jct-turquoise text-jct-charcoal font-bold px-2 py-1 text-[10px]"
-                                        >
-                                          Save
-                                        </button>
-                                      </div>
-                                    ) : (
-                                      <>
-                                        <div className="text-right">
-                                          <span className="block font-display text-xs font-extrabold text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap">
-                                            SAR{" "}
-                                            {fmt(
-                                              bankSettlementMode === "NET" ? fb.net : bankGross
-                                            )}
-                                          </span>
-                                        </div>
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setEditingRowId(rowKey);
-                                            setEditingRowVal(String(bankGross));
-                                          }}
-                                          className="rounded bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-2 py-0.5 text-[10px]"
-                                        >
-                                          Edit
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => handleRemoveErpInvoice(inv.invoiceNo)}
-                                          className="text-slate-400 hover:text-rose-500 text-xs font-bold px-1"
-                                          title="Remove invoice"
-                                        >
-                                          ×
-                                        </button>
-                                      </>
-                                    )}
-                                  </div>
+                                    )
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      isSplitRow
+                                        ? handleSetInvoiceSplitMethod(
+                                            inv.invoiceNo,
+                                            "BANK_TRANSFER"
+                                          )
+                                        : handleSetInvoiceMode(inv.invoiceNo, "BANK_TRANSFER")
+                                    }
+                                    className={`rounded px-2 py-0.5 text-[10px] font-bold transition ${
+                                      isBankTransferRow
+                                        ? "bg-jct-turquoise text-jct-charcoal"
+                                        : "text-slate-500 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-jct-offwhite"
+                                    }`}
+                                  >
+                                    Bank
+                                  </button>
                                 </div>
 
-                                {/* Detailed SAMA & ZATCA Fee Breakdown when Audit Details are Expanded */}
-                                {showExpandedFeeBreakdown && (
-                                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 dark:border-[#1F1F1F] bg-slate-50 dark:bg-[#111111] px-3 py-1.5 font-mono text-[11px] text-slate-600 dark:text-slate-300">
-                                    <span className="text-slate-500 dark:text-slate-400">
-                                      {isBankTransferRow
-                                        ? "0% Direct Bank Transfer"
-                                        : `${termMeta.label} (${termMeta.feePctLabel})`}
-                                    </span>
-                                    <span>
-                                      Gross: <strong className="text-jct-charcoal dark:text-jct-offwhite">SAR {fmt(fb.gross)}</strong>{" "}
-                                      | MDR: <strong className="text-rose-500">-SAR {fmt(fb.mdrBase)}</strong>{" "}
-                                      | 15% VAT:{" "}
-                                      <strong className="text-rose-500">-SAR {fmt(fb.vatOnFee)}</strong>{" "}
-                                      | Net: <strong className="text-jct-charcoal dark:text-jct-offwhite">SAR {fmt(fb.net)}</strong>
-                                    </span>
+                                {isEditing ? (
+                                  <div className="flex items-center gap-1.5">
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      value={editingRowVal}
+                                      onChange={(e) => setEditingRowVal(e.target.value)}
+                                      className="w-24 bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-2 py-1 text-right text-xs font-extrabold outline-none"
+                                      autoFocus
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSaveInlineEdit(rowKey)}
+                                      className="rounded-lg bg-jct-turquoise text-jct-charcoal font-bold px-2 py-1 text-[10px]"
+                                    >
+                                      Save
+                                    </button>
                                   </div>
+                                ) : (
+                                  <>
+                                    <div className="text-right">
+                                      <span className="block font-display text-xs font-extrabold text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap">
+                                        SAR{" "}
+                                        {fmt(
+                                          bankSettlementMode === "NET" ? fb.net : bankGross
+                                        )}
+                                      </span>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingRowId(rowKey);
+                                        setEditingRowVal(String(bankGross));
+                                      }}
+                                      className="rounded bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-2 py-0.5 text-[10px]"
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveErpInvoice(inv.invoiceNo)}
+                                      className="text-slate-400 hover:text-rose-500 text-xs font-bold px-1"
+                                      title="Remove invoice"
+                                    >
+                                      ×
+                                    </button>
+                                  </>
                                 )}
                               </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
+
+                              {/* Print-only Amount */}
+                              <div className="hidden print:block text-right">
+                                <span className="font-display text-xs font-extrabold text-black whitespace-nowrap print:text-sm print:font-bold">
+                                  SAR {fmt(bankSettlementMode === "NET" ? fb.net : bankGross)}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Detailed SAMA & ZATCA Fee Breakdown when Audit Details are Expanded */}
+                            {showExpandedFeeBreakdown && (
+                              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 dark:border-[#1F1F1F] bg-slate-50 dark:bg-[#111111] px-3 py-1.5 font-mono text-[11px] text-slate-600 dark:text-slate-300 print:hidden">
+                                <span className="text-slate-500 dark:text-slate-400">
+                                  {isBankTransferRow
+                                    ? "0% Direct Bank Transfer"
+                                    : `${termMeta.label} (${termMeta.feePctLabel})`}
+                                </span>
+                                <span>
+                                  Gross: <strong className="text-jct-charcoal dark:text-jct-offwhite">SAR {fmt(fb.gross)}</strong>{" "}
+                                  | MDR: <strong className="text-rose-500">-SAR {fmt(fb.mdrBase)}</strong>{" "}
+                                  | 15% VAT:{" "}
+                                  <strong className="text-rose-500">-SAR {fmt(fb.vatOnFee)}</strong>{" "}
+                                  | Net: <strong className="text-jct-charcoal dark:text-jct-offwhite">SAR {fmt(fb.net)}</strong>
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
               </div>
+            )}
+          </div>
 
-              {/* 4. Clean Footer Bar */}
+          {/* Print-Only Signature Footer at very bottom of document */}
+          <PrintReportFooter />
+
+          {/* 4. Clean Footer Bar */}
               <div className="sticky bottom-4 z-20 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 transition-all duration-300 print:hidden">
                 <div className="flex items-center gap-2.5 text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400">
                   <span className="inline-flex h-2 w-2 rounded-full bg-jct-turquoise" />
