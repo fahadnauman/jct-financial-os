@@ -67,6 +67,7 @@ export interface SupplierPayableBrand {
 
 export type UniversalPaymentMode =
   | "CASH"
+  | "CARD"
   | "SAB"
   | "AL_RAJHI"
   | "SNB"
@@ -81,18 +82,23 @@ export const UNIVERSAL_PAYMENT_MODES: {
   short: string;
 }[] = [
   { value: "CASH", label: "Cash", badge: "💵 Cash", short: "💵 Cash" },
+  { value: "CARD", label: "Card", badge: "💳 Card", short: "💳 Card" },
+  { value: "BANK_TRANSFER", label: "Bank Transfer", badge: "🏦 Bank Transfer", short: "🏦 Bank Transfer" },
   { value: "SAB", label: "SAB (Saudi Awwal Bank)", badge: "🏦 SAB", short: "🏦 SAB" },
   { value: "AL_RAJHI", label: "Al Rajhi", badge: "🏦 Al Rajhi", short: "🏦 Al Rajhi" },
   { value: "SNB", label: "SNB", badge: "🏦 SNB", short: "🏦 SNB" },
   { value: "VISA", label: "VISA", badge: "💳 VISA", short: "💳 VISA" },
   { value: "MADA", label: "Mada", badge: "💳 Mada", short: "💳 Mada" },
-  { value: "BANK_TRANSFER", label: "Bank Transfer", badge: "🏦 Bank Transfer", short: "🏦 Bank Transfer" },
 ];
 
 export const formatPaymentModeBadge = (
   mode?: string | null
 ): { badge: string; badgeClass: string; label: string; cls: string } => {
   const m = (mode || "CASH").toUpperCase();
+  if (m === "CARD" || m.includes("CARD") || m.includes("SWIPE")) {
+    const cls = "rounded-full font-bold px-3 py-1 bg-jct-turquoise/20 text-jct-charcoal dark:text-jct-turquoise border border-jct-turquoise/40";
+    return { badge: "💳 Card", badgeClass: cls, label: "💳 Card", cls };
+  }
   if (m.includes("SAB")) {
     const cls = "rounded-full font-bold px-3 py-1 bg-jct-turquoise/20 text-jct-charcoal dark:text-jct-turquoise border border-jct-turquoise/40";
     return { badge: "🏦 SAB", badgeClass: cls, label: "🏦 SAB", cls };
@@ -391,7 +397,7 @@ export type InvoicePaymentMode =
   | "OTHER_RECD"
   | "CREDIT_SALE"
   | "Cash";
-export type PosTerminalBank = "SAB" | "AL_RAJHI" | "VISA_MC";
+export type PosTerminalBank = "SAB" | "AL_RAJHI" | "SNB" | "VISA_MC";
 
 export const STRICT_EXPENSE_CATEGORIES = [
   "Food",
@@ -437,6 +443,15 @@ export const POS_TERMINAL_META: Record<
     samaCap: 40,
     isMada: true,
   },
+  SNB: {
+    label: "mada · SNB",
+    shortLabel: "mada · SNB",
+    badgeTag: "mada · SNB",
+    feeRate: 0.008,
+    feePctLabel: "0.80% fee, SAMA cap SAR 40",
+    samaCap: 40,
+    isMada: true,
+  },
   VISA_MC: {
     label: "Visa / Mastercard",
     shortLabel: "Visa / Mastercard",
@@ -453,11 +468,13 @@ export interface PreLoggedBankInvoice {
   amount?: number;
   paymentMode: "BANK_TRANSFER" | "POS_SWIPE";
   posTerminal?: PosTerminalBank;
+  cardNetwork?: "mada" | "visa";
   time: string;
 }
 
 export interface PreLoggedEntry {
   id: string;
+  invoiceNumber?: string;
   type: PreLoggedEntryType;
   title: string;
   expenseCategory?: StrictExpenseCategory;
@@ -469,6 +486,8 @@ export interface PreLoggedEntry {
   staffId?: string;
   staffName?: string;
   paymentMode?: string;
+  terminal?: "SAB" | "AL_RAJHI" | "SNB";
+  network?: "mada" | "visa";
   note?: string;
   amount: number;
   originalAmount?: number;
@@ -497,7 +516,10 @@ export interface ErpInvoiceItem {
   overrideNote?: string;
   paymentMode: InvoicePaymentMode;
   posTerminal: PosTerminalBank;
-  posTerminalDevice?: "SAB" | "AL_RAJHI";
+  posTerminalDevice?: "SAB" | "AL_RAJHI" | "SNB";
+  terminal?: "SAB" | "AL_RAJHI" | "SNB";
+  cardNetwork?: "mada" | "visa";
+  network?: "mada" | "visa";
   bankPaymentMode?: string;
   isSplit?: boolean;
   splitCashAmount: number;
@@ -1056,13 +1078,13 @@ function buildClassicDataSheetRows(
         amtCashSale = inv.splitCashAmount || null;
         const bAmt = inv.splitBankAmount || 0;
         toBankAmt = bAmt;
-        toBank = `Split ${inv.splitBankMethod === "BANK_TRANSFER" ? "Bank" : "Swipe"} - SAR ${fmt(bAmt)}`;
+        toBank = `Split ${inv.splitBankMethod === "BANK_TRANSFER" ? "Bank" : "Card"} - SAR ${fmt(bAmt)}`;
       } else if (inv.paymentMode === "BANK_TRANSFER") {
         toBankAmt = inv.amount;
         toBank = `Bank #${inv.invoiceNo} - SAR ${fmt(inv.amount)}`;
       } else if (inv.paymentMode === "POS_SWIPE") {
         toBankAmt = inv.amount;
-        toBank = `Swipe #${inv.invoiceNo} - SAR ${fmt(inv.amount)}`;
+        toBank = `Card #${inv.invoiceNo} - SAR ${fmt(inv.amount)}`;
       }
     } else if (sRow) {
       invoiceNo = sRow.invoiceNo || "";
@@ -1467,12 +1489,15 @@ export interface PosFeeBreakdown {
 
 export const calcAmountPosFeeBreakdown = (
   amount: number,
-  terminal: PosTerminalBank
+  terminal: PosTerminalBank = "SAB",
+  network?: "mada" | "visa"
 ): PosFeeBreakdown => {
   const gross = r2(Math.max(0, amount));
-  const meta = POS_TERMINAL_META[terminal || "SAB"];
-  const rawMdr = gross * meta.feeRate;
-  const mdrBase = r2(meta.samaCap !== undefined ? Math.min(rawMdr, meta.samaCap) : rawMdr);
+  const isVisa = network === "visa" || terminal === "VISA_MC";
+  const feeRate = isVisa ? 0.022 : 0.008;
+  const samaCap = isVisa ? undefined : 40;
+  const rawMdr = gross * feeRate;
+  const mdrBase = r2(samaCap !== undefined ? Math.min(rawMdr, samaCap) : rawMdr);
   const vatOnFee = r2(mdrBase * 0.15);
   const totalFee = r2(mdrBase + vatOnFee);
   const net = r2(gross - totalFee);
@@ -1482,7 +1507,7 @@ export const calcAmountPosFeeBreakdown = (
     vatOnFee,
     totalFee,
     net,
-    isMada: meta.isMada,
+    isMada: !isVisa,
   };
 };
 
@@ -1510,18 +1535,22 @@ export const calcInvoiceBankGrossPortion = (inv: ErpInvoiceItem): number => {
 };
 
 export const calcInvoiceFeeBreakdown = (inv: ErpInvoiceItem): PosFeeBreakdown => {
+  const term = (inv.posTerminalDevice || inv.terminal || (inv.posTerminal === "VISA_MC" ? "SAB" : inv.posTerminal) || "SAB") as PosTerminalBank;
+  const netw: "mada" | "visa" = inv.cardNetwork || inv.network || (inv.posTerminal === "VISA_MC" ? "visa" : "mada");
+
   if (inv.paymentMode === "CREDIT_SALE" && inv.creditDownMethod === "POS_SWIPE") {
     return calcAmountPosFeeBreakdown(
       inv.creditDownAmount || 0,
-      inv.creditDownTerminal || inv.posTerminal || "SAB"
+      inv.creditDownTerminal || term,
+      netw
     );
   }
   if (inv.paymentMode === "POS_SWIPE") {
-    return calcAmountPosFeeBreakdown(inv.amount, inv.posTerminal || "SAB");
+    return calcAmountPosFeeBreakdown(inv.amount, term, netw);
   }
   if (inv.paymentMode === "SPLIT" && inv.splitBankMethod === "POS_SWIPE") {
-    const term = inv.splitPosTerminal || inv.posTerminal || "SAB";
-    return calcAmountPosFeeBreakdown(inv.splitBankAmount || 0, term);
+    const sTerm = inv.splitPosTerminal || term;
+    return calcAmountPosFeeBreakdown(inv.splitBankAmount || 0, sTerm, netw);
   }
   const gross = calcInvoiceBankGrossPortion(inv);
   return {
@@ -1532,6 +1561,23 @@ export const calcInvoiceFeeBreakdown = (inv: ErpInvoiceItem): PosFeeBreakdown =>
     net: gross,
     isMada: false,
   };
+};
+
+export const calcEntryPosFeeBreakdown = (entry: PreLoggedEntry): PosFeeBreakdown => {
+  const isCard =
+    entry.paymentMode === "CARD" ||
+    entry.paymentMode === "POS_SWIPE" ||
+    entry.paymentMode === "VISA" ||
+    entry.paymentMode === "MADA" ||
+    entry.terminal !== undefined ||
+    entry.network !== undefined;
+  if (!isCard) {
+    const gross = r2(Math.max(0, entry.amount));
+    return { gross, mdrBase: 0, vatOnFee: 0, totalFee: 0, net: gross, isMada: false };
+  }
+  const term = (entry.terminal || "SAB") as PosTerminalBank;
+  const netw: "mada" | "visa" = entry.network || (entry.paymentMode === "VISA" ? "visa" : "mada");
+  return calcAmountPosFeeBreakdown(entry.amount, term, netw);
 };
 
 export const calcInvoicePosFee = (inv: ErpInvoiceItem): number => {
@@ -1609,7 +1655,7 @@ export const parseErpCsvText = (
     } else {
       const mode: InvoicePaymentMode = rawType.includes("TRANSFER")
         ? "BANK_TRANSFER"
-        : rawType.includes("SWIPE") || rawType.includes("POS")
+        : rawType.includes("CARD") || rawType.includes("SWIPE") || rawType.includes("POS")
         ? "POS_SWIPE"
         : rawType.includes("CREDIT")
         ? "CREDIT_SALE"
@@ -1758,7 +1804,7 @@ function CreditSaleModal({
                 >
                   Cash
                 </button>
-                {(["SAB", "AL_RAJHI", "VISA_MC"] as PosTerminalBank[]).map((term) => (
+                {(["SAB", "AL_RAJHI", "SNB", "VISA_MC"] as PosTerminalBank[]).map((term) => (
                   <button
                     key={term}
                     type="button"
@@ -1772,7 +1818,7 @@ function CreditSaleModal({
                         : "text-slate-500 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-jct-offwhite"
                     }`}
                   >
-                    Swipe: {POS_TERMINAL_META[term].badgeTag}
+                    Card: {POS_TERMINAL_META[term].badgeTag}
                   </button>
                 ))}
               </div>
@@ -1943,6 +1989,8 @@ function DailyRegisterView({
     "CREDIT_RECD" | "CREDIT_SALE" | "SPLIT_SALE" | "LOAN_IN" | "OTHER_IN"
   >("CREDIT_RECD");
   const [step3PaymentMode, setStep3PaymentMode] = useState<UniversalPaymentMode>("CASH");
+  const [step3Terminal, setStep3Terminal] = useState<"SAB" | "AL_RAJHI" | "SNB">("SAB");
+  const [step3Network, setStep3Network] = useState<"mada" | "visa">("mada");
   const [step3SplitEnabled, setStep3SplitEnabled] = useState(false);
   const [step3Title, setStep3Title] = useState("");
   const [step3FollowUpDate, setStep3FollowUpDate] = useState("2026-09-20");
@@ -1953,11 +2001,14 @@ function DailyRegisterView({
   const [step3SplitMethod, setStep3SplitMethod] = useState<"POS_SWIPE" | "BANK_TRANSFER">(
     "POS_SWIPE"
   );
-  const [step3SplitTerminal, setStep3SplitTerminal] = useState<PosTerminalBank>("SAB");
+  const [step3SplitTerminal, setStep3SplitTerminal] = useState<"SAB" | "AL_RAJHI" | "SNB">("SAB");
+  const [step3SplitNetwork, setStep3SplitNetwork] = useState<"mada" | "visa">("mada");
 
   // Step 4 (Expenses & Purchases — Strict 7 Categories) State
   const [step4Category, setStep4Category] = useState<StrictExpenseCategory>("Food");
   const [step4PaymentMode, setStep4PaymentMode] = useState<UniversalPaymentMode>("CASH");
+  const [step4Terminal, setStep4Terminal] = useState<"SAB" | "AL_RAJHI" | "SNB">("SAB");
+  const [step4Network, setStep4Network] = useState<"mada" | "visa">("mada");
   const [step4SupplierName, setStep4SupplierName] = useState("Jotun");
   const [step4DueDate, setStep4DueDate] = useState("2026-09-25");
   const [step4Note, setStep4Note] = useState("");
@@ -1974,14 +2025,21 @@ function DailyRegisterView({
   const [editModalAmount, setEditModalAmount] = useState("");
   const [editModalPaymentMode, setEditModalPaymentMode] = useState<string>("CASH");
   const [editModalCategory, setEditModalCategory] = useState<StrictExpenseCategory>("Food");
+  const [editModalTerminal, setEditModalTerminal] = useState<"SAB" | "AL_RAJHI" | "SNB">("SAB");
+  const [editModalNetwork, setEditModalNetwork] = useState<"mada" | "visa">("mada");
+  const [missingInflowInvNo, setMissingInflowInvNo] = useState("");
   const [missingInflowTitle, setMissingInflowTitle] = useState("");
   const [missingInflowAmt, setMissingInflowAmt] = useState("");
   const [missingInflowMode, setMissingInflowMode] = useState<UniversalPaymentMode>("CASH");
+  const [missingInflowTerminal, setMissingInflowTerminal] = useState<"SAB" | "AL_RAJHI" | "SNB">("SAB");
+  const [missingInflowNetwork, setMissingInflowNetwork] = useState<"mada" | "visa">("mada");
   const [missingExpenseCat, setMissingExpenseCat] = useState<StrictExpenseCategory>("Food");
   const [missingExpenseSupplier, setMissingExpenseSupplier] = useState("");
   const [missingExpenseDueDate, setMissingExpenseDueDate] = useState("2026-09-25");
   const [missingExpenseAmt, setMissingExpenseAmt] = useState("");
   const [missingExpenseMode, setMissingExpenseMode] = useState<UniversalPaymentMode>("CASH");
+  const [missingExpenseTerminal, setMissingExpenseTerminal] = useState<"SAB" | "AL_RAJHI" | "SNB">("SAB");
+  const [missingExpenseNetwork, setMissingExpenseNetwork] = useState<"mada" | "visa">("mada");
 
   // Classic Digital Data Sheet State (15 Pre-Populated Rows matching client paper ledger)
   const [sheetRows, setSheetRows] = useState<DataSheetRow[]>(INITIAL_DATASHEET_ROWS);
@@ -2212,12 +2270,19 @@ function DailyRegisterView({
         ? matchedInfo.paymentMode
         : "CASH";
 
+      const matchedTerm = (matchedInfo?.posTerminal === "AL_RAJHI" ? "AL_RAJHI" : matchedInfo?.posTerminal === "SNB" ? "SNB" : "SAB") as "SAB" | "AL_RAJHI" | "SNB";
+      const matchedNet = matchedInfo?.cardNetwork || (matchedInfo?.posTerminal === "VISA_MC" ? "visa" : "mada");
+
       return {
         ...inv,
         originalAmount: inv.amount,
         isEdited: false,
         paymentMode: resolvedMode,
         posTerminal: matchedInfo?.posTerminal || resolvedSplitTerm,
+        posTerminalDevice: matchedTerm,
+        terminal: matchedTerm,
+        cardNetwork: matchedNet,
+        network: matchedNet,
         isSplit: resolvedMode === "SPLIT",
         splitCashAmount: resolvedCash,
         splitBankAmount: resolvedBank,
@@ -2250,7 +2315,9 @@ function DailyRegisterView({
       setStep3SplitCash(String(cashHalf));
       setStep3SplitCard(String(cardHalf));
       if (match.splitPosTerminal || match.posTerminal) {
-        setStep3SplitTerminal(match.splitPosTerminal || match.posTerminal);
+        const rawT = match.splitPosTerminal || match.posTerminal;
+        setStep3SplitTerminal(rawT === "AL_RAJHI" ? "AL_RAJHI" : rawT === "SNB" ? "SNB" : "SAB");
+        setStep3SplitNetwork(rawT === "VISA_MC" || match.cardNetwork === "visa" || match.network === "visa" ? "visa" : "mada");
       }
     }
   };
@@ -2563,17 +2630,20 @@ function DailyRegisterView({
 
   const handleSelectInvoicePosTerminal = (
     invoiceNo: string,
-    terminal: "SAB" | "AL_RAJHI"
+    terminal: "SAB" | "AL_RAJHI" | "SNB"
   ) => {
     setErpInvoices((prev) => {
       const base = prev.length > 0 ? prev : buildMatchedErpList();
       return base.map((inv) => {
         if (inv.invoiceNo !== invoiceNo) return inv;
-        const currentNetwork = inv.posTerminal === "VISA_MC" ? "visa" : "mada";
-        const nextTerminal = currentNetwork === "visa" ? "VISA_MC" : terminal;
+        const currentNetwork = inv.cardNetwork || inv.network || (inv.posTerminal === "VISA_MC" ? "visa" : "mada");
+        const nextTerminal: PosTerminalBank = currentNetwork === "visa" ? "VISA_MC" : terminal;
         return {
           ...inv,
           posTerminalDevice: terminal,
+          terminal: terminal,
+          cardNetwork: currentNetwork,
+          network: currentNetwork,
           posTerminal: nextTerminal,
           splitPosTerminal: nextTerminal,
         };
@@ -2590,11 +2660,14 @@ function DailyRegisterView({
       return base.map((inv) => {
         if (inv.invoiceNo !== invoiceNo) return inv;
         const currentDevice =
-          inv.posTerminalDevice || (inv.posTerminal === "AL_RAJHI" ? "AL_RAJHI" : "SAB");
+          inv.posTerminalDevice || inv.terminal || (inv.posTerminal === "AL_RAJHI" ? "AL_RAJHI" : inv.posTerminal === "SNB" ? "SNB" : "SAB");
         const nextTerminal: PosTerminalBank = network === "visa" ? "VISA_MC" : currentDevice;
         return {
           ...inv,
           posTerminalDevice: currentDevice,
+          terminal: currentDevice,
+          cardNetwork: network,
+          network: network,
           posTerminal: nextTerminal,
           splitPosTerminal: nextTerminal,
         };
@@ -2929,11 +3002,17 @@ function DailyRegisterView({
         `Inv ${formattedReceiptNo} Split Sale`
       ).trim();
 
+      const effectiveSplitTerminal: PosTerminalBank =
+        step3SplitMethod === "POS_SWIPE"
+          ? (step3SplitNetwork === "visa" ? "VISA_MC" : step3SplitTerminal)
+          : step3SplitTerminal;
+
       upsertEntry({
         id: `ple-split-${invNumber}`,
         type: "SPLIT_SALE",
         customerName: cleanCustomer,
         receiptNo: formattedReceiptNo,
+        invoiceNumber: invNumber,
         title: `${cleanCustomer} (Cash: SAR ${fmt(cashVal)} + ${
           step3SplitMethod === "BANK_TRANSFER"
             ? "Bank"
@@ -2944,7 +3023,9 @@ function DailyRegisterView({
         splitCashAmount: cashVal,
         splitBankAmount: cardVal,
         splitBankMethod: step3SplitMethod,
-        splitPosTerminal: step3SplitTerminal,
+        splitPosTerminal: effectiveSplitTerminal,
+        terminal: step3SplitMethod === "POS_SWIPE" ? step3SplitTerminal : undefined,
+        network: step3SplitMethod === "POS_SWIPE" ? step3SplitNetwork : undefined,
         time: nowHHMM(),
       });
 
@@ -2963,8 +3044,12 @@ function DailyRegisterView({
                   splitCashAmount: cashVal,
                   splitBankAmount: cardVal,
                   splitBankMethod: step3SplitMethod,
-                  splitPosTerminal: step3SplitTerminal,
-                  posTerminal: step3SplitTerminal,
+                  splitPosTerminal: effectiveSplitTerminal,
+                  posTerminalDevice: step3SplitTerminal,
+                  terminal: step3SplitTerminal,
+                  cardNetwork: step3SplitNetwork,
+                  network: step3SplitNetwork,
+                  posTerminal: effectiveSplitTerminal,
                   autoMatched: true,
                 }
               : inv
@@ -2976,12 +3061,16 @@ function DailyRegisterView({
             customer: cleanCustomer,
             amount: totalVal,
             paymentMode: "SPLIT",
-            posTerminal: step3SplitTerminal,
+            posTerminal: effectiveSplitTerminal,
+            posTerminalDevice: step3SplitTerminal,
+            terminal: step3SplitTerminal,
+            cardNetwork: step3SplitNetwork,
+            network: step3SplitNetwork,
             isSplit: true,
             splitCashAmount: cashVal,
             splitBankAmount: cardVal,
             splitBankMethod: step3SplitMethod,
-            splitPosTerminal: step3SplitTerminal,
+            splitPosTerminal: effectiveSplitTerminal,
             autoMatched: true,
             time: nowHHMM(),
           },
@@ -2991,13 +3080,13 @@ function DailyRegisterView({
 
       const feeAmt =
         step3SplitMethod === "POS_SWIPE"
-          ? r2(cardVal * POS_TERMINAL_META[step3SplitTerminal].feeRate)
+          ? calcAmountPosFeeBreakdown(cardVal, step3SplitTerminal, step3SplitNetwork).totalFee
           : 0;
       setSyncBannerMsg({
         text: `⚡ Split Tender ${formattedReceiptNo} (${cleanCustomer}): Cash Share SAR ${fmt(cashVal)} + Card Share SAR ${fmt(cardVal)} (${
           step3SplitMethod === "BANK_TRANSFER"
             ? "0% Bank"
-            : `${POS_TERMINAL_META[step3SplitTerminal].shortLabel} Fee: -SAR ${fmt(feeAmt)}`
+            : `${step3SplitNetwork === "visa" ? "Visa" : "mada"} · ${step3SplitTerminal} Fee: -SAR ${fmt(feeAmt)}`
         })`,
         targetTab: "pulse",
         targetLabel: "View Financial Pulse →",
@@ -3027,7 +3116,10 @@ function DailyRegisterView({
       customerName: isCredit ? cleanCustomer : undefined,
       followUpDate: isCredit ? step3FollowUpDate : undefined,
       receiptNo: formattedReceiptNo,
+      invoiceNumber: cleanInv || undefined,
       paymentMode: step3PaymentMode,
+      terminal: step3PaymentMode === "CARD" ? step3Terminal : undefined,
+      network: step3PaymentMode === "CARD" ? step3Network : undefined,
       title: cleanCustomer,
       amount: val,
       time: nowHHMM(),
@@ -3100,6 +3192,7 @@ function DailyRegisterView({
         ? "SAB"
         : step4PaymentMode;
 
+    const isStep4Card = effectiveStep4Mode === "CARD";
     upsertEntry({
       id: isSupplierPurchase
         ? `ple-${step4Category.toLowerCase().replace(/\s+/g, "-")}-${cleanSupplier.toLowerCase().replace(/\s+/g, "-")}`
@@ -3113,6 +3206,8 @@ function DailyRegisterView({
       staffId: isStaffExpense ? step4StaffId : undefined,
       staffName: isStaffExpense ? staffName : undefined,
       paymentMode: effectiveStep4Mode,
+      terminal: isStep4Card ? step4Terminal : undefined,
+      network: isStep4Card ? step4Network : undefined,
       note: step4Note.trim() || undefined,
       title: displayTitle,
       amount: val,
@@ -3229,6 +3324,8 @@ function DailyRegisterView({
     setEditModalAmount(String(entry.amount));
     setEditModalPaymentMode(entry.paymentMode || "CASH");
     setEditModalCategory(entry.expenseCategory || "Food");
+    setEditModalTerminal(entry.terminal || "SAB");
+    setEditModalNetwork(entry.network || (entry.paymentMode === "VISA" ? "visa" : "mada"));
   };
 
   const handleSaveEditEntryModal = (e: React.FormEvent) => {
@@ -3236,6 +3333,7 @@ function DailyRegisterView({
     if (!editingEntryModal) return;
     const nextAmt = Math.max(0, parseFloat(editModalAmount) || 0);
     const nextTitle = editModalTitle.trim() || editingEntryModal.title;
+    const isEditCard = editModalPaymentMode === "CARD";
     setPreLoggedEntries((prev) =>
       prev.map((item) =>
         item.id === editingEntryModal.id
@@ -3245,6 +3343,8 @@ function DailyRegisterView({
               amount: nextAmt,
               originalAmount: item.originalAmount ?? item.amount,
               paymentMode: editModalPaymentMode,
+              terminal: isEditCard ? editModalTerminal : item.terminal,
+              network: isEditCard ? editModalNetwork : item.network,
               expenseCategory:
                 item.type === "EXPENSE" ? editModalCategory : item.expenseCategory,
             }
@@ -3444,18 +3544,26 @@ function DailyRegisterView({
     e.preventDefault();
     const val = parseFloat(missingInflowAmt);
     if (!missingInflowTitle.trim() || Number.isNaN(val) || val <= 0) return;
+    const cleanInvNo = missingInflowInvNo.trim().replace(/^#/i, "");
+    const entryId = cleanInvNo ? `inv-${cleanInvNo}` : `ple-${Date.now()}`;
+    const isMissingCard = missingInflowMode === "CARD";
     upsertEntry({
-      id: `ple-${Date.now()}`,
+      id: entryId,
+      invoiceNumber: cleanInvNo || undefined,
+      receiptNo: cleanInvNo ? `#${cleanInvNo}` : undefined,
       type: "CREDIT_RECD",
       customerName: missingInflowTitle.trim(),
       followUpDate: "2026-09-20",
       paymentMode: missingInflowMode,
-      title: missingInflowTitle.trim(),
+      terminal: isMissingCard ? missingInflowTerminal : undefined,
+      network: isMissingCard ? missingInflowNetwork : undefined,
+      title: cleanInvNo ? `Inv #${cleanInvNo} · ${missingInflowTitle.trim()}` : missingInflowTitle.trim(),
       amount: val,
       time: nowHHMM(),
     });
-    onSyncCreditCustomer(missingInflowTitle.trim(), val, "2026-09-20", undefined, "CREDIT_RECD");
+    onSyncCreditCustomer(missingInflowTitle.trim(), val, "2026-09-20", cleanInvNo ? `#${cleanInvNo}` : undefined, "CREDIT_RECD");
     setMissingInflowTitle("");
+    setMissingInflowInvNo("");
     setMissingInflowAmt("");
   };
 
@@ -3475,6 +3583,7 @@ function DailyRegisterView({
       ? `${missingExpenseCat} (${missingExpenseSupplier.trim()})`
       : missingExpenseCat;
 
+    const isMissingExpCard = missingExpenseMode === "CARD";
     upsertEntry({
       id: `ple-${Date.now()}`,
       type: "EXPENSE",
@@ -3482,6 +3591,8 @@ function DailyRegisterView({
       supplierName: isPurchase ? supplier : undefined,
       dueDate: isCreditPurchase ? missingExpenseDueDate : undefined,
       paymentMode: missingExpenseMode,
+      terminal: isMissingExpCard ? missingExpenseTerminal : undefined,
+      network: isMissingExpCard ? missingExpenseNetwork : undefined,
       title,
       amount: val,
       time: nowHHMM(),
@@ -4195,13 +4306,13 @@ function DailyRegisterView({
                     onChange={(e) => setBankModeInput(e.target.value as "POS_SWIPE" | "BANK_TRANSFER")}
                     className="bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md text-xs font-semibold px-3 py-2 outline-none transition"
                   >
-                    <option value="POS_SWIPE" className="bg-white dark:bg-[#0A0A0A]">Swipe (POS)</option>
+                    <option value="POS_SWIPE" className="bg-white dark:bg-[#0A0A0A]">Card</option>
                     <option value="BANK_TRANSFER" className="bg-white dark:bg-[#0A0A0A]">Bank (0%)</option>
                   </select>
 
                   {bankModeInput === "POS_SWIPE" && (
                     <div className="inline-flex rounded-lg bg-slate-100 dark:bg-black p-1 border border-slate-200 dark:border-[#1F1F1F] gap-1">
-                      {(["SAB", "AL_RAJHI", "VISA_MC"] as PosTerminalBank[]).map((term) => (
+                      {(["SAB", "AL_RAJHI", "SNB", "VISA_MC"] as PosTerminalBank[]).map((term) => (
                         <button
                           key={term}
                           type="button"
@@ -4650,6 +4761,51 @@ function DailyRegisterView({
                   ))}
                 </select>
               </div>
+
+              {editModalPaymentMode === "CARD" && (
+                <div className="bg-slate-50 dark:bg-[#111111] rounded-lg p-3 space-y-2 border border-slate-200 dark:border-[#222222]">
+                  <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-semibold text-slate-500 dark:text-slate-400">Terminal:</span>
+                      <div className="bg-white dark:bg-[#0A0A0A] p-0.5 rounded-lg border border-slate-200 dark:border-[#222222] flex items-center gap-1">
+                        {(["SAB", "AL_RAJHI", "SNB"] as const).map((term) => (
+                          <button
+                            key={term}
+                            type="button"
+                            onClick={() => setEditModalTerminal(term)}
+                            className={`rounded-md px-2.5 py-1 text-xs font-bold transition-colors ${
+                              editModalTerminal === term
+                                ? "bg-jct-turquoise text-jct-charcoal shadow-sm"
+                                : "text-slate-600 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-white"
+                            }`}
+                          >
+                            {term === "SAB" ? "SAB" : term === "AL_RAJHI" ? "Al Rajhi" : "SNB"}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-semibold text-slate-500 dark:text-slate-400">Card Network:</span>
+                      <div className="bg-white dark:bg-[#0A0A0A] p-0.5 rounded-lg border border-slate-200 dark:border-[#222222] flex items-center gap-1">
+                        {(["mada", "visa"] as const).map((net) => (
+                          <button
+                            key={net}
+                            type="button"
+                            onClick={() => setEditModalNetwork(net)}
+                            className={`rounded-md px-2.5 py-1 text-xs font-bold transition-colors ${
+                              editModalNetwork === net
+                                ? "bg-jct-turquoise text-jct-charcoal shadow-sm"
+                                : "text-slate-600 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-white"
+                            }`}
+                          >
+                            {net === "mada" ? "mada" : "Visa"}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
                   Amount (SAR)
@@ -5078,7 +5234,7 @@ function DailyRegisterView({
                                   : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
                               }`}
                             >
-                              Swipe
+                              Card
                             </button>
                             <button
                               type="button"
@@ -5247,7 +5403,7 @@ function DailyRegisterView({
                         </div>
                       )}
 
-                      {/* Progressive Disclosure Sub-Row for Swipe (POS): Terminal -> Card Network Hierarchy */}
+                      {/* Progressive Disclosure Sub-Row for Card: Terminal -> Card Network Hierarchy */}
                       {isPosSwipe && (
                         <div className="bg-slate-50 dark:bg-[#111111] rounded-lg mt-2 p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
                           <div className="flex flex-wrap items-center gap-4">
@@ -5255,9 +5411,9 @@ function DailyRegisterView({
                             <div className="flex items-center gap-1.5">
                               <span className="font-semibold text-slate-500 dark:text-slate-400">Terminal:</span>
                               <div className="bg-white dark:bg-[#0A0A0A] p-0.5 rounded-lg border border-slate-200 dark:border-[#222222] flex items-center gap-1">
-                                {(["SAB", "AL_RAJHI"] as const).map((term) => {
+                                {(["SAB", "AL_RAJHI", "SNB"] as const).map((term) => {
                                   const isSelected =
-                                    (inv.posTerminalDevice || (inv.posTerminal === "AL_RAJHI" ? "AL_RAJHI" : "SAB")) === term;
+                                    (inv.posTerminalDevice || inv.terminal || (inv.posTerminal === "AL_RAJHI" ? "AL_RAJHI" : inv.posTerminal === "SNB" ? "SNB" : "SAB")) === term;
                                   return (
                                     <button
                                       key={term}
@@ -5269,7 +5425,7 @@ function DailyRegisterView({
                                           : "text-slate-600 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-white"
                                       }`}
                                     >
-                                      {term === "SAB" ? "SAB" : "Al Rajhi"}
+                                      {term === "SAB" ? "SAB" : term === "AL_RAJHI" ? "Al Rajhi" : "SNB"}
                                     </button>
                                   );
                                 })}
@@ -5280,38 +5436,37 @@ function DailyRegisterView({
                             <div className="flex items-center gap-1.5">
                               <span className="font-semibold text-slate-500 dark:text-slate-400">Card Network:</span>
                               <div className="bg-white dark:bg-[#0A0A0A] p-0.5 rounded-lg border border-slate-200 dark:border-[#222222] flex items-center gap-1">
-                                <button
-                                  type="button"
-                                  onClick={() => handleSelectInvoiceCardNetwork(inv.invoiceNo, "mada")}
-                                  className={`rounded-md px-2.5 py-1 text-xs font-bold transition-colors ${
-                                    inv.posTerminal !== "VISA_MC"
-                                      ? "bg-jct-turquoise text-jct-charcoal shadow-sm"
-                                      : "text-slate-600 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-white"
-                                  }`}
-                                >
-                                  {trackPosFees ? "mada (0.80% fee, cap SAR 40)" : "mada"}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleSelectInvoiceCardNetwork(inv.invoiceNo, "visa")}
-                                  className={`rounded-md px-2.5 py-1 text-xs font-bold transition-colors ${
-                                    inv.posTerminal === "VISA_MC"
-                                      ? "bg-jct-turquoise text-jct-charcoal shadow-sm"
-                                      : "text-slate-600 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-white"
-                                  }`}
-                                >
-                                  {trackPosFees ? "Visa / MC (2.20%)" : "Visa / MC"}
-                                </button>
+                                {(["mada", "visa"] as const).map((net) => {
+                                  const isSelected = (inv.cardNetwork || inv.network || (inv.posTerminal === "VISA_MC" ? "visa" : "mada")) === net;
+                                  return (
+                                    <button
+                                      key={net}
+                                      type="button"
+                                      onClick={() => handleSelectInvoiceCardNetwork(inv.invoiceNo, net)}
+                                      className={`rounded-md px-2.5 py-1 text-xs font-bold transition-colors ${
+                                        isSelected
+                                          ? "bg-jct-turquoise text-jct-charcoal shadow-sm"
+                                          : "text-slate-600 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-white"
+                                      }`}
+                                    >
+                                      {net === "mada"
+                                        ? (trackPosFees ? "mada (0.80% fee, cap SAR 40)" : "mada")
+                                        : (trackPosFees ? "Visa (2.20%)" : "Visa")}
+                                    </button>
+                                  );
+                                })}
                               </div>
                             </div>
                           </div>
 
                           <div className="flex flex-col items-end gap-0.5 font-mono text-xs">
                             <span className="text-slate-700 font-semibold dark:text-jct-yellow dark:font-normal">
-                              {inv.posTerminal === "VISA_MC"
-                                ? `Visa / MC (${(inv.posTerminalDevice || "SAB") === "AL_RAJHI" ? "Al Rajhi" : "SAB"})`
-                                : inv.posTerminal === "AL_RAJHI"
+                              {(inv.cardNetwork || inv.network) === "visa" || inv.posTerminal === "VISA_MC"
+                                ? `Visa (${(inv.posTerminalDevice || inv.terminal || "SAB") === "AL_RAJHI" ? "Al Rajhi" : (inv.posTerminalDevice || inv.terminal || "SAB") === "SNB" ? "SNB" : "SAB"})`
+                                : (inv.posTerminalDevice || inv.terminal || (inv.posTerminal === "AL_RAJHI" ? "AL_RAJHI" : inv.posTerminal === "SNB" ? "SNB" : "SAB")) === "AL_RAJHI"
                                 ? "mada · Al Rajhi"
+                                : (inv.posTerminalDevice || inv.terminal || inv.posTerminal) === "SNB"
+                                ? "mada · SNB"
                                 : "mada · SAB"}: SAR {fmt(inv.amount)}
                             </span>
                             {isOwner && trackPosFees && posFee > 0 && (
@@ -5658,22 +5813,80 @@ function DailyRegisterView({
 
                     {/* 5. Required Mode of Payment Dropdown (Step 3 Inflows) */}
                     {!step3SplitEnabled && (
-                      <div className="space-y-1.5">
-                        <label className="block text-xs font-medium text-slate-500 dark:text-slate-400">
-                          Mode of Payment (Required)
-                        </label>
-                        <select
-                          value={step3PaymentMode}
-                          onChange={(e) => setStep3PaymentMode(e.target.value as UniversalPaymentMode)}
-                          required
-                          className="w-full bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-3.5 py-2.5 text-sm font-medium outline-none"
-                        >
-                          {UNIVERSAL_PAYMENT_MODES.map((pm) => (
-                            <option key={pm.value} value={pm.value} className="bg-white dark:bg-[#0A0A0A]">
-                              {pm.badge} · {pm.label}
-                            </option>
-                          ))}
-                        </select>
+                      <div className="space-y-2">
+                        <div className="space-y-1.5">
+                          <label className="block text-xs font-medium text-slate-500 dark:text-slate-400">
+                            Mode of Payment (Required)
+                          </label>
+                          <select
+                            value={step3PaymentMode}
+                            onChange={(e) => setStep3PaymentMode(e.target.value as UniversalPaymentMode)}
+                            required
+                            className="w-full bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-3.5 py-2.5 text-sm font-medium outline-none"
+                          >
+                            {UNIVERSAL_PAYMENT_MODES.map((pm) => (
+                              <option key={pm.value} value={pm.value} className="bg-white dark:bg-[#0A0A0A]">
+                                {pm.badge} · {pm.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {step3PaymentMode === "CARD" && (
+                          <div className="bg-slate-50 dark:bg-[#111111] rounded-lg p-3 space-y-2 border border-slate-200 dark:border-[#1F1F1F]">
+                            <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-semibold text-slate-500 dark:text-slate-400">Terminal:</span>
+                                <div className="bg-white dark:bg-[#0A0A0A] p-0.5 rounded-lg border border-slate-200 dark:border-[#222222] flex items-center gap-1">
+                                  {(["SAB", "AL_RAJHI", "SNB"] as const).map((term) => (
+                                    <button
+                                      key={term}
+                                      type="button"
+                                      onClick={() => setStep3Terminal(term)}
+                                      className={`rounded-md px-2.5 py-1 text-xs font-bold transition-colors ${
+                                        step3Terminal === term
+                                          ? "bg-jct-turquoise text-jct-charcoal shadow-sm"
+                                          : "text-slate-600 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-white"
+                                      }`}
+                                    >
+                                      {term === "SAB" ? "SAB" : term === "AL_RAJHI" ? "Al Rajhi" : "SNB"}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-semibold text-slate-500 dark:text-slate-400">Card Network:</span>
+                                <div className="bg-white dark:bg-[#0A0A0A] p-0.5 rounded-lg border border-slate-200 dark:border-[#222222] flex items-center gap-1">
+                                  {(["mada", "visa"] as const).map((net) => (
+                                    <button
+                                      key={net}
+                                      type="button"
+                                      onClick={() => setStep3Network(net)}
+                                      className={`rounded-md px-2.5 py-1 text-xs font-bold transition-colors ${
+                                        step3Network === net
+                                          ? "bg-jct-turquoise text-jct-charcoal shadow-sm"
+                                          : "text-slate-600 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-white"
+                                      }`}
+                                    >
+                                      {net === "mada" ? "mada (0.80% cap 40)" : "Visa (2.20%)"}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                            {parseFloat(step3Amount) > 0 && (
+                              <div className="text-[11px] font-mono text-slate-600 dark:text-slate-400 flex items-center justify-between border-t border-slate-200 dark:border-[#1F1F1F] pt-1.5">
+                                <span>Est. Card MDR Fee:</span>
+                                <span className="font-bold text-amber-600 dark:text-amber-400">
+                                  {(() => {
+                                    const fb = calcAmountPosFeeBreakdown(parseFloat(step3Amount) || 0, step3Terminal, step3Network);
+                                    return `-SAR ${fmt(fb.totalFee)} (MDR: SAR ${fmt(fb.mdrBase)} + VAT: SAR ${fmt(fb.vatOnFee)})`;
+                                  })()}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -5736,40 +5949,75 @@ function DailyRegisterView({
                           </div>
                         </div>
 
-                        <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                            Card Method:
-                          </span>
-                          <div className="bg-white dark:bg-[#0A0A0A] border border-slate-200 dark:border-[#1F1F1F] p-1 rounded-lg flex flex-wrap gap-1">
-                            {(["SAB", "AL_RAJHI", "VISA_MC"] as PosTerminalBank[]).map((term) => (
-                              <button
-                                key={term}
-                                type="button"
-                                onClick={() => {
-                                  setStep3SplitMethod("POS_SWIPE");
-                                  setStep3SplitTerminal(term);
-                                }}
-                                className={`rounded-md px-2.5 py-1 text-xs transition-all ${
-                                  step3SplitMethod === "POS_SWIPE" && step3SplitTerminal === term
-                                    ? "bg-jct-turquoise text-jct-charcoal font-bold shadow-sm"
-                                    : "text-slate-500 dark:text-slate-400 font-medium hover:text-jct-charcoal dark:hover:text-jct-offwhite"
-                                }`}
-                              >
-                                {POS_TERMINAL_META[term].badgeTag}
-                              </button>
-                            ))}
+                        <div className="flex flex-col gap-2 pt-1">
+                          <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-semibold text-slate-500 dark:text-slate-400">Terminal:</span>
+                              <div className="bg-white dark:bg-[#0A0A0A] p-0.5 rounded-lg border border-slate-200 dark:border-[#222222] flex items-center gap-1">
+                                {(["SAB", "AL_RAJHI", "SNB"] as const).map((term) => (
+                                  <button
+                                    key={term}
+                                    type="button"
+                                    onClick={() => {
+                                      setStep3SplitMethod("POS_SWIPE");
+                                      setStep3SplitTerminal(term);
+                                    }}
+                                    className={`rounded-md px-2.5 py-1 text-xs font-bold transition-colors ${
+                                      step3SplitMethod === "POS_SWIPE" && step3SplitTerminal === term
+                                        ? "bg-jct-turquoise text-jct-charcoal shadow-sm"
+                                        : "text-slate-600 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-white"
+                                    }`}
+                                  >
+                                    {term === "SAB" ? "SAB" : term === "AL_RAJHI" ? "Al Rajhi" : "SNB"}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-semibold text-slate-500 dark:text-slate-400">Card Network:</span>
+                              <div className="bg-white dark:bg-[#0A0A0A] p-0.5 rounded-lg border border-slate-200 dark:border-[#222222] flex items-center gap-1">
+                                {(["mada", "visa"] as const).map((net) => (
+                                  <button
+                                    key={net}
+                                    type="button"
+                                    onClick={() => {
+                                      setStep3SplitMethod("POS_SWIPE");
+                                      setStep3SplitNetwork(net);
+                                    }}
+                                    className={`rounded-md px-2.5 py-1 text-xs font-bold transition-colors ${
+                                      step3SplitMethod === "POS_SWIPE" && step3SplitNetwork === net
+                                        ? "bg-jct-turquoise text-jct-charcoal shadow-sm"
+                                        : "text-slate-600 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-white"
+                                    }`}
+                                  >
+                                    {net === "mada" ? "mada" : "Visa"}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
                             <button
                               type="button"
                               onClick={() => setStep3SplitMethod("BANK_TRANSFER")}
-                              className={`rounded-md px-2.5 py-1 text-xs transition-all ${
+                              className={`rounded-md px-2.5 py-1 text-xs font-bold transition ${
                                 step3SplitMethod === "BANK_TRANSFER"
-                                  ? "bg-jct-turquoise text-jct-charcoal font-bold shadow-sm"
-                                  : "text-slate-500 dark:text-slate-400 font-medium hover:text-jct-charcoal dark:hover:text-jct-offwhite"
+                                  ? "bg-jct-turquoise text-jct-charcoal shadow-sm"
+                                  : "border border-slate-200 dark:border-[#222222] text-slate-600 dark:text-slate-400 hover:text-white"
                               }`}
                             >
                               Bank (0%)
                             </button>
                           </div>
+                          {step3SplitMethod === "POS_SWIPE" && parseFloat(step3SplitCard) > 0 && (
+                            <div className="text-[11px] font-mono text-slate-600 dark:text-slate-400 flex items-center justify-between border-t border-slate-200 dark:border-[#1F1F1F] pt-1.5">
+                              <span>Split Card MDR Fee:</span>
+                              <span className="font-bold text-amber-600 dark:text-amber-400">
+                                {(() => {
+                                  const fb = calcAmountPosFeeBreakdown(parseFloat(step3SplitCard) || 0, step3SplitTerminal, step3SplitNetwork);
+                                  return `-SAR ${fmt(fb.totalFee)} (MDR: SAR ${fmt(fb.mdrBase)} + VAT: SAR ${fmt(fb.vatOnFee)})`;
+                                })()}
+                              </span>
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
@@ -5814,6 +6062,16 @@ function DailyRegisterView({
                                 {item.receiptNo && (
                                   <span className="font-mono text-xs font-semibold text-slate-500 dark:text-slate-400">
                                     {item.receiptNo}
+                                  </span>
+                                )}
+                                {item.invoiceNumber && !item.receiptNo?.includes(item.invoiceNumber) && (
+                                  <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-jct-turquoise/20 text-jct-charcoal dark:text-jct-turquoise border border-jct-turquoise/40 shrink-0">
+                                    #{item.invoiceNumber}
+                                  </span>
+                                )}
+                                {(item.paymentMode === "CARD" || item.terminal || item.network) && (
+                                  <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-500/40 shrink-0">
+                                    {item.network === "visa" ? "Visa" : "mada"} · {item.terminal || "SAB"}
                                   </span>
                                 )}
                                 <p className="text-sm font-semibold text-jct-charcoal dark:text-jct-offwhite truncate">{item.title}</p>
@@ -5994,22 +6252,80 @@ function DailyRegisterView({
 
                   <form onSubmit={handleAddStep4Expense} className="space-y-3 pt-2">
                     {/* Required Mode of Payment Dropdown (Step 4 Outflows/Purchases) */}
-                    <div>
-                      <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
-                        Mode of Payment (Required)
-                      </label>
-                      <select
-                        value={step4PaymentMode}
-                        onChange={(e) => setStep4PaymentMode(e.target.value as UniversalPaymentMode)}
-                        required
-                        className="w-full bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-3.5 py-2.5 text-sm font-medium outline-none"
-                      >
-                        {UNIVERSAL_PAYMENT_MODES.map((pm) => (
-                          <option key={pm.value} value={pm.value} className="bg-white dark:bg-[#0A0A0A]">
-                            {pm.badge} · {pm.label}
-                          </option>
-                        ))}
-                      </select>
+                    <div className="space-y-2">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
+                          Mode of Payment (Required)
+                        </label>
+                        <select
+                          value={step4PaymentMode}
+                          onChange={(e) => setStep4PaymentMode(e.target.value as UniversalPaymentMode)}
+                          required
+                          className="w-full bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-3.5 py-2.5 text-sm font-medium outline-none"
+                        >
+                          {UNIVERSAL_PAYMENT_MODES.map((pm) => (
+                            <option key={pm.value} value={pm.value} className="bg-white dark:bg-[#0A0A0A]">
+                              {pm.badge} · {pm.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {step4PaymentMode === "CARD" && (
+                        <div className="bg-slate-50 dark:bg-[#111111] rounded-lg p-3 space-y-2 border border-slate-200 dark:border-[#1F1F1F]">
+                          <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-semibold text-slate-500 dark:text-slate-400">Terminal:</span>
+                              <div className="bg-white dark:bg-[#0A0A0A] p-0.5 rounded-lg border border-slate-200 dark:border-[#222222] flex items-center gap-1">
+                                {(["SAB", "AL_RAJHI", "SNB"] as const).map((term) => (
+                                  <button
+                                    key={term}
+                                    type="button"
+                                    onClick={() => setStep4Terminal(term)}
+                                    className={`rounded-md px-2.5 py-1 text-xs font-bold transition-colors ${
+                                      step4Terminal === term
+                                        ? "bg-jct-turquoise text-jct-charcoal shadow-sm"
+                                        : "text-slate-600 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-white"
+                                    }`}
+                                  >
+                                    {term === "SAB" ? "SAB" : term === "AL_RAJHI" ? "Al Rajhi" : "SNB"}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-semibold text-slate-500 dark:text-slate-400">Card Network:</span>
+                              <div className="bg-white dark:bg-[#0A0A0A] p-0.5 rounded-lg border border-slate-200 dark:border-[#222222] flex items-center gap-1">
+                                {(["mada", "visa"] as const).map((net) => (
+                                  <button
+                                    key={net}
+                                    type="button"
+                                    onClick={() => setStep4Network(net)}
+                                    className={`rounded-md px-2.5 py-1 text-xs font-bold transition-colors ${
+                                      step4Network === net
+                                        ? "bg-jct-turquoise text-jct-charcoal shadow-sm"
+                                        : "text-slate-600 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-white"
+                                    }`}
+                                  >
+                                    {net === "mada" ? "mada (0.80% cap 40)" : "Visa (2.20%)"}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                          {parseFloat(step4Amount) > 0 && (
+                            <div className="text-[11px] font-mono text-slate-600 dark:text-slate-400 flex items-center justify-between border-t border-slate-200 dark:border-[#1F1F1F] pt-1.5">
+                              <span>Est. Card MDR Fee:</span>
+                              <span className="font-bold text-amber-600 dark:text-amber-400">
+                                {(() => {
+                                  const fb = calcAmountPosFeeBreakdown(parseFloat(step4Amount) || 0, step4Terminal, step4Network);
+                                  return `-SAR ${fmt(fb.totalFee)} (MDR: SAR ${fmt(fb.mdrBase)} + VAT: SAR ${fmt(fb.vatOnFee)})`;
+                                })()}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {/* Show Supplier Name when Credit Purchase, Cash Purchase, or Bank Purchase is selected */}
@@ -6138,6 +6454,15 @@ function DailyRegisterView({
                                 >
                                   {pmBadge.badge}
                                 </span>
+                                {(item.paymentMode === "CARD" || item.terminal || item.network) && (
+                                  <span className="rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-500/40 px-2.5 py-0.5 text-[10px] font-bold shrink-0">
+                                    {item.network === "visa" ? "Visa" : "mada"} · {item.terminal || "SAB"}
+                                    {(() => {
+                                      const fb = calcEntryPosFeeBreakdown(item);
+                                      return fb.totalFee > 0 ? ` (-SAR ${fmt(fb.totalFee)})` : "";
+                                    })()}
+                                  </span>
+                                )}
                                 <p className="text-sm font-semibold text-jct-charcoal dark:text-jct-offwhite truncate">{item.title}</p>
                                 {item.dueDate && (
                                   <span className="rounded-full bg-jct-turquoise/25 border border-jct-turquoise/40 px-3 py-1 text-[10px] font-bold text-jct-charcoal dark:text-jct-offwhite">
@@ -6607,6 +6932,16 @@ function DailyRegisterView({
                               >
                                 {pmBadge.badge}
                               </span>
+                              {entry.invoiceNumber && (
+                                <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-jct-turquoise/20 text-jct-charcoal dark:text-jct-turquoise border border-jct-turquoise/40 shrink-0">
+                                  #{entry.invoiceNumber}
+                                </span>
+                              )}
+                              {(entry.paymentMode === "CARD" || entry.terminal || entry.network) && (
+                                <span className="rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-500/40 px-2 py-0.5 text-[10px] font-bold shrink-0">
+                                  {entry.network === "visa" ? "Visa" : "mada"} · {entry.terminal || "SAB"}
+                                </span>
+                              )}
                               <span className="text-xs font-bold text-jct-charcoal dark:text-jct-offwhite truncate print:text-black print:text-sm">
                                 {entry.title}
                               </span>
@@ -6673,6 +7008,13 @@ function DailyRegisterView({
                     <form onSubmit={handleAddMissingInflow} className="flex flex-wrap items-center gap-2 pt-1 print:hidden">
                       <input
                         type="text"
+                        placeholder="Invoice # (e.g., #30089)"
+                        value={missingInflowInvNo}
+                        onChange={(e) => setMissingInflowInvNo(e.target.value)}
+                        className="w-32 bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-3 py-2 text-xs font-mono font-semibold placeholder:font-sans placeholder:text-slate-400 outline-none"
+                      />
+                      <input
+                        type="text"
                         value={missingInflowTitle}
                         onChange={(e) => setMissingInflowTitle(e.target.value)}
                         placeholder="Missing receipt or customer name..."
@@ -6690,6 +7032,44 @@ function DailyRegisterView({
                           </option>
                         ))}
                       </select>
+                      {missingInflowMode === "CARD" && (
+                        <div className="flex items-center gap-2 bg-slate-50 dark:bg-[#111111] px-2 py-1 rounded-md border border-slate-200 dark:border-[#1F1F1F]">
+                          <div className="flex items-center gap-1">
+                            <span className="text-[10px] text-slate-500 font-semibold">Term:</span>
+                            {(["SAB", "AL_RAJHI", "SNB"] as const).map((term) => (
+                              <button
+                                key={term}
+                                type="button"
+                                onClick={() => setMissingInflowTerminal(term)}
+                                className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                  missingInflowTerminal === term
+                                    ? "bg-jct-turquoise text-jct-charcoal"
+                                    : "text-slate-500 hover:text-white"
+                                }`}
+                              >
+                                {term === "SAB" ? "SAB" : term === "AL_RAJHI" ? "Al Rajhi" : "SNB"}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className="text-[10px] text-slate-500 font-semibold">Net:</span>
+                            {(["mada", "visa"] as const).map((net) => (
+                              <button
+                                key={net}
+                                type="button"
+                                onClick={() => setMissingInflowNetwork(net)}
+                                className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                  missingInflowNetwork === net
+                                    ? "bg-jct-turquoise text-jct-charcoal"
+                                    : "text-slate-500 hover:text-white"
+                                }`}
+                              >
+                                {net === "mada" ? "mada" : "Visa"}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                       <input
                         type="number"
                         step="0.01"
@@ -6773,6 +7153,15 @@ function DailyRegisterView({
                               >
                                 {pmBadge.badge}
                               </span>
+                              {(entry.paymentMode === "CARD" || entry.terminal || entry.network) && (
+                                <span className="rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-500/40 px-2 py-0.5 text-[10px] font-bold shrink-0">
+                                  {entry.network === "visa" ? "Visa" : "mada"} · {entry.terminal || "SAB"}
+                                  {(() => {
+                                    const fb = calcEntryPosFeeBreakdown(entry);
+                                    return fb.totalFee > 0 ? ` (-SAR ${fmt(fb.totalFee)})` : "";
+                                  })()}
+                                </span>
+                              )}
                               <span className="text-xs font-bold text-jct-charcoal dark:text-jct-offwhite truncate print:text-black print:text-sm">
                                 {entry.title}
                               </span>
@@ -6904,6 +7293,44 @@ function DailyRegisterView({
                           </option>
                         ))}
                       </select>
+                      {missingExpenseMode === "CARD" && (
+                        <div className="flex items-center gap-2 bg-slate-50 dark:bg-[#111111] px-2 py-1 rounded-md border border-slate-200 dark:border-[#1F1F1F]">
+                          <div className="flex items-center gap-1">
+                            <span className="text-[10px] text-slate-500 font-semibold">Term:</span>
+                            {(["SAB", "AL_RAJHI", "SNB"] as const).map((term) => (
+                              <button
+                                key={term}
+                                type="button"
+                                onClick={() => setMissingExpenseTerminal(term)}
+                                className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                  missingExpenseTerminal === term
+                                    ? "bg-jct-turquoise text-jct-charcoal"
+                                    : "text-slate-500 hover:text-white"
+                                }`}
+                              >
+                                {term === "SAB" ? "SAB" : term === "AL_RAJHI" ? "Al Rajhi" : "SNB"}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className="text-[10px] text-slate-500 font-semibold">Net:</span>
+                            {(["mada", "visa"] as const).map((net) => (
+                              <button
+                                key={net}
+                                type="button"
+                                onClick={() => setMissingExpenseNetwork(net)}
+                                className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                  missingExpenseNetwork === net
+                                    ? "bg-jct-turquoise text-jct-charcoal"
+                                    : "text-slate-500 hover:text-white"
+                                }`}
+                              >
+                                {net === "mada" ? "mada" : "Visa"}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                       <input
                         type="text"
                         value={missingExpenseSupplier}
@@ -7066,7 +7493,7 @@ function DailyRegisterView({
                               {/* Terminal Switcher Pill (mada · SAB, mada · Al Rajhi, 💳 Visa / MC, Bank) */}
                               <div className="flex flex-wrap items-center gap-2 shrink-0 print:hidden">
                                 <div className="inline-flex flex-wrap rounded-lg bg-white dark:bg-[#0A0A0A] p-0.5 border border-slate-200 dark:border-[#1F1F1F] gap-0.5">
-                                  {(["SAB", "AL_RAJHI", "VISA_MC"] as PosTerminalBank[]).map(
+                                  {(["SAB", "AL_RAJHI", "SNB", "VISA_MC"] as PosTerminalBank[]).map(
                                     (term) => (
                                       <button
                                         key={term}
