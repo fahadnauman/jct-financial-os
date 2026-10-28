@@ -3491,8 +3491,8 @@ function DailyRegisterView({
           </div>
 
           {/* Top Dashboard Metrics (3 Values) */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 sm:gap-4">
-            <div className="bg-white dark:bg-[#0A0A0A] border border-white/80 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-shadow duration-300 rounded-2xl p-5 sm:p-6">
+          <div className="flex flex-wrap lg:flex-nowrap gap-3.5 sm:gap-4 w-full">
+            <div className="flex-1 min-w-[260px] w-full bg-white dark:bg-[#0A0A0A] border border-white/80 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-shadow duration-300 rounded-2xl p-5 sm:p-6">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
                   Prev Day Received Amount
@@ -3509,7 +3509,7 @@ function DailyRegisterView({
               </span>
             </div>
 
-            <div className="bg-white dark:bg-[#0A0A0A] border border-white/80 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-shadow duration-300 rounded-2xl p-5 sm:p-6">
+            <div className="flex-1 min-w-[260px] w-full bg-white dark:bg-[#0A0A0A] border border-white/80 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-shadow duration-300 rounded-2xl p-5 sm:p-6">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
                   Opening Balance
@@ -3526,7 +3526,7 @@ function DailyRegisterView({
               </span>
             </div>
 
-            <div className="bg-white dark:bg-[#0A0A0A] border border-white/80 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-shadow duration-300 rounded-2xl p-5 sm:p-6">
+            <div className="flex-1 min-w-[260px] w-full bg-white dark:bg-[#0A0A0A] border border-white/80 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-shadow duration-300 rounded-2xl p-5 sm:p-6">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
                   Cash Drawer Amount
@@ -3545,46 +3545,44 @@ function DailyRegisterView({
           </div>
 
           {/* End-of-Day Hero Card */}
-          <div className="relative overflow-hidden bg-gradient-to-r from-jct-turquoise/10 via-white/60 to-jct-yellow/10 backdrop-blur-xl border border-white/80 shadow-sm dark:bg-gradient-to-r dark:from-jct-turquoise/5 dark:via-black/60 dark:to-jct-yellow/5 dark:backdrop-blur-xl dark:border-white/10 rounded-2xl p-6 sm:p-8 transition-all duration-300">
-            <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-              <div className="max-w-2xl space-y-1.5">
-                <h2 className="font-display text-xl sm:text-2xl font-extrabold tracking-tight text-jct-charcoal dark:text-white">
-                  SALE SUMMARY
-                </h2>
-                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
-                  Match ERP sales, calculate SAB &amp; Al Rajhi POS terminal fees, and close today&apos;s drawer in 5 guided steps.
-                </p>
-              </div>
+          <div className="relative overflow-hidden bg-gradient-to-r from-jct-turquoise/10 via-white/60 to-jct-yellow/10 backdrop-blur-xl border border-white/80 shadow-sm dark:bg-gradient-to-r dark:from-jct-turquoise/5 dark:via-black/60 dark:to-jct-yellow/5 dark:backdrop-blur-xl dark:border-white/10 rounded-2xl py-6 px-6 lg:px-8 h-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-6 transition-all duration-300">
+            <div className="max-w-2xl space-y-1.5">
+              <h2 className="font-display text-xl sm:text-2xl font-extrabold tracking-tight text-jct-charcoal dark:text-white">
+                SALE SUMMARY
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                Match ERP sales, calculate SAB &amp; Al Rajhi POS terminal fees, and close today&apos;s drawer in 5 guided steps.
+              </p>
+            </div>
 
-              <div className="flex flex-wrap items-center gap-3 shrink-0">
-                <button
-                  type="button"
-                  onClick={handleStartWizard}
-                  className="bg-jct-turquoise text-jct-charcoal font-bold hover:brightness-95 transition-all shadow-sm rounded-lg px-6 py-3 flex items-center gap-2 text-sm whitespace-nowrap border border-jct-turquoise/60 hover:border-jct-turquoise hover:shadow-[0_0_15px_rgba(45,226,230,0.25)]"
-                >
-                  <Sparkles size={16} className="text-jct-charcoal" />
-                  <span>TRACK SALE</span>
-                  <ArrowRight size={14} className="text-jct-charcoal" />
-                </button>
+            <div className="flex flex-wrap items-center gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={handleStartWizard}
+                className="bg-jct-turquoise text-jct-charcoal font-bold hover:brightness-95 transition-all shadow-sm rounded-lg px-6 py-3 flex items-center gap-2 text-sm whitespace-nowrap border border-jct-turquoise/60 hover:border-jct-turquoise hover:shadow-[0_0_15px_rgba(45,226,230,0.25)]"
+              >
+                <Sparkles size={16} className="text-jct-charcoal" />
+                <span>TRACK SALE</span>
+                <ArrowRight size={14} className="text-jct-charcoal" />
+              </button>
 
-                <button
-                  type="button"
-                  onClick={() => setTrackingMode("datasheet")}
-                  className="bg-jct-yellow text-jct-charcoal font-bold px-4 py-2 rounded-lg hover:brightness-95 transition-all flex items-center gap-2 whitespace-nowrap shadow-sm border border-jct-yellow/60 hover:border-jct-yellow hover:shadow-[0_0_15px_rgba(255,222,89,0.25)]"
-                >
-                  <FileSpreadsheet size={16} className="text-jct-charcoal" />
-                  <span>Classic Data Entry</span>
-                </button>
+              <button
+                type="button"
+                onClick={() => setTrackingMode("datasheet")}
+                className="bg-jct-yellow text-jct-charcoal font-bold px-4 py-2 rounded-lg hover:brightness-95 transition-all flex items-center gap-2 whitespace-nowrap shadow-sm border border-jct-yellow/60 hover:border-jct-yellow hover:shadow-[0_0_15px_rgba(255,222,89,0.25)]"
+              >
+                <FileSpreadsheet size={16} className="text-jct-charcoal" />
+                <span>Classic Data Entry</span>
+              </button>
 
-                <button
-                  type="button"
-                  onClick={() => setShowManualEntry((prev) => !prev)}
-                  className="bg-slate-800 text-slate-300 border border-slate-600 text-sm px-3 py-1.5 rounded-md hover:bg-slate-700 transition-colors flex items-center gap-1.5 whitespace-nowrap"
-                  title="Toggle manual entry forms"
-                >
-                  <span>Add Manual Entry 🔽</span>
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => setShowManualEntry((prev) => !prev)}
+                className="bg-slate-800 text-slate-300 border border-slate-600 text-sm px-3 py-1.5 rounded-md hover:bg-slate-700 transition-colors flex items-center gap-1.5 whitespace-nowrap"
+                title="Toggle manual entry forms"
+              >
+                <span>Add Manual Entry 🔽</span>
+              </button>
             </div>
           </div>
 
@@ -12058,25 +12056,23 @@ function BranchAuditRadar() {
   ];
   return (
     <div className="w-full">
-      <div className="overflow-x-auto pb-1 scrollbar-none">
-        <div className="bg-white/50 dark:bg-[#0A0A0A]/50 backdrop-blur-md p-2 rounded-full border border-slate-200/50 dark:border-white/5 flex gap-2 items-center min-w-max shadow-sm">
-          <div className="flex items-center gap-1.5 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 shrink-0">
-            <Eye size={13} className="text-jct-turquoise" />
-            <span>Branch Radar</span>
-          </div>
-          {branches.map((b) => (
-            <div
-              key={b.name}
-              title={`${b.name} · ${b.status} (${b.detail})`}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full border text-xs transition-all hover:scale-[1.02] cursor-default shrink-0 ${b.cls}`}
-            >
-              <span className="font-bold text-jct-charcoal dark:text-jct-offwhite">{b.name}</span>
-              <span className="opacity-30">·</span>
-              <span className="font-extrabold text-[11px]">{b.status}</span>
-              <span className="text-[10px] opacity-75 hidden 2xl:inline font-mono">({b.detail})</span>
-            </div>
-          ))}
+      <div className="bg-white/50 dark:bg-[#0A0A0A]/50 backdrop-blur-md p-2 rounded-full border border-slate-200/50 dark:border-white/5 flex gap-2 items-center overflow-x-auto w-full hide-scrollbar shadow-sm">
+        <div className="flex items-center gap-1.5 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 shrink-0">
+          <Eye size={13} className="text-jct-turquoise" />
+          <span>Branch Radar</span>
         </div>
+        {branches.map((b) => (
+          <div
+            key={b.name}
+            title={`${b.name} · ${b.status} (${b.detail})`}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full border text-xs transition-all hover:scale-[1.02] cursor-default shrink-0 ${b.cls}`}
+          >
+            <span className="font-bold text-jct-charcoal dark:text-jct-offwhite">{b.name}</span>
+            <span className="opacity-30">·</span>
+            <span className="font-extrabold text-[11px]">{b.status}</span>
+            <span className="text-[10px] opacity-75 hidden 2xl:inline font-mono">({b.detail})</span>
+          </div>
+        ))}
       </div>
     </div>
   );
