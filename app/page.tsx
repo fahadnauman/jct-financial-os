@@ -967,6 +967,489 @@ export const INITIAL_DATASHEET_ROWS: DataSheetRow[] = [
   },
 ];
 
+
+
+/* ════════════════════════════════════════════════════════════════════════
+   EXACT 19-COLUMN PHYSICAL "DAILY DATA SHEET" TABLE COMPONENT
+   ════════════════════════════════════════════════════════════════════════ */
+
+export interface ClassicDataSheetTableProps {
+  sheetRows?: DataSheetRow[];
+  activeErpList?: ErpInvoiceItem[];
+  preLoggedEntries?: PreLoggedEntry[];
+  openingBalance?: number;
+  date?: string;
+  branchName?: string;
+  className?: string;
+}
+
+interface ClassicMappedRow {
+  invoiceNo: string;
+  amtCashSale: number | null;
+  creditInvAmt: number | null;
+  receiptNo: string;
+  creditAmtRecd: number | null;
+  openBal: number | null;
+  loanIn: number | null;
+  otherAmtRecd: number | null;
+  fromBank: number | null;
+  totalAmt: number | null;
+  creditPurchase: string;
+  creditPurchaseAmt: number | null;
+  cashPurchase: number | null;
+  creditPurchasePayment: number | null;
+  crNote: number | null;
+  expense: string;
+  expenseAmt: number | null;
+  toBank: string;
+  toBankAmt: number | null;
+  loanOut: number | null;
+  excessAmt: number | null;
+  closingBalance: number | null;
+}
+
+function buildClassicDataSheetRows(
+  sheetRows?: DataSheetRow[],
+  activeErpList: ErpInvoiceItem[] = [],
+  preLoggedEntries: PreLoggedEntry[] = [],
+  openingBalance: number = 500
+): ClassicMappedRow[] {
+  const parseNum = (v: string | number | undefined | null): number => {
+    if (typeof v === "number") return Number.isNaN(v) ? 0 : v;
+    if (!v) return 0;
+    const parsed = parseFloat(String(v));
+    return Number.isNaN(parsed) ? 0 : parsed;
+  };
+
+  const rowCount = Math.max(
+    activeErpList.length,
+    sheetRows?.length || 0,
+    preLoggedEntries.length,
+    15
+  );
+
+  const expenses = preLoggedEntries.filter((e) => e.type === "EXPENSE");
+  const inflows = preLoggedEntries.filter((e) => e.type !== "EXPENSE");
+
+  let cumulativeCash = openingBalance;
+
+  return Array.from({ length: rowCount }, (_, idx) => {
+    const sRow = sheetRows?.[idx];
+    const inv = activeErpList[idx];
+    const exp = expenses[idx];
+    const inf = inflows[idx];
+
+    // 1. INVOICE NO., 2. AMT CASH SALE, 3. CREDIT INV. AMOUNT
+    let invoiceNo = "";
+    let amtCashSale: number | null = null;
+    let creditInvAmt: number | null = null;
+    let toBank = "";
+    let toBankAmt: number | null = null;
+
+    if (inv) {
+      invoiceNo = inv.invoiceNo;
+      if (inv.paymentMode === "CASH") {
+        amtCashSale = inv.amount;
+      } else if (inv.paymentMode === "CREDIT_SALE") {
+        creditInvAmt = inv.amount;
+      } else if (inv.paymentMode === "SPLIT") {
+        amtCashSale = inv.splitCashAmount || null;
+        const bAmt = inv.splitBankAmount || 0;
+        toBankAmt = bAmt;
+        toBank = `Split ${inv.splitBankMethod === "BANK_TRANSFER" ? "Bank" : "Swipe"} - SAR ${fmt(bAmt)}`;
+      } else if (inv.paymentMode === "BANK_TRANSFER") {
+        toBankAmt = inv.amount;
+        toBank = `Bank #${inv.invoiceNo} - SAR ${fmt(inv.amount)}`;
+      } else if (inv.paymentMode === "POS_SWIPE") {
+        toBankAmt = inv.amount;
+        toBank = `Swipe #${inv.invoiceNo} - SAR ${fmt(inv.amount)}`;
+      }
+    } else if (sRow) {
+      invoiceNo = sRow.invoiceNo || "";
+      amtCashSale = parseNum(sRow.amtCashSale) > 0 ? parseNum(sRow.amtCashSale) : null;
+      creditInvAmt = parseNum(sRow.creditInvAmt) > 0 ? parseNum(sRow.creditInvAmt) : null;
+      if (sRow.toBankChecked && parseNum(sRow.toBankAmt) > 0) {
+        toBankAmt = parseNum(sRow.toBankAmt);
+        toBank = sRow.toBankLabel
+          ? `${sRow.toBankLabel} - SAR ${fmt(toBankAmt)}`
+          : `SAR ${fmt(toBankAmt)}`;
+      }
+    }
+
+    // 4. RECEIPT NO. & 5. CREDIT AMT RECD, 7. LOAN IN, 8. OTHER AMT RECD, 9. FROM BANK
+    let receiptNo = "";
+    let creditAmtRecd: number | null = null;
+    let loanIn: number | null = null;
+    let otherAmtRecd: number | null = null;
+    let fromBank: number | null = null;
+
+    if (inf) {
+      if (inf.type === "CREDIT_RECD") {
+        receiptNo = inf.customerName || inf.receiptNo || inf.title || "Credit Recd";
+        creditAmtRecd = inf.amount;
+      } else if (inf.type === "LOAN_IN") {
+        loanIn = inf.amount;
+      } else if (inf.type === "OTHER_IN") {
+        otherAmtRecd = inf.amount;
+      }
+    } else if (sRow) {
+      receiptNo = sRow.receiptNo || "";
+      creditAmtRecd = parseNum(sRow.creditSaleRecd) > 0 ? parseNum(sRow.creditSaleRecd) : null;
+      loanIn = parseNum(sRow.loanIn) > 0 ? parseNum(sRow.loanIn) : null;
+      otherAmtRecd = parseNum(sRow.otherAmtRecd) > 0 ? parseNum(sRow.otherAmtRecd) : null;
+      fromBank = parseNum(sRow.fromBank) > 0 ? parseNum(sRow.fromBank) : null;
+    }
+
+    // 6. OPEN BAL (Only on Row 1)
+    const openBal: number | null =
+      idx === 0
+        ? openingBalance || (sRow ? parseNum(sRow.openBal) || null : null)
+        : null;
+
+    // 10. TOTAL AMT (Row Inflow)
+    const rowInflow =
+      (amtCashSale || 0) +
+      (creditAmtRecd || 0) +
+      (openBal || 0) +
+      (loanIn || 0) +
+      (otherAmtRecd || 0) +
+      (fromBank || 0);
+    const totalAmt = rowInflow > 0 ? rowInflow : null;
+
+    // 11. CREDIT PURCHASE, 12. CASH PURCHASE, 13. CREDIT PURCHASE PAYMENT, 14. CR NOTE, 15. EXPENSE
+    let creditPurchase = "";
+    let creditPurchaseAmt: number | null = null;
+    let cashPurchase: number | null = null;
+    let creditPurchasePayment: number | null = null;
+    const crNote: number | null = sRow && parseNum(sRow.crNote) > 0 ? parseNum(sRow.crNote) : null;
+    let expense = "";
+    let expenseAmt: number | null = null;
+    const loanOut: number | null = sRow && parseNum(sRow.loanOut) > 0 ? parseNum(sRow.loanOut) : null;
+    const excessAmt: number | null = sRow && parseNum(sRow.excessAmt) > 0 ? parseNum(sRow.excessAmt) : null;
+
+    if (exp) {
+      const cat = exp.expenseCategory || exp.title;
+      if (cat === "Cash Purchase" || exp.title.toLowerCase().includes("cash purchase")) {
+        cashPurchase = exp.amount;
+      } else if (cat === "Credit Purchase" || exp.title.toLowerCase().includes("credit purchase")) {
+        creditPurchaseAmt = exp.amount;
+        creditPurchase = `${exp.title || "Supplier"} - SAR ${fmt(exp.amount)}`;
+      } else if (cat === "Credit Purchase Payment") {
+        creditPurchasePayment = exp.amount;
+      } else {
+        expenseAmt = exp.amount;
+        expense = `${cat} - SAR ${fmt(exp.amount)}`;
+      }
+    } else if (sRow) {
+      if (parseNum(sRow.creditPurchaseAmt) > 0) {
+        creditPurchaseAmt = parseNum(sRow.creditPurchaseAmt);
+        creditPurchase = sRow.creditPurchaseSupplier
+          ? `${sRow.creditPurchaseSupplier} - SAR ${fmt(creditPurchaseAmt)}`
+          : `SAR ${fmt(creditPurchaseAmt)}`;
+      }
+      cashPurchase = parseNum(sRow.cashPurchase) > 0 ? parseNum(sRow.cashPurchase) : null;
+      creditPurchasePayment =
+        parseNum(sRow.creditPurchasePayment) > 0 ? parseNum(sRow.creditPurchasePayment) : null;
+      if (parseNum(sRow.expenseAmt) > 0) {
+        expenseAmt = parseNum(sRow.expenseAmt);
+        expense = sRow.expenseLabel
+          ? `${sRow.expenseLabel} - SAR ${fmt(expenseAmt)}`
+          : `SAR ${fmt(expenseAmt)}`;
+      }
+    }
+
+    // Row-level outflow & cumulative closing balance
+    const rowOutflow =
+      (cashPurchase || 0) +
+      (creditPurchasePayment || 0) +
+      (expenseAmt || 0) +
+      (toBankAmt || 0) +
+      (loanOut || 0) -
+      (excessAmt || 0);
+
+    if (rowInflow > 0 || rowOutflow > 0) {
+      cumulativeCash =
+        cumulativeCash +
+        (idx === 0 ? 0 : openBal || 0) +
+        (amtCashSale || 0) +
+        (creditAmtRecd || 0) +
+        (loanIn || 0) +
+        (otherAmtRecd || 0) +
+        (fromBank || 0) -
+        rowOutflow;
+    }
+
+    const closingBalance =
+      rowInflow > 0 || rowOutflow > 0 || idx === rowCount - 1 ? cumulativeCash : null;
+
+    return {
+      invoiceNo,
+      amtCashSale,
+      creditInvAmt,
+      receiptNo,
+      creditAmtRecd,
+      openBal,
+      loanIn,
+      otherAmtRecd,
+      fromBank,
+      totalAmt,
+      creditPurchase,
+      creditPurchaseAmt,
+      cashPurchase,
+      creditPurchasePayment,
+      crNote,
+      expense,
+      expenseAmt,
+      toBank,
+      toBankAmt,
+      loanOut,
+      excessAmt,
+      closingBalance,
+    };
+  });
+}
+
+export function ClassicDataSheetTable({
+  sheetRows,
+  activeErpList = [],
+  preLoggedEntries = [],
+  openingBalance = 500,
+  date = "12-09-2026",
+  branchName = "Jubail Main",
+  className = "",
+}: ClassicDataSheetTableProps) {
+  const mappedRows = buildClassicDataSheetRows(
+    sheetRows,
+    activeErpList,
+    preLoggedEntries,
+    openingBalance
+  );
+
+  // Calculate Column Totals
+  const totalCashSale = mappedRows.reduce((s, r) => s + (r.amtCashSale || 0), 0);
+  const totalCreditInvAmt = mappedRows.reduce((s, r) => s + (r.creditInvAmt || 0), 0);
+  const totalCreditAmtRecd = mappedRows.reduce((s, r) => s + (r.creditAmtRecd || 0), 0);
+  const totalOpenBal = mappedRows.reduce((s, r) => s + (r.openBal || 0), 0);
+  const totalLoanIn = mappedRows.reduce((s, r) => s + (r.loanIn || 0), 0);
+  const totalOtherAmtRecd = mappedRows.reduce((s, r) => s + (r.otherAmtRecd || 0), 0);
+  const totalFromBank = mappedRows.reduce((s, r) => s + (r.fromBank || 0), 0);
+  const totalTotalAmt = mappedRows.reduce((s, r) => s + (r.totalAmt || 0), 0);
+  const totalCreditPurchase = mappedRows.reduce((s, r) => s + (r.creditPurchaseAmt || 0), 0);
+  const totalCashPurchase = mappedRows.reduce((s, r) => s + (r.cashPurchase || 0), 0);
+  const totalCreditPurchasePayment = mappedRows.reduce((s, r) => s + (r.creditPurchasePayment || 0), 0);
+  const totalCrNote = mappedRows.reduce((s, r) => s + (r.crNote || 0), 0);
+  const totalExpense = mappedRows.reduce((s, r) => s + (r.expenseAmt || 0), 0);
+  const totalToBank = mappedRows.reduce((s, r) => s + (r.toBankAmt || 0), 0);
+  const totalLoanOut = mappedRows.reduce((s, r) => s + (r.loanOut || 0), 0);
+  const totalExcessAmt = mappedRows.reduce((s, r) => s + (r.excessAmt || 0), 0);
+  const finalClosingBalance =
+    totalTotalAmt -
+    (totalCashPurchase + totalCreditPurchasePayment + totalExpense + totalToBank + totalLoanOut) +
+    totalExcessAmt;
+
+  return (
+    <div className={`w-full text-black ${className}`}>
+      {/* Global Print Style for Landscape A4 Orientation */}
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+            @media print {
+              @page {
+                size: A4 landscape;
+                margin: 5mm;
+              }
+              body {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+              }
+            }
+          `,
+        }}
+      />
+
+      {/* Header with Date at Top Left and Exact Text */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2 pb-2 border-b-2 border-black text-black">
+        <div className="text-left font-bold text-xs font-mono">
+          Date: {date || new Date().toLocaleDateString()}
+        </div>
+        <div className="text-center font-black tracking-tight text-sm sm:text-base uppercase font-display">
+          DAILY DATA SHEET : JUBAIL CORP. TRADING EST.
+        </div>
+        <div className="text-right text-xs font-semibold text-slate-700 print:text-black">
+          Branch: {branchName}
+        </div>
+      </div>
+
+      {/* Exact 19-Column Dense Table */}
+      <div className="overflow-x-auto w-full">
+        <table className="w-full border-collapse border border-black text-[10px] leading-tight text-black font-mono">
+          <thead>
+            <tr className="bg-slate-100 print:bg-slate-200 border-b border-black text-[9px] font-black uppercase tracking-tight text-center">
+              <th className="border border-black p-1 whitespace-nowrap">1. INVOICE NO.</th>
+              <th className="border border-black p-1 whitespace-nowrap">2. AMT CASH SALE</th>
+              <th className="border border-black p-1 whitespace-nowrap">3. CREDIT INV. AMOUNT</th>
+              <th className="border border-black p-1 whitespace-nowrap">4. RECEIPT NO.</th>
+              <th className="border border-black p-1 whitespace-nowrap">5. CREDIT AMT RECD</th>
+              <th className="border border-black p-1 whitespace-nowrap">6. OPEN BAL</th>
+              <th className="border border-black p-1 whitespace-nowrap">7. LOAN IN</th>
+              <th className="border border-black p-1 whitespace-nowrap">8. OTHER AMT RECD</th>
+              <th className="border border-black p-1 whitespace-nowrap">9. FROM BANK</th>
+              <th className="border border-black p-1 whitespace-nowrap bg-yellow-100 print:bg-yellow-200 font-black">
+                10. TOTAL AMT
+              </th>
+              <th className="border border-black p-1 whitespace-nowrap">11. CREDIT PURCHASE</th>
+              <th className="border border-black p-1 whitespace-nowrap">12. CASH PURCHASE</th>
+              <th className="border border-black p-1 whitespace-nowrap">13. CREDIT PURCHASE PAYMENT</th>
+              <th className="border border-black p-1 whitespace-nowrap">14. CR NOTE</th>
+              <th className="border border-black p-1 whitespace-nowrap">
+                15. EXPENSE (Format: Name/Note - Amount)
+              </th>
+              <th className="border border-black p-1 whitespace-nowrap">16. TO BANK</th>
+              <th className="border border-black p-1 whitespace-nowrap">17. LOAN OUT</th>
+              <th className="border border-black p-1 whitespace-nowrap">18. EXCESS AMT</th>
+              <th className="border border-black p-1 whitespace-nowrap bg-emerald-100 print:bg-emerald-200 font-black">
+                19. CLOSING BALANCE
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {mappedRows.map((row, idx) => (
+              <tr
+                key={`ds-row-${idx}`}
+                className="border-b border-slate-300 print:border-black print:break-inside-avoid hover:bg-slate-50 transition-colors"
+              >
+                {/* 1. INVOICE NO. */}
+                <td className="border border-slate-400 dark:border-white/20 print:border-black p-1 text-center font-bold">
+                  {row.invoiceNo ? `#${row.invoiceNo}` : null}
+                </td>
+
+                {/* 2. AMT CASH SALE */}
+                <td className="border border-slate-400 dark:border-white/20 print:border-black p-1 text-right font-mono font-bold">
+                  {row.amtCashSale ? fmt(row.amtCashSale) : null}
+                </td>
+
+                {/* 3. CREDIT INV. AMOUNT */}
+                <td className="border border-slate-400 dark:border-white/20 print:border-black p-1 text-right font-mono font-bold">
+                  {row.creditInvAmt ? fmt(row.creditInvAmt) : null}
+                </td>
+
+                {/* 4. RECEIPT NO. */}
+                <td className="border border-slate-400 dark:border-white/20 print:border-black p-1 text-left">
+                  {row.receiptNo || null}
+                </td>
+
+                {/* 5. CREDIT AMT RECD */}
+                <td className="border border-slate-400 dark:border-white/20 print:border-black p-1 text-right font-mono font-bold">
+                  {row.creditAmtRecd ? fmt(row.creditAmtRecd) : null}
+                </td>
+
+                {/* 6. OPEN BAL */}
+                <td className="border border-slate-400 dark:border-white/20 print:border-black p-1 text-right font-mono font-bold">
+                  {row.openBal ? fmt(row.openBal) : null}
+                </td>
+
+                {/* 7. LOAN IN */}
+                <td className="border border-slate-400 dark:border-white/20 print:border-black p-1 text-right font-mono font-bold">
+                  {row.loanIn ? fmt(row.loanIn) : null}
+                </td>
+
+                {/* 8. OTHER AMT RECD */}
+                <td className="border border-slate-400 dark:border-white/20 print:border-black p-1 text-right font-mono font-bold">
+                  {row.otherAmtRecd ? fmt(row.otherAmtRecd) : null}
+                </td>
+
+                {/* 9. FROM BANK */}
+                <td className="border border-slate-400 dark:border-white/20 print:border-black p-1 text-right font-mono font-bold">
+                  {row.fromBank ? fmt(row.fromBank) : null}
+                </td>
+
+                {/* 10. TOTAL AMT */}
+                <td className="border border-slate-400 dark:border-white/20 print:border-black p-1 text-right font-mono font-black bg-yellow-50/50 print:bg-yellow-50">
+                  {row.totalAmt ? fmt(row.totalAmt) : null}
+                </td>
+
+                {/* 11. CREDIT PURCHASE */}
+                <td className="border border-slate-400 dark:border-white/20 print:border-black p-1 text-left text-[9px]">
+                  {row.creditPurchase || null}
+                </td>
+
+                {/* 12. CASH PURCHASE */}
+                <td className="border border-slate-400 dark:border-white/20 print:border-black p-1 text-right font-mono">
+                  {row.cashPurchase ? fmt(row.cashPurchase) : null}
+                </td>
+
+                {/* 13. CREDIT PURCHASE PAYMENT */}
+                <td className="border border-slate-400 dark:border-white/20 print:border-black p-1 text-right font-mono">
+                  {row.creditPurchasePayment ? fmt(row.creditPurchasePayment) : null}
+                </td>
+
+                {/* 14. CR NOTE */}
+                <td className="border border-slate-400 dark:border-white/20 print:border-black p-1 text-right font-mono">
+                  {row.crNote ? fmt(row.crNote) : null}
+                </td>
+
+                {/* 15. EXPENSE (Format: Name/Note - Amount) */}
+                <td className="border border-slate-400 dark:border-white/20 print:border-black p-1 text-left text-[9px]">
+                  {row.expense || null}
+                </td>
+
+                {/* 16. TO BANK */}
+                <td className="border border-slate-400 dark:border-white/20 print:border-black p-1 text-left text-[9px]">
+                  {row.toBank || null}
+                </td>
+
+                {/* 17. LOAN OUT */}
+                <td className="border border-slate-400 dark:border-white/20 print:border-black p-1 text-right font-mono">
+                  {row.loanOut ? fmt(row.loanOut) : null}
+                </td>
+
+                {/* 18. EXCESS AMT */}
+                <td className="border border-slate-400 dark:border-white/20 print:border-black p-1 text-right font-mono">
+                  {row.excessAmt ? fmt(row.excessAmt) : null}
+                </td>
+
+                {/* 19. CLOSING BALANCE */}
+                <td className="border border-slate-400 dark:border-white/20 print:border-black p-1 text-right font-mono font-black bg-emerald-50/50 print:bg-emerald-50">
+                  {row.closingBalance ? fmt(row.closingBalance) : null}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="bg-slate-100 print:bg-slate-200 border-t-2 border-black font-black text-[9px] uppercase tracking-tight text-right">
+              <td className="border border-black p-1 text-center font-black">TOTAL</td>
+              <td className="border border-black p-1 font-mono">{totalCashSale > 0 ? fmt(totalCashSale) : null}</td>
+              <td className="border border-black p-1 font-mono">{totalCreditInvAmt > 0 ? fmt(totalCreditInvAmt) : null}</td>
+              <td className="border border-black p-1"></td>
+              <td className="border border-black p-1 font-mono">{totalCreditAmtRecd > 0 ? fmt(totalCreditAmtRecd) : null}</td>
+              <td className="border border-black p-1 font-mono">{totalOpenBal > 0 ? fmt(totalOpenBal) : null}</td>
+              <td className="border border-black p-1 font-mono">{totalLoanIn > 0 ? fmt(totalLoanIn) : null}</td>
+              <td className="border border-black p-1 font-mono">{totalOtherAmtRecd > 0 ? fmt(totalOtherAmtRecd) : null}</td>
+              <td className="border border-black p-1 font-mono">{totalFromBank > 0 ? fmt(totalFromBank) : null}</td>
+              <td className="border border-black p-1 font-mono bg-yellow-100 print:bg-yellow-200 font-black">
+                {totalTotalAmt > 0 ? fmt(totalTotalAmt) : null}
+              </td>
+              <td className="border border-black p-1 font-mono">{totalCreditPurchase > 0 ? fmt(totalCreditPurchase) : null}</td>
+              <td className="border border-black p-1 font-mono">{totalCashPurchase > 0 ? fmt(totalCashPurchase) : null}</td>
+              <td className="border border-black p-1 font-mono">
+                {totalCreditPurchasePayment > 0 ? fmt(totalCreditPurchasePayment) : null}
+              </td>
+              <td className="border border-black p-1 font-mono">{totalCrNote > 0 ? fmt(totalCrNote) : null}</td>
+              <td className="border border-black p-1 font-mono">{totalExpense > 0 ? fmt(totalExpense) : null}</td>
+              <td className="border border-black p-1 font-mono">{totalToBank > 0 ? fmt(totalToBank) : null}</td>
+              <td className="border border-black p-1 font-mono">{totalLoanOut > 0 ? fmt(totalLoanOut) : null}</td>
+              <td className="border border-black p-1 font-mono">{totalExcessAmt > 0 ? fmt(totalExcessAmt) : null}</td>
+              <td className="border border-black p-1 font-mono bg-emerald-100 print:bg-emerald-200 font-black">
+                {fmt(finalClosingBalance)}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export interface PosFeeBreakdown {
   gross: number;
   mdrBase: number;
@@ -4925,125 +5408,15 @@ function DailyRegisterView({
                 })}
                 </div>
               ) : (
-                <div className="w-full overflow-x-auto rounded-xl border border-slate-200 dark:border-[#1F1F1F] bg-white dark:bg-black shadow-sm">
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="border-b border-slate-200 dark:border-[#1F1F1F] bg-slate-100/75 dark:bg-white/5 font-semibold text-slate-700 dark:text-slate-200">
-                        <th className="py-2.5 px-3 whitespace-nowrap">Invoice #</th>
-                        <th className="py-2.5 px-3 min-w-[180px]">Customer</th>
-                        <th className="py-2.5 px-3 text-right whitespace-nowrap">Original Amount</th>
-                        <th className="py-2.5 px-3 text-right whitespace-nowrap">Edited Amount</th>
-                        <th className="py-2.5 px-3 whitespace-nowrap">Payment Mode</th>
-                        <th className="py-2.5 px-3 min-w-[200px]">Reason</th>
-                        <th className="py-2.5 px-3 text-center w-10"></th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-white/5">
-                      {activeErpList.map((inv) => {
-                        const origAmt = inv.originalAmount !== undefined ? inv.originalAmount : inv.amount;
-                        const isModified = inv.originalAmount !== undefined && inv.amount !== inv.originalAmount;
-
-                        return (
-                          <tr
-                            key={inv.invoiceNo}
-                            className="even:bg-slate-50 dark:even:bg-white/5 hover:bg-slate-100/50 dark:hover:bg-white/10 transition-colors"
-                          >
-                            <td className="py-2.5 px-3 font-mono font-medium text-slate-500 whitespace-nowrap">
-                              #{inv.invoiceNo}
-                              {inv.isManualEntry && (
-                                <span className="ml-1.5 rounded bg-jct-turquoise/20 text-jct-charcoal dark:text-jct-turquoise px-1.5 py-0.5 text-[9px] font-bold">
-                                  Manual
-                                </span>
-                              )}
-                            </td>
-                            <td className="py-2.5 px-3">
-                              <input
-                                type="text"
-                                value={inv.customer || inv.customerName || ""}
-                                onChange={(e) => handleEditErpInvoiceCustomer(inv.invoiceNo, e.target.value)}
-                                placeholder="Customer Name..."
-                                className="w-full bg-transparent border-b border-transparent focus:border-jct-turquoise text-jct-charcoal dark:text-white placeholder-slate-400 focus:outline-none px-1 py-0.5 text-xs"
-                              />
-                            </td>
-                            <td className="py-2.5 px-3 text-right font-mono text-slate-500 whitespace-nowrap">
-                              SAR {fmt(origAmt)}
-                            </td>
-                            <td className="py-2.5 px-3 text-right whitespace-nowrap">
-                              <div className="flex items-center justify-end gap-1">
-                                <span className="text-[10px] text-slate-400">SAR</span>
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  value={inv.amount === 0 ? "" : inv.amount}
-                                  placeholder="0.00"
-                                  onChange={(e) => handleEditErpInvoiceAmount(inv.invoiceNo, e.target.value)}
-                                  className={`w-24 text-right font-mono text-xs font-semibold bg-transparent border-b px-1 py-0.5 focus:outline-none ${
-                                    isModified
-                                      ? "border-amber-500 text-amber-600 dark:text-amber-400 font-bold"
-                                      : "border-transparent focus:border-jct-turquoise text-jct-charcoal dark:text-white"
-                                  }`}
-                                />
-                              </div>
-                            </td>
-                            <td className="py-2.5 px-3 whitespace-nowrap">
-                              <select
-                                value={inv.paymentMode}
-                                onChange={(e) => handleSetInvoiceMode(inv.invoiceNo, e.target.value as InvoicePaymentMode)}
-                                className="rounded border border-slate-200 dark:border-white/10 bg-white dark:bg-black px-2 py-1 text-xs font-medium text-jct-charcoal dark:text-white focus:outline-none focus:ring-1 focus:ring-jct-turquoise"
-                              >
-                                <option value="CASH">Cash</option>
-                                <option value="BANK_TRANSFER">Bank Transfer</option>
-                                <option value="POS_SWIPE">POS Swipe</option>
-                                <option value="SPLIT">Split Tender</option>
-                                <option value="CREDIT_SALE">Credit Sale</option>
-                              </select>
-                            </td>
-                            <td className="py-2.5 px-3">
-                              {isModified ? (
-                                <div className="flex items-center gap-1.5">
-                                  <select
-                                    value={inv.overrideReason || "BUSINESS_COMMISSION"}
-                                    onChange={(e) =>
-                                      handleEditErpInvoiceOverrideReason(
-                                        inv.invoiceNo,
-                                        e.target.value as OverrideReason
-                                      )
-                                    }
-                                    className="rounded border border-amber-500/40 bg-white dark:bg-black px-1.5 py-0.5 text-xs font-semibold text-amber-600 dark:text-amber-400 focus:outline-none"
-                                  >
-                                    <option value="BUSINESS_COMMISSION">Business Commission</option>
-                                    <option value="BILL_MISTAKE">Bill Mistake</option>
-                                    <option value="CUSTOM">Custom Note</option>
-                                  </select>
-                                  {inv.overrideReason === "CUSTOM" && (
-                                    <input
-                                      type="text"
-                                      placeholder="Reason note..."
-                                      value={inv.overrideNote || ""}
-                                      onChange={(e) => handleEditErpInvoiceOverrideNote(inv.invoiceNo, e.target.value)}
-                                      className="flex-1 min-w-[100px] bg-transparent border-b border-amber-500/40 text-xs px-1 py-0.5 focus:outline-none text-jct-charcoal dark:text-white"
-                                    />
-                                  )}
-                                </div>
-                              ) : (
-                                <span className="text-slate-400 text-[11px] italic">—</span>
-                              )}
-                            </td>
-                            <td className="py-2.5 px-3 text-center">
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveErpInvoice(inv.invoiceNo)}
-                                title="Remove invoice"
-                                className="text-slate-400 hover:text-red-500 transition-colors p-1"
-                              >
-                                <Trash2 size={13} />
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                <div className="w-full overflow-x-auto rounded-xl border border-slate-200 dark:border-[#1F1F1F] bg-white p-4 shadow-sm">
+                  <ClassicDataSheetTable
+                    sheetRows={sheetRows}
+                    activeErpList={activeErpList}
+                    preLoggedEntries={preLoggedEntries}
+                    openingBalance={openingBalance}
+                    date="12-09-2026"
+                    branchName={branchId === "JCT_HQ" ? "JCT Main HQ (Jubail)" : branchId}
+                  />
                 </div>
               )}
 
@@ -7062,81 +7435,18 @@ function DailyRegisterView({
       )}
 
       {/* ──────────────────────────────────────────────────────────
-          PRINT-ONLY: FULL SEQUENTIAL CLASSIC DATASHEET LEDGER (printMode === 'datasheet')
+          PRINT-ONLY: EXACT 19-COLUMN CLASSIC PHYSICAL DATASHEET (printMode === 'datasheet')
          ────────────────────────────────────────────────────────── */}
       {printMode === "datasheet" && (
         <div className="hidden print:block print:w-full print:bg-white print:text-black print:p-0 print:m-0">
-          <div className="mb-6">
-            <h1 className="print:text-4xl print:font-black print:tracking-tighter print:uppercase print:mb-2 print:text-black">
-              DAILY DATA SHEET : JUBAIL CORP. TRADING EST.
-            </h1>
-            <div className="print:text-lg print:font-bold">Date: {new Date().toLocaleDateString()}</div>
-            <div className="print:flex print:items-center print:justify-between print:text-lg print:font-semibold print:tracking-tight print:text-slate-600 print:mb-6 print:border-b-2 print:border-black print:pb-3 mt-1">
-              <div>
-                <span>Branch: </span>
-                <strong className="print:text-black">
-                  {branchId === "JCT_HQ" ? "JCT Main HQ (Jubail)" : branchId}
-                </strong>
-                <span className="print:mx-2">•</span>
-                <span>Jubail Corp. Trading Est.</span>
-              </div>
-              <div className="print:text-right print:font-mono print:text-sm">
-                <span>Register Date: </span>
-                <strong className="print:text-black">12-09-2026</strong>
-              </div>
-            </div>
-          </div>
-
-          <table className="w-full text-left border-collapse text-xs">
-            <thead>
-              <tr className="border-b-2 border-black font-bold uppercase text-[11px]">
-                <th className="py-2.5 px-2">#</th>
-                <th className="py-2.5 px-2 font-mono">Invoice #</th>
-                <th className="py-2.5 px-2">Customer Name</th>
-                <th className="py-2.5 px-2 text-right">Original (SAR)</th>
-                <th className="py-2.5 px-2 text-right">Edited (SAR)</th>
-                <th className="py-2.5 px-2">Payment Mode</th>
-                <th className="py-2.5 px-2">Reason / Note</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200">
-              {activeErpList.map((inv, idx) => {
-                const origAmt = inv.originalAmount !== undefined ? inv.originalAmount : inv.amount;
-                const isModified = inv.originalAmount !== undefined && inv.amount !== inv.originalAmount;
-                return (
-                  <tr key={`print-ds-${inv.invoiceNo}`} className="print:break-inside-avoid">
-                    <td className="py-2 px-2 font-mono text-slate-600">{idx + 1}</td>
-                    <td className="py-2 px-2 font-mono font-bold">#{inv.invoiceNo}</td>
-                    <td className="py-2 px-2 font-medium">{inv.customer || inv.customerName || "—"}</td>
-                    <td className="py-2 px-2 font-mono text-right text-slate-600">{fmt(origAmt)}</td>
-                    <td className="py-2 px-2 font-mono font-bold text-right">{fmt(inv.amount)}</td>
-                    <td className="py-2 px-2 uppercase text-[10px] font-semibold">{inv.paymentMode}</td>
-                    <td className="py-2 px-2 text-[11px] text-slate-600">
-                      {isModified ? (
-                        <span>
-                          {inv.overrideReason || "MODIFIED"}
-                          {inv.overrideNote ? ` (${inv.overrideNote})` : ""}
-                        </span>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-            <tfoot>
-              <tr className="border-t-2 border-black font-bold text-xs">
-                <td colSpan={4} className="py-3 px-2 uppercase text-right">Total Net Invoices:</td>
-                <td className="py-3 px-2 text-right font-mono text-sm">
-                  SAR {fmt(activeErpList.reduce((acc, i) => acc + (i.amount || 0), 0))}
-                </td>
-                <td colSpan={2}></td>
-              </tr>
-            </tfoot>
-          </table>
-
-          {/* Final Audit Sign-off */}
+          <ClassicDataSheetTable
+            sheetRows={sheetRows}
+            activeErpList={activeErpList}
+            preLoggedEntries={preLoggedEntries}
+            openingBalance={openingBalance}
+            date="12-09-2026"
+            branchName={branchId === "JCT_HQ" ? "JCT Main HQ (Jubail)" : branchId}
+          />
           <PrintReportFooter />
         </div>
       )}
