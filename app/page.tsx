@@ -3026,6 +3026,51 @@ function DailyRegisterView({
         (i.creditDownAmount || 0) > 0)
   );
 
+  // ── Print Categorized Ledger Lists (Strict Multi-Page Pagination) ────────
+  // Page 2: Cash Section (paymentMode === 'Cash' / 'CASH', 'OTHER_RECD', Split cash portion)
+  const printCashInvoices = cashSaleInvoices;
+
+  // Page 3: Bank Transfer Section (paymentMode === 'Bank' / 'BANK_TRANSFER', Split bank transfer portion)
+  const printBankTransferInvoices = activeErpList.filter(
+    (i) =>
+      i.paymentMode === "BANK_TRANSFER" ||
+      (i.paymentMode as string) === "Bank" ||
+      (i.paymentMode as string) === "BANK" ||
+      (i.paymentMode === "SPLIT" &&
+        i.splitBankMethod === "BANK_TRANSFER" &&
+        i.splitBankAmount > 0)
+  );
+
+  // Page 4: POS Swipes Section (paymentMode === 'Swipe' / 'POS_SWIPE', Split swipe portion, Credit POS down)
+  const printPosSwipeInvoices = activeErpList.filter(
+    (i) =>
+      i.paymentMode === "POS_SWIPE" ||
+      (i.paymentMode as string) === "Swipe" ||
+      (i.paymentMode as string) === "SWIPE" ||
+      (i.paymentMode === "SPLIT" &&
+        i.splitBankMethod === "POS_SWIPE" &&
+        i.splitBankAmount > 0) ||
+      (i.paymentMode === "CREDIT_SALE" &&
+        i.creditDownMethod === "POS_SWIPE" &&
+        (i.creditDownAmount || 0) > 0)
+  );
+
+  const bankTransferTotal = r2(
+    printBankTransferInvoices.reduce((sum, inv) => {
+      const amt =
+        inv.paymentMode === "SPLIT"
+          ? inv.splitBankAmount || 0
+          : inv.paymentMode === "CREDIT_SALE" && inv.creditDownMethod === "POS_SWIPE"
+          ? 0
+          : inv.amount;
+      return sum + amt;
+    }, 0)
+  );
+
+  const posSwipesGrossTotal = r2(
+    printPosSwipeInvoices.reduce((sum, inv) => sum + calcInvoiceBankGrossPortion(inv), 0)
+  );
+
   const cashSalesTotal = r2(
     activeErpList.reduce((sum, inv) => sum + calcInvoiceCashPortion(inv), 0)
   );
@@ -5675,150 +5720,158 @@ function DailyRegisterView({
              ────────────────────────────────────────────────────────────── */}
           {wizardStep === 5 && (
             <div className="flex flex-col gap-6 pb-8 print:block print:w-full print:bg-white print:text-black print:p-0 print:m-0">
-              {/* Print-Only Report Header */}
-              <PrintReportHeader
-                branch={branchId === "JCT_HQ" ? "JCT Main HQ (Jubail)" : branchId}
-                date="12-09-2026"
-              />
+              {/* ──────────────────────────────────────────────────────────
+                  PAGE 1: AUDIT SUMMARY (EXECUTIVE OVERVIEW)
+                 ────────────────────────────────────────────────────────── */}
+              <div className="print:break-after-page">
+                {/* Print-Only Report Header */}
+                <PrintReportHeader
+                  branch={branchId === "JCT_HQ" ? "JCT Main HQ (Jubail)" : branchId}
+                  date="12-09-2026"
+                />
 
-              {/* 1. Consolidated Settlement & Merchant Fee Header Strip - Staff RBAC */}
-              {isOwner && (
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 transition-all duration-300 print:hidden">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                      Audit Settlement Mode:
-                    </span>
-                    <div className="inline-flex rounded-xl bg-slate-100 dark:bg-black p-1 border border-slate-200 dark:border-[#1F1F1F] gap-1 print:hidden">
-                      <button
-                        type="button"
-                        onClick={() => setBankSettlementMode("GROSS")}
-                        className={`rounded-lg px-3 py-1.5 text-xs transition ${
-                          bankSettlementMode === "GROSS"
-                            ? "bg-jct-turquoise text-jct-charcoal font-bold shadow-sm"
-                            : "text-slate-500 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-jct-offwhite font-medium"
-                        }`}
-                      >
-                        Gross Face Value
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setBankSettlementMode("NET")}
-                        className={`rounded-lg px-3 py-1.5 text-xs transition ${
-                          bankSettlementMode === "NET"
-                            ? "bg-jct-turquoise text-jct-charcoal font-bold shadow-sm"
-                            : "text-slate-500 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-jct-offwhite font-medium"
-                        }`}
-                      >
-                        Net Bank (Deduct Fees &amp; VAT)
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center">
-                    {bankSettlementMode === "GROSS" ? (
-                      <div className="inline-flex items-center gap-1.5 text-xs bg-jct-yellow text-jct-charcoal font-bold px-3 py-1.5 rounded-lg">
-                        <span>ℹ️ Est. Merchant Fees: <strong className="font-mono">-SAR {fmt(totalPosFees)}</strong> (mada: SAR {fmt(totalMadaFees)} · CC: SAR {fmt(totalCcFees)}) · Informational</span>
-                      </div>
-                    ) : (
-                      <div className="inline-flex items-center gap-1.5 text-xs bg-jct-turquoise text-jct-charcoal font-bold px-3 py-1.5 rounded-lg">
-                        <span>✅ Net Settlement Active: <strong className="font-mono">SAR {fmt(totalPosFees)}</strong> deducted from bank total</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* 2. Streamlined Hero Drawer Closing Card */}
-              <div className="w-full bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-yellow/20 dark:border-jct-yellow/30 hover:border-jct-yellow/80 hover:shadow-[0_0_15px_rgba(255,222,89,0.1)] rounded-xl p-6 mb-2 transition-all duration-300 print:shadow-none print:border print:border-black print:rounded-none print:bg-white print:text-black print:p-6 print:mb-4 print:break-inside-avoid">
-                <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-4">
-                  <div>
-                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-jct-yellow text-jct-charcoal text-xs font-bold uppercase tracking-wider print:border print:border-black print:bg-white print:text-black print:text-xs print:font-bold print:uppercase">
-                      <Wallet size={14} className="text-jct-charcoal print:text-black" />
-                      <span>💵 PHYSICAL CASH DRAWER CLOSING BALANCE</span>
-                    </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 print:text-black">
-                      Count physical cash in register before locking.
-                    </p>
-                  </div>
-                  <div className="text-3xl md:text-4xl font-black text-jct-charcoal dark:text-jct-offwhite tracking-tight print:text-black print:text-2xl print:font-bold">
-                    SAR {fmt(calculatedClosingBalance)}
-                  </div>
-                </div>
-
-                {/* Clean Math Formula Strip (Fully Visible) */}
-                <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-slate-200 dark:border-[#1F1F1F] text-xs text-slate-500 dark:text-slate-400 print:text-black print:border-black">
-                  <span>Opening Float: <strong className="text-jct-charcoal dark:text-jct-offwhite print:text-black">SAR {fmt(openingBalance)}</strong></span>
-                  <span className="text-jct-turquoise font-bold print:text-black">+</span>
-                  <span>Inflows: <strong className="text-jct-charcoal dark:text-jct-offwhite print:text-black">SAR {fmt(totalCashInSalesAndReceipts)}</strong></span>
-                  <span className="text-rose-500 font-bold print:text-black">-</span>
-                  <span>Outflows: <strong className="text-jct-charcoal dark:text-jct-offwhite print:text-black">SAR {fmt(totalMoneyOutDrawer)}</strong></span>
-                  <span className="text-jct-yellow font-bold print:text-black">=</span>
-                  <span>Closing Cash: <strong className="text-jct-charcoal dark:text-jct-offwhite print:text-black">SAR {fmt(calculatedClosingBalance)}</strong></span>
-                </div>
-              </div>
-
-              {/* 3. The 3 Financial Pillars Grid (Inflows · Bank/Swipes · Outflows) */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-2 print:grid-cols-3 print:gap-4 print:mb-6 print:break-inside-avoid">
-                {/* Card 1: Cash Inflows */}
-                <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 flex flex-col justify-between gap-3 transition-all duration-300 print:shadow-none print:border print:border-black print:rounded-none print:bg-white print:text-black">
-                  <div>
-                    <span className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider print:text-black print:text-xs print:font-bold print:uppercase">
-                      Cash Inflows (Sales &amp; Receipts)
-                    </span>
-                    <span className="mt-2 block font-mono text-2xl font-black text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap print:text-black print:text-2xl print:font-bold">
-                      SAR {fmt(totalCashInSalesAndReceipts)}
-                    </span>
-                  </div>
-                  <span className="block text-xs text-slate-500 dark:text-slate-400 border-t border-slate-200 dark:border-[#1F1F1F] pt-2 print:text-black print:border-black">
-                    + Opening Float <strong className="text-jct-charcoal dark:text-jct-offwhite print:text-black">SAR {fmt(openingBalance)}</strong>
-                  </span>
-                </div>
-
-                {/* Card 2: Bank / Card Swipes */}
-                <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-yellow/20 dark:border-jct-yellow/30 hover:border-jct-yellow/80 hover:shadow-[0_0_15px_rgba(255,222,89,0.1)] rounded-xl p-6 flex flex-col justify-between gap-3 transition-all duration-300 print:shadow-none print:border print:border-black print:rounded-none print:bg-white print:text-black">
-                  <div>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider print:text-black print:text-xs print:font-bold print:uppercase">
-                        Bank &amp; Card Swipes
+                {/* 1. Consolidated Settlement & Merchant Fee Header Strip - Staff RBAC */}
+                {isOwner && (
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 transition-all duration-300 print:hidden">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                        Audit Settlement Mode:
                       </span>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setExpandedAuditBox(expandedAuditBox === "BANK_POS" ? "NONE" : "BANK_POS")
-                        }
-                        className="rounded px-2 py-0.5 text-[11px] bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 transition-all print:hidden"
-                      >
-                        {expandedAuditBox === "BANK_POS" ? "[Collapse]" : "[View Details]"}
-                      </button>
+                      <div className="inline-flex rounded-xl bg-slate-100 dark:bg-black p-1 border border-slate-200 dark:border-[#1F1F1F] gap-1 print:hidden">
+                        <button
+                          type="button"
+                          onClick={() => setBankSettlementMode("GROSS")}
+                          className={`rounded-lg px-3 py-1.5 text-xs transition ${
+                            bankSettlementMode === "GROSS"
+                              ? "bg-jct-turquoise text-jct-charcoal font-bold shadow-sm"
+                              : "text-slate-500 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-jct-offwhite font-medium"
+                          }`}
+                        >
+                          Gross Face Value
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setBankSettlementMode("NET")}
+                          className={`rounded-lg px-3 py-1.5 text-xs transition ${
+                            bankSettlementMode === "NET"
+                              ? "bg-jct-turquoise text-jct-charcoal font-bold shadow-sm"
+                              : "text-slate-500 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-jct-offwhite font-medium"
+                          }`}
+                        >
+                          Net Bank (Deduct Fees &amp; VAT)
+                        </button>
+                      </div>
                     </div>
-                    <span className="mt-2 block font-mono text-2xl font-black text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap print:text-black print:text-2xl print:font-bold">
-                      SAR {fmt(activeBankSettlementTotal)}
+
+                    <div className="flex items-center">
+                      {bankSettlementMode === "GROSS" ? (
+                        <div className="inline-flex items-center gap-1.5 text-xs bg-jct-yellow text-jct-charcoal font-bold px-3 py-1.5 rounded-lg">
+                          <span>ℹ️ Est. Merchant Fees: <strong className="font-mono">-SAR {fmt(totalPosFees)}</strong> (mada: SAR {fmt(totalMadaFees)} · CC: SAR {fmt(totalCcFees)}) · Informational</span>
+                        </div>
+                      ) : (
+                        <div className="inline-flex items-center gap-1.5 text-xs bg-jct-turquoise text-jct-charcoal font-bold px-3 py-1.5 rounded-lg">
+                          <span>✅ Net Settlement Active: <strong className="font-mono">SAR {fmt(totalPosFees)}</strong> deducted from bank total</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* 2. Streamlined Hero Drawer Closing Card */}
+                <div className="w-full bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-yellow/20 dark:border-jct-yellow/30 hover:border-jct-yellow/80 hover:shadow-[0_0_15px_rgba(255,222,89,0.1)] rounded-xl p-6 mb-2 transition-all duration-300 print:shadow-none print:border print:border-black print:rounded-none print:bg-white print:text-black print:p-6 print:mb-4 print:break-inside-avoid">
+                  <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-4">
+                    <div>
+                      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-jct-yellow text-jct-charcoal text-xs font-bold uppercase tracking-wider print:border print:border-black print:bg-white print:text-black print:text-xs print:font-bold print:uppercase">
+                        <Wallet size={14} className="text-jct-charcoal print:text-black" />
+                        <span>💵 PHYSICAL CASH DRAWER CLOSING BALANCE</span>
+                      </div>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 print:text-black">
+                        Count physical cash in register before locking.
+                      </p>
+                    </div>
+                    <div className="text-3xl md:text-4xl font-black text-jct-charcoal dark:text-jct-offwhite tracking-tight print:text-black print:text-2xl print:font-bold">
+                      SAR {fmt(calculatedClosingBalance)}
+                    </div>
+                  </div>
+
+                  {/* Clean Math Formula Strip (Fully Visible) */}
+                  <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-slate-200 dark:border-[#1F1F1F] text-xs text-slate-500 dark:text-slate-400 print:text-black print:border-black">
+                    <span>Opening Float: <strong className="text-jct-charcoal dark:text-jct-offwhite print:text-black">SAR {fmt(openingBalance)}</strong></span>
+                    <span className="text-jct-turquoise font-bold print:text-black">+</span>
+                    <span>Inflows: <strong className="text-jct-charcoal dark:text-jct-offwhite print:text-black">SAR {fmt(totalCashInSalesAndReceipts)}</strong></span>
+                    <span className="text-rose-500 font-bold print:text-black">-</span>
+                    <span>Outflows: <strong className="text-jct-charcoal dark:text-jct-offwhite print:text-black">SAR {fmt(totalMoneyOutDrawer)}</strong></span>
+                    <span className="text-jct-yellow font-bold print:text-black">=</span>
+                    <span>Closing Cash: <strong className="text-jct-charcoal dark:text-jct-offwhite print:text-black">SAR {fmt(calculatedClosingBalance)}</strong></span>
+                  </div>
+                </div>
+
+                {/* 3. The 3 Financial Pillars Grid (Inflows · Bank/Swipes · Outflows) */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-2 print:grid-cols-3 print:gap-4 print:mb-6 print:break-inside-avoid">
+                  {/* Card 1: Cash Inflows */}
+                  <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 flex flex-col justify-between gap-3 transition-all duration-300 print:shadow-none print:border print:border-black print:rounded-none print:bg-white print:text-black">
+                    <div>
+                      <span className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider print:text-black print:text-xs print:font-bold print:uppercase">
+                        Cash Inflows (Sales &amp; Receipts)
+                      </span>
+                      <span className="mt-2 block font-mono text-2xl font-black text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap print:text-black print:text-2xl print:font-bold">
+                        SAR {fmt(totalCashInSalesAndReceipts)}
+                      </span>
+                    </div>
+                    <span className="block text-xs text-slate-500 dark:text-slate-400 border-t border-slate-200 dark:border-[#1F1F1F] pt-2 print:text-black print:border-black">
+                      + Opening Float <strong className="text-jct-charcoal dark:text-jct-offwhite print:text-black">SAR {fmt(openingBalance)}</strong>
                     </span>
                   </div>
-                  <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 border-t border-slate-200 dark:border-[#1F1F1F] pt-2 print:text-black print:border-black">
-                    <span className="print:text-black">
-                      {bankSwipeInvoices.length} Invoices settled to bank
-                    </span>
-                    <span className="text-[11px] font-semibold text-jct-charcoal dark:text-jct-offwhite print:text-black">
-                      {bankSettlementMode === "NET" ? "Net of fees" : "Gross"}
+
+                  {/* Card 2: Bank / Card Swipes */}
+                  <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-yellow/20 dark:border-jct-yellow/30 hover:border-jct-yellow/80 hover:shadow-[0_0_15px_rgba(255,222,89,0.1)] rounded-xl p-6 flex flex-col justify-between gap-3 transition-all duration-300 print:shadow-none print:border print:border-black print:rounded-none print:bg-white print:text-black">
+                    <div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider print:text-black print:text-xs print:font-bold print:uppercase">
+                          Bank &amp; Card Swipes
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setExpandedAuditBox(expandedAuditBox === "BANK_POS" ? "NONE" : "BANK_POS")
+                          }
+                          className="rounded px-2 py-0.5 text-[11px] bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 transition-all print:hidden"
+                        >
+                          {expandedAuditBox === "BANK_POS" ? "[Collapse]" : "[View Details]"}
+                        </button>
+                      </div>
+                      <span className="mt-2 block font-mono text-2xl font-black text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap print:text-black print:text-2xl print:font-bold">
+                        SAR {fmt(activeBankSettlementTotal)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 border-t border-slate-200 dark:border-[#1F1F1F] pt-2 print:text-black print:border-black">
+                      <span className="print:text-black">
+                        {bankSwipeInvoices.length} Invoices settled to bank
+                      </span>
+                      <span className="text-[11px] font-semibold text-jct-charcoal dark:text-jct-offwhite print:text-black">
+                        {bankSettlementMode === "NET" ? "Net of fees" : "Gross"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Card 3: Cash Outflows */}
+                  <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 flex flex-col justify-between gap-3 transition-all duration-300 print:shadow-none print:border print:border-black print:rounded-none print:bg-white print:text-black">
+                    <div>
+                      <span className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider print:text-black print:text-xs print:font-bold print:uppercase">
+                        Cash Outflows (Shop Expenses)
+                      </span>
+                      <span className="mt-2 block font-mono text-2xl font-black text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap print:text-black print:text-2xl print:font-bold">
+                        SAR {fmt(totalMoneyOutDrawer)}
+                      </span>
+                    </div>
+                    <span className="block text-xs text-slate-500 dark:text-slate-400 border-t border-slate-200 dark:border-[#1F1F1F] pt-2 print:text-black print:border-black">
+                      {expenseEntries.length} Recorded shop expenses
                     </span>
                   </div>
                 </div>
 
-                {/* Card 3: Cash Outflows */}
-                <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 flex flex-col justify-between gap-3 transition-all duration-300 print:shadow-none print:border print:border-black print:rounded-none print:bg-white print:text-black">
-                  <div>
-                    <span className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider print:text-black print:text-xs print:font-bold print:uppercase">
-                      Cash Outflows (Shop Expenses)
-                    </span>
-                    <span className="mt-2 block font-mono text-2xl font-black text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap print:text-black print:text-2xl print:font-bold">
-                      SAR {fmt(totalMoneyOutDrawer)}
-                    </span>
-                  </div>
-                  <span className="block text-xs text-slate-500 dark:text-slate-400 border-t border-slate-200 dark:border-[#1F1F1F] pt-2 print:text-black print:border-black">
-                    {expenseEntries.length} Recorded shop expenses
-                  </span>
-                </div>
+                {/* Print-Only Signature Footer at bottom of Page 1 Audit Summary */}
+                <PrintReportFooter />
               </div>
 
               {/* Expanded Mode Banner if a Box is Expanded */}
@@ -5843,11 +5896,11 @@ function DailyRegisterView({
                 </div>
               )}
 
-              {/* Main Body — 3 Expandable Boxes */}
+              {/* Main Body — 3 Expandable Boxes (Interactive on screen, hidden in print ledger) */}
               <div
                 className={`grid grid-cols-1 ${
                   expandedAuditBox === "NONE" ? "lg:grid-cols-2" : "lg:grid-cols-1"
-                } gap-6 items-start print:block print:w-full print:space-y-6`}
+                } gap-6 items-start print:hidden`}
               >
                 {/* ══════════════════════════════════════════════════════════
                     BOX 1: Money In — Cash Sales & Receipts
@@ -6640,8 +6693,241 @@ function DailyRegisterView({
             )}
           </div>
 
-          {/* Print-Only Signature Footer at very bottom of document */}
-          <PrintReportFooter />
+          {/* ──────────────────────────────────────────────────────────
+              PAGE 2: APPENDIX A: CASH INFLOWS
+             ────────────────────────────────────────────────────────── */}
+          <div className="hidden print:block print:break-before-page">
+            <div className="print:text-2xl print:font-black print:tracking-tight print:uppercase print:mb-6 print:border-b-2 print:border-black print:pb-2 print:text-black flex justify-between items-center">
+              <span>APPENDIX A: CASH INFLOWS</span>
+              <span className="font-mono text-base font-bold text-slate-700">
+                Total: SAR {fmt(cashSalesTotal)}
+              </span>
+            </div>
+
+            <div className="divide-y divide-slate-200">
+              {/* Table Column Headers */}
+              <div className="print:flex print:justify-between print:items-center print:py-2.5 print:border-b-2 print:border-black print:text-xs print:font-bold print:uppercase print:text-slate-800">
+                <div className="flex items-center gap-4 min-w-0 flex-1">
+                  <span className="w-24 shrink-0 font-mono">Invoice #</span>
+                  <span className="truncate">Customer Name</span>
+                </div>
+                <div className="flex items-center gap-6 shrink-0">
+                  <span className="w-28 text-center">Type</span>
+                  <span className="w-28 text-right font-mono">Amount (SAR)</span>
+                </div>
+              </div>
+
+              {/* Register Float Row */}
+              <div className="print:flex print:justify-between print:py-3 print:border-b print:border-slate-200 print:text-sm print:items-center print:break-inside-avoid print:text-black bg-slate-50">
+                <div className="flex items-center gap-4 min-w-0 flex-1">
+                  <span className="font-mono font-bold w-24 shrink-0 text-slate-800">
+                    FLOAT
+                  </span>
+                  <span className="font-medium text-black">
+                    Opening Drawer Float
+                  </span>
+                </div>
+                <div className="flex items-center gap-6 shrink-0">
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded border border-slate-300 text-slate-600 w-28 text-center">
+                    Float
+                  </span>
+                  <span className="font-mono font-bold text-sm w-28 text-right text-black">
+                    +SAR {fmt(openingBalance)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Cash Invoices */}
+              {printCashInvoices.length === 0 ? (
+                <div className="py-6 text-center text-slate-500 italic text-sm">
+                  No cash invoices recorded for this period.
+                </div>
+              ) : (
+                printCashInvoices.map((inv) => {
+                  const isSplit = inv.paymentMode === "SPLIT";
+                  const cashAmt = calcInvoiceCashPortion(inv);
+                  return (
+                    <div
+                      key={`print-cash-${inv.invoiceNo}`}
+                      className="print:flex print:justify-between print:py-3 print:border-b print:border-slate-200 print:text-sm print:items-center print:break-inside-avoid print:text-black"
+                    >
+                      <div className="flex items-center gap-4 min-w-0 flex-1">
+                        <span className="font-mono font-bold w-24 shrink-0 text-slate-800">
+                          #{inv.invoiceNo}
+                        </span>
+                        <span className="font-medium truncate text-black">
+                          {inv.customer}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-6 shrink-0">
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded border border-slate-300 text-slate-600 w-28 text-center">
+                          {isSplit
+                            ? "Split (Cash)"
+                            : inv.paymentMode === "OTHER_RECD"
+                            ? "Other Recd"
+                            : "Cash"}
+                        </span>
+                        <span className="font-mono font-bold text-sm w-28 text-right text-black">
+                          +SAR {fmt(cashAmt)}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+
+              {/* Cash Inflow Receipts */}
+              {cashInflowEntries.map((entry) => (
+                <div
+                  key={`print-receipt-${entry.id}`}
+                  className="print:flex print:justify-between print:py-3 print:border-b print:border-slate-200 print:text-sm print:items-center print:break-inside-avoid print:text-black"
+                >
+                  <div className="flex items-center gap-4 min-w-0 flex-1">
+                    <span className="font-mono font-bold w-24 shrink-0 text-slate-800">
+                      {entry.receiptNo || "RECEIPT"}
+                    </span>
+                    <span className="font-medium truncate text-black">
+                      {entry.title}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-6 shrink-0">
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded border border-slate-300 text-slate-600 w-28 text-center">
+                      Receipt
+                    </span>
+                    <span className="font-mono font-bold text-sm w-28 text-right text-black">
+                      +SAR {fmt(entry.amount)}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* ──────────────────────────────────────────────────────────
+              PAGE 3: APPENDIX B: BANK TRANSFERS
+             ────────────────────────────────────────────────────────── */}
+          <div className="hidden print:block print:break-before-page">
+            <div className="print:text-2xl print:font-black print:tracking-tight print:uppercase print:mb-6 print:border-b-2 print:border-black print:pb-2 print:text-black flex justify-between items-center">
+              <span>APPENDIX B: BANK TRANSFERS</span>
+              <span className="font-mono text-base font-bold text-slate-700">
+                Total: SAR {fmt(bankTransferTotal)}
+              </span>
+            </div>
+
+            <div className="divide-y divide-slate-200">
+              {/* Table Column Headers */}
+              <div className="print:flex print:justify-between print:items-center print:py-2.5 print:border-b-2 print:border-black print:text-xs print:font-bold print:uppercase print:text-slate-800">
+                <div className="flex items-center gap-4 min-w-0 flex-1">
+                  <span className="w-24 shrink-0 font-mono">Invoice #</span>
+                  <span className="truncate">Customer Name</span>
+                </div>
+                <div className="flex items-center gap-6 shrink-0">
+                  <span className="w-28 text-center">Channel</span>
+                  <span className="w-28 text-right font-mono">Amount (SAR)</span>
+                </div>
+              </div>
+
+              {printBankTransferInvoices.length === 0 ? (
+                <div className="py-8 text-center text-slate-500 italic text-sm">
+                  No direct bank transfers recorded for this register date.
+                </div>
+              ) : (
+                printBankTransferInvoices.map((inv) => {
+                  const isSplit = inv.paymentMode === "SPLIT";
+                  const amt = isSplit ? (inv.splitBankAmount || 0) : inv.amount;
+                  return (
+                    <div
+                      key={`print-bank-${inv.invoiceNo}`}
+                      className="print:flex print:justify-between print:py-3 print:border-b print:border-slate-200 print:text-sm print:items-center print:break-inside-avoid print:text-black"
+                    >
+                      <div className="flex items-center gap-4 min-w-0 flex-1">
+                        <span className="font-mono font-bold w-24 shrink-0 text-slate-800">
+                          #{inv.invoiceNo}
+                        </span>
+                        <span className="font-medium truncate text-black">
+                          {inv.customer}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-6 shrink-0">
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded border border-slate-300 text-slate-600 w-28 text-center">
+                          {isSplit ? "Split (Bank)" : "Bank Transfer"}
+                        </span>
+                        <span className="font-mono font-bold text-sm w-28 text-right text-black">
+                          SAR {fmt(amt)}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          {/* ──────────────────────────────────────────────────────────
+              PAGE 4: APPENDIX C: POS SWIPES
+             ────────────────────────────────────────────────────────── */}
+          <div className="hidden print:block print:break-before-page">
+            <div className="print:text-2xl print:font-black print:tracking-tight print:uppercase print:mb-6 print:border-b-2 print:border-black print:pb-2 print:text-black flex justify-between items-center">
+              <span>APPENDIX C: POS SWIPES</span>
+              <span className="font-mono text-base font-bold text-slate-700">
+                Total: SAR {fmt(posSwipesGrossTotal)}
+              </span>
+            </div>
+
+            <div className="divide-y divide-slate-200">
+              {/* Table Column Headers */}
+              <div className="print:flex print:justify-between print:items-center print:py-2.5 print:border-b-2 print:border-black print:text-xs print:font-bold print:uppercase print:text-slate-800">
+                <div className="flex items-center gap-4 min-w-0 flex-1">
+                  <span className="w-24 shrink-0 font-mono">Invoice #</span>
+                  <span className="truncate">Customer Name</span>
+                </div>
+                <div className="flex items-center gap-6 shrink-0">
+                  <span className="w-28 text-center">Terminal / Card</span>
+                  <span className="w-28 text-right font-mono">Gross Amount (SAR)</span>
+                </div>
+              </div>
+
+              {printPosSwipeInvoices.length === 0 ? (
+                <div className="py-8 text-center text-slate-500 italic text-sm">
+                  No POS card transactions recorded for this register date.
+                </div>
+              ) : (
+                printPosSwipeInvoices.map((inv) => {
+                  const isSplit = inv.paymentMode === "SPLIT";
+                  const amt = calcInvoiceBankGrossPortion(inv);
+                  const term: PosTerminalBank =
+                    (isSplit ? inv.splitPosTerminal : inv.posTerminal) || "SAB";
+                  const termLabel = POS_TERMINAL_META[term]?.badgeTag || term;
+                  return (
+                    <div
+                      key={`print-pos-${inv.invoiceNo}`}
+                      className="print:flex print:justify-between print:py-3 print:border-b print:border-slate-200 print:text-sm print:items-center print:break-inside-avoid print:text-black"
+                    >
+                      <div className="flex items-center gap-4 min-w-0 flex-1">
+                        <span className="font-mono font-bold w-24 shrink-0 text-slate-800">
+                          #{inv.invoiceNo}
+                        </span>
+                        <span className="font-medium truncate text-black">
+                          {inv.customer}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-6 shrink-0">
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded border border-slate-300 text-slate-600 font-mono w-28 text-center">
+                          [{termLabel}]
+                        </span>
+                        <span className="font-mono font-bold text-sm w-28 text-right text-black">
+                          SAR {fmt(amt)}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Final Audit Sign-off at bottom of Page 4 */}
+            <PrintReportFooter />
+          </div>
 
           {/* 4. Clean Footer Bar */}
               <div className="sticky bottom-4 z-20 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 transition-all duration-300 print:hidden">
