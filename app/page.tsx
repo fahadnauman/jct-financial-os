@@ -268,7 +268,8 @@ function PrintReportHeader({ branch, date }: { branch: string; date: string }) {
       <h1 className="print:text-4xl print:font-black print:tracking-tighter print:uppercase print:mb-2 print:text-black">
         JCT FINANCIAL OS — DAILY REGISTER REPORT
       </h1>
-      <div className="print:flex print:items-center print:justify-between print:text-lg print:font-semibold print:tracking-tight print:text-slate-600 print:mb-8 print:border-b-2 print:border-black print:pb-4">
+      <div className="print:text-lg print:font-bold">Date: {new Date().toLocaleDateString()}</div>
+      <div className="print:flex print:items-center print:justify-between print:text-lg print:font-semibold print:tracking-tight print:text-slate-600 print:mb-8 print:border-b-2 print:border-black print:pb-4 mt-1">
         <div>
           <span>Branch: </span>
           <strong className="print:text-black">{branch}</strong>
@@ -1391,6 +1392,8 @@ function DailyRegisterView({
   const [showManualEntry, setShowManualEntry] = useState(false);
   const [trackPosFees, setTrackPosFees] = useState(false);
   const [bankSettlementMode, setBankSettlementMode] = useState<"GROSS" | "NET">("GROSS");
+  const [isDatasheetView, setIsDatasheetView] = useState(false);
+  const [printMode, setPrintMode] = useState<"summary" | "datasheet">("summary");
   const [creditModalInvNo, setCreditModalInvNo] = useState<string | null>(null);
   const [justCompletedToast, setJustCompletedToast] = useState<string | null>(null);
   const [syncBannerMsg, setSyncBannerMsg] = useState<{
@@ -3614,15 +3617,6 @@ function DailyRegisterView({
 
               <button
                 type="button"
-                onClick={() => setTrackingMode("datasheet")}
-                className="bg-jct-yellow text-jct-charcoal font-bold px-4 py-2 rounded-lg hover:brightness-95 transition-all flex items-center gap-2 whitespace-nowrap shadow-sm border border-jct-yellow/60 hover:border-jct-yellow hover:shadow-[0_0_15px_rgba(255,222,89,0.25)]"
-              >
-                <FileSpreadsheet size={16} className="text-jct-charcoal" />
-                <span>Classic Data Entry</span>
-              </button>
-
-              <button
-                type="button"
                 onClick={() => setShowManualEntry((prev) => !prev)}
                 className="bg-slate-800 text-slate-300 border border-slate-600 text-sm px-3 py-1.5 rounded-md hover:bg-slate-700 transition-colors flex items-center gap-1.5 whitespace-nowrap"
                 title="Toggle manual entry forms"
@@ -4433,7 +4427,8 @@ function DailyRegisterView({
               </div>
 
               {/* Clean Spreadsheet Table of Imported Invoices with Progressive Disclosure */}
-              <div className="divide-y-0">
+              {!isDatasheetView ? (
+                <div className="divide-y-0">
                 {activeErpList.map((inv) => {
                   const isBankOrPos =
                     inv.paymentMode === "BANK_TRANSFER" || inv.paymentMode === "POS_SWIPE";
@@ -4928,7 +4923,129 @@ function DailyRegisterView({
                     </div>
                   );
                 })}
-              </div>
+                </div>
+              ) : (
+                <div className="w-full overflow-x-auto rounded-xl border border-slate-200 dark:border-[#1F1F1F] bg-white dark:bg-black shadow-sm">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-200 dark:border-[#1F1F1F] bg-slate-100/75 dark:bg-white/5 font-semibold text-slate-700 dark:text-slate-200">
+                        <th className="py-2.5 px-3 whitespace-nowrap">Invoice #</th>
+                        <th className="py-2.5 px-3 min-w-[180px]">Customer</th>
+                        <th className="py-2.5 px-3 text-right whitespace-nowrap">Original Amount</th>
+                        <th className="py-2.5 px-3 text-right whitespace-nowrap">Edited Amount</th>
+                        <th className="py-2.5 px-3 whitespace-nowrap">Payment Mode</th>
+                        <th className="py-2.5 px-3 min-w-[200px]">Reason</th>
+                        <th className="py-2.5 px-3 text-center w-10"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                      {activeErpList.map((inv) => {
+                        const origAmt = inv.originalAmount !== undefined ? inv.originalAmount : inv.amount;
+                        const isModified = inv.originalAmount !== undefined && inv.amount !== inv.originalAmount;
+
+                        return (
+                          <tr
+                            key={inv.invoiceNo}
+                            className="even:bg-slate-50 dark:even:bg-white/5 hover:bg-slate-100/50 dark:hover:bg-white/10 transition-colors"
+                          >
+                            <td className="py-2.5 px-3 font-mono font-medium text-slate-500 whitespace-nowrap">
+                              #{inv.invoiceNo}
+                              {inv.isManualEntry && (
+                                <span className="ml-1.5 rounded bg-jct-turquoise/20 text-jct-charcoal dark:text-jct-turquoise px-1.5 py-0.5 text-[9px] font-bold">
+                                  Manual
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <input
+                                type="text"
+                                value={inv.customer || inv.customerName || ""}
+                                onChange={(e) => handleEditErpInvoiceCustomer(inv.invoiceNo, e.target.value)}
+                                placeholder="Customer Name..."
+                                className="w-full bg-transparent border-b border-transparent focus:border-jct-turquoise text-jct-charcoal dark:text-white placeholder-slate-400 focus:outline-none px-1 py-0.5 text-xs"
+                              />
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-mono text-slate-500 whitespace-nowrap">
+                              SAR {fmt(origAmt)}
+                            </td>
+                            <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                              <div className="flex items-center justify-end gap-1">
+                                <span className="text-[10px] text-slate-400">SAR</span>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={inv.amount === 0 ? "" : inv.amount}
+                                  placeholder="0.00"
+                                  onChange={(e) => handleEditErpInvoiceAmount(inv.invoiceNo, e.target.value)}
+                                  className={`w-24 text-right font-mono text-xs font-semibold bg-transparent border-b px-1 py-0.5 focus:outline-none ${
+                                    isModified
+                                      ? "border-amber-500 text-amber-600 dark:text-amber-400 font-bold"
+                                      : "border-transparent focus:border-jct-turquoise text-jct-charcoal dark:text-white"
+                                  }`}
+                                />
+                              </div>
+                            </td>
+                            <td className="py-2.5 px-3 whitespace-nowrap">
+                              <select
+                                value={inv.paymentMode}
+                                onChange={(e) => handleSetInvoiceMode(inv.invoiceNo, e.target.value as InvoicePaymentMode)}
+                                className="rounded border border-slate-200 dark:border-white/10 bg-white dark:bg-black px-2 py-1 text-xs font-medium text-jct-charcoal dark:text-white focus:outline-none focus:ring-1 focus:ring-jct-turquoise"
+                              >
+                                <option value="CASH">Cash</option>
+                                <option value="BANK_TRANSFER">Bank Transfer</option>
+                                <option value="POS_SWIPE">POS Swipe</option>
+                                <option value="SPLIT">Split Tender</option>
+                                <option value="CREDIT_SALE">Credit Sale</option>
+                              </select>
+                            </td>
+                            <td className="py-2.5 px-3">
+                              {isModified ? (
+                                <div className="flex items-center gap-1.5">
+                                  <select
+                                    value={inv.overrideReason || "BUSINESS_COMMISSION"}
+                                    onChange={(e) =>
+                                      handleEditErpInvoiceOverrideReason(
+                                        inv.invoiceNo,
+                                        e.target.value as OverrideReason
+                                      )
+                                    }
+                                    className="rounded border border-amber-500/40 bg-white dark:bg-black px-1.5 py-0.5 text-xs font-semibold text-amber-600 dark:text-amber-400 focus:outline-none"
+                                  >
+                                    <option value="BUSINESS_COMMISSION">Business Commission</option>
+                                    <option value="BILL_MISTAKE">Bill Mistake</option>
+                                    <option value="CUSTOM">Custom Note</option>
+                                  </select>
+                                  {inv.overrideReason === "CUSTOM" && (
+                                    <input
+                                      type="text"
+                                      placeholder="Reason note..."
+                                      value={inv.overrideNote || ""}
+                                      onChange={(e) => handleEditErpInvoiceOverrideNote(inv.invoiceNo, e.target.value)}
+                                      className="flex-1 min-w-[100px] bg-transparent border-b border-amber-500/40 text-xs px-1 py-0.5 focus:outline-none text-jct-charcoal dark:text-white"
+                                    />
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-slate-400 text-[11px] italic">—</span>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-3 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveErpInvoice(inv.invoiceNo)}
+                                title="Remove invoice"
+                                className="text-slate-400 hover:text-red-500 transition-colors p-1"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
 
               <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
                 <button
@@ -4938,13 +5055,23 @@ function DailyRegisterView({
                 >
                   ← Back
                 </button>
-                <button
-                  type="button"
-                  onClick={handleAddInvoiceRow}
-                  className="px-4 py-2 rounded-lg border border-jct-turquoise/50 text-jct-turquoise hover:bg-jct-turquoise/10 transition-all font-semibold text-sm"
-                >
-                  + Add Manual Invoice
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleAddInvoiceRow}
+                    className="px-4 py-2 rounded-lg border border-jct-turquoise/50 text-jct-turquoise hover:bg-jct-turquoise/10 transition-all font-semibold text-sm"
+                  >
+                    + Add Manual Invoice
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsDatasheetView((prev) => !prev)}
+                    className="px-4 py-2 rounded-lg border border-slate-300 dark:border-white/20 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 transition-all font-semibold text-sm flex items-center gap-1.5"
+                  >
+                    <FileSpreadsheet size={15} />
+                    <span>{isDatasheetView ? "📋 Switch to Grid View" : "📄 Switch to Classic Datasheet View"}</span>
+                  </button>
+                </div>
                 <button
                   type="button"
                   onClick={() => {
@@ -5723,7 +5850,7 @@ function DailyRegisterView({
               {/* ──────────────────────────────────────────────────────────
                   PAGE 1: AUDIT SUMMARY (EXECUTIVE OVERVIEW)
                  ────────────────────────────────────────────────────────── */}
-              <div className="print:break-after-page">
+              <div className={printMode === "summary" ? "print:break-after-page" : "print:hidden"}>
                 {/* Print-Only Report Header */}
                 <PrintReportHeader
                   branch={branchId === "JCT_HQ" ? "JCT Main HQ (Jubail)" : branchId}
@@ -6694,9 +6821,12 @@ function DailyRegisterView({
           </div>
 
           {/* ──────────────────────────────────────────────────────────
-              PAGE 2: APPENDIX A: CASH INFLOWS
+              PAGE 2, 3, 4: EXECUTIVE SUMMARY APPENDICES (printMode === 'summary')
              ────────────────────────────────────────────────────────── */}
-          <div className="hidden print:block print:break-before-page">
+          {printMode === "summary" && (
+            <>
+              {/* PAGE 2: APPENDIX A: CASH INFLOWS */}
+              <div className="hidden print:block print:break-before-page">
             <div className="print:text-2xl print:font-black print:tracking-tight print:uppercase print:mb-6 print:border-b-2 print:border-black print:pb-2 print:text-black flex justify-between items-center">
               <span>APPENDIX A: CASH INFLOWS</span>
               <span className="font-mono text-base font-bold text-slate-700">
@@ -6928,33 +7058,129 @@ function DailyRegisterView({
             {/* Final Audit Sign-off at bottom of Page 4 */}
             <PrintReportFooter />
           </div>
+        </>
+      )}
 
-          {/* 4. Clean Footer Bar */}
-              <div className="sticky bottom-4 z-20 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 transition-all duration-300 print:hidden">
-                <div className="flex items-center gap-2.5 text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400">
-                  <span className="inline-flex h-2 w-2 rounded-full bg-jct-turquoise" />
-                  <span>Ready to lock register for Jubail - Main Branch · 12-09-2026</span>
-                </div>
-
-                <div className="flex items-center justify-end gap-3 print:hidden">
-                  <button
-                    type="button"
-                    onClick={() => window.print()}
-                    className="flex items-center justify-center gap-2 bg-jct-charcoal dark:bg-slate-800 text-white px-4 py-2 rounded-lg font-bold print:hidden hover:brightness-110 transition-all text-sm shadow-sm"
-                  >
-                    <Printer size={16} />
-                    <span>🖨️ Print Report</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleLockAndSaveDay}
-                    className="flex items-center justify-center gap-2.5 bg-jct-turquoise text-jct-charcoal font-bold hover:brightness-95 transition-all shadow-sm rounded-lg text-sm px-8 py-3.5 whitespace-nowrap"
-                  >
-                    <Lock size={18} className="text-jct-charcoal" />
-                    <span>🔒 Confirm Drawer Cash &amp; Lock Register</span>
-                  </button>
-                </div>
+      {/* ──────────────────────────────────────────────────────────
+          PRINT-ONLY: FULL SEQUENTIAL CLASSIC DATASHEET LEDGER (printMode === 'datasheet')
+         ────────────────────────────────────────────────────────── */}
+      {printMode === "datasheet" && (
+        <div className="hidden print:block print:w-full print:bg-white print:text-black print:p-0 print:m-0">
+          <div className="mb-6">
+            <h1 className="print:text-4xl print:font-black print:tracking-tighter print:uppercase print:mb-2 print:text-black">
+              DAILY DATA SHEET : JUBAIL CORP. TRADING EST.
+            </h1>
+            <div className="print:text-lg print:font-bold">Date: {new Date().toLocaleDateString()}</div>
+            <div className="print:flex print:items-center print:justify-between print:text-lg print:font-semibold print:tracking-tight print:text-slate-600 print:mb-6 print:border-b-2 print:border-black print:pb-3 mt-1">
+              <div>
+                <span>Branch: </span>
+                <strong className="print:text-black">
+                  {branchId === "JCT_HQ" ? "JCT Main HQ (Jubail)" : branchId}
+                </strong>
+                <span className="print:mx-2">•</span>
+                <span>Jubail Corp. Trading Est.</span>
               </div>
+              <div className="print:text-right print:font-mono print:text-sm">
+                <span>Register Date: </span>
+                <strong className="print:text-black">12-09-2026</strong>
+              </div>
+            </div>
+          </div>
+
+          <table className="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr className="border-b-2 border-black font-bold uppercase text-[11px]">
+                <th className="py-2.5 px-2">#</th>
+                <th className="py-2.5 px-2 font-mono">Invoice #</th>
+                <th className="py-2.5 px-2">Customer Name</th>
+                <th className="py-2.5 px-2 text-right">Original (SAR)</th>
+                <th className="py-2.5 px-2 text-right">Edited (SAR)</th>
+                <th className="py-2.5 px-2">Payment Mode</th>
+                <th className="py-2.5 px-2">Reason / Note</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200">
+              {activeErpList.map((inv, idx) => {
+                const origAmt = inv.originalAmount !== undefined ? inv.originalAmount : inv.amount;
+                const isModified = inv.originalAmount !== undefined && inv.amount !== inv.originalAmount;
+                return (
+                  <tr key={`print-ds-${inv.invoiceNo}`} className="print:break-inside-avoid">
+                    <td className="py-2 px-2 font-mono text-slate-600">{idx + 1}</td>
+                    <td className="py-2 px-2 font-mono font-bold">#{inv.invoiceNo}</td>
+                    <td className="py-2 px-2 font-medium">{inv.customer || inv.customerName || "—"}</td>
+                    <td className="py-2 px-2 font-mono text-right text-slate-600">{fmt(origAmt)}</td>
+                    <td className="py-2 px-2 font-mono font-bold text-right">{fmt(inv.amount)}</td>
+                    <td className="py-2 px-2 uppercase text-[10px] font-semibold">{inv.paymentMode}</td>
+                    <td className="py-2 px-2 text-[11px] text-slate-600">
+                      {isModified ? (
+                        <span>
+                          {inv.overrideReason || "MODIFIED"}
+                          {inv.overrideNote ? ` (${inv.overrideNote})` : ""}
+                        </span>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              <tr className="border-t-2 border-black font-bold text-xs">
+                <td colSpan={4} className="py-3 px-2 uppercase text-right">Total Net Invoices:</td>
+                <td className="py-3 px-2 text-right font-mono text-sm">
+                  SAR {fmt(activeErpList.reduce((acc, i) => acc + (i.amount || 0), 0))}
+                </td>
+                <td colSpan={2}></td>
+              </tr>
+            </tfoot>
+          </table>
+
+          {/* Final Audit Sign-off */}
+          <PrintReportFooter />
+        </div>
+      )}
+
+      {/* 4. Clean Footer Bar */}
+          <div className="sticky bottom-4 z-20 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 transition-all duration-300 print:hidden">
+            <div className="flex items-center gap-2.5 text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400">
+              <span className="inline-flex h-2 w-2 rounded-full bg-jct-turquoise" />
+              <span>Ready to lock register for Jubail - Main Branch · 12-09-2026</span>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 print:hidden">
+              <button
+                type="button"
+                onClick={() => {
+                  setPrintMode("summary");
+                  setTimeout(() => window.print(), 100);
+                }}
+                className="flex items-center justify-center gap-2 bg-jct-charcoal dark:bg-slate-800 text-white px-4 py-2 rounded-lg font-bold print:hidden hover:brightness-110 transition-all text-sm shadow-sm"
+              >
+                <Printer size={16} />
+                <span>🖨️ Print Report</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setPrintMode("datasheet");
+                  setTimeout(() => window.print(), 100);
+                }}
+                className="flex items-center justify-center gap-2 bg-white dark:bg-black border border-slate-300 dark:border-white/20 text-slate-800 dark:text-slate-100 px-4 py-2 rounded-lg font-bold print:hidden hover:bg-slate-100 dark:hover:bg-white/10 transition-all text-sm shadow-sm"
+              >
+                <FileSpreadsheet size={16} />
+                <span>⬇️ Print Classic Datasheet</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleLockAndSaveDay}
+                className="flex items-center justify-center gap-2.5 bg-jct-turquoise text-jct-charcoal font-bold hover:brightness-95 transition-all shadow-sm rounded-lg text-sm px-8 py-3.5 whitespace-nowrap"
+              >
+                <Lock size={18} className="text-jct-charcoal" />
+                <span>🔒 Confirm Drawer Cash &amp; Lock Register</span>
+              </button>
+            </div>
+          </div>
             </div>
           )}
         </div>
