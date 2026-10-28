@@ -3386,7 +3386,7 @@ function DailyRegisterView({
   };
 
   return (
-    <div className="relative flex-1 h-full w-full overflow-y-auto bg-slate-50 dark:bg-black text-jct-charcoal dark:text-jct-offwhite select-none">
+    <div className="relative flex-1 min-w-0 w-full max-w-full mx-auto flex flex-col gap-6 bg-slate-50 dark:bg-black text-jct-charcoal dark:text-jct-offwhite select-none">
       {/* Live Cross-Module Sync Toast Banner */}
       {syncBannerMsg && (
         <div className="relative z-30 max-w-7xl w-full mx-auto px-6 pt-5 print:hidden">
@@ -3421,7 +3421,7 @@ function DailyRegisterView({
           MODE 1: WIDESCREEN HOME HUB (trackingMode === 'hub')
          ════════════════════════════════════════════════════════════════════ */}
       {trackingMode === "hub" && (
-        <div className="relative z-10 max-w-7xl w-full mx-auto px-6 py-8 lg:py-10 flex flex-col gap-7">
+        <div className="relative z-10 w-full max-w-7xl mx-auto px-6 py-6 lg:py-8 flex flex-col gap-6">
           {justCompletedToast && (
             <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 dark:border-[#1F1F1F] bg-white dark:bg-[#0A0A0A] px-5 py-3.5 text-sm font-semibold text-jct-charcoal dark:text-jct-offwhite shadow-sm print:hidden">
               <div className="flex items-center gap-2.5">
@@ -12540,7 +12540,7 @@ export default function Page() {
     >
       <Sidebar tab={safeTab} setTab={setTab} allowedTabs={allowedTabs} />
 
-      <div className="flex flex-1 flex-col overflow-hidden bg-slate-50 dark:bg-black print:overflow-visible print:h-auto print:w-full print:p-0 print:m-0 print:bg-white print:text-black">
+      <div className="flex flex-1 min-w-0 flex-col overflow-hidden bg-slate-50 dark:bg-black print:overflow-visible print:h-auto print:w-full print:p-0 print:m-0 print:bg-white print:text-black">
         {/* Top Header */}
         <header className="flex shrink-0 flex-wrap items-center justify-between gap-4 border-b border-slate-200 dark:border-[#1F1F1F] bg-white dark:bg-[#0A0A0A] px-6 py-4 z-20 shadow-sm print:hidden">
           <div className="flex items-center gap-4">
@@ -12603,9 +12603,9 @@ export default function Page() {
         </header>
 
         {/* Layout Wrapper */}
-        <div className="flex flex-1 overflow-hidden relative print:overflow-visible print:h-auto print:w-full print:p-0 print:m-0">
+        <div className="flex flex-1 min-w-0 overflow-hidden relative print:overflow-visible print:h-auto print:w-full print:p-0 print:m-0">
           {/* Center Canvas */}
-          <main className="flex-1 overflow-hidden flex flex-col relative z-10 print:overflow-visible print:h-auto print:w-full print:p-0 print:m-0 print:bg-white print:text-black">
+          <main className="flex-1 min-w-0 overflow-x-hidden overflow-y-auto flex flex-col relative z-10 bg-slate-50 dark:bg-black print:overflow-visible print:h-auto print:w-full print:p-0 print:m-0 print:bg-white print:text-black">
             {profile.isOwner && safeTab === "register" && trackingMode === "hub" && (
               <div className="shrink-0 px-4 pt-4 sm:px-6 print:hidden">
                 <BranchAuditRadar />
