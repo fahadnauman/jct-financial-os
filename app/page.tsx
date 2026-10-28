@@ -4413,7 +4413,7 @@ function DailyRegisterView({
                   return (
                     <div
                       key={inv.invoiceNo}
-                      className="border-b border-slate-100 dark:border-[#1A1A1A] py-3 transition-colors"
+                      className="border-b border-slate-200 dark:border-[#1F1F1F] pt-2 pb-6 mb-4 last:border-b-0 last:pb-0 hover:bg-slate-50/50 dark:hover:bg-[#0A0A0A]/50 transition-colors rounded-xl px-2 -mx-2"
                     >
                       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
                         <div className="flex flex-wrap items-center gap-2.5 min-w-0 flex-1">
