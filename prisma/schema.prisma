@@ -30,21 +30,23 @@ model PocketTransaction {
 }
 
 model DailyRegisterLock {
-  id          String   @id @default(cuid())
-  branch      String
-  date        String
-  closingCash Float
-  openingCash Float    @default(2634)
-  inflows     Float    @default(0)
-  bankSwipes  Float    @default(0)
-  outflows    Float    @default(0)
-  posFees     Float    @default(0)
-  madaFees    Float    @default(0)
-  ccFees      Float    @default(0)
-  lockedAt    DateTime @default(now())
-  lockedBy    String
-  status      String   @default("LOCKED")
-  dataJson    String?
+  id                 String   @id @default(cuid())
+  branch             String
+  date               String
+  closingCash        Float
+  openingCash        Float    @default(2634)
+  takeHomeAmount     Float?
+  nextDayOpeningCash Float?
+  inflows            Float    @default(0)
+  bankSwipes         Float    @default(0)
+  outflows           Float    @default(0)
+  posFees            Float    @default(0)
+  madaFees           Float    @default(0)
+  ccFees             Float    @default(0)
+  lockedAt           DateTime @default(now())
+  lockedBy           String
+  status             String   @default("LOCKED")
+  dataJson           String?
 
   @@index([branch, date])
 }

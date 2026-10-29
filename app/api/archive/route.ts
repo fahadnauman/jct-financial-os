@@ -208,7 +208,14 @@ export async function POST(req: Request) {
       lockedBy = "Staff",
       status = "LOCKED",
       dataJson,
+      takeHomeAmount: rawTakeHome,
+      nextDayOpeningCash: rawNextDayOpening,
     } = body;
+
+    const takeHomeAmount =
+      rawTakeHome !== undefined && rawTakeHome !== null ? Number(rawTakeHome) : null;
+    const nextDayOpeningCash =
+      rawNextDayOpening !== undefined && rawNextDayOpening !== null ? Number(rawNextDayOpening) : null;
 
     if (!branch || !date) {
       return NextResponse.json({ error: "Branch and date are required" }, { status: 400 });
@@ -254,6 +261,8 @@ export async function POST(req: Request) {
         data: {
           closingCash: Number(closingCash),
           openingCash: Number(openingCash),
+          takeHomeAmount: takeHomeAmount !== null ? Number(takeHomeAmount) : null,
+          nextDayOpeningCash: nextDayOpeningCash !== null ? Number(nextDayOpeningCash) : null,
           inflows: Number(inflows),
           bankSwipes: Number(bankSwipes),
           outflows: Number(outflows),
@@ -273,6 +282,8 @@ export async function POST(req: Request) {
           date: String(date),
           closingCash: Number(closingCash),
           openingCash: Number(openingCash),
+          takeHomeAmount: takeHomeAmount !== null ? Number(takeHomeAmount) : null,
+          nextDayOpeningCash: nextDayOpeningCash !== null ? Number(nextDayOpeningCash) : null,
           inflows: Number(inflows),
           bankSwipes: Number(bankSwipes),
           outflows: Number(outflows),
