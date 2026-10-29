@@ -12,6 +12,7 @@ import {
   UploadCloud, Zap, ArrowLeft, ArrowRight, BarChart2, Eye, ArrowRightLeft, Trash2, Maximize2, Minimize2,
   Archive, Edit3, CheckCircle2, RotateCcw, Search,
   Users, UserCheck, DollarSign, X, Banknote, Printer,
+  Menu,
   Coins, ArrowDownLeft
 } from "lucide-react";
 
@@ -373,6 +374,118 @@ function Sidebar({ tab, setTab, allowedTabs }: { tab: TabId; setTab: (t: TabId) 
         </div>
       </div>
     </aside>
+  );
+}
+
+function MobileSidebarDrawer({
+  isOpen,
+  onClose,
+  tab,
+  setTab,
+  allowedTabs,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  tab: TabId;
+  setTab: (t: TabId) => void;
+  allowedTabs: TabId[];
+}) {
+  const nav = [
+    { id: "register" as TabId, label: "Daily Register", icon: Wallet },
+    { id: "archive" as TabId, label: "Audit Library", icon: Archive },
+    { id: "radar" as TabId, label: "Credit Radar", icon: Target },
+    { id: "suppliers" as TabId, label: "Suppliers & Payables", icon: Package },
+    { id: "payroll" as TabId, label: "Staff & Payroll", icon: Users },
+    { id: "pulse" as TabId, label: "Financial Pulse", icon: Activity },
+    { id: "consolidation" as TabId, label: "Branch Consolidation", icon: Building2 },
+    { id: "ai" as TabId, label: "Nauman AI", icon: Sparkles },
+  ].filter((n) => allowedTabs.includes(n.id));
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 lg:hidden flex">
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+
+      {/* Slide-over Drawer Panel */}
+      <div className="relative z-10 w-72 sm:w-80 max-w-[85vw] h-full flex flex-col bg-white dark:bg-[#0A0A0A] border-r border-slate-200 dark:border-[#1F1F1F] p-5 text-jct-charcoal dark:text-jct-offwhite shadow-2xl animate-fadeIn">
+        <div className="flex items-center justify-between pb-6 pt-1">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-jct-turquoise font-display text-sm font-black tracking-tight text-jct-charcoal shadow-sm">
+              JCT
+            </div>
+            <div className="leading-tight">
+              <p className="font-display text-sm font-extrabold tracking-tight text-jct-charcoal dark:text-jct-offwhite">
+                JCT Financial OS
+              </p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400">Jubail Corp. Trading Est.</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-jct-charcoal dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#111111] transition"
+            aria-label="Close navigation"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        <nav className="flex flex-col gap-1.5 flex-1 overflow-y-auto">
+          <p className="px-3 pb-1 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">
+            Modules
+          </p>
+          {nav.map(({ id, label, icon: Icon }) => {
+            const active = tab === id;
+            return (
+              <button
+                key={id}
+                onClick={() => {
+                  setTab(id);
+                  onClose();
+                }}
+                className={`group relative flex w-full items-center gap-3 rounded-xl px-3.5 py-3 text-left text-sm font-semibold transition-all ${
+                  active
+                    ? "bg-jct-turquoise text-jct-charcoal font-bold shadow-sm"
+                    : "border border-transparent text-jct-charcoal dark:text-jct-offwhite hover:bg-slate-100 dark:hover:bg-[#111111]"
+                }`}
+              >
+                <Icon
+                  size={18}
+                  strokeWidth={active ? 2.2 : 1.8}
+                  className={
+                    active
+                      ? "text-jct-charcoal"
+                      : "text-slate-500 dark:text-slate-400 group-hover:text-jct-charcoal dark:group-hover:text-jct-offwhite"
+                  }
+                />
+                <span className="flex-1">{label}</span>
+              </button>
+            );
+          })}
+        </nav>
+
+        <div className="mt-auto pt-4 space-y-3">
+          <div className="rounded-xl bg-slate-50 dark:bg-black p-3.5 border border-slate-200 dark:border-[#1F1F1F]">
+            <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">
+              Drawer Status
+            </p>
+            <div className="mt-1 flex items-center gap-2 text-xs font-semibold text-jct-charcoal dark:text-jct-offwhite">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full rounded-full bg-jct-turquoise opacity-75 animate-ping"></span>
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-jct-turquoise"></span>
+              </span>
+              Active Session
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1309,8 +1422,8 @@ export function ClassicDataSheetTable({
       </div>
 
       {/* Day / Dark Mode Responsive Main Table Wrapper */}
-      <div className="w-full overflow-x-auto pb-4 bg-white dark:bg-[#0A0A0A] rounded-xl border border-slate-200 dark:border-white/10 shadow-sm print:border-none print:shadow-none print:bg-white print:overflow-visible">
-        <table className="w-full text-left border-collapse whitespace-nowrap">
+      <div className="w-full overflow-x-auto hide-scrollbar pb-4 bg-white dark:bg-[#0A0A0A] rounded-xl border border-slate-200 dark:border-white/10 shadow-sm print:border-none print:shadow-none print:bg-white print:overflow-visible">
+        <table className="w-full min-w-[1200px] text-left border-collapse whitespace-nowrap">
           <thead>
             <tr>
               <th className={thClass}>1. INVOICE NO.</th>
@@ -4070,7 +4183,7 @@ function DailyRegisterView({
           MODE 1: WIDESCREEN HOME HUB (trackingMode === 'hub')
          ════════════════════════════════════════════════════════════════════ */}
       {trackingMode === "hub" && (
-        <div className="relative z-10 w-full max-w-7xl mx-auto px-6 py-6 lg:py-8 flex flex-col gap-6">
+        <div className="relative z-10 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8 flex flex-col gap-6">
           {justCompletedToast && (
             <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 dark:border-[#1F1F1F] bg-white dark:bg-[#0A0A0A] px-5 py-3.5 text-sm font-semibold text-jct-charcoal dark:text-jct-offwhite shadow-sm print:hidden">
               <div className="flex items-center gap-2.5">
@@ -4140,7 +4253,7 @@ function DailyRegisterView({
           </div>
 
           {/* Top Dashboard Metrics (3 Values) */}
-          <div className="flex flex-wrap lg:flex-nowrap gap-3.5 sm:gap-4 w-full">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 sm:gap-4 w-full">
             <div className="flex-1 min-w-[260px] w-full bg-white dark:bg-[#0A0A0A] border border-white/80 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-shadow duration-300 rounded-2xl p-5 sm:p-6">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
@@ -4204,11 +4317,11 @@ function DailyRegisterView({
               </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3 shrink-0">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full sm:w-auto shrink-0">
               <button
                 type="button"
                 onClick={handleStartWizard}
-                className="bg-jct-turquoise text-jct-charcoal font-bold hover:brightness-95 transition-all shadow-sm rounded-lg px-6 py-3 flex items-center gap-2 text-sm whitespace-nowrap border border-jct-turquoise/60 hover:border-jct-turquoise hover:shadow-[0_0_15px_rgba(45,226,230,0.25)]"
+                className="bg-jct-turquoise text-jct-charcoal font-bold hover:brightness-95 transition-all shadow-sm rounded-lg px-6 py-3 flex items-center justify-center gap-2 text-sm whitespace-nowrap border border-jct-turquoise/60 hover:border-jct-turquoise hover:shadow-[0_0_15px_rgba(45,226,230,0.25)] w-full sm:w-auto"
               >
                 <Sparkles size={16} className="text-jct-charcoal" />
                 <span>TRACK SALE</span>
@@ -4218,7 +4331,7 @@ function DailyRegisterView({
               <button
                 type="button"
                 onClick={() => setShowManualEntry((prev) => !prev)}
-                className="bg-slate-800 text-slate-300 border border-slate-600 text-sm px-3 py-1.5 rounded-md hover:bg-slate-700 transition-colors flex items-center gap-1.5 whitespace-nowrap"
+                className="bg-slate-800 text-slate-300 border border-slate-600 text-sm px-4 py-2.5 rounded-lg hover:bg-slate-700 transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap w-full sm:w-auto"
                 title="Toggle manual entry forms"
               >
                 <span>Add Manual Entry 🔽</span>
@@ -4869,7 +4982,7 @@ function DailyRegisterView({
           MODE 2: WIDESCREEN 5-STEP GUIDED WIZARD (trackingMode === 'wizard')
          ════════════════════════════════════════════════════════════════════ */}
       {trackingMode === "wizard" && (
-        <div className="relative z-10 max-w-7xl w-full mx-auto px-6 py-6 lg:py-8 flex flex-col gap-6 print:max-w-none print:w-full print:p-0 print:m-0 print:overflow-visible">
+        <div className="relative z-10 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8 flex flex-col gap-6 print:max-w-none print:w-full print:p-0 print:m-0 print:overflow-visible">
           {/* Calm Enterprise Top Step Navigation Bar */}
           <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 print:hidden">
             <div className="flex flex-wrap items-center justify-between gap-4">
@@ -4929,7 +5042,7 @@ function DailyRegisterView({
               STEP 1: IMPORT TODAY'S ERP SALES (CALM & CENTERED)
              ────────────────────────────────────────────────────────────── */}
           {wizardStep === 1 && (
-            <div className="mx-auto my-6 flex w-full max-w-2xl flex-col items-center justify-center bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-10 sm:p-14 text-center transition-all duration-300">
+            <div className="mx-auto my-6 flex w-full max-w-2xl flex-col items-center justify-center bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 sm:p-10 md:p-14 text-center transition-all duration-300">
               <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-xl bg-jct-turquoise/20 border border-jct-turquoise/40 text-jct-charcoal dark:text-jct-turquoise">
                 <UploadCloud size={28} />
               </div>
@@ -5581,26 +5694,26 @@ function DailyRegisterView({
                 </div>
               )}
 
-              <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
                 <button
                   type="button"
                   onClick={() => setWizardStep(1)}
-                  className="rounded-lg border border-slate-200 dark:border-[#1F1F1F] bg-white dark:bg-black px-4 py-2 text-xs font-semibold text-jct-charcoal dark:text-jct-offwhite hover:bg-slate-50 dark:hover:bg-[#0A0A0A] shadow-sm transition-colors"
+                  className="rounded-lg border border-slate-200 dark:border-[#1F1F1F] bg-white dark:bg-black px-4 py-2 text-xs font-semibold text-jct-charcoal dark:text-jct-offwhite hover:bg-slate-50 dark:hover:bg-[#0A0A0A] shadow-sm transition-colors w-full sm:w-auto text-center"
                 >
                   ← Back
                 </button>
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
                   <button
                     type="button"
                     onClick={handleAddInvoiceRow}
-                    className="px-4 py-2 rounded-lg border border-jct-turquoise/50 text-jct-turquoise hover:bg-jct-turquoise/10 transition-all font-semibold text-sm"
+                    className="px-4 py-2 rounded-lg border border-jct-turquoise/50 text-jct-turquoise hover:bg-jct-turquoise/10 transition-all font-semibold text-sm w-full sm:w-auto text-center"
                   >
                     + Add Manual Invoice
                   </button>
                   <button
                     type="button"
                     onClick={() => setIsDatasheetView((prev) => !prev)}
-                    className="px-4 py-2 rounded-lg border border-slate-300 dark:border-white/20 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 transition-all font-semibold text-sm flex items-center gap-1.5"
+                    className="px-4 py-2 rounded-lg border border-slate-300 dark:border-white/20 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 transition-all font-semibold text-sm flex items-center justify-center gap-1.5 w-full sm:w-auto"
                   >
                     <FileSpreadsheet size={15} />
                     <span>{isDatasheetView ? "📋 Switch to Grid View" : "📄 Switch to Classic Datasheet View"}</span>
@@ -5612,7 +5725,7 @@ function DailyRegisterView({
                     syncCommissionExpenses();
                     setWizardStep(3);
                   }}
-                  className="flex items-center gap-2 bg-jct-turquoise text-jct-charcoal font-bold hover:brightness-95 transition-all shadow-sm rounded-lg px-5 py-2.5 text-sm"
+                  className="flex items-center justify-center gap-2 bg-jct-turquoise text-jct-charcoal font-bold hover:brightness-95 transition-all shadow-sm rounded-lg px-5 py-2.5 text-sm w-full sm:w-auto"
                 >
                   <span>Continue to Cash Inflows</span>
                   <ArrowRight size={16} />
@@ -6049,7 +6162,8 @@ function DailyRegisterView({
                       </div>
                     </div>
 
-                    <div className="divide-y divide-slate-200 dark:divide-[#1F1F1F] mt-2">
+                    <div className="w-full overflow-x-auto hide-scrollbar">
+                      <div className="min-w-[480px] divide-y divide-slate-200 dark:divide-[#1F1F1F] mt-2">
                       {inflowEntries.map((item) => {
                         const isEditing = editingRowId === item.id;
                         const isCreditSaleRow = item.type === "CREDIT_SALE";
@@ -6149,23 +6263,24 @@ function DailyRegisterView({
                           </div>
                         );
                       })}
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between pt-2">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
                 <button
                   type="button"
                   onClick={() => setWizardStep(2)}
-                  className="bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 transition-all rounded-lg px-4 py-2 text-xs shadow-sm"
+                  className="bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 transition-all rounded-lg px-4 py-2.5 text-xs shadow-sm w-full sm:w-auto justify-center"
                 >
                   ← Back
                 </button>
                 <button
                   type="button"
                   onClick={() => setWizardStep(4)}
-                  className="flex items-center gap-2 bg-jct-turquoise text-jct-charcoal font-bold hover:brightness-95 transition-all shadow-sm rounded-lg px-5 py-2.5 text-sm"
+                  className="flex items-center justify-center gap-2 bg-jct-turquoise text-jct-charcoal font-bold hover:brightness-95 transition-all shadow-sm rounded-lg px-5 py-2.5 text-sm w-full sm:w-auto"
                 >
                   <span>Continue to Expenses &amp; Purchases</span>
                   <ArrowRight size={16} />
@@ -6438,7 +6553,8 @@ function DailyRegisterView({
                       </span>
                     </div>
 
-                    <div className="divide-y divide-slate-200 dark:divide-[#1F1F1F] mt-2">
+                    <div className="w-full overflow-x-auto hide-scrollbar">
+                      <div className="min-w-[480px] divide-y divide-slate-200 dark:divide-[#1F1F1F] mt-2">
                       {expenseEntries.map((item) => {
                         const isEditing = editingRowId === item.id;
                         const pmBadge = formatPaymentModeBadge(item.paymentMode);
@@ -6521,23 +6637,24 @@ function DailyRegisterView({
                           </div>
                         );
                       })}
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between pt-2">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
                 <button
                   type="button"
                   onClick={() => setWizardStep(3)}
-                  className="bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 transition-all rounded-lg px-4 py-2 text-xs shadow-sm"
+                  className="bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 transition-all rounded-lg px-4 py-2.5 text-xs shadow-sm w-full sm:w-auto justify-center"
                 >
                   ← Back
                 </button>
                 <button
                   type="button"
                   onClick={() => setWizardStep(5)}
-                  className="flex items-center gap-2 bg-jct-turquoise text-jct-charcoal font-bold hover:brightness-95 transition-all shadow-sm rounded-lg px-5 py-2.5 text-sm"
+                  className="flex items-center justify-center gap-2 bg-jct-turquoise text-jct-charcoal font-bold hover:brightness-95 transition-all shadow-sm rounded-lg px-5 py-2.5 text-sm w-full sm:w-auto"
                 >
                   <span>Open Final Audit Workbench</span>
                   <ArrowRight size={16} />
@@ -6775,7 +6892,8 @@ function DailyRegisterView({
                       </div>
                     </div>
 
-                    <div className="divide-y divide-slate-200 dark:divide-[#1F1F1F] rounded-xl border border-slate-200 dark:border-[#1F1F1F] bg-slate-50/50 dark:bg-black overflow-hidden print:border print:border-slate-300 print:rounded-none print:bg-white print:divide-slate-200">
+                    <div className="w-full overflow-x-auto hide-scrollbar">
+                      <div className="min-w-[520px] divide-y divide-slate-200 dark:divide-[#1F1F1F] rounded-xl border border-slate-200 dark:border-[#1F1F1F] bg-slate-50/50 dark:bg-black overflow-hidden print:border print:border-slate-300 print:rounded-none print:bg-white print:divide-slate-200">
                       {/* Opening Float Row */}
                       <div className="flex items-center justify-between gap-2 px-4 py-2.5 bg-slate-50 dark:bg-[#111111] print:flex print:justify-between print:py-2 print:border-b print:border-slate-200 print:text-sm print:text-black print:bg-white print:break-inside-avoid">
                         <div className="flex items-center gap-2.5 min-w-0">
@@ -7002,6 +7120,7 @@ function DailyRegisterView({
                           </div>
                         );
                       })}
+                      </div>
                     </div>
 
                     {/* [+ Add Missing Inflow] Row at Bottom */}
@@ -7135,7 +7254,8 @@ function DailyRegisterView({
                       </div>
                     </div>
 
-                    <div className="divide-y divide-slate-200 dark:divide-[#1F1F1F] rounded-xl border border-slate-200 dark:border-[#1F1F1F] bg-slate-50/50 dark:bg-black overflow-hidden print:border print:border-slate-300 print:rounded-none print:bg-white print:divide-slate-200">
+                    <div className="w-full overflow-x-auto hide-scrollbar">
+                      <div className="min-w-[520px] divide-y divide-slate-200 dark:divide-[#1F1F1F] rounded-xl border border-slate-200 dark:border-[#1F1F1F] bg-slate-50/50 dark:bg-black overflow-hidden print:border print:border-slate-300 print:rounded-none print:bg-white print:divide-slate-200">
                       {expenseEntries.map((entry) => {
                         const isEditing = editingRowId === entry.id;
                         const pmBadge = formatPaymentModeBadge(entry.paymentMode);
@@ -7264,6 +7384,7 @@ function DailyRegisterView({
                           </div>
                         );
                       })}
+                      </div>
                     </div>
 
                     {/* [+ Add Missing Expense] Row at Bottom */}
@@ -7426,7 +7547,8 @@ function DailyRegisterView({
                       </div>
                     </div>
 
-                    <div className="divide-y divide-slate-200 dark:divide-[#1F1F1F] rounded-xl border border-slate-200 dark:border-[#1F1F1F] bg-slate-50/50 dark:bg-black overflow-hidden print:border print:border-slate-300 print:rounded-none print:bg-white print:divide-slate-200">
+                    <div className="w-full overflow-x-auto hide-scrollbar">
+                      <div className="min-w-[520px] divide-y divide-slate-200 dark:divide-[#1F1F1F] rounded-xl border border-slate-200 dark:border-[#1F1F1F] bg-slate-50/50 dark:bg-black overflow-hidden print:border print:border-slate-300 print:rounded-none print:bg-white print:divide-slate-200">
                       {bankSwipeInvoices.map((inv) => {
                         const isSplitRow = inv.paymentMode === "SPLIT";
                         const bankGross = calcInvoiceBankGrossPortion(inv);
@@ -7619,6 +7741,7 @@ function DailyRegisterView({
                           </div>
                         );
                       })}
+                      </div>
                     </div>
                   </div>
                 )}
@@ -7891,14 +8014,14 @@ function DailyRegisterView({
               <span>Ready to lock register for Jubail - Main Branch · 12-09-2026</span>
             </div>
 
-            <div className="flex items-center justify-end gap-3 print:hidden">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-3 w-full sm:w-auto print:hidden">
               <button
                 type="button"
                 onClick={() => {
                   setPrintMode("summary");
                   setTimeout(() => window.print(), 100);
                 }}
-                className="flex items-center justify-center gap-2 bg-jct-charcoal dark:bg-slate-800 text-white px-4 py-2 rounded-lg font-bold print:hidden hover:brightness-110 transition-all text-sm shadow-sm"
+                className="flex items-center justify-center gap-2 bg-jct-charcoal dark:bg-slate-800 text-white px-4 py-2.5 rounded-lg font-bold print:hidden hover:brightness-110 transition-all text-sm shadow-sm w-full sm:w-auto"
               >
                 <Printer size={16} />
                 <span>🖨️ Print Report</span>
@@ -7909,7 +8032,7 @@ function DailyRegisterView({
                   setPrintMode("datasheet");
                   setTimeout(() => window.print(), 100);
                 }}
-                className="flex items-center justify-center gap-2 bg-white dark:bg-black border border-slate-300 dark:border-white/20 text-slate-800 dark:text-slate-100 px-4 py-2 rounded-lg font-bold print:hidden hover:bg-slate-100 dark:hover:bg-white/10 transition-all text-sm shadow-sm"
+                className="flex items-center justify-center gap-2 bg-white dark:bg-black border border-slate-300 dark:border-white/20 text-slate-800 dark:text-slate-100 px-4 py-2.5 rounded-lg font-bold print:hidden hover:bg-slate-100 dark:hover:bg-white/10 transition-all text-sm shadow-sm w-full sm:w-auto"
               >
                 <FileSpreadsheet size={16} />
                 <span>⬇️ Print Classic Datasheet</span>
@@ -7917,7 +8040,7 @@ function DailyRegisterView({
               <button
                 type="button"
                 onClick={handleLockAndSaveDay}
-                className="flex items-center justify-center gap-2.5 bg-jct-turquoise text-jct-charcoal font-bold hover:brightness-95 transition-all shadow-sm rounded-lg text-sm px-8 py-3.5 whitespace-nowrap"
+                className="flex items-center justify-center gap-2.5 bg-jct-turquoise text-jct-charcoal font-bold hover:brightness-95 transition-all shadow-sm rounded-lg text-sm px-6 py-3 whitespace-nowrap w-full sm:w-auto"
               >
                 <Lock size={18} className="text-jct-charcoal" />
                 <span>🔒 Confirm Drawer Cash &amp; Lock Register</span>
@@ -8082,8 +8205,8 @@ function DailyRegisterView({
 
           {/* 2. Editable 19-Column Spreadsheet Grid */}
           <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl overflow-hidden">
-            <div className="overflow-x-auto max-h-[68vh] overflow-y-auto">
-              <table className="w-full border-collapse text-xs font-mono">
+            <div className="w-full overflow-x-auto hide-scrollbar max-h-[68vh] overflow-y-auto">
+              <table className="w-full min-w-[1200px] border-collapse text-xs font-mono">
                 <thead className="sticky top-0 z-20 text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-[#111111] shadow-sm">
                   <tr className="border-b border-slate-200 dark:border-[#1F1F1F] divide-x divide-slate-200 dark:divide-[#1F1F1F]">
                     <th className="px-2.5 py-3 text-center w-9">#</th>
@@ -8658,7 +8781,7 @@ function CreditRadarView({
   };
 
   return (
-    <div className="flex flex-col h-full w-full gap-5 p-6 overflow-hidden">
+    <div className="flex flex-col h-full w-full gap-5 p-4 md:p-6 lg:p-8 overflow-hidden">
       {/* Owner Edit Customer Modal */}
       {isOwner && editingCustomer && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
@@ -8783,9 +8906,9 @@ function CreditRadarView({
         </div>
       </div>
 
-      <div className="flex flex-1 min-h-0 w-full gap-6 overflow-hidden">
+      <div className="flex flex-col lg:flex-row flex-1 min-h-0 w-full gap-6 overflow-y-auto lg:overflow-hidden">
         {/* Left Column: Active Radar & Entry */}
-        <div className="flex-[2] flex flex-col gap-5 overflow-hidden">
+        <div className="w-full lg:flex-[2] flex flex-col gap-5 lg:overflow-hidden">
           {/* New Credit Issue Box */}
           <form
             onSubmit={handleCreateCredit}
@@ -8945,7 +9068,7 @@ function CreditRadarView({
 
         {/* Right Column: Contractor Intelligence */}
         {active && (
-          <div className="flex-[1.5] flex flex-col bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl overflow-hidden">
+          <div className="w-full lg:flex-[1.5] flex flex-col bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl overflow-hidden">
             <div className="p-6 border-b border-slate-200 dark:border-[#1F1F1F] bg-slate-50 dark:bg-[#111111]">
               <div className="flex items-center gap-5 mb-6">
                 <div className="h-16 w-16 rounded-2xl flex items-center justify-center font-display font-extrabold text-3xl text-jct-charcoal shadow-sm bg-jct-turquoise shrink-0">
@@ -9180,7 +9303,7 @@ function SupplierHubView({
   };
 
   return (
-    <div className="flex flex-col gap-6 p-6 h-full overflow-y-auto w-full">
+    <div className="flex flex-col gap-6 p-4 md:p-6 lg:p-8 h-full overflow-y-auto w-full">
       {/* Owner Edit Supplier Bill Modal */}
       {isOwner && editingBill && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
@@ -9530,8 +9653,8 @@ function SupplierHubView({
                 </div>
               </div>
 
-              <div className="rounded-xl border border-slate-200 dark:border-[#1F1F1F] overflow-hidden">
-                <table className="w-full text-left text-sm whitespace-nowrap">
+              <div className="w-full overflow-x-auto hide-scrollbar rounded-xl border border-slate-200 dark:border-[#1F1F1F]">
+                <table className="w-full min-w-[700px] text-left text-sm whitespace-nowrap">
                   <thead className="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-[#111111] font-bold">
                     <tr>
                       <th className="px-4 py-3">Recipient Name</th>
@@ -9655,7 +9778,7 @@ function FinancialPulseView({ metrics }: { metrics: LiveCrossModuleMetrics }) {
   const mtdCashCollected = r2(328000 + metrics.todayCashSales + metrics.todayBankNet);
 
   return (
-    <div className="flex flex-col gap-6 p-6 h-full overflow-y-auto w-full">
+    <div className="flex flex-col gap-6 p-4 md:p-6 lg:p-8 h-full overflow-y-auto w-full">
       <div className="flex items-center justify-between mb-2">
         <div className="flex flex-col gap-1.5">
           <h2 className="font-display font-extrabold text-2xl text-jct-charcoal dark:text-white tracking-tight flex items-center gap-2">
@@ -9877,7 +10000,7 @@ function BranchConsolidationView({ metrics }: { metrics: LiveCrossModuleMetrics 
   const allBranchesSales = r2(jubailTodayCashAndBank + 98400 + 107300);
 
   return (
-    <div className="flex flex-col gap-6 p-6 h-full overflow-y-auto w-full">
+    <div className="flex flex-col gap-6 p-4 md:p-6 lg:p-8 h-full overflow-y-auto w-full">
       <div className="flex items-center justify-between mb-2">
         <div className="flex flex-col gap-1.5">
           <h2 className="font-display font-extrabold text-2xl text-jct-charcoal dark:text-white tracking-tight flex items-center gap-2">
@@ -10207,7 +10330,7 @@ function NaumanAiView({
   };
 
   return (
-    <div className="flex flex-col gap-6 p-6 h-full overflow-y-auto w-full">
+    <div className="flex flex-col gap-6 p-4 md:p-6 lg:p-8 h-full overflow-y-auto w-full">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-2">
         <div className="flex flex-col gap-1.5">
           <h2 className="font-display font-extrabold text-2xl text-jct-charcoal dark:text-white tracking-tight flex items-center gap-2">
@@ -10797,7 +10920,7 @@ function AuditLibraryView({ profile }: { profile: UserProfile | null }) {
     const displayBankTotal = settlementMode === "NET" ? r2(editBankSwipes - estFees) : editBankSwipes;
 
     return (
-      <div className="flex flex-col h-full overflow-y-auto p-4 sm:p-6 w-full gap-6 print:overflow-visible print:h-auto print:w-full print:p-0 print:m-0 print:bg-white print:text-black">
+      <div className="flex flex-col h-full overflow-y-auto p-4 md:p-6 lg:p-8 w-full gap-6 print:overflow-visible print:h-auto print:w-full print:p-0 print:m-0 print:bg-white print:text-black">
         {/* Print-Only Report Header */}
         <PrintReportHeader
           branch={bInfo.name}
@@ -11455,7 +11578,7 @@ function AuditLibraryView({ profile }: { profile: UserProfile | null }) {
   // ARCHIVE LIST VIEW
   // ══════════════════════════════════════════════════════════════════════════
   return (
-    <div className="flex flex-col h-full overflow-y-auto p-4 sm:p-6 w-full gap-6">
+    <div className="flex flex-col h-full overflow-y-auto p-4 md:p-6 lg:p-8 w-full gap-6">
       {/* Header & Controls */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
@@ -11518,7 +11641,7 @@ function AuditLibraryView({ profile }: { profile: UserProfile | null }) {
       </div>
 
       {/* KPI Summary Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 transition-all duration-300">
           <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Total Audits</span>
           <span className="text-xl sm:text-2xl font-black text-jct-charcoal dark:text-jct-offwhite mt-1 block font-mono">{totalAudits} Days</span>
@@ -12091,7 +12214,7 @@ function StaffPayrollView({ profile }: { profile: UserProfile | null }) {
   );
 
   return (
-    <div className="flex flex-col gap-6 p-6 h-full overflow-y-auto w-full bg-jct-offwhite dark:bg-black text-jct-charcoal dark:text-jct-offwhite">
+    <div className="flex flex-col gap-6 p-4 md:p-6 lg:p-8 h-full overflow-y-auto w-full bg-jct-offwhite dark:bg-black text-jct-charcoal dark:text-jct-offwhite">
       {/* Top Header Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 dark:border-[#1F1F1F] pb-5">
         <div>
@@ -12252,8 +12375,8 @@ function StaffPayrollView({ profile }: { profile: UserProfile | null }) {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+          <div className="w-full overflow-x-auto hide-scrollbar">
+            <table className="w-full min-w-[800px] text-left text-xs whitespace-nowrap">
               <thead className="border-b border-slate-200 dark:border-[#1F1F1F] text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-[#111111] font-bold">
                 <tr>
                   <th className="py-3.5 px-4">Employee &amp; Role</th>
@@ -13345,6 +13468,7 @@ export default function Page() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [ownerBranch, setOwnerBranch] = useState(OWNER_BRANCH_OPTIONS[1]);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   useEffect(() => {
     const saved = window.localStorage.getItem(PROFILE_STORAGE_KEY);
@@ -13802,12 +13926,27 @@ export default function Page() {
       }`}
     >
       <Sidebar tab={safeTab} setTab={setTab} allowedTabs={allowedTabs} />
+      <MobileSidebarDrawer
+        isOpen={mobileNavOpen}
+        onClose={() => setMobileNavOpen(false)}
+        tab={safeTab}
+        setTab={setTab}
+        allowedTabs={allowedTabs}
+      />
 
-      <div className="flex flex-1 min-w-0 flex-col overflow-hidden bg-slate-50 dark:bg-black print:overflow-visible print:h-auto print:w-full print:p-0 print:m-0 print:bg-white print:text-black">
+      <div className="flex flex-1 min-w-0 w-full flex-col overflow-hidden bg-slate-50 dark:bg-black print:overflow-visible print:h-auto print:w-full print:p-0 print:m-0 print:bg-white print:text-black">
         {/* Top Header */}
-        <header className="flex shrink-0 flex-wrap items-center justify-between gap-4 border-b border-slate-200 dark:border-[#1F1F1F] bg-white dark:bg-[#0A0A0A] px-6 py-4 z-20 shadow-sm print:hidden">
-          <div className="flex items-center gap-4">
-            <h1 className="text-jct-charcoal dark:text-jct-offwhite font-semibold text-base hidden sm:block">
+        <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 sm:gap-4 border-b border-slate-200 dark:border-[#1F1F1F] bg-white dark:bg-[#0A0A0A] px-4 sm:px-6 py-3 sm:py-4 z-20 shadow-sm print:hidden">
+          <div className="flex items-center gap-2 sm:gap-4">
+            <button
+              type="button"
+              onClick={() => setMobileNavOpen(true)}
+              className="lg:hidden p-2 -ml-2 rounded-lg text-jct-charcoal dark:text-jct-offwhite hover:bg-slate-100 dark:hover:bg-[#111111] transition-colors"
+              aria-label="Open Navigation menu"
+            >
+              <Menu size={20} />
+            </button>
+            <h1 className="text-jct-charcoal dark:text-jct-offwhite font-semibold text-sm sm:text-base hidden sm:block">
               Good afternoon, {profile.greeting}
             </h1>
             <button
