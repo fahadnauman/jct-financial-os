@@ -34,15 +34,15 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-// Applies the saved theme before first paint to avoid a flash.
-const themeInit = `(function(){try{var t=localStorage.getItem('jct-theme');if(t==='dark'){document.documentElement.classList.add('dark')}else{document.documentElement.classList.remove('dark')}}catch(e){}})();`;
+// Applies the saved theme before first paint to avoid a flash (defaults to dark).
+const themeInit = `(function(){try{var t=localStorage.getItem('jct-theme');if(t==='light'){document.documentElement.classList.remove('dark')}else{document.documentElement.classList.add('dark')}}catch(e){}})();`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${inter.variable} ${jakarta.variable} h-full antialiased`}
+      className={`dark ${inter.variable} ${jakarta.variable} h-full antialiased`}
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />

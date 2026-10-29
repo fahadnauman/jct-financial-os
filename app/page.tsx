@@ -13370,9 +13370,9 @@ export default function Page() {
 
   const [dark, setDark] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
-      return window.localStorage.getItem("jct-theme") === "dark";
+      return window.localStorage.getItem("jct-theme") !== "light";
     }
-    return false;
+    return true;
   });
   const [tab, setTab] = useState<TabId>("register");
 
