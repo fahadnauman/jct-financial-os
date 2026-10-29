@@ -89,24 +89,52 @@ export async function POST(req: Request) {
 
     const rawBranch = body.branch || body.branchId || req.headers.get("x-branch-id") || staff.branch;
     const branch = normalizeBranch(rawBranch, normalizeBranch(staff.branch));
+    const effectiveNote = note || (type === "SALARY_PAYOUT" ? `Salary Payment - ${staff.name}` : undefined);
 
-    const log = await prisma.payrollLog.create({
-      data: {
-        staffId,
-        type,
-        amount,
-        date,
-        branch,
-        note,
-        source,
-        paymentMode,
-      },
-      include: {
-        staff: true,
-      },
+    // Dual-write atomic transaction: Staff & Payroll Ledger + Daily Register Expense
+    const [log, pocketTx] = await prisma.$transaction(async (tx) => {
+      const createdLog = await tx.payrollLog.create({
+        data: {
+          staffId,
+          type,
+          amount,
+          date,
+          branch,
+          note: effectiveNote,
+          source,
+          paymentMode,
+        },
+        include: {
+          staff: true,
+        },
+      });
+
+      let createdPocket = null;
+      if (type === "SALARY_PAYOUT") {
+        createdPocket = await tx.pocketTransaction.create({
+          data: {
+            branch,
+            type: "EXPENSE",
+            category: "Salary",
+            amount,
+            recipientName: staff.name,
+            paymentSource:
+              source === "REGISTER_DRAWER"
+                ? "DRAWER_CASH"
+                : source === "OWNER_POCKET"
+                ? "OWNER_POCKET"
+                : "BANK_TRANSFER",
+            paymentMode,
+            note: effectiveNote || `Salary Payment - ${staff.name}`,
+            date,
+          },
+        });
+      }
+
+      return [createdLog, createdPocket];
     });
 
-    return NextResponse.json({ log }, { status: 201 });
+    return NextResponse.json({ log, pocketTx }, { status: 201 });
   } catch (err) {
     console.error("POST /api/payroll failed", err);
     return NextResponse.json({ error: "Failed to create payroll log" }, { status: 500 });
