@@ -5,12 +5,12 @@ import { POCKET_CUSTOMERS_KEY, pocketTag, usePocketTransactions, type BranchId }
 import * as Dropdown from "@radix-ui/react-dropdown-menu";
 import {
   Activity, Building2, CalendarDays, Check, ChevronDown,
-  FileSpreadsheet, Lock, LockOpen, Moon, 
+  FileSpreadsheet, Lock, Moon, 
   Package, Sparkles, Store, Sun, TrendingUp, 
   Crown, PaintRoller, SprayCan, Landmark, Repeat,
   Wallet, Plus, Target, AlertTriangle, Mail, Bell,
   UploadCloud, Zap, ArrowLeft, ArrowRight, BarChart2, Eye, ArrowRightLeft, Trash2, Maximize2, Minimize2,
-  Archive, Edit3, CheckCircle2, RotateCcw, Search,
+  Archive, Edit3, CheckCircle2, RotateCcw, Search, FileText, FolderArchive, Upload,
   Users, UserCheck, DollarSign, X, Banknote, Printer,
   Menu,
   Coins, ArrowDownLeft
@@ -137,6 +137,8 @@ export interface SupplierBillItem {
   paymentMode?: string;
   createdAt: string;
   source: "Daily Register" | "Supplier Hub";
+  supplierInvoiceNum?: string;
+  billPdfUrl?: string;
 }
 
 export interface StaffMember {
@@ -228,6 +230,7 @@ const INITIAL_SUPPLIER_BILLS: SupplierBillItem[] = [
     paymentMode: "SAB",
     createdAt: "10-09-2026",
     source: "Supplier Hub",
+    supplierInvoiceNum: "INV-9021",
   },
   {
     id: "sb-2",
@@ -238,6 +241,7 @@ const INITIAL_SUPPLIER_BILLS: SupplierBillItem[] = [
     paymentMode: "AL_RAJHI",
     createdAt: "11-09-2026",
     source: "Supplier Hub",
+    supplierInvoiceNum: "INV-8840",
   },
 ];
 
@@ -588,6 +592,8 @@ export interface PreLoggedBankInvoice {
 export interface PreLoggedEntry {
   id: string;
   invoiceNumber?: string;
+  supplierInvoiceNum?: string;
+  billPdfUrl?: string;
   type: PreLoggedEntryType;
   title: string;
   expenseCategory?: StrictExpenseCategory;
@@ -2008,8 +2014,10 @@ interface DailyRegisterViewProps {
     supplierName: string,
     amount: number,
     dueDate: string,
-    category: "Credit Purchase" | "Cash Purchase" | "Bank Purchase",
-    paymentMode?: string
+    category: "Credit Purchase" | "Cash Purchase" | "Bank Purchase" | "Return",
+    paymentMode?: UniversalPaymentMode | string,
+    supplierInvoiceNum?: string,
+    billPdfUrl?: string
   ) => void;
   onSyncCreditCustomer: (
     customerName: string,
@@ -2339,8 +2347,47 @@ function DailyRegisterView({
   const [step4Network, setStep4Network] = useState<"mada" | "visa">("mada");
   const [step4SupplierName, setStep4SupplierName] = useState("Jotun");
   const [step4DueDate, setStep4DueDate] = useState("2026-09-25");
+  const [step4SupplierInvoiceNum, setStep4SupplierInvoiceNum] = useState("");
+  const [step4BillPdfUrl, setStep4BillPdfUrl] = useState<string | null>(null);
+  const [step4PdfUploading, setStep4PdfUploading] = useState(false);
+  const [step4PdfFileName, setStep4PdfFileName] = useState<string | null>(null);
   const [step4Note, setStep4Note] = useState("");
   const [step4Amount, setStep4Amount] = useState("");
+
+  const handleStep4FileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setStep4PdfUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setStep4BillPdfUrl(data.url);
+        setStep4PdfFileName(file.name);
+      } else {
+        const reader = new FileReader();
+        reader.onload = () => {
+          setStep4BillPdfUrl(reader.result as string);
+          setStep4PdfFileName(file.name);
+        };
+        reader.readAsDataURL(file);
+      }
+    } catch {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setStep4BillPdfUrl(reader.result as string);
+        setStep4PdfFileName(file.name);
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      setStep4PdfUploading(false);
+    }
+  };
 
   // Step 5 Expandable Box State & Inline Editing State
   const [expandedAuditBox, setExpandedAuditBox] = useState<
@@ -3532,6 +3579,8 @@ function DailyRegisterView({
       expenseCategory: step4Category,
       supplierName: isSupplierPurchase ? cleanSupplier : undefined,
       dueDate: isCreditPurchase ? step4DueDate : undefined,
+      supplierInvoiceNum: step4SupplierInvoiceNum.trim() || undefined,
+      billPdfUrl: step4BillPdfUrl || undefined,
       staffId: isStaffExpense ? step4StaffId : undefined,
       staffName: isStaffExpense ? staffName : undefined,
       paymentMode: effectiveStep4Mode,
@@ -3549,13 +3598,37 @@ function DailyRegisterView({
         val,
         step4DueDate || "2026-09-25",
         step4Category,
-        effectiveStep4Mode
+        effectiveStep4Mode,
+        step4SupplierInvoiceNum.trim() || undefined,
+        step4BillPdfUrl || undefined
       );
+      // Persist to Neon PostgreSQL /api/pocket
+      fetch("/api/pocket", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          branch: branchId || "JCT_HQ",
+          type: "EXPENSE",
+          amount: val,
+          category: step4Category,
+          recipientName: cleanSupplier,
+          paymentSource: effectiveStep4Mode === "CASH" ? "DRAWER_CASH" : "BANK_TRANSFER",
+          paymentMode: effectiveStep4Mode,
+          supplierInvoiceNum: step4SupplierInvoiceNum.trim() || undefined,
+          billPdfUrl: step4BillPdfUrl || undefined,
+          note: step4Note.trim() || undefined,
+          date: new Date().toISOString().slice(0, 10),
+        }),
+      }).catch((e) => console.warn("Background pocket sync failed:", e));
+
       setSyncBannerMsg({
-        text: `${step4Category}: ${cleanSupplier} (SAR ${fmt(val)}${isCreditPurchase ? ` · Due: ${step4DueDate}` : ""}) synced live to Suppliers & Payables`,
+        text: `${step4Category}: ${cleanSupplier}${step4SupplierInvoiceNum ? ` (#${step4SupplierInvoiceNum.trim()})` : ""} (SAR ${fmt(val)}${isCreditPurchase ? ` · Due: ${step4DueDate}` : ""}) synced live to Suppliers & Payables`,
         targetTab: "suppliers",
         targetLabel: "View in Suppliers & Payables →",
       });
+      setStep4SupplierInvoiceNum("");
+      setStep4BillPdfUrl(null);
+      setStep4PdfFileName(null);
     }
 
     if (isStaffExpense && step4StaffId) {
@@ -4981,22 +5054,26 @@ function DailyRegisterView({
                           <span className={`font-mono font-bold ${meta.isOutflow ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-jct-turquoise"}`}>
                             {meta.isOutflow ? "-" : "+"}SAR {fmt(entry.amount)}
                           </span>
-                          <button
-                            type="button"
-                            onClick={() => handleOpenEditEntryModal(entry)}
-                            className="bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 transition-all rounded px-1.5 py-0.5 text-[10px]"
-                            title="Edit entry"
-                          >
-                            ✏️ Edit
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveEntry(entry.id)}
-                            className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/20 transition"
-                            title="Delete entry"
-                          >
-                            🗑️ Delete
-                          </button>
+                          {isOwner && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditEntryModal(entry)}
+                                className="bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 transition-all rounded px-1.5 py-0.5 text-[10px]"
+                                title="Edit entry"
+                              >
+                                ✏️ Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveEntry(entry.id)}
+                                className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/20 transition"
+                                title="Delete entry"
+                              >
+                                🗑️ Delete
+                              </button>
+                            </>
+                          )}
                         </div>
                       );
                     })}
@@ -5543,16 +5620,18 @@ function DailyRegisterView({
                             </button>
                           </div>
 
-                          {/* Subtle Trash Icon Delete Button */}
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveErpInvoice(inv.invoiceNo)}
-                            className="text-slate-400 hover:text-rose-500 p-1.5 rounded-lg hover:bg-rose-500/10 transition-colors"
-                            title="Delete invoice row"
-                            aria-label={`Delete invoice ${inv.invoiceNo}`}
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                          {/* Subtle Trash Icon Delete Button (Owner Only) */}
+                          {isOwner && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveErpInvoice(inv.invoiceNo)}
+                              className="text-slate-400 hover:text-rose-500 p-1.5 rounded-lg hover:bg-rose-500/10 transition-colors"
+                              title="Delete invoice row"
+                              aria-label={`Delete invoice ${inv.invoiceNo}`}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
                         </div>
                       </div>
 
@@ -6359,21 +6438,25 @@ function DailyRegisterView({
                                   <span className="font-display text-sm font-bold whitespace-nowrap text-jct-charcoal dark:text-jct-offwhite">
                                     {isCreditSaleRow ? "" : "+"}SAR {fmt(item.amount)}
                                   </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleOpenEditEntryModal(item)}
-                                    className="bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 transition-all rounded-md px-2.5 py-1 text-xs"
-                                  >
-                                    ✏️ Edit
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemoveEntry(item.id)}
-                                    className="text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 p-1.5 rounded-md transition-colors"
-                                    title="Delete entry"
-                                  >
-                                    <Trash2 size={15} />
-                                  </button>
+                                  {isOwner && (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenEditEntryModal(item)}
+                                        className="bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 transition-all rounded-md px-2.5 py-1 text-xs"
+                                      >
+                                        ✏️ Edit
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRemoveEntry(item.id)}
+                                        className="text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 p-1.5 rounded-md transition-colors"
+                                        title="Delete entry"
+                                      >
+                                        <Trash2 size={15} />
+                                      </button>
+                                    </>
+                                  )}
                                 </>
                               )}
                             </div>
@@ -6546,6 +6629,52 @@ function DailyRegisterView({
                             />
                           </div>
                         )}
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-slate-200 dark:border-[#1F1F1F]">
+                          <div>
+                            <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
+                              Supplier Invoice # (Optional)
+                            </label>
+                            <input
+                              type="text"
+                              value={step4SupplierInvoiceNum}
+                              onChange={(e) => setStep4SupplierInvoiceNum(e.target.value)}
+                              placeholder="Supplier Invoice # (e.g., INV-0992)"
+                              className="w-full bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-3 py-2 text-xs font-mono font-semibold placeholder:font-sans placeholder:text-slate-400 outline-none"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
+                              PDF Bill Attachment (Optional)
+                            </label>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <label className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md border border-dashed border-jct-turquoise/40 hover:border-jct-turquoise bg-jct-turquoise/5 text-jct-turquoise text-xs font-bold cursor-pointer transition">
+                                <Upload size={14} />
+                                <span>{step4PdfUploading ? "Uploading..." : step4BillPdfUrl ? "Replace PDF Bill" : "📎 Upload PDF Bill"}</span>
+                                <input
+                                  type="file"
+                                  accept="application/pdf,image/*"
+                                  onChange={handleStep4FileUpload}
+                                  className="hidden"
+                                />
+                              </label>
+                              {step4PdfFileName && (
+                                <span className="text-xs text-slate-600 dark:text-slate-300 flex items-center gap-1">
+                                  ✓ {step4PdfFileName}
+                                  <button
+                                    type="button"
+                                    onClick={() => { setStep4BillPdfUrl(null); setStep4PdfFileName(null); }}
+                                    className="text-rose-500 hover:text-rose-600 text-[11px] font-bold ml-1"
+                                    title="Remove attachment"
+                                  >
+                                    ✕
+                                  </button>
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     )}
 
@@ -6651,6 +6780,22 @@ function DailyRegisterView({
                                     Due: {item.dueDate}
                                   </span>
                                 )}
+                                {item.supplierInvoiceNum && (
+                                  <span className="rounded-full bg-slate-200 dark:bg-white/10 px-2.5 py-0.5 text-[10px] font-mono font-bold text-jct-turquoise">
+                                    #{item.supplierInvoiceNum}
+                                  </span>
+                                )}
+                                {item.billPdfUrl && (
+                                  <a
+                                    href={item.billPdfUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 rounded-full bg-jct-turquoise/20 hover:bg-jct-turquoise/30 px-2.5 py-0.5 text-[10px] font-bold text-jct-charcoal dark:text-jct-turquoise transition"
+                                  >
+                                    <FileText size={10} />
+                                    <span>📄 View Bill</span>
+                                  </a>
+                                )}
                               </div>
                               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                                 {item.supplierName ? `Supplier: ${item.supplierName} · ` : ""}
@@ -6682,21 +6827,25 @@ function DailyRegisterView({
                                   <span className="font-display text-sm font-bold text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap">
                                     -SAR {fmt(item.amount)}
                                   </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleOpenEditEntryModal(item)}
-                                    className="bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 transition-all rounded-md px-2.5 py-1 text-xs"
-                                  >
-                                    ✏️ Edit
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemoveEntry(item.id)}
-                                    className="text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 p-1.5 rounded-md transition-colors"
-                                    title="Delete expense"
-                                  >
-                                    <Trash2 size={15} />
-                                  </button>
+                                  {isOwner && (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenEditEntryModal(item)}
+                                        className="bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 transition-all rounded-md px-2.5 py-1 text-xs"
+                                      >
+                                        ✏️ Edit
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRemoveEntry(item.id)}
+                                        className="text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 p-1.5 rounded-md transition-colors"
+                                        title="Delete expense"
+                                      >
+                                        <Trash2 size={15} />
+                                      </button>
+                                    </>
+                                  )}
                                 </>
                               )}
                             </div>
@@ -7165,21 +7314,25 @@ function DailyRegisterView({
                                   <span className="font-display text-xs font-extrabold text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap print:text-black print:text-sm print:font-bold">
                                     +SAR {fmt(entry.amount)}
                                   </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleOpenEditEntryModal(entry)}
-                                    className="rounded bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-2 py-0.5 text-[10px] print:hidden"
-                                  >
-                                    ✏️ Edit
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemoveEntry(entry.id)}
-                                    className="rounded border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-600 dark:text-rose-400 transition print:hidden"
-                                    title="Delete inflow"
-                                  >
-                                    🗑️ Delete
-                                  </button>
+                                  {isOwner && (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenEditEntryModal(entry)}
+                                        className="rounded bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-2 py-0.5 text-[10px] print:hidden"
+                                      >
+                                        ✏️ Edit
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRemoveEntry(entry.id)}
+                                        className="rounded border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-600 dark:text-rose-400 transition print:hidden"
+                                        title="Delete inflow"
+                                      >
+                                        🗑️ Delete
+                                      </button>
+                                    </>
+                                  )}
                                 </>
                               )}
                             </div>
@@ -7388,21 +7541,25 @@ function DailyRegisterView({
                                   <span className="font-display text-xs font-extrabold text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap print:text-black print:text-sm print:font-bold">
                                     -SAR {fmt(entry.amount)}
                                   </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleOpenEditEntryModal(entry)}
-                                    className="rounded bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-2 py-0.5 text-[10px] print:hidden"
-                                  >
-                                    ✏️ Edit
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemoveEntry(entry.id)}
-                                    className="rounded border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-600 dark:text-rose-400 transition print:hidden"
-                                    title="Delete expense"
-                                  >
-                                    🗑️ Delete
-                                  </button>
+                                  {isOwner && (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenEditEntryModal(entry)}
+                                        className="rounded bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-2 py-0.5 text-[10px] print:hidden"
+                                      >
+                                        ✏️ Edit
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRemoveEntry(entry.id)}
+                                        className="rounded border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-600 dark:text-rose-400 transition print:hidden"
+                                        title="Delete expense"
+                                      >
+                                        🗑️ Delete
+                                      </button>
+                                    </>
+                                  )}
                                 </>
                               )}
                             </div>
@@ -9218,12 +9375,15 @@ function SupplierHubView({
     amount: number,
     dueDate: string,
     category: "Credit Purchase" | "Cash Purchase" | "Bank Purchase" | "Return",
-    paymentMode?: UniversalPaymentMode
+    paymentMode?: UniversalPaymentMode,
+    supplierInvoiceNum?: string,
+    billPdfUrl?: string
   ) => void;
   isOwner?: boolean;
   onUpdateBill?: (updated: SupplierBillItem) => void;
   onDeleteBill?: (id: string) => void;
 }) {
+  const [supplierHubTab, setSupplierHubTab] = useState<"vault" | "payables">("vault");
   const [unlocked, setUnlocked] = useState(false);
   const [pin, setPin] = useState("");
 
@@ -9236,7 +9396,7 @@ function SupplierHubView({
     }
   };
 
-  const [privateCommissions, setPrivateCommissions] = useState([
+  const [privateCommissions] = useState([
     { id: 1, name: "Ali R. (Broker)", dealRef: "Jubail Port Proj.", amount: 15000, date: "2026-09-01", paymentMode: "CASH" as UniversalPaymentMode },
     { id: 2, name: "Saad Contractor", dealRef: "Al-Noor Complex", amount: 8500, date: "2026-09-10", paymentMode: "AL_RAJHI" as UniversalPaymentMode },
   ]);
@@ -9244,8 +9404,12 @@ function SupplierHubView({
   const [supplierSearch, setSupplierSearch] = useState("");
   const [logAmount, setLogAmount] = useState("");
   const [logType, setLogType] = useState<"Credit Purchase" | "Cash Purchase" | "Bank Purchase" | "Return">("Credit Purchase");
-  const [logPaymentMode, setLogPaymentMode] = useState<UniversalPaymentMode>("SAB");
+  const [logPaymentMode] = useState<UniversalPaymentMode>("SAB");
   const [logDate, setLogDate] = useState("2026-09-25");
+  const [logInvoiceNum, setLogInvoiceNum] = useState("");
+  const [logBillPdfUrl, setLogBillPdfUrl] = useState<string | null>(null);
+  const [logPdfUploading, setLogPdfUploading] = useState(false);
+  const [logPdfFileName, setLogPdfFileName] = useState<string | null>(null);
 
   // Owner Edit Supplier Bill Modal State
   const [editingBill, setEditingBill] = useState<SupplierBillItem | null>(null);
@@ -9253,6 +9417,50 @@ function SupplierHubView({
   const [editBillAmount, setEditBillAmount] = useState("");
   const [editBillDueDate, setEditBillDueDate] = useState("");
   const [editBillPaymentMode, setEditBillPaymentMode] = useState<UniversalPaymentMode>("SAB");
+  const [editBillInvoiceNum, setEditBillInvoiceNum] = useState("");
+  const [editBillPdfUrl, setEditBillPdfUrl] = useState<string | null>(null);
+
+  // Retroactive PDF Upload state
+  const [retroUploadingId, setRetroUploadingId] = useState<string | null>(null);
+
+  const handleRetroactivePdfUpload = async (
+    billId: string,
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file || !onUpdateBill) return;
+    setRetroUploadingId(billId);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+      let billPdfUrl = "";
+      if (res.ok) {
+        const data = await res.json();
+        billPdfUrl = data.url;
+      } else {
+        const reader = new FileReader();
+        billPdfUrl = await new Promise((resolve) => {
+          reader.onload = () => resolve(reader.result as string);
+          reader.readAsDataURL(file);
+        });
+      }
+      const existing = supplierBills.find((b) => b.id === billId);
+      if (existing) {
+        onUpdateBill({
+          ...existing,
+          billPdfUrl,
+        });
+      }
+    } catch (err) {
+      console.error("Retroactive PDF upload failed:", err);
+    } finally {
+      setRetroUploadingId(null);
+    }
+  };
 
   const handleOpenEditBill = (bill: SupplierBillItem) => {
     setEditingBill(bill);
@@ -9260,6 +9468,8 @@ function SupplierHubView({
     setEditBillAmount(String(bill.amount));
     setEditBillDueDate(bill.dueDate);
     setEditBillPaymentMode((bill.paymentMode as UniversalPaymentMode) || "SAB");
+    setEditBillInvoiceNum(bill.supplierInvoiceNum || "");
+    setEditBillPdfUrl(bill.billPdfUrl || null);
   };
 
   const handleSaveEditBill = (e: React.FormEvent) => {
@@ -9273,35 +9483,121 @@ function SupplierHubView({
       amount: val,
       dueDate: editBillDueDate || editingBill.dueDate,
       paymentMode: editBillPaymentMode,
+      supplierInvoiceNum: editBillInvoiceNum.trim() || undefined,
+      billPdfUrl: editBillPdfUrl || undefined,
     });
     setEditingBill(null);
+  };
+
+  const handleQuickLogFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setLogPdfUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setLogBillPdfUrl(data.url);
+        setLogPdfFileName(file.name);
+      } else {
+        const reader = new FileReader();
+        reader.onload = () => {
+          setLogBillPdfUrl(reader.result as string);
+          setLogPdfFileName(file.name);
+        };
+        reader.readAsDataURL(file);
+      }
+    } catch {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setLogBillPdfUrl(reader.result as string);
+        setLogPdfFileName(file.name);
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      setLogPdfUploading(false);
+    }
   };
 
   const handleLogSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const val = parseFloat(logAmount);
-    if (!supplierSearch.trim() || Number.isNaN(val) || val <= 0) return;
-    onLogSupplierPurchase(supplierSearch.trim(), val, logDate || "2026-09-25", logType, logPaymentMode);
+    if (Number.isNaN(val) || val <= 0 || !supplierSearch.trim()) return;
+
+    onLogSupplierPurchase(
+      supplierSearch.trim(),
+      val,
+      logDate || "2026-09-25",
+      logType,
+      logPaymentMode,
+      logInvoiceNum.trim() || undefined,
+      logBillPdfUrl || undefined
+    );
     setSupplierSearch("");
     setLogAmount("");
+    setLogInvoiceNum("");
+    setLogBillPdfUrl(null);
+    setLogPdfFileName(null);
   };
 
   return (
-    <div className="flex flex-col gap-6 p-4 md:p-6 lg:p-8 h-full overflow-y-auto w-full">
-      {/* Owner Edit Supplier Bill Modal */}
-      {isOwner && editingBill && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 text-jct-charcoal dark:text-jct-offwhite">
-            <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#1F1F1F] pb-3 mb-4">
-              <h3 className="font-display text-lg font-extrabold text-jct-charcoal dark:text-jct-offwhite">
-                ✏️ Edit Supplier Bill (Owner Override)
+    <div className="flex flex-1 flex-col p-6 sm:p-8 space-y-6">
+      {/* Sub-Navigation: Invoice Vault vs Brand Payables */}
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 dark:border-[#1F1F1F] pb-4">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setSupplierHubTab("vault")}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all ${
+              supplierHubTab === "vault"
+                ? "bg-jct-turquoise text-jct-charcoal shadow-sm"
+                : "text-slate-600 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-white bg-slate-100 dark:bg-[#111111]"
+            }`}
+          >
+            <FolderArchive size={16} />
+            <span>Purchase History (Invoice Vault)</span>
+            <span className="text-xs px-2 py-0.5 rounded-full bg-black/10 dark:bg-white/10 font-mono">
+              {supplierBills.length}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setSupplierHubTab("payables")}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all ${
+              supplierHubTab === "payables"
+                ? "bg-jct-turquoise text-jct-charcoal shadow-sm"
+                : "text-slate-600 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-white bg-slate-100 dark:bg-[#111111]"
+            }`}
+          >
+            <Package size={16} />
+            <span>Brand Payables &amp; Due Dates</span>
+          </button>
+        </div>
+
+        <span className="text-xs font-bold bg-jct-yellow text-jct-charcoal px-3 py-1 rounded-full shrink-0">
+          ● Live Synced with Daily Register
+        </span>
+      </div>
+
+      {/* Owner Edit Bill Modal */}
+      {editingBill && isOwner && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-fadeIn">
+          <div className="w-full max-w-md bg-white dark:bg-[#0A0A0A] rounded-xl p-6 border border-jct-yellow/40 dark:border-jct-yellow/50 shadow-2xl transition-all text-jct-charcoal dark:text-jct-offwhite">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#1F1F1F] pb-4 mb-5">
+              <h3 className="font-display text-lg font-extrabold tracking-tight text-jct-charcoal dark:text-white">
+                👑 Edit Supplier Bill / Purchase
               </h3>
               <button
                 type="button"
                 onClick={() => setEditingBill(null)}
-                className="rounded-lg bg-slate-100 dark:bg-[#111111] px-2.5 py-1 text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-jct-offwhite"
+                className="rounded-lg border border-slate-200 dark:border-slate-800 p-1.5 text-slate-400 hover:text-jct-charcoal dark:hover:text-white transition"
               >
-                ✕
+                <X size={16} />
               </button>
             </div>
             <form onSubmit={handleSaveEditBill} className="space-y-4">
@@ -9314,26 +9610,23 @@ function SupplierHubView({
                   required
                   value={editBillSupplier}
                   onChange={(e) => setEditBillSupplier(e.target.value)}
-                  className="w-full bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-3.5 py-2.5 text-sm font-semibold outline-none"
+                  className="w-full bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-3.5 py-2.5 text-sm font-bold outline-none"
                 />
               </div>
+
               <div>
                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
-                  Mode of Payment (Required)
+                  Supplier Invoice #
                 </label>
-                <select
-                  value={editBillPaymentMode}
-                  onChange={(e) => setEditBillPaymentMode(e.target.value as UniversalPaymentMode)}
-                  required
-                  className="w-full bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-3.5 py-2.5 text-sm font-bold outline-none"
-                >
-                  {UNIVERSAL_PAYMENT_MODES.map((pm) => (
-                    <option key={pm.value} value={pm.value} className="bg-white dark:bg-[#0A0A0A]">
-                      {pm.badge} · {pm.label}
-                    </option>
-                  ))}
-                </select>
+                <input
+                  type="text"
+                  value={editBillInvoiceNum}
+                  onChange={(e) => setEditBillInvoiceNum(e.target.value)}
+                  placeholder="e.g. INV-0992"
+                  className="w-full bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-3.5 py-2.5 text-sm font-mono font-bold outline-none"
+                />
               </div>
+
               <div>
                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
                   Amount (SAR)
@@ -9347,6 +9640,7 @@ function SupplierHubView({
                   className="w-full bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-3.5 py-2.5 font-mono text-base font-extrabold outline-none"
                 />
               </div>
+
               <div>
                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
                   Due Date
@@ -9358,6 +9652,50 @@ function SupplierHubView({
                   className="w-full bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-3.5 py-2.5 text-sm font-bold outline-none"
                 />
               </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
+                  Attached PDF Bill
+                </label>
+                <div className="flex items-center gap-2">
+                  <label className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-dashed border-jct-turquoise/40 hover:border-jct-turquoise bg-jct-turquoise/5 text-jct-turquoise text-xs font-bold cursor-pointer transition">
+                    <Upload size={14} />
+                    <span>{editBillPdfUrl ? "Replace Attached PDF" : "Attach PDF Bill"}</span>
+                    <input
+                      type="file"
+                      accept="application/pdf,image/*"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        try {
+                          const formData = new FormData();
+                          formData.append("file", file);
+                          const res = await fetch("/api/upload", { method: "POST", body: formData });
+                          if (res.ok) {
+                            const data = await res.json();
+                            setEditBillPdfUrl(data.url);
+                          }
+                        } catch (err) {
+                          console.error("Upload failed", err);
+                        }
+                      }}
+                      className="hidden"
+                    />
+                  </label>
+                  {editBillPdfUrl && (
+                    <a
+                      href={editBillPdfUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs font-bold text-jct-turquoise hover:underline flex items-center gap-1"
+                    >
+                      <FileText size={12} />
+                      View Bill
+                    </a>
+                  )}
+                </div>
+              </div>
+
               <div className="flex items-center justify-end gap-2.5 pt-2">
                 <button
                   type="button"
@@ -9378,196 +9716,338 @@ function SupplierHubView({
         </div>
       )}
 
-      {/* Top section: Official Brand Payables */}
-      <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <h2 className="font-display font-extrabold text-2xl text-jct-charcoal dark:text-white tracking-tight flex items-center gap-2">
-            <Package className="text-jct-turquoise" /> Official Brand Payables
-          </h2>
-          <span className="text-xs font-bold bg-jct-yellow text-jct-charcoal px-3 py-1 rounded-full">
-            ● Live Synced with Daily Register Credit Purchases
-          </span>
-        </div>
-
-        {/* Quick Supplier Add/Log Card */}
-        <form
-          onSubmit={handleLogSubmit}
-          className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6"
-        >
-          <h3 className="font-bold text-xs text-slate-500 dark:text-slate-400 mb-4 uppercase tracking-wider">
-            Log Supplier Credit Purchase or Return
-          </h3>
-          <div className="flex flex-wrap items-center gap-3">
-            <input
-              list="suppliers-list"
-              type="text"
-              placeholder="Search Supplier (Jotun, Hempel, Sigma...)"
-              value={supplierSearch}
-              onChange={(e) => setSupplierSearch(e.target.value)}
-              className="flex-[2] min-w-[200px] px-4 py-2.5 bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md font-medium text-sm outline-none"
-            />
-            <datalist id="suppliers-list">
-              <option value="Jotun" />
-              <option value="Hempel" />
-              <option value="Sigma" />
-            </datalist>
-            <input
-              type="number"
-              step="0.01"
-              placeholder="Amount (SAR)"
-              value={logAmount}
-              onChange={(e) => setLogAmount(e.target.value)}
-              className="flex-1 min-w-[120px] px-4 py-2.5 bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md font-bold text-sm outline-none"
-            />
-            <select
-              value={logType}
-              onChange={(e) =>
-                setLogType(e.target.value as "Credit Purchase" | "Cash Purchase" | "Bank Purchase" | "Return")
-              }
-              className="flex-1 min-w-[150px] px-4 py-2.5 bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md outline-none font-bold text-sm"
-            >
-              <option value="Credit Purchase" className="bg-white dark:bg-[#0A0A0A]">Credit Purchase</option>
-              <option value="Cash Purchase" className="bg-white dark:bg-[#0A0A0A]">Cash Purchase</option>
-              <option value="Bank Purchase" className="bg-white dark:bg-[#0A0A0A]">Bank Purchase</option>
-              <option value="Return" className="bg-white dark:bg-[#0A0A0A]">Return / Refund</option>
-            </select>
-            {/* Required Mode of Payment Dropdown */}
-            <select
-              value={logPaymentMode}
-              onChange={(e) => setLogPaymentMode(e.target.value as UniversalPaymentMode)}
-              required
-              className="flex-1 min-w-[160px] px-4 py-2.5 bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md font-bold text-sm outline-none"
-            >
-              {UNIVERSAL_PAYMENT_MODES.map((pm) => (
-                <option key={pm.value} value={pm.value} className="bg-white dark:bg-[#0A0A0A]">
-                  {pm.badge} · {pm.label}
-                </option>
-              ))}
-            </select>
-            <input
-              type="date"
-              value={logDate}
-              onChange={(e) => setLogDate(e.target.value)}
-              className="flex-1 min-w-[140px] px-4 py-2.5 bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md font-medium text-sm outline-none"
-            />
-            <button
-              type="submit"
-              className={`px-6 py-2.5 rounded-lg font-bold transition-all shadow-sm whitespace-nowrap shrink-0 ${
-                logType === "Return"
-                  ? "bg-jct-yellow text-jct-charcoal hover:brightness-95"
-                  : "bg-jct-turquoise text-jct-charcoal hover:brightness-95"
-              }`}
-            >
-              {logType === "Return" ? "Log Return" : "Log Purchase"}
-            </button>
-          </div>
-        </form>
-
-        {/* Payables Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {supplierBrands.map((p) => (
-            <div
-              key={p.id}
-              className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 flex flex-col gap-4"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center font-display font-extrabold text-jct-charcoal text-lg bg-jct-turquoise shadow-sm">
-                  {p.brand.charAt(0)}
-                </div>
-                <h3 className="font-display font-extrabold text-lg text-jct-charcoal dark:text-jct-offwhite">
-                  {p.brand}
-                </h3>
-              </div>
-              <div className="flex flex-col gap-1">
-                <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  Total Paid This Month
-                </p>
-                <p className="font-display font-extrabold text-xl text-jct-charcoal dark:text-jct-offwhite">
-                  SAR {fmt(p.amountPaid)}
-                </p>
-              </div>
-              <div className="flex flex-col gap-1 pt-3 border-t border-slate-200 dark:border-[#1F1F1F]">
-                <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  Pending Credit Bills
-                </p>
-                <p className="font-display font-extrabold text-lg text-jct-charcoal dark:text-jct-offwhite">
-                  SAR {fmt(p.pendingBills)}
-                </p>
-              </div>
+      {/* ────────────────────────────────────────────────────────────
+          VIEW 1: INVOICE VAULT & PURCHASE HISTORY
+         ──────────────────────────────────────────────────────────── */}
+      {supplierHubTab === "vault" && (
+        <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="font-display font-extrabold text-lg text-jct-charcoal dark:text-white flex items-center gap-2">
+                <FolderArchive className="text-jct-turquoise" size={20} />
+                Supplier Purchase History &amp; Invoice Vault
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Centralized repository of all supplier invoices and attached PDF bills across all branches.
+              </p>
             </div>
-          ))}
-        </div>
-
-        {/* Live Credit Purchase Bills & Due Dates Table */}
-        <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-display font-extrabold text-base text-jct-charcoal dark:text-jct-offwhite">
-              Active Supplier Credit Purchases &amp; Payment Due Dates ({supplierBills.length})
-            </h3>
-            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
-              Includes bills logged in Daily Register Step 4
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold px-3 py-1 rounded-full bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-300">
+                Total Records: {supplierBills.length}
+              </span>
+            </div>
           </div>
-          <div className="divide-y divide-slate-200 dark:divide-[#1F1F1F]">
-            {supplierBills.map((bill) => {
-              const pmBadge = formatPaymentModeBadge(bill.paymentMode);
-              return (
-                <div
-                  key={bill.id}
-                  className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm"
-                >
-                  <div className="flex flex-wrap items-center gap-2.5">
-                    <span className="font-extrabold text-jct-charcoal dark:text-jct-offwhite">
-                      {bill.supplierName}
-                    </span>
-                    <span className="rounded-full bg-jct-yellow text-jct-charcoal font-bold px-3 py-1 text-xs">
-                      {bill.category}
-                    </span>
-                    <span
-                      className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${pmBadge.badgeClass}`}
-                    >
-                      {pmBadge.badge}
-                    </span>
-                    {bill.source === "Daily Register" && (
-                      <span className="rounded-full bg-jct-turquoise text-jct-charcoal px-2.5 py-0.5 text-[10px] font-bold">
-                        ✓ Synced from Daily Register
+
+          <div className="w-full overflow-x-auto hide-scrollbar border border-slate-200 dark:border-[#1F1F1F] rounded-xl">
+            <table className="w-full text-left border-collapse whitespace-nowrap min-w-[780px]">
+              <thead>
+                <tr className="bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                  <th className="px-4 py-3">Date</th>
+                  <th className="px-4 py-3">Supplier</th>
+                  <th className="px-4 py-3">Invoice #</th>
+                  <th className="px-4 py-3">Amount</th>
+                  <th className="px-4 py-3">PDF Bill</th>
+                  <th className="px-4 py-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-800 text-xs">
+                {supplierBills.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
+                      No supplier purchases logged yet.
+                    </td>
+                  </tr>
+                ) : (
+                  supplierBills.map((bill) => {
+                    const hasPdf = Boolean(bill.billPdfUrl);
+                    const invNum = bill.supplierInvoiceNum || "—";
+                    return (
+                      <tr key={bill.id} className="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
+                        <td className="px-4 py-3.5 font-mono text-slate-600 dark:text-slate-400">
+                          {bill.createdAt || "12-09-2026"}
+                        </td>
+                        <td className="px-4 py-3.5 font-bold text-jct-charcoal dark:text-white">
+                          <div className="flex items-center gap-2">
+                            <span>{bill.supplierName}</span>
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-200 dark:bg-white/10 text-slate-600 dark:text-slate-300">
+                              {bill.category}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3.5 font-mono font-bold text-jct-turquoise">
+                          {invNum}
+                        </td>
+                        <td className="px-4 py-3.5 font-mono font-bold text-jct-charcoal dark:text-white">
+                          SAR {fmt(bill.amount)}
+                        </td>
+                        <td className="px-4 py-3.5">
+                          {hasPdf ? (
+                            <a
+                              href={bill.billPdfUrl!}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-jct-turquoise/20 hover:bg-jct-turquoise/30 text-jct-charcoal dark:text-jct-turquoise font-bold text-xs transition shadow-sm"
+                              title="Open bill in new tab"
+                            >
+                              <FileText size={13} />
+                              <span>📄 View Bill</span>
+                            </a>
+                          ) : isOwner ? (
+                            <label className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-dashed border-jct-yellow/60 hover:border-jct-yellow bg-jct-yellow/10 text-jct-charcoal dark:text-jct-yellow font-bold text-xs cursor-pointer transition">
+                              <Upload size={12} />
+                              <span>{retroUploadingId === bill.id ? "Uploading..." : "⬆️ Attach PDF"}</span>
+                              <input
+                                type="file"
+                                accept="application/pdf,image/*"
+                                onChange={(e) => handleRetroactivePdfUpload(bill.id, e)}
+                                className="hidden"
+                              />
+                            </label>
+                          ) : (
+                            <span className="text-slate-400 text-xs italic">No bill attached</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3.5 text-right">
+                          {isOwner ? (
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditBill(bill)}
+                                className="rounded-lg bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-2.5 py-1 text-xs transition"
+                              >
+                                ✏️ Edit
+                              </button>
+                              {onDeleteBill && (
+                                <button
+                                  type="button"
+                                  onClick={() => onDeleteBill(bill.id)}
+                                  className="rounded-lg bg-rose-500/15 hover:bg-rose-500/30 px-2.5 py-1 text-xs font-bold text-rose-500 transition"
+                                >
+                                  🗑️ Delete
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 text-xs font-medium">Locked (Staff)</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ────────────────────────────────────────────────────────────
+          VIEW 2: BRAND PAYABLES & ACTIVE CREDIT PURCHASES
+         ──────────────────────────────────────────────────────────── */}
+      {supplierHubTab === "payables" && (
+        <div className="flex flex-col gap-6">
+          {/* Official Brand Payables Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {supplierBrands.map((p) => (
+              <div
+                key={p.id}
+                className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-5 flex flex-col gap-3"
+              >
+                <div className="flex items-center justify-between">
+                  <h4 className="font-display font-extrabold text-lg text-jct-charcoal dark:text-jct-offwhite">
+                    {p.brand}
+                  </h4>
+                  <span
+                    className={`w-3 h-3 rounded-full ${
+                      p.color === "emerald" ? "bg-emerald-500" : p.color === "yellow" ? "bg-amber-400" : "bg-jct-turquoise"
+                    }`}
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    Total Paid This Month
+                  </p>
+                  <p className="font-display font-extrabold text-xl text-jct-charcoal dark:text-jct-offwhite">
+                    SAR {fmt(p.amountPaid)}
+                  </p>
+                </div>
+                <div className="flex flex-col gap-1 pt-3 border-t border-slate-200 dark:border-[#1F1F1F]">
+                  <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    Pending Credit Bills
+                  </p>
+                  <p className="font-display font-extrabold text-lg text-jct-charcoal dark:text-jct-offwhite">
+                    SAR {fmt(p.pendingBills)}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Quick Supplier Add/Log Card */}
+          <form
+            onSubmit={handleLogSubmit}
+            className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6"
+          >
+            <h3 className="font-bold text-xs text-slate-500 dark:text-slate-400 mb-4 uppercase tracking-wider">
+              Log Supplier Credit Purchase or Return
+            </h3>
+            <div className="flex flex-wrap items-center gap-3">
+              <input
+                list="suppliers-list"
+                type="text"
+                placeholder="Search Supplier (Jotun, Hempel, Sigma...)"
+                value={supplierSearch}
+                onChange={(e) => setSupplierSearch(e.target.value)}
+                className="flex-[2] min-w-[180px] px-4 py-2.5 bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md font-medium text-sm outline-none"
+              />
+              <datalist id="suppliers-list">
+                <option value="Jotun" />
+                <option value="Hempel" />
+                <option value="Sigma" />
+              </datalist>
+              <input
+                type="text"
+                placeholder="Invoice # (e.g., INV-0992)"
+                value={logInvoiceNum}
+                onChange={(e) => setLogInvoiceNum(e.target.value)}
+                className="flex-1 min-w-[140px] px-3.5 py-2.5 bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md font-mono text-sm outline-none"
+              />
+              <input
+                type="number"
+                step="0.01"
+                placeholder="Amount (SAR)"
+                value={logAmount}
+                onChange={(e) => setLogAmount(e.target.value)}
+                className="flex-1 min-w-[120px] px-4 py-2.5 bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md font-bold text-sm outline-none"
+              />
+              <select
+                value={logType}
+                onChange={(e) =>
+                  setLogType(e.target.value as "Credit Purchase" | "Cash Purchase" | "Bank Purchase" | "Return")
+                }
+                className="flex-1 min-w-[150px] px-4 py-2.5 bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md outline-none font-bold text-sm"
+              >
+                <option value="Credit Purchase" className="bg-white dark:bg-[#0A0A0A]">Credit Purchase</option>
+                <option value="Cash Purchase" className="bg-white dark:bg-[#0A0A0A]">Cash Purchase</option>
+                <option value="Bank Purchase" className="bg-white dark:bg-[#0A0A0A]">Bank Purchase</option>
+                <option value="Return" className="bg-white dark:bg-[#0A0A0A]">Return / Refund</option>
+              </select>
+              <input
+                type="date"
+                value={logDate}
+                onChange={(e) => setLogDate(e.target.value)}
+                className="flex-1 min-w-[140px] px-4 py-2.5 bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md font-medium text-sm outline-none"
+              />
+              <label className="flex items-center gap-1.5 px-3 py-2.5 rounded-lg border border-dashed border-jct-turquoise/40 hover:border-jct-turquoise bg-jct-turquoise/5 text-jct-turquoise text-xs font-bold cursor-pointer transition">
+                <Upload size={14} />
+                <span>{logPdfUploading ? "Uploading..." : logPdfFileName ? `✓ ${logPdfFileName.slice(0, 16)}` : logBillPdfUrl ? "✓ PDF Attached" : "Attach PDF"}</span>
+                <input
+                  type="file"
+                  accept="application/pdf,image/*"
+                  onChange={handleQuickLogFileUpload}
+                  className="hidden"
+                />
+              </label>
+              <button
+                type="submit"
+                className={`px-6 py-2.5 rounded-lg font-bold transition-all shadow-sm whitespace-nowrap shrink-0 ${
+                  logType === "Return"
+                    ? "bg-jct-yellow text-jct-charcoal hover:brightness-95"
+                    : "bg-jct-turquoise text-jct-charcoal hover:brightness-95"
+                }`}
+              >
+                + Record Purchase
+              </button>
+            </div>
+          </form>
+
+          {/* Active Supplier Credit Purchases & Payment Due Dates Table */}
+          <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-display font-extrabold text-base text-jct-charcoal dark:text-jct-offwhite">
+                Active Supplier Credit Purchases &amp; Payment Due Dates ({supplierBills.length})
+              </h3>
+              <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                Includes bills logged in Daily Register Step 4
+              </span>
+            </div>
+            <div className="divide-y divide-slate-200 dark:divide-[#1F1F1F]">
+              {supplierBills.map((bill) => {
+                const pmBadge = formatPaymentModeBadge(bill.paymentMode);
+                return (
+                  <div
+                    key={bill.id}
+                    className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm"
+                  >
+                    <div className="flex flex-wrap items-center gap-2.5">
+                      <span className="font-extrabold text-jct-charcoal dark:text-jct-offwhite">
+                        {bill.supplierName}
                       </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                      Due Date: {bill.dueDate}
-                    </span>
-                    <span className="font-display font-extrabold text-jct-charcoal dark:text-jct-offwhite">
-                      SAR {fmt(bill.amount)}
-                    </span>
-                    {isOwner && (
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => handleOpenEditBill(bill)}
-                          className="rounded-lg bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-2 py-1 text-xs transition"
+                      {bill.supplierInvoiceNum && (
+                        <span className="font-mono text-xs font-bold text-jct-turquoise">
+                          #{bill.supplierInvoiceNum}
+                        </span>
+                      )}
+                      <span className="rounded-full bg-jct-yellow text-jct-charcoal font-bold px-3 py-1 text-xs">
+                        {bill.category}
+                      </span>
+                      <span
+                        className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${pmBadge.badgeClass}`}
+                      >
+                        {pmBadge.badge}
+                      </span>
+                      {bill.source === "Daily Register" && (
+                        <span className="rounded-full bg-jct-turquoise text-jct-charcoal px-2.5 py-0.5 text-[10px] font-bold">
+                          ✓ Synced from Daily Register
+                        </span>
+                      )}
+                      {bill.billPdfUrl && (
+                        <a
+                          href={bill.billPdfUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 rounded-full bg-jct-turquoise/20 hover:bg-jct-turquoise/30 px-2.5 py-0.5 text-[10px] font-bold text-jct-charcoal dark:text-jct-turquoise transition"
                         >
-                          ✏️ Edit
-                        </button>
-                        {onDeleteBill && (
+                          <FileText size={10} />
+                          <span>📄 View Bill</span>
+                        </a>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                        Due Date: {bill.dueDate}
+                      </span>
+                      <span className="font-display font-extrabold text-jct-charcoal dark:text-jct-offwhite">
+                        SAR {fmt(bill.amount)}
+                      </span>
+                      {isOwner && (
+                        <div className="flex items-center gap-1.5">
                           <button
                             type="button"
-                            onClick={() => onDeleteBill(bill.id)}
-                            className="rounded-lg bg-rose-500/15 hover:bg-rose-500/30 px-2 py-1 text-xs font-bold text-rose-500 transition"
+                            onClick={() => handleOpenEditBill(bill)}
+                            className="rounded-lg bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-2 py-1 text-xs transition"
                           >
-                            🗑️ Delete
+                            ✏️ Edit
                           </button>
-                        )}
-                      </div>
-                    )}
+                          {onDeleteBill && (
+                            <button
+                              type="button"
+                              onClick={() => onDeleteBill(bill.id)}
+                              className="rounded-lg bg-rose-500/15 hover:bg-rose-500/30 px-2 py-1 text-xs font-bold text-rose-500 transition"
+                            >
+                              🗑️ Delete
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Divider */}
       <div className="my-2 border-b border-slate-200 dark:border-[#1F1F1F]"></div>
@@ -9578,168 +10058,70 @@ function SupplierHubView({
           <div className="absolute inset-0 z-10 rounded-xl backdrop-blur-xl bg-slate-900/10 dark:bg-black/40 flex flex-col items-center justify-center border border-slate-200 dark:border-[#1F1F1F] shadow-lg overflow-hidden">
             <div className="relative z-20 flex flex-col items-center gap-4 bg-white dark:bg-[#0A0A0A] p-8 rounded-xl shadow-sm border border-slate-200 dark:border-[#1F1F1F]">
               <div className="h-16 w-16 rounded-full bg-jct-yellow text-jct-charcoal flex items-center justify-center shadow-sm">
-                <Lock size={28} />
+                <Lock size={32} />
               </div>
               <div className="text-center">
-                <h3 className="font-display font-extrabold text-xl text-jct-charcoal dark:text-jct-offwhite mb-1">
-                  Private Vault Locked
+                <h3 className="font-display font-extrabold text-xl text-jct-charcoal dark:text-white">
+                  Executive Security Protocol
                 </h3>
-                <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
-                  Enter PIN to view confidential ledgers
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-[280px]">
+                  Confidential Broker Kickbacks &amp; Private Cash Margins are encrypted. Enter PIN to unlock.
                 </p>
               </div>
-              <input
-                type="password"
-                value={pin}
-                onChange={handlePin}
-                placeholder="••••"
-                className="mt-2 w-32 text-center tracking-[0.5em] font-display text-2xl font-bold py-3 bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md outline-none"
-              />
+              <div className="flex items-center gap-2">
+                <input
+                  type="password"
+                  maxLength={4}
+                  placeholder="PIN"
+                  value={pin}
+                  onChange={handlePin}
+                  className="w-24 text-center font-mono tracking-widest text-lg bg-slate-50 dark:bg-[#111111] border border-slate-300 dark:border-[#222222] text-jct-charcoal dark:text-white rounded-lg py-2 focus:border-jct-yellow focus:ring-1 focus:ring-jct-yellow outline-none transition"
+                  autoFocus
+                />
+              </div>
             </div>
           </div>
         )}
 
-        <div
-          className={`flex flex-col gap-4 transition-all duration-500 ${
-            !unlocked ? "opacity-30 blur-sm pointer-events-none" : "opacity-100"
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <h2 className="font-display font-extrabold text-2xl text-jct-charcoal dark:text-white tracking-tight flex items-center gap-2">
-              <LockOpen className="text-jct-turquoise" /> The Private Vault
-            </h2>
-            <button
-              onClick={() => setUnlocked(false)}
-              className="px-4 py-2 bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 rounded-lg text-sm transition-all flex items-center gap-2"
-            >
-              <Lock size={14} /> Lock Vault
-            </button>
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-display font-extrabold text-xl text-jct-charcoal dark:text-white flex items-center gap-2">
+              <Crown className="text-jct-yellow" /> The Executive Vault
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Secret Direct Off-the-Book Kickbacks &amp; Cash Margins (CEO Eyes Only).
+            </p>
           </div>
+          <span className="text-xs font-bold bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30 px-3 py-1 rounded-full">
+            ● 256-Bit Encrypted
+          </span>
+        </div>
 
-          <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 text-jct-charcoal dark:text-jct-offwhite overflow-hidden relative">
-            <div className="relative z-10 flex flex-col gap-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest text-xs mb-1">
-                    Confidential Ledger
-                  </h3>
-                  <p className="font-display font-extrabold text-xl text-jct-charcoal dark:text-jct-offwhite">
-                    Broker &amp; Contractor Commissions
-                  </p>
+        <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6">
+          <div className="divide-y divide-slate-200 dark:divide-[#1F1F1F]">
+            {privateCommissions.map((comm) => (
+              <div
+                key={comm.id}
+                className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm"
+              >
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <span className="font-extrabold text-jct-charcoal dark:text-jct-offwhite">
+                    {comm.name}
+                  </span>
+                  <span className="rounded-full bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-300 font-bold px-2.5 py-0.5 text-xs">
+                    {comm.dealRef}
+                  </span>
+                  <span className="font-mono text-xs text-slate-500 dark:text-slate-400">
+                    {comm.date}
+                  </span>
                 </div>
-                <div className="text-right">
-                  <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1">
-                    Total Dispensed
-                  </p>
-                  <p className="font-display font-extrabold text-2xl text-jct-charcoal dark:text-jct-offwhite">
-                    SAR {fmt(privateCommissions.reduce((s, c) => s + c.amount, 0))}
-                  </p>
+                <div className="flex items-center gap-3">
+                  <span className="font-display font-extrabold text-emerald-600 dark:text-jct-turquoise">
+                    +SAR {fmt(comm.amount)}
+                  </span>
                 </div>
               </div>
-
-              <div className="w-full overflow-x-auto hide-scrollbar rounded-xl border border-slate-200 dark:border-[#1F1F1F]">
-                <table className="w-full min-w-[700px] text-left text-sm whitespace-nowrap">
-                  <thead className="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-[#111111] font-bold">
-                    <tr>
-                      <th className="px-4 py-3">Recipient Name</th>
-                      <th className="px-4 py-3">Deal Reference</th>
-                      <th className="px-4 py-3">Mode</th>
-                      <th className="px-4 py-3">Date</th>
-                      <th className="px-4 py-3 text-right">Amount</th>
-                      {isOwner && <th className="px-4 py-3 text-right">Actions</th>}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200 dark:divide-[#1F1F1F] font-medium">
-                    {privateCommissions.map((c) => {
-                      const pmBadge = formatPaymentModeBadge(c.paymentMode);
-                      return (
-                        <tr key={c.id} className="hover:bg-slate-50 dark:hover:bg-[#111111] transition-colors">
-                          <td className="px-4 py-3 text-jct-charcoal dark:text-jct-offwhite">
-                            <input
-                              type="text"
-                              value={c.name}
-                              onChange={(e) =>
-                                setPrivateCommissions((prev) =>
-                                  prev.map((it) => (it.id === c.id ? { ...it, name: e.target.value } : it))
-                                )
-                              }
-                              className="bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-2 py-1 font-semibold outline-none"
-                            />
-                          </td>
-                          <td className="px-4 py-3 text-slate-500 dark:text-slate-400">
-                            <input
-                              type="text"
-                              value={c.dealRef}
-                              onChange={(e) =>
-                                setPrivateCommissions((prev) =>
-                                  prev.map((it) => (it.id === c.id ? { ...it, dealRef: e.target.value } : it))
-                                )
-                              }
-                              className="bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-2 py-1 outline-none"
-                            />
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${pmBadge.badgeClass}`}>
-                              {pmBadge.badge}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-slate-500 dark:text-slate-400">{c.date}</td>
-                          <td className="px-4 py-3 text-right font-bold text-jct-charcoal dark:text-jct-offwhite">
-                            <input
-                              type="number"
-                              value={c.amount}
-                              onChange={(e) =>
-                                setPrivateCommissions((prev) =>
-                                  prev.map((it) =>
-                                    it.id === c.id ? { ...it, amount: parseFloat(e.target.value) || 0 } : it
-                                  )
-                                )
-                              }
-                              className="w-24 bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-2 py-1 text-right font-mono font-bold outline-none"
-                            />
-                          </td>
-                          {isOwner && (
-                            <td className="px-4 py-3 text-right">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setPrivateCommissions((prev) => prev.filter((it) => it.id !== c.id))
-                                }
-                                className="rounded bg-rose-500/15 hover:bg-rose-500/30 px-2 py-1 text-xs font-bold text-rose-500"
-                              >
-                                🗑️ Delete
-                              </button>
-                            </td>
-                          )}
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setPrivateCommissions((prev) => [
-                      ...prev,
-                      {
-                        id: Date.now(),
-                        name: "New Broker",
-                        dealRef: "Project Commission",
-                        amount: 5000,
-                        date: "2026-09-12",
-                        paymentMode: "CASH",
-                      },
-                    ])
-                  }
-                  className="flex items-center gap-2 px-5 py-2.5 bg-jct-turquoise text-jct-charcoal font-bold hover:brightness-95 transition-all shadow-sm rounded-lg text-sm"
-                >
-                  <Plus size={16} /> Add Commission Entry
-                </button>
-              </div>
-            </div>
+            ))}
           </div>
         </div>
       </div>
@@ -13566,7 +13948,9 @@ export default function Page() {
     amount: number,
     dueDate: string,
     category: "Credit Purchase" | "Cash Purchase" | "Bank Purchase" | "Return",
-    paymentMode?: UniversalPaymentMode | string
+    paymentMode?: UniversalPaymentMode | string,
+    supplierInvoiceNum?: string,
+    billPdfUrl?: string
   ) => {
     const cleanName = supplierName.trim() || "Jotun";
     const newBill: SupplierBillItem = {
@@ -13578,6 +13962,8 @@ export default function Page() {
       paymentMode: paymentMode || (category === "Bank Purchase" ? "SAB" : "CASH"),
       createdAt: "12-09-2026",
       source: "Daily Register",
+      supplierInvoiceNum: supplierInvoiceNum || undefined,
+      billPdfUrl: billPdfUrl || undefined,
     };
     setSupplierBills((prev) => [newBill, ...prev]);
 

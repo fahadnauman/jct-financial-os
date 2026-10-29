@@ -20,6 +20,8 @@ model PocketTransaction {
   recipientName  String?
   paymentSource  String   // DRAWER_CASH | OWNER_POCKET | BANK_TRANSFER
   paymentMode    String?  // e.g., "SAB", "AL_RAJHI", "SNB", "VISA", "MADA", "BANK_TRANSFER", "CASH"
+  supplierInvoiceNum String?
+  billPdfUrl     String?
   note           String?
   date           String   // YYYY-MM-DD
   createdAt      DateTime @default(now())
@@ -93,14 +95,44 @@ model CreditCustomer {
 }
 
 model SupplierBill {
-  id          String   @id @default(cuid())
-  supplier    String   // "Jotun KSA", "Hempel", "Sigma"
-  invoiceNo   String
-  amount      Float
-  dueDate     DateTime
-  isPaid      Boolean  @default(false)
-  paymentMode String?  // e.g., "SAB", "AL_RAJHI", "SNB", "VISA", "MADA", "BANK_TRANSFER", "CASH"
-  createdAt   DateTime @default(now())
+  id                 String   @id @default(cuid())
+  supplier           String   // "Jotun KSA", "Hempel", "Sigma"
+  invoiceNo          String
+  supplierInvoiceNum String?
+  billPdfUrl         String?
+  amount             Float
+  dueDate            DateTime
+  isPaid             Boolean  @default(false)
+  paymentMode        String?  // e.g., "SAB", "AL_RAJHI", "SNB", "VISA", "MADA", "BANK_TRANSFER", "CASH"
+  createdAt          DateTime @default(now())
+}
+
+model Purchase {
+  id                 String   @id @default(cuid())
+  branch             String   @default("JCT_HQ")
+  supplier           String
+  supplierInvoiceNum String?
+  billPdfUrl         String?
+  amount             Float
+  category           String   @default("Credit Purchase")
+  dueDate            String?
+  paymentMode        String?
+  date               String
+  createdAt          DateTime @default(now())
+}
+
+model Expense {
+  id                 String   @id @default(cuid())
+  branch             String   @default("JCT_HQ")
+  title              String
+  category           String
+  supplierName       String?
+  supplierInvoiceNum String?
+  billPdfUrl         String?
+  amount             Float
+  paymentMode        String?
+  date               String
+  createdAt          DateTime @default(now())
 }
 
 
