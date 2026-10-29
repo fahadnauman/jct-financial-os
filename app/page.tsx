@@ -1677,12 +1677,20 @@ export const calcInvoiceFeeBreakdown = (inv: ErpInvoiceItem): PosFeeBreakdown =>
 };
 
 export const calcEntryPosFeeBreakdown = (entry: PreLoggedEntry): PosFeeBreakdown => {
+  const isBankTransfer =
+    entry.paymentMode === "BANK_TRANSFER" ||
+    entry.paymentMode === "Bank Transfer" ||
+    entry.paymentMode === "BANK";
+  if (isBankTransfer) {
+    const gross = r2(Math.max(0, entry.amount));
+    return { gross, mdrBase: 0, vatOnFee: 0, totalFee: 0, net: gross, isMada: false };
+  }
   const isCard =
     entry.paymentMode === "CARD" ||
     entry.paymentMode === "POS_SWIPE" ||
     entry.paymentMode === "VISA" ||
     entry.paymentMode === "MADA" ||
-    entry.terminal !== undefined ||
+    (entry.terminal !== undefined && !isBankTransfer) ||
     entry.network !== undefined;
   if (!isCard) {
     const gross = r2(Math.max(0, entry.amount));
@@ -2014,6 +2022,213 @@ interface DailyRegisterViewProps {
   branchId?: string;
   isOwner?: boolean;
 }
+
+export interface CascadingPaymentSelectorProps {
+  mode: string;
+  onModeChange: (mode: UniversalPaymentMode | string) => void;
+  bank?: "SAB" | "AL_RAJHI" | "SNB" | string;
+  onBankChange?: (bank: "SAB" | "AL_RAJHI" | "SNB") => void;
+  network?: "mada" | "visa" | string;
+  onNetworkChange?: (network: "mada" | "visa") => void;
+  allowedModes?: { value: string; label: string }[];
+  layout?: "inline" | "stacked" | "auto";
+  showLabels?: boolean;
+  selectClassName?: string;
+  containerClassName?: string;
+  idPrefix?: string;
+}
+
+export const CascadingPaymentSelector: React.FC<CascadingPaymentSelectorProps> = ({
+  mode,
+  onModeChange,
+  bank = "SAB",
+  onBankChange,
+  network = "mada",
+  onNetworkChange,
+  allowedModes,
+  layout = "inline",
+  showLabels = false,
+  selectClassName,
+  containerClassName,
+  idPrefix = "pay-select",
+}) => {
+  const rawUpper = (mode || "CASH").toUpperCase();
+  let normalizedMode = "CASH";
+  if (rawUpper === "CARD" || rawUpper === "POS_SWIPE" || rawUpper === "VISA" || rawUpper === "MADA") {
+    normalizedMode = "CARD";
+  } else if (
+    rawUpper === "BANK_TRANSFER" ||
+    rawUpper === "BANK" ||
+    rawUpper === "SAB" ||
+    rawUpper === "AL_RAJHI" ||
+    rawUpper === "SNB"
+  ) {
+    normalizedMode = "BANK_TRANSFER";
+  } else if (rawUpper === "CREDIT" || rawUpper === "CREDIT_SALE") {
+    normalizedMode = "CREDIT";
+  } else {
+    normalizedMode = "CASH";
+  }
+
+  const activeBank = (
+    bank ||
+    (rawUpper === "AL_RAJHI" ? "AL_RAJHI" : rawUpper === "SNB" ? "SNB" : "SAB")
+  ) as "SAB" | "AL_RAJHI" | "SNB";
+
+  const activeNetwork = (
+    network ||
+    (rawUpper === "VISA" ? "visa" : "mada")
+  ) as "mada" | "visa";
+
+  const defaultModes = [
+    { value: "CASH", label: "Cash" },
+    { value: "BANK_TRANSFER", label: "Bank Transfer" },
+    { value: "CARD", label: "Card" },
+    { value: "CREDIT", label: "Credit" },
+  ];
+  const modeOptions = allowedModes || defaultModes;
+
+  const handleLevel1Change = (newMode: string) => {
+    onModeChange(newMode);
+    if (newMode === "BANK_TRANSFER") {
+      if (onBankChange && !bank) onBankChange("SAB");
+    } else if (newMode === "CARD") {
+      if (onBankChange && !bank) onBankChange("SAB");
+      if (onNetworkChange && !network) onNetworkChange("mada");
+    }
+  };
+
+  const isBankPath = normalizedMode === "BANK_TRANSFER";
+  const isCardPath = normalizedMode === "CARD";
+  const showLevel2 = isBankPath || isCardPath;
+  const showLevel3 = isCardPath; // Path B only: strictly Card Network (mada/Visa). Never rendered for Bank Transfer.
+
+  const defaultSelectClass =
+    "bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-2.5 py-2 text-xs font-bold outline-none transition";
+  const sClass = selectClassName || defaultSelectClass;
+
+  if (layout === "stacked") {
+    return (
+      <div className={`space-y-3 ${containerClassName || ""}`}>
+        <div>
+          {showLabels && (
+            <label
+              htmlFor={`${idPrefix}-mode`}
+              className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5"
+            >
+              Mode of Payment (Required)
+            </label>
+          )}
+          <select
+            id={`${idPrefix}-mode`}
+            value={normalizedMode}
+            onChange={(e) => handleLevel1Change(e.target.value)}
+            required
+            className={`w-full ${sClass}`}
+            title="Mode of Payment"
+          >
+            {modeOptions.map((opt) => (
+              <option key={opt.value} value={opt.value} className="bg-white dark:bg-[#0A0A0A]">
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {showLevel2 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50 dark:bg-[#111111] p-3 rounded-lg border border-slate-200 dark:border-[#222222]">
+            <div>
+              <label
+                htmlFor={`${idPrefix}-bank`}
+                className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5"
+              >
+                {isCardPath ? "Terminal Bank" : "Bank"}
+              </label>
+              <select
+                id={`${idPrefix}-bank`}
+                value={activeBank}
+                onChange={(e) => onBankChange?.(e.target.value as "SAB" | "AL_RAJHI" | "SNB")}
+                className={`w-full ${sClass}`}
+                title={isCardPath ? "Terminal Bank" : "Bank"}
+              >
+                <option value="SAB" className="bg-white dark:bg-[#0A0A0A]">SAB</option>
+                <option value="AL_RAJHI" className="bg-white dark:bg-[#0A0A0A]">Al Rajhi</option>
+                <option value="SNB" className="bg-white dark:bg-[#0A0A0A]">SNB</option>
+              </select>
+            </div>
+
+            {showLevel3 && (
+              <div>
+                <label
+                  htmlFor={`${idPrefix}-network`}
+                  className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5"
+                >
+                  Card Network
+                </label>
+                <select
+                  id={`${idPrefix}-network`}
+                  value={activeNetwork}
+                  onChange={(e) => onNetworkChange?.(e.target.value as "mada" | "visa")}
+                  className={`w-full ${sClass}`}
+                  title="Card Network"
+                >
+                  <option value="mada" className="bg-white dark:bg-[#0A0A0A]">mada</option>
+                  <option value="visa" className="bg-white dark:bg-[#0A0A0A]">Visa</option>
+                </select>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className={`flex flex-wrap items-center gap-2 ${containerClassName || ""}`}>
+      <select
+        id={`${idPrefix}-mode`}
+        value={normalizedMode}
+        onChange={(e) => handleLevel1Change(e.target.value)}
+        required
+        className={sClass}
+        title="Mode of Payment"
+      >
+        {modeOptions.map((opt) => (
+          <option key={opt.value} value={opt.value} className="bg-white dark:bg-[#0A0A0A]">
+            {opt.label}
+          </option>
+        ))}
+      </select>
+
+      {showLevel2 && (
+        <select
+          id={`${idPrefix}-bank`}
+          value={activeBank}
+          onChange={(e) => onBankChange?.(e.target.value as "SAB" | "AL_RAJHI" | "SNB")}
+          className={sClass}
+          title={isCardPath ? "Terminal Bank" : "Bank"}
+        >
+          <option value="SAB" className="bg-white dark:bg-[#0A0A0A]">SAB</option>
+          <option value="AL_RAJHI" className="bg-white dark:bg-[#0A0A0A]">Al Rajhi</option>
+          <option value="SNB" className="bg-white dark:bg-[#0A0A0A]">SNB</option>
+        </select>
+      )}
+
+      {showLevel3 && (
+        <select
+          id={`${idPrefix}-network`}
+          value={activeNetwork}
+          onChange={(e) => onNetworkChange?.(e.target.value as "mada" | "visa")}
+          className={sClass}
+          title="Card Network"
+        >
+          <option value="mada" className="bg-white dark:bg-[#0A0A0A]">mada</option>
+          <option value="visa" className="bg-white dark:bg-[#0A0A0A]">Visa</option>
+        </select>
+      )}
+    </div>
+  );
+};
 
 function DailyRegisterView({
   trackingMode,
@@ -3231,7 +3446,7 @@ function DailyRegisterView({
       receiptNo: formattedReceiptNo,
       invoiceNumber: cleanInv || undefined,
       paymentMode: step3PaymentMode,
-      terminal: step3PaymentMode === "CARD" ? step3Terminal : undefined,
+      terminal: (step3PaymentMode === "CARD" || step3PaymentMode === "BANK_TRANSFER") ? step3Terminal : undefined,
       network: step3PaymentMode === "CARD" ? step3Network : undefined,
       title: cleanCustomer,
       amount: val,
@@ -3301,11 +3516,12 @@ function DailyRegisterView({
       : step4Category;
 
     const effectiveStep4Mode =
-      step4Category === "Bank Purchase" && step4PaymentMode === "CASH"
-        ? "SAB"
+      step4Category === "Bank Purchase" && (step4PaymentMode === "CASH" || step4PaymentMode === "SAB")
+        ? "BANK_TRANSFER"
         : step4PaymentMode;
 
     const isStep4Card = effectiveStep4Mode === "CARD";
+    const isStep4Bank = effectiveStep4Mode === "BANK_TRANSFER";
     upsertEntry({
       id: isSupplierPurchase
         ? `ple-${step4Category.toLowerCase().replace(/\s+/g, "-")}-${cleanSupplier.toLowerCase().replace(/\s+/g, "-")}`
@@ -3319,7 +3535,7 @@ function DailyRegisterView({
       staffId: isStaffExpense ? step4StaffId : undefined,
       staffName: isStaffExpense ? staffName : undefined,
       paymentMode: effectiveStep4Mode,
-      terminal: isStep4Card ? step4Terminal : undefined,
+      terminal: (isStep4Card || isStep4Bank) ? step4Terminal : undefined,
       network: isStep4Card ? step4Network : undefined,
       note: step4Note.trim() || undefined,
       title: displayTitle,
@@ -3447,6 +3663,7 @@ function DailyRegisterView({
     const nextAmt = Math.max(0, parseFloat(editModalAmount) || 0);
     const nextTitle = editModalTitle.trim() || editingEntryModal.title;
     const isEditCard = editModalPaymentMode === "CARD";
+    const isEditBank = editModalPaymentMode === "BANK_TRANSFER";
     setPreLoggedEntries((prev) =>
       prev.map((item) =>
         item.id === editingEntryModal.id
@@ -3456,8 +3673,8 @@ function DailyRegisterView({
               amount: nextAmt,
               originalAmount: item.originalAmount ?? item.amount,
               paymentMode: editModalPaymentMode,
-              terminal: isEditCard ? editModalTerminal : item.terminal,
-              network: isEditCard ? editModalNetwork : item.network,
+              terminal: (isEditCard || isEditBank) ? editModalTerminal : undefined,
+              network: isEditCard ? editModalNetwork : undefined,
               expenseCategory:
                 item.type === "EXPENSE" ? editModalCategory : item.expenseCategory,
             }
@@ -3660,6 +3877,7 @@ function DailyRegisterView({
     const cleanInvNo = missingInflowInvNo.trim().replace(/^#/i, "");
     const entryId = cleanInvNo ? `inv-${cleanInvNo}` : `ple-${Date.now()}`;
     const isMissingCard = missingInflowMode === "CARD";
+    const isMissingBank = missingInflowMode === "BANK_TRANSFER";
     upsertEntry({
       id: entryId,
       invoiceNumber: cleanInvNo || undefined,
@@ -3668,7 +3886,7 @@ function DailyRegisterView({
       customerName: missingInflowTitle.trim(),
       followUpDate: "2026-09-20",
       paymentMode: missingInflowMode,
-      terminal: isMissingCard ? missingInflowTerminal : undefined,
+      terminal: (isMissingCard || isMissingBank) ? missingInflowTerminal : undefined,
       network: isMissingCard ? missingInflowNetwork : undefined,
       title: cleanInvNo ? `Inv #${cleanInvNo} · ${missingInflowTitle.trim()}` : missingInflowTitle.trim(),
       amount: val,
@@ -3697,6 +3915,7 @@ function DailyRegisterView({
       : missingExpenseCat;
 
     const isMissingExpCard = missingExpenseMode === "CARD";
+    const isMissingExpBank = missingExpenseMode === "BANK_TRANSFER";
     upsertEntry({
       id: `ple-${Date.now()}`,
       type: "EXPENSE",
@@ -3704,7 +3923,7 @@ function DailyRegisterView({
       supplierName: isPurchase ? supplier : undefined,
       dueDate: isCreditPurchase ? missingExpenseDueDate : undefined,
       paymentMode: missingExpenseMode,
-      terminal: isMissingExpCard ? missingExpenseTerminal : undefined,
+      terminal: (isMissingExpCard || isMissingExpBank) ? missingExpenseTerminal : undefined,
       network: isMissingExpCard ? missingExpenseNetwork : undefined,
       title,
       amount: val,
@@ -4858,67 +5077,18 @@ function DailyRegisterView({
                 </div>
               )}
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
-                  Mode of Payment (Required)
-                </label>
-                <select
-                  value={editModalPaymentMode}
-                  onChange={(e) => setEditModalPaymentMode(e.target.value as UniversalPaymentMode)}
-                  required
-                  className="w-full bg-slate-50 dark:bg-[#111111] border border-slate-300 dark:border-[#222222] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-lg px-3.5 py-2.5 text-sm font-bold outline-none transition"
-                >
-                  {UNIVERSAL_PAYMENT_MODES.map((pm) => (
-                    <option key={pm.value} value={pm.value} className="bg-white dark:bg-[#0A0A0A]">
-                      {pm.badge} · {pm.label}
-                    </option>
-                  ))}
-                </select>
+                <CascadingPaymentSelector
+                  idPrefix="edit-entry"
+                  mode={editModalPaymentMode}
+                  onModeChange={(m) => setEditModalPaymentMode(m)}
+                  bank={editModalTerminal}
+                  onBankChange={setEditModalTerminal}
+                  network={editModalNetwork}
+                  onNetworkChange={setEditModalNetwork}
+                  layout="stacked"
+                  showLabels
+                />
               </div>
-
-              {editModalPaymentMode === "CARD" && (
-                <div className="bg-slate-50 dark:bg-[#111111] rounded-lg p-3 space-y-2 border border-slate-200 dark:border-[#222222]">
-                  <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-semibold text-slate-500 dark:text-slate-400">Terminal:</span>
-                      <div className="bg-white dark:bg-[#0A0A0A] p-0.5 rounded-lg border border-slate-200 dark:border-[#222222] flex items-center gap-1">
-                        {(["SAB", "AL_RAJHI", "SNB"] as const).map((term) => (
-                          <button
-                            key={term}
-                            type="button"
-                            onClick={() => setEditModalTerminal(term)}
-                            className={`rounded-md px-2.5 py-1 text-xs font-bold transition-colors ${
-                              editModalTerminal === term
-                                ? "bg-jct-turquoise text-jct-charcoal shadow-sm"
-                                : "text-slate-600 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-white"
-                            }`}
-                          >
-                            {term === "SAB" ? "SAB" : term === "AL_RAJHI" ? "Al Rajhi" : "SNB"}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-semibold text-slate-500 dark:text-slate-400">Card Network:</span>
-                      <div className="bg-white dark:bg-[#0A0A0A] p-0.5 rounded-lg border border-slate-200 dark:border-[#222222] flex items-center gap-1">
-                        {(["mada", "visa"] as const).map((net) => (
-                          <button
-                            key={net}
-                            type="button"
-                            onClick={() => setEditModalNetwork(net)}
-                            className={`rounded-md px-2.5 py-1 text-xs font-bold transition-colors ${
-                              editModalNetwork === net
-                                ? "bg-jct-turquoise text-jct-charcoal shadow-sm"
-                                : "text-slate-600 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-white"
-                            }`}
-                          >
-                            {net === "mada" ? "mada" : "Visa"}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
                   Amount (SAR)
@@ -5640,20 +5810,18 @@ function DailyRegisterView({
                               Mode of Payment (Bank):
                             </span>
                             <select
-                              value={inv.bankPaymentMode || "BANK_TRANSFER"}
+                              value={inv.bankPaymentMode || "SAB"}
                               onChange={(e) =>
                                 handleEditErpInvoiceBankMode(
                                   inv.invoiceNo,
                                   e.target.value as UniversalPaymentMode
                                 )
                               }
-                              className="bg-transparent border-transparent text-jct-charcoal dark:text-white focus:outline-none focus:ring-0 focus:border-b-2 focus:border-jct-turquoise transition-all rounded-none px-2 py-0.5 text-xs font-medium"
+                              className="bg-transparent border border-slate-300 dark:border-[#222222] text-jct-charcoal dark:text-white rounded px-2 py-0.5 text-xs font-medium"
                             >
-                              {UNIVERSAL_PAYMENT_MODES.map((pm) => (
-                                <option key={pm.value} value={pm.value} className="bg-white dark:bg-[#0A0A0A]">
-                                  {pm.badge} · {pm.label}
-                                </option>
-                              ))}
+                              <option value="SAB" className="bg-white dark:bg-[#0A0A0A]">🏦 SAB</option>
+                              <option value="AL_RAJHI" className="bg-white dark:bg-[#0A0A0A]">🏦 Al Rajhi</option>
+                              <option value="SNB" className="bg-white dark:bg-[#0A0A0A]">🏦 SNB</option>
                             </select>
                           </div>
                           <span className="font-mono font-semibold text-jct-charcoal dark:text-jct-turquoise">
@@ -5924,80 +6092,29 @@ function DailyRegisterView({
                       </div>
                     )}
 
-                    {/* 5. Required Mode of Payment Dropdown (Step 3 Inflows) */}
+                    {/* 5. Cascading Mode of Payment (Step 3 Inflows) */}
                     {!step3SplitEnabled && (
                       <div className="space-y-2">
-                        <div className="space-y-1.5">
-                          <label className="block text-xs font-medium text-slate-500 dark:text-slate-400">
-                            Mode of Payment (Required)
-                          </label>
-                          <select
-                            value={step3PaymentMode}
-                            onChange={(e) => setStep3PaymentMode(e.target.value as UniversalPaymentMode)}
-                            required
-                            className="w-full bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-3.5 py-2.5 text-sm font-medium outline-none"
-                          >
-                            {UNIVERSAL_PAYMENT_MODES.map((pm) => (
-                              <option key={pm.value} value={pm.value} className="bg-white dark:bg-[#0A0A0A]">
-                                {pm.badge} · {pm.label}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        {step3PaymentMode === "CARD" && (
-                          <div className="bg-slate-50 dark:bg-[#111111] rounded-lg p-3 space-y-2 border border-slate-200 dark:border-[#1F1F1F]">
-                            <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
-                              <div className="flex items-center gap-1.5">
-                                <span className="font-semibold text-slate-500 dark:text-slate-400">Terminal:</span>
-                                <div className="bg-white dark:bg-[#0A0A0A] p-0.5 rounded-lg border border-slate-200 dark:border-[#222222] flex items-center gap-1">
-                                  {(["SAB", "AL_RAJHI", "SNB"] as const).map((term) => (
-                                    <button
-                                      key={term}
-                                      type="button"
-                                      onClick={() => setStep3Terminal(term)}
-                                      className={`rounded-md px-2.5 py-1 text-xs font-bold transition-colors ${
-                                        step3Terminal === term
-                                          ? "bg-jct-turquoise text-jct-charcoal shadow-sm"
-                                          : "text-slate-600 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-white"
-                                      }`}
-                                    >
-                                      {term === "SAB" ? "SAB" : term === "AL_RAJHI" ? "Al Rajhi" : "SNB"}
-                                    </button>
-                                  ))}
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <span className="font-semibold text-slate-500 dark:text-slate-400">Card Network:</span>
-                                <div className="bg-white dark:bg-[#0A0A0A] p-0.5 rounded-lg border border-slate-200 dark:border-[#222222] flex items-center gap-1">
-                                  {(["mada", "visa"] as const).map((net) => (
-                                    <button
-                                      key={net}
-                                      type="button"
-                                      onClick={() => setStep3Network(net)}
-                                      className={`rounded-md px-2.5 py-1 text-xs font-bold transition-colors ${
-                                        step3Network === net
-                                          ? "bg-jct-turquoise text-jct-charcoal shadow-sm"
-                                          : "text-slate-600 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-white"
-                                      }`}
-                                    >
-                                      {net === "mada" ? "mada (0.80% cap 40)" : "Visa (2.20%)"}
-                                    </button>
-                                  ))}
-                                </div>
-                              </div>
-                            </div>
-                            {parseFloat(step3Amount) > 0 && (
-                              <div className="text-[11px] font-mono text-slate-600 dark:text-slate-400 flex items-center justify-between border-t border-slate-200 dark:border-[#1F1F1F] pt-1.5">
-                                <span>Est. Card MDR Fee:</span>
-                                <span className="font-bold text-amber-600 dark:text-amber-400">
-                                  {(() => {
-                                    const fb = calcAmountPosFeeBreakdown(parseFloat(step3Amount) || 0, step3Terminal, step3Network);
-                                    return `-SAR ${fmt(fb.totalFee)} (MDR: SAR ${fmt(fb.mdrBase)} + VAT: SAR ${fmt(fb.vatOnFee)})`;
-                                  })()}
-                                </span>
-                              </div>
-                            )}
+                        <CascadingPaymentSelector
+                          idPrefix="step3"
+                          mode={step3PaymentMode}
+                          onModeChange={(m) => setStep3PaymentMode(m as UniversalPaymentMode)}
+                          bank={step3Terminal}
+                          onBankChange={setStep3Terminal}
+                          network={step3Network}
+                          onNetworkChange={setStep3Network}
+                          layout="stacked"
+                          showLabels
+                        />
+                        {step3PaymentMode === "CARD" && parseFloat(step3Amount) > 0 && (
+                          <div className="text-[11px] font-mono text-slate-600 dark:text-slate-400 flex items-center justify-between border-t border-slate-200 dark:border-[#1F1F1F] pt-1.5">
+                            <span>Est. Card MDR Fee:</span>
+                            <span className="font-bold text-amber-600 dark:text-amber-400">
+                              {(() => {
+                                const fb = calcAmountPosFeeBreakdown(parseFloat(step3Amount) || 0, step3Terminal, step3Network);
+                                return `-SAR ${fmt(fb.totalFee)} (MDR: SAR ${fmt(fb.mdrBase)} + VAT: SAR ${fmt(fb.vatOnFee)})`;
+                              })()}
+                            </span>
                           </div>
                         )}
                       </div>
@@ -6366,79 +6483,28 @@ function DailyRegisterView({
                   </div>
 
                   <form onSubmit={handleAddStep4Expense} className="space-y-3 pt-2">
-                    {/* Required Mode of Payment Dropdown (Step 4 Outflows/Purchases) */}
+                    {/* Cascading Mode of Payment (Step 4 Outflows/Purchases) */}
                     <div className="space-y-2">
-                      <div>
-                        <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
-                          Mode of Payment (Required)
-                        </label>
-                        <select
-                          value={step4PaymentMode}
-                          onChange={(e) => setStep4PaymentMode(e.target.value as UniversalPaymentMode)}
-                          required
-                          className="w-full bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-3.5 py-2.5 text-sm font-medium outline-none"
-                        >
-                          {UNIVERSAL_PAYMENT_MODES.map((pm) => (
-                            <option key={pm.value} value={pm.value} className="bg-white dark:bg-[#0A0A0A]">
-                              {pm.badge} · {pm.label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {step4PaymentMode === "CARD" && (
-                        <div className="bg-slate-50 dark:bg-[#111111] rounded-lg p-3 space-y-2 border border-slate-200 dark:border-[#1F1F1F]">
-                          <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
-                            <div className="flex items-center gap-1.5">
-                              <span className="font-semibold text-slate-500 dark:text-slate-400">Terminal:</span>
-                              <div className="bg-white dark:bg-[#0A0A0A] p-0.5 rounded-lg border border-slate-200 dark:border-[#222222] flex items-center gap-1">
-                                {(["SAB", "AL_RAJHI", "SNB"] as const).map((term) => (
-                                  <button
-                                    key={term}
-                                    type="button"
-                                    onClick={() => setStep4Terminal(term)}
-                                    className={`rounded-md px-2.5 py-1 text-xs font-bold transition-colors ${
-                                      step4Terminal === term
-                                        ? "bg-jct-turquoise text-jct-charcoal shadow-sm"
-                                        : "text-slate-600 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-white"
-                                    }`}
-                                  >
-                                    {term === "SAB" ? "SAB" : term === "AL_RAJHI" ? "Al Rajhi" : "SNB"}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                              <span className="font-semibold text-slate-500 dark:text-slate-400">Card Network:</span>
-                              <div className="bg-white dark:bg-[#0A0A0A] p-0.5 rounded-lg border border-slate-200 dark:border-[#222222] flex items-center gap-1">
-                                {(["mada", "visa"] as const).map((net) => (
-                                  <button
-                                    key={net}
-                                    type="button"
-                                    onClick={() => setStep4Network(net)}
-                                    className={`rounded-md px-2.5 py-1 text-xs font-bold transition-colors ${
-                                      step4Network === net
-                                        ? "bg-jct-turquoise text-jct-charcoal shadow-sm"
-                                        : "text-slate-600 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-white"
-                                    }`}
-                                  >
-                                    {net === "mada" ? "mada (0.80% cap 40)" : "Visa (2.20%)"}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          </div>
-                          {parseFloat(step4Amount) > 0 && (
-                            <div className="text-[11px] font-mono text-slate-600 dark:text-slate-400 flex items-center justify-between border-t border-slate-200 dark:border-[#1F1F1F] pt-1.5">
-                              <span>Est. Card MDR Fee:</span>
-                              <span className="font-bold text-amber-600 dark:text-amber-400">
-                                {(() => {
-                                  const fb = calcAmountPosFeeBreakdown(parseFloat(step4Amount) || 0, step4Terminal, step4Network);
-                                  return `-SAR ${fmt(fb.totalFee)} (MDR: SAR ${fmt(fb.mdrBase)} + VAT: SAR ${fmt(fb.vatOnFee)})`;
-                                })()}
-                              </span>
-                            </div>
-                          )}
+                      <CascadingPaymentSelector
+                        idPrefix="step4"
+                        mode={step4PaymentMode}
+                        onModeChange={(m) => setStep4PaymentMode(m as UniversalPaymentMode)}
+                        bank={step4Terminal}
+                        onBankChange={setStep4Terminal}
+                        network={step4Network}
+                        onNetworkChange={setStep4Network}
+                        layout="stacked"
+                        showLabels
+                      />
+                      {step4PaymentMode === "CARD" && parseFloat(step4Amount) > 0 && (
+                        <div className="text-[11px] font-mono text-slate-600 dark:text-slate-400 flex items-center justify-between border-t border-slate-200 dark:border-[#1F1F1F] pt-1.5">
+                          <span>Est. Card MDR Fee:</span>
+                          <span className="font-bold text-amber-600 dark:text-amber-400">
+                            {(() => {
+                              const fb = calcAmountPosFeeBreakdown(parseFloat(step4Amount) || 0, step4Terminal, step4Network);
+                              return `-SAR ${fmt(fb.totalFee)} (MDR: SAR ${fmt(fb.mdrBase)} + VAT: SAR ${fmt(fb.vatOnFee)})`;
+                            })()}
+                          </span>
                         </div>
                       )}
                     </div>
@@ -7139,56 +7205,15 @@ function DailyRegisterView({
                         placeholder="Missing receipt or customer name..."
                         className="flex-1 min-w-[140px] bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-3.5 py-2 text-xs font-semibold placeholder:text-slate-400 outline-none"
                       />
-                      <select
-                        value={missingInflowMode}
-                        onChange={(e) => setMissingInflowMode(e.target.value as UniversalPaymentMode)}
-                        required
-                        className="bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-2.5 py-2 text-xs font-bold outline-none"
-                      >
-                        {UNIVERSAL_PAYMENT_MODES.map((pm) => (
-                          <option key={pm.value} value={pm.value} className="bg-white dark:bg-[#0A0A0A]">
-                            {pm.badge} · {pm.label}
-                          </option>
-                        ))}
-                      </select>
-                      {missingInflowMode === "CARD" && (
-                        <div className="flex items-center gap-2 bg-slate-50 dark:bg-[#111111] px-2 py-1 rounded-md border border-slate-200 dark:border-[#1F1F1F]">
-                          <div className="flex items-center gap-1">
-                            <span className="text-[10px] text-slate-500 font-semibold">Term:</span>
-                            {(["SAB", "AL_RAJHI", "SNB"] as const).map((term) => (
-                              <button
-                                key={term}
-                                type="button"
-                                onClick={() => setMissingInflowTerminal(term)}
-                                className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                                  missingInflowTerminal === term
-                                    ? "bg-jct-turquoise text-jct-charcoal"
-                                    : "text-slate-500 hover:text-white"
-                                }`}
-                              >
-                                {term === "SAB" ? "SAB" : term === "AL_RAJHI" ? "Al Rajhi" : "SNB"}
-                              </button>
-                            ))}
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <span className="text-[10px] text-slate-500 font-semibold">Net:</span>
-                            {(["mada", "visa"] as const).map((net) => (
-                              <button
-                                key={net}
-                                type="button"
-                                onClick={() => setMissingInflowNetwork(net)}
-                                className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                                  missingInflowNetwork === net
-                                    ? "bg-jct-turquoise text-jct-charcoal"
-                                    : "text-slate-500 hover:text-white"
-                                }`}
-                              >
-                                {net === "mada" ? "mada" : "Visa"}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
+                      <CascadingPaymentSelector
+                        idPrefix="missing-inflow"
+                        mode={missingInflowMode}
+                        onModeChange={(m) => setMissingInflowMode(m as UniversalPaymentMode)}
+                        bank={missingInflowTerminal}
+                        onBankChange={setMissingInflowTerminal}
+                        network={missingInflowNetwork}
+                        onNetworkChange={setMissingInflowNetwork}
+                      />
                       <input
                         type="number"
                         step="0.01"
@@ -7402,56 +7427,15 @@ function DailyRegisterView({
                           </option>
                         ))}
                       </select>
-                      <select
-                        value={missingExpenseMode}
-                        onChange={(e) => setMissingExpenseMode(e.target.value as UniversalPaymentMode)}
-                        required
-                        className="bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-2.5 py-2 text-xs font-bold outline-none"
-                      >
-                        {UNIVERSAL_PAYMENT_MODES.map((pm) => (
-                          <option key={pm.value} value={pm.value} className="bg-white dark:bg-[#0A0A0A]">
-                            {pm.badge} · {pm.label}
-                          </option>
-                        ))}
-                      </select>
-                      {missingExpenseMode === "CARD" && (
-                        <div className="flex items-center gap-2 bg-slate-50 dark:bg-[#111111] px-2 py-1 rounded-md border border-slate-200 dark:border-[#1F1F1F]">
-                          <div className="flex items-center gap-1">
-                            <span className="text-[10px] text-slate-500 font-semibold">Term:</span>
-                            {(["SAB", "AL_RAJHI", "SNB"] as const).map((term) => (
-                              <button
-                                key={term}
-                                type="button"
-                                onClick={() => setMissingExpenseTerminal(term)}
-                                className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                                  missingExpenseTerminal === term
-                                    ? "bg-jct-turquoise text-jct-charcoal"
-                                    : "text-slate-500 hover:text-white"
-                                }`}
-                              >
-                                {term === "SAB" ? "SAB" : term === "AL_RAJHI" ? "Al Rajhi" : "SNB"}
-                              </button>
-                            ))}
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <span className="text-[10px] text-slate-500 font-semibold">Net:</span>
-                            {(["mada", "visa"] as const).map((net) => (
-                              <button
-                                key={net}
-                                type="button"
-                                onClick={() => setMissingExpenseNetwork(net)}
-                                className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                                  missingExpenseNetwork === net
-                                    ? "bg-jct-turquoise text-jct-charcoal"
-                                    : "text-slate-500 hover:text-white"
-                                }`}
-                              >
-                                {net === "mada" ? "mada" : "Visa"}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
+                      <CascadingPaymentSelector
+                        idPrefix="missing-expense"
+                        mode={missingExpenseMode}
+                        onModeChange={(m) => setMissingExpenseMode(m as UniversalPaymentMode)}
+                        bank={missingExpenseTerminal}
+                        onBankChange={setMissingExpenseTerminal}
+                        network={missingExpenseNetwork}
+                        onNetworkChange={setMissingExpenseNetwork}
+                      />
                       <input
                         type="text"
                         value={missingExpenseSupplier}
