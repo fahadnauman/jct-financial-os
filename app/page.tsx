@@ -13,7 +13,7 @@ import {
   Archive, Edit3, CheckCircle2, RotateCcw, Search, FileText, FolderArchive, Upload,
   Users, UserCheck, DollarSign, X, Banknote, Printer,
   Menu,
-  Coins, ArrowDownLeft, Send, MessageSquare, Bot
+  Coins, ArrowDownLeft, Send, MessageSquare, Bot, Info
 } from "lucide-react";
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -2243,6 +2243,44 @@ export const CascadingPaymentSelector: React.FC<CascadingPaymentSelectorProps> =
 /* ════════════════════════════════════════════════════════════════════════
    INTELLIGENT DRAWER CLOSING & CASH HANDOVER SEQUENCE MODAL
    ════════════════════════════════════════════════════════════════════════ */
+
+/* ════════════════════════════════════════════════════════════════════════
+   MINIMALIST INFO TOOLTIP / POPOVER COMPONENT
+   ════════════════════════════════════════════════════════════════════════ */
+
+function InfoTooltip({ text, label }: { text: string; label?: string }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <span
+      className="relative inline-flex items-center ml-1.5 align-middle select-none print:hidden"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((prev) => !prev);
+        }}
+        aria-label={label || "Information"}
+        className="inline-flex items-center justify-center h-5 w-5 rounded-full text-slate-400 hover:text-white hover:bg-white/10 transition-colors focus:outline-none"
+      >
+        <Info size={14} className="stroke-[2.2]" />
+      </button>
+
+      {open && (
+        <div
+          role="tooltip"
+          className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 z-50 p-2.5 text-xs bg-slate-800 dark:bg-[#1C1C1E] text-slate-200 rounded-md shadow-2xl border border-slate-700 dark:border-white/10 max-w-xs min-w-[190px] w-max pointer-events-none animate-in fade-in zoom-in-95 duration-150 leading-relaxed font-sans font-normal normal-case tracking-normal text-left"
+        >
+          {text}
+          <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800 dark:border-t-[#1C1C1E]" />
+        </div>
+      )}
+    </span>
+  );
+}
 
 function HandoverModalComponent({
   isOpen,
@@ -4821,7 +4859,7 @@ function DailyRegisterView({
           MODE 1: WIDESCREEN HOME HUB (trackingMode === 'hub')
          ════════════════════════════════════════════════════════════════════ */}
       {trackingMode === "hub" && (
-        <div className="relative z-10 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8 flex flex-col gap-6">
+        <div className="relative z-10 w-full animate-in fade-in slide-in-from-bottom-2 duration-400 ease-out max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8 flex flex-col gap-6">
           {justCompletedToast && (
             <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 dark:border-[#1F1F1F] bg-white dark:bg-[#0A0A0A] px-5 py-3.5 text-sm font-semibold text-jct-charcoal dark:text-jct-offwhite shadow-sm print:hidden">
               <div className="flex items-center gap-2.5">
@@ -4842,12 +4880,12 @@ function DailyRegisterView({
           {/* Header Section */}
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div>
-              <h1 className="text-2xl sm:text-3xl font-extrabold text-jct-charcoal dark:text-white tracking-tight">
-                Jubail Corp Daily Hub
-              </h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Log daytime swipes and cash movements, or start your end-of-day reconciliation.
-              </p>
+              <div className="flex items-center gap-1.5">
+                <h1 className="font-display text-2xl sm:text-3xl font-extrabold text-jct-charcoal dark:text-white tracking-tight uppercase">
+                  DAILY HUB
+                </h1>
+                <InfoTooltip text="Log daytime swipes and cash movements, or start your end-of-day reconciliation." />
+              </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
@@ -4947,12 +4985,12 @@ function DailyRegisterView({
           {/* End-of-Day Hero Card */}
           <div className="relative overflow-hidden bg-gradient-to-r from-jct-turquoise/10 via-white/60 to-jct-yellow/10 backdrop-blur-xl border border-white/80 shadow-sm dark:bg-gradient-to-r dark:from-jct-turquoise/5 dark:via-black/60 dark:to-jct-yellow/5 dark:backdrop-blur-xl dark:border-white/10 rounded-2xl py-6 px-6 lg:px-8 h-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-6 transition-all duration-300">
             <div className="max-w-2xl space-y-1.5">
-              <h2 className="font-display text-xl sm:text-2xl font-extrabold tracking-tight text-jct-charcoal dark:text-white">
-                SALE SUMMARY
-              </h2>
-              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
-                Match ERP sales, calculate SAB &amp; Al Rajhi POS terminal fees, and close today&apos;s drawer in 5 guided steps.
-              </p>
+              <div className="flex items-center gap-1.5">
+                <h2 className="font-display text-xl sm:text-2xl font-extrabold tracking-tight text-jct-charcoal dark:text-white uppercase">
+                  SALE SUMMARY
+                </h2>
+                <InfoTooltip text="Match ERP sales, calculate SAB & Al Rajhi POS terminal fees, and close today's drawer in 5 guided steps." />
+              </div>
             </div>
 
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full sm:w-auto shrink-0">
@@ -5635,17 +5673,17 @@ function DailyRegisterView({
               STEP 1: IMPORT TODAY'S ERP SALES (CALM & CENTERED)
              ────────────────────────────────────────────────────────────── */}
           {wizardStep === 1 && (
-            <div className="mx-auto my-6 flex w-full max-w-2xl flex-col items-center justify-center bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 sm:p-10 md:p-14 text-center transition-all duration-300">
+            <div className="animate-in fade-in slide-in-from-bottom-2 duration-400 ease-out mx-auto my-6 flex w-full max-w-2xl flex-col items-center justify-center bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 sm:p-10 md:p-14 text-center transition-all duration-300">
               <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-xl bg-jct-turquoise/20 border border-jct-turquoise/40 text-jct-charcoal dark:text-jct-turquoise">
                 <UploadCloud size={28} />
               </div>
 
-              <h2 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-jct-charcoal dark:text-white">
-                Import Today&apos;s ERP Sales
-              </h2>
-              <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-                Drop your daily CSV export or load today&apos;s 18 Jubail invoices (auto-detects `PARTIAL`, `SPLIT`, `CASH/BANK` dual tenders).
-              </p>
+              <div className="flex items-center justify-center gap-1.5">
+                <h2 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-jct-charcoal dark:text-white uppercase">
+                  IMPORT SALES
+                </h2>
+                <InfoTooltip text="Drop your daily CSV export or load today's Jubail invoices. Automatically detects split tenders and payment methods." />
+              </div>
 
               <label className="mt-7 flex w-full cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 dark:border-[#1F1F1F] bg-slate-50 dark:bg-black hover:bg-slate-100 dark:hover:bg-[#111111] px-6 py-10 transition-colors">
                 <UploadCloud size={26} className="text-slate-500 dark:text-slate-400 mb-2.5" />
@@ -5684,13 +5722,16 @@ function DailyRegisterView({
               STEP 2: VERIFY BANK SWIPES (SAB / AL RAJHI), SPLIT TENDERS & CASH SALES
              ────────────────────────────────────────────────────────────── */}
           {wizardStep === 2 && (
-            <div className="flex flex-col gap-5 bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 sm:p-8 transition-all duration-300">
+            <div className="animate-in fade-in slide-in-from-bottom-2 duration-400 ease-out flex flex-col gap-5 bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 sm:p-8 transition-all duration-300">
               {/* Header + Optional MDR Toggle + Summary Cards */}
               <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 pb-5 border-b border-slate-200 dark:border-[#1F1F1F]">
                 <div className="space-y-2">
-                  <h2 className="font-display text-xl sm:text-2xl font-extrabold tracking-tight text-jct-charcoal dark:text-white">
-                    Verify Sales Data
-                  </h2>
+                  <div className="flex items-center gap-1.5">
+                    <h2 className="font-display text-xl sm:text-2xl font-extrabold tracking-tight text-jct-charcoal dark:text-white uppercase">
+                      VERIFY SALES
+                    </h2>
+                    <InfoTooltip text="Inspect imported invoices, edit tender breakdowns, override line-items, and toggle POS merchant fee estimates." />
+                  </div>
                   {/* Clean Optional Toggle Switch: Estimate POS Merchant Fees (MDR) - Staff RBAC */}
                   {isOwner && (
                     <div className="pt-0.5 flex flex-wrap items-center">
@@ -6331,15 +6372,15 @@ function DailyRegisterView({
               STEP 3: CREDIT & CASH INFLOWS + MANUAL SPLIT PAYMENT ENTRY
              ────────────────────────────────────────────────────────────── */}
           {wizardStep === 3 && (
-            <div className="flex flex-col gap-6 bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 sm:p-8 transition-all duration-300">
+            <div className="animate-in fade-in slide-in-from-bottom-2 duration-400 ease-out flex flex-col gap-6 bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 sm:p-8 transition-all duration-300">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-[#1F1F1F] pb-5">
                 <div>
-                  <h2 className="font-display text-xl sm:text-2xl font-extrabold tracking-tight text-jct-charcoal dark:text-white">
-                    Credit Sales, Split Payments, Receipts &amp; Opening Balance
-                  </h2>
-                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                    Log Credit Sales, Split Payments (Cash + Card), or Cash Receipts. Type an ERP Invoice # (e.g. 30064 or 30072) to auto-fill details.
-                  </p>
+                  <div className="flex items-center gap-1.5">
+                    <h2 className="font-display text-xl sm:text-2xl font-extrabold tracking-tight text-jct-charcoal dark:text-white uppercase">
+                      INFLOWS &amp; RECEIPTS
+                    </h2>
+                    <InfoTooltip text="Log Credit Sales, Split Payments (Cash + Card), or Cash Receipts. Type an ERP Invoice # to auto-fill details." />
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-3 bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-yellow/20 dark:border-jct-yellow/30 hover:border-jct-yellow/80 hover:shadow-[0_0_15px_rgba(255,222,89,0.1)] rounded-xl p-4 shrink-0 transition-all duration-300">
@@ -6839,15 +6880,15 @@ function DailyRegisterView({
               STEP 4: EXPENSES & SUPPLIER PURCHASES (STRICT 7 CATEGORIES + SUPPLIER SYNC)
              ────────────────────────────────────────────────────────────── */}
           {wizardStep === 4 && (
-            <div className="flex flex-col gap-6 bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-yellow/20 dark:border-jct-yellow/30 hover:border-jct-yellow/80 hover:shadow-[0_0_15px_rgba(255,222,89,0.1)] rounded-xl p-6 sm:p-8 transition-all duration-300">
+            <div className="animate-in fade-in slide-in-from-bottom-2 duration-400 ease-out flex flex-col gap-6 bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-yellow/20 dark:border-jct-yellow/30 hover:border-jct-yellow/80 hover:shadow-[0_0_15px_rgba(255,222,89,0.1)] rounded-xl p-6 sm:p-8 transition-all duration-300">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-[#1F1F1F] pb-5">
                 <div>
-                  <h2 className="font-display text-xl sm:text-2xl font-extrabold tracking-tight text-jct-charcoal dark:text-white">
-                    Expenses &amp; Supplier Purchases
-                  </h2>
-                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                    Select from the 7 official categories. Credit Purchases sync directly into Suppliers &amp; Payables.
-                  </p>
+                  <div className="flex items-center gap-1.5">
+                    <h2 className="font-display text-xl sm:text-2xl font-extrabold tracking-tight text-jct-charcoal dark:text-white uppercase">
+                      EXPENSES &amp; PURCHASES
+                    </h2>
+                    <InfoTooltip text="Select from official categories. Credit Purchases automatically sync directly into Suppliers & Payables." />
+                  </div>
                 </div>
                 <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-yellow/20 dark:border-jct-yellow/30 hover:border-jct-yellow/80 hover:shadow-[0_0_15px_rgba(255,222,89,0.1)] rounded-xl px-4 py-2.5 shrink-0 transition-all duration-300">
                   <span className="font-display text-base font-bold text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap">
@@ -7228,7 +7269,7 @@ function DailyRegisterView({
               STEP 5: FULL-WIDESCREEN EDITABLE AUDIT WORKBENCH WITH [⤢ EXPAND] ON ALL 3 BOXES
              ────────────────────────────────────────────────────────────── */}
           {wizardStep === 5 && (
-            <div className="flex flex-col gap-6 pb-8 print:block print:w-full print:bg-white print:text-black print:p-0 print:m-0">
+            <div className="animate-in fade-in slide-in-from-bottom-2 duration-400 ease-out flex flex-col gap-6 pb-8 print:block print:w-full print:bg-white print:text-black print:p-0 print:m-0">
               {/* ──────────────────────────────────────────────────────────
                   PAGE 1: AUDIT SUMMARY (EXECUTIVE OVERVIEW)
                  ────────────────────────────────────────────────────────── */}
@@ -7418,12 +7459,12 @@ function DailyRegisterView({
                   <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 flex flex-col gap-4 transition-all duration-300 print:shadow-none print:border-none print:p-0 print:bg-white print:text-black">
                     <div className="flex items-center justify-between gap-3 border-b border-slate-200 dark:border-[#1F1F1F] pb-3.5 print:border-none print:pb-0">
                       <div className="w-full">
-                        <h3 className="font-display text-lg font-extrabold text-jct-charcoal dark:text-jct-offwhite print:text-xl print:font-extrabold print:tracking-tight print:mt-10 print:mb-4 print:border-b print:border-slate-300 print:pb-2 print:text-black">
-                          Cash Inflows (Sales &amp; Receipts)
-                        </h3>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 print:hidden">
-                          Includes 15% Saudi VAT breakdown, notes, and inline amount editing
-                        </p>
+                        <div className="flex items-center gap-1.5">
+                          <h3 className="font-display text-lg font-extrabold text-jct-charcoal dark:text-jct-offwhite uppercase print:text-xl print:font-extrabold print:tracking-tight print:mt-10 print:mb-4 print:border-b print:border-slate-300 print:pb-2 print:text-black">
+                            CASH INFLOWS
+                          </h3>
+                          <InfoTooltip text="Includes 15% Saudi VAT breakdown, notes, and inline amount editing." />
+                        </div>
                       </div>
                       <div className="flex items-center gap-3 shrink-0 print:hidden">
                         <span className="font-display text-base font-extrabold text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap">
@@ -7743,12 +7784,12 @@ function DailyRegisterView({
                       <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-yellow/20 dark:border-jct-yellow/30 hover:border-jct-yellow/80 hover:shadow-[0_0_15px_rgba(255,222,89,0.1)] rounded-xl p-6 flex flex-col gap-4 transition-all duration-300 print:shadow-none print:border-none print:p-0 print:bg-white print:text-black">
                         <div className="flex items-center justify-between gap-3 border-b border-slate-200 dark:border-[#1F1F1F] pb-3.5 print:border-none print:pb-0">
                           <div className="w-full">
-                            <h3 className="font-display text-lg font-extrabold text-jct-charcoal dark:text-jct-offwhite print:text-xl print:font-extrabold print:tracking-tight print:mt-10 print:mb-4 print:border-b print:border-slate-300 print:pb-2 print:text-black">
-                              Cash Outflows (Shop Expenses)
-                            </h3>
-                            <p className="text-xs text-slate-500 dark:text-slate-400 print:hidden">
-                              7 official categories · Credit Purchases sync to Suppliers &amp; Payables
-                            </p>
+                            <div className="flex items-center gap-1.5">
+                              <h3 className="font-display text-lg font-extrabold text-jct-charcoal dark:text-jct-offwhite uppercase print:text-xl print:font-extrabold print:tracking-tight print:mt-10 print:mb-4 print:border-b print:border-slate-300 print:pb-2 print:text-black">
+                                CASH OUTFLOWS
+                              </h3>
+                              <InfoTooltip text="7 official categories · Credit Purchases sync to Suppliers & Payables." />
+                            </div>
                           </div>
                           <div className="flex items-center gap-3 shrink-0 print:hidden">
                             <span className="font-display text-base font-extrabold text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap">
@@ -7985,16 +8026,12 @@ function DailyRegisterView({
                   <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 flex flex-col gap-4 transition-all duration-300 print:shadow-none print:border-none print:p-0 print:bg-white print:text-black print:break-before-page">
                     <div className="flex items-center justify-between gap-3 border-b border-slate-200 dark:border-[#1F1F1F] pb-3.5 print:border-none print:pb-0">
                       <div className="w-full">
-                        <h3 className="font-display text-lg font-extrabold text-jct-charcoal dark:text-jct-offwhite print:text-xl print:font-extrabold print:tracking-tight print:mt-10 print:mb-4 print:border-b print:border-slate-300 print:pb-2 print:text-black">
-                          Bank &amp; Card Swipes
-                        </h3>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 print:hidden">
-                          {isOwner && bankSettlementMode === "NET"
-                            ? "Net bank settlement after SAMA mada / Credit Card MDR & 15% ZATCA VAT"
-                            : isOwner
-                            ? "100% gross face value reconciled · Expand to inspect MDR + 15% VAT breakdown"
-                            : "100% gross face value reconciled"}
-                        </p>
+                        <div className="flex items-center gap-1.5">
+                          <h3 className="font-display text-lg font-extrabold text-jct-charcoal dark:text-jct-offwhite uppercase print:text-xl print:font-extrabold print:tracking-tight print:mt-10 print:mb-4 print:border-b print:border-slate-300 print:pb-2 print:text-black">
+                            BANK &amp; CARD SWIPES
+                          </h3>
+                          <InfoTooltip text="Reconciles gross face value or net settlement after SAMA mada / Visa fees & 15% ZATCA VAT." />
+                        </div>
                       </div>
                       <div className="flex items-center gap-3 shrink-0 print:hidden">
                         <div className="text-right">
@@ -8556,7 +8593,7 @@ function DailyRegisterView({
           MODE 3: CLASSIC JUBAIL CORP DIGITAL DATA SHEET (trackingMode === 'datasheet')
          ════════════════════════════════════════════════════════════════════ */}
       {trackingMode === "datasheet" && (
-        <div className="relative z-10 w-full px-4 sm:px-6 py-6 flex flex-col gap-5">
+        <div className="relative z-10 w-full animate-in fade-in slide-in-from-bottom-2 duration-400 ease-out px-4 sm:px-6 py-6 flex flex-col gap-5">
           {/* 1. Official Sheet Header Bar */}
           <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6">
             <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
@@ -10083,13 +10120,13 @@ function SupplierHubView({
         <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <h3 className="font-display font-extrabold text-lg text-jct-charcoal dark:text-white flex items-center gap-2">
+              <div className="flex items-center gap-2">
                 <FolderArchive className="text-jct-turquoise" size={20} />
-                Supplier Purchase History &amp; Invoice Vault
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Centralized repository of all supplier invoices and attached PDF bills across all branches.
-              </p>
+                <h3 className="font-display font-extrabold text-lg text-jct-charcoal dark:text-white uppercase">
+                  PURCHASE HISTORY
+                </h3>
+                <InfoTooltip text="Centralized repository of all supplier invoices and attached PDF bills across all branches." />
+              </div>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-xs font-semibold px-3 py-1 rounded-full bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-300">
@@ -10445,12 +10482,13 @@ function SupplierHubView({
 
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="font-display font-extrabold text-xl text-jct-charcoal dark:text-white flex items-center gap-2">
-              <Crown className="text-jct-yellow" /> The Executive Vault
+          <div className="flex items-center gap-2">
+            <Crown className="text-jct-yellow" size={18} />
+            <h3 className="font-display font-extrabold text-xl text-jct-charcoal dark:text-white uppercase">
+              EXECUTIVE VAULT
             </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Secret Direct Off-the-Book Kickbacks &amp; Cash Margins (CEO Eyes Only).
-            </p>
+            <InfoTooltip text="Direct off-the-book supplier commissions, cash margins, and executive rebates." />
+          </div>
           </div>
           <span className="text-xs font-bold bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30 px-3 py-1 rounded-full">
             ● 256-Bit Encrypted
@@ -13348,12 +13386,12 @@ function StaffPayrollView({
               <Users size={20} strokeWidth={2.5} />
             </div>
             <div>
-              <h2 className="font-display font-extrabold text-2xl sm:text-3xl text-jct-charcoal dark:text-white tracking-tight flex items-center gap-2">
-                Staff Management &amp; Payroll Portal
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Owner executive portal: Employee base salaries, daily cash advances, and monthly net disbursements.
-              </p>
+              <div className="flex items-center gap-2">
+                <h2 className="font-display font-extrabold text-2xl sm:text-3xl text-jct-charcoal dark:text-white tracking-tight uppercase">
+                  STAFF &amp; PAYROLL
+                </h2>
+                <InfoTooltip text="Employee base salaries, daily cash advances, and automated register deduction sync." />
+              </div>
             </div>
           </div>
         </div>
@@ -15375,6 +15413,7 @@ export default function Page() {
                 <BranchAuditRadar />
               </div>
             )}
+            <div key={safeTab} className="flex-1 flex flex-col min-w-0 animate-in fade-in slide-in-from-bottom-2 duration-400 ease-out">
             {safeTab === "register" ? (
               <DailyRegisterView
                 trackingMode={trackingMode}
@@ -15437,6 +15476,7 @@ export default function Page() {
             ) : safeTab === "pulse" ? (
               <FinancialPulseView metrics={liveMetrics} />
             ) : null}
+            </div>
           </main>
         </div>
       </div>
