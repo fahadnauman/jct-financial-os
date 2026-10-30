@@ -2240,6 +2240,310 @@ export const CascadingPaymentSelector: React.FC<CascadingPaymentSelectorProps> =
   );
 };
 
+/* ════════════════════════════════════════════════════════════════════════
+   INTELLIGENT DRAWER CLOSING & CASH HANDOVER SEQUENCE MODAL
+   ════════════════════════════════════════════════════════════════════════ */
+
+function HandoverModalComponent({
+  isOpen,
+  onClose,
+  calculatedClosingBalance,
+  totalCashInSalesAndReceipts,
+  totalPreLoggedExpenses,
+  onConfirmLock,
+  isSaving,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  calculatedClosingBalance: number;
+  totalCashInSalesAndReceipts: number;
+  totalPreLoggedExpenses: number;
+  onConfirmLock: (takeHomeAmount: number, nextDayOpening: number) => Promise<void>;
+  isSaving: boolean;
+}) {
+  const [drawerCloseStep, setDrawerCloseStep] = useState<1 | 2>(1);
+  const [takeHomeInput, setTakeHomeInput] = useState<string>("");
+
+
+  if (!isOpen) return null;
+
+  const parsedTakeHome = parseFloat(takeHomeInput);
+  const effectiveTakeHome = Number.isNaN(parsedTakeHome) ? 0 : parsedTakeHome;
+  const nextDayOpeningFloat = r2(calculatedClosingBalance - effectiveTakeHome);
+  const STANDARD_RETAIL_FLOAT = 2500;
+  const isNegativeShortage = effectiveTakeHome > calculatedClosingBalance || nextDayOpeningFloat < 0;
+  const isDepletedFloat = !isNegativeShortage && nextDayOpeningFloat < STANDARD_RETAIL_FLOAT;
+  const floatDeficit = isDepletedFloat ? r2(STANDARD_RETAIL_FLOAT - nextDayOpeningFloat) : 0;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-700 bg-[#0A0A0A]/95 backdrop-blur-xl text-jct-charcoal dark:text-jct-offwhite">
+      <div className="w-full max-w-xl bg-white dark:bg-[#111111] border border-slate-200 dark:border-white/10 rounded-3xl p-6 sm:p-8 shadow-2xl relative overflow-hidden transition-all duration-500">
+        
+        {/* ── STEP 1: PHYSICAL CASH VERIFICATION ── */}
+        {drawerCloseStep === 1 && (
+          <div className="flex flex-col gap-6 animate-in fade-in duration-500">
+            {/* Step Header */}
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="h-10 w-10 rounded-2xl bg-jct-turquoise/20 text-jct-turquoise flex items-center justify-center font-bold">
+                  <Wallet size={20} />
+                </div>
+                <div>
+                  <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-jct-turquoise block">
+                    Step 1 of 2 · Physical Verification
+                  </span>
+                  <h3 className="font-display text-lg sm:text-xl font-extrabold text-jct-charcoal dark:text-white">
+                    Verify Physical Cash Drawer
+                  </h3>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-lg p-1.5 text-slate-400 hover:text-white transition"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Primary Verification Prompt */}
+            <div className="text-center py-2">
+              <p className="text-sm sm:text-base text-slate-600 dark:text-slate-300 leading-relaxed max-w-lg mx-auto">
+                System calculates <span className="font-mono font-bold text-jct-charcoal dark:text-white">SAR {fmt(calculatedClosingBalance)}</span> in the physical drawer.
+                <br />
+                <span className="font-extrabold text-base sm:text-lg text-jct-charcoal dark:text-jct-turquoise mt-1 inline-block">
+                  Does the physical cash in the drawer exactly match this amount?
+                </span>
+              </p>
+            </div>
+
+            {/* Hero Balance Box with Inflow/Expense Math */}
+            <div className="rounded-2xl border border-jct-turquoise/30 bg-jct-turquoise/5 p-6 flex flex-col items-center justify-center text-center">
+              <span className="text-xs uppercase font-bold tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+                Calculated Drawer Physical Cash
+              </span>
+              <div className="font-mono text-4xl sm:text-5xl font-black text-jct-charcoal dark:text-jct-turquoise tracking-tight">
+                SAR {fmt(calculatedClosingBalance)}
+              </div>
+              <div className="flex flex-wrap items-center justify-center gap-2 mt-3 text-xs text-slate-500 dark:text-slate-400">
+                <span>Cash Inflows: <strong>+SAR {fmt(totalCashInSalesAndReceipts)}</strong></span>
+                <span>·</span>
+                <span className="text-rose-500">Expenses: <strong>-SAR {fmt(totalPreLoggedExpenses)}</strong></span>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="w-full py-3.5 px-4 rounded-xl font-bold border border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-[#181818] hover:bg-slate-200 dark:hover:bg-[#202020] text-slate-700 dark:text-slate-300 transition text-sm flex items-center justify-center gap-2"
+              >
+                <span>❌ No, I need to check</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDrawerCloseStep(2)}
+                className="w-full py-3.5 px-4 rounded-xl font-bold bg-jct-turquoise text-jct-charcoal hover:brightness-95 transition-all shadow-lg text-sm flex items-center justify-center gap-2"
+              >
+                <span>✅ Yes, it matches perfectly</span>
+                <ArrowRight size={16} />
+              </button>
+            </div>
+
+            <p className="text-[11px] text-center text-slate-400 dark:text-slate-500">
+              Clicking &apos;No&apos; will safely return you to the register workbench to adjust entries or record an excess/shortage adjustment.
+            </p>
+          </div>
+        )}
+
+        {/* ── STEP 2: OWNER WITHDRAWAL (CASH DROP) & STEP 3: FLOAT LOGIC ── */}
+        {drawerCloseStep === 2 && (
+          <div className="flex flex-col gap-5 animate-in fade-in duration-500">
+            {/* Step Header */}
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="h-10 w-10 rounded-2xl bg-amber-500/20 text-amber-500 flex items-center justify-center font-bold">
+                  <Banknote size={20} />
+                </div>
+                <div>
+                  <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-amber-500 block">
+                    Step 2 of 2 · Owner Cash Drop &amp; Float Setup
+                  </span>
+                  <h3 className="font-display text-lg sm:text-xl font-extrabold text-jct-charcoal dark:text-white">
+                    Cash Drop &amp; Tomorrow&apos;s Opening Float
+                  </h3>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-lg p-1.5 text-slate-400 hover:text-white transition"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Primary Withdrawal Prompt */}
+            <div className="text-center">
+              <p className="text-sm sm:text-base font-bold text-jct-charcoal dark:text-slate-200">
+                How much cash are you taking home / depositing to the bank?
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Total Physical Drawer Cash: <strong className="text-jct-charcoal dark:text-white font-mono">SAR {fmt(calculatedClosingBalance)}</strong>
+              </p>
+            </div>
+
+            {/* Large Centered Number Input */}
+            <div className="flex flex-col items-center justify-center py-2">
+              <div className="relative w-full max-w-sm">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400 font-mono">SAR</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  autoFocus
+                  value={takeHomeInput}
+                  onChange={(e) => setTakeHomeInput(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full text-center text-4xl sm:text-5xl font-mono font-black py-3 px-12 bg-transparent border-b-2 border-jct-turquoise focus:outline-none text-jct-charcoal dark:text-white tracking-tight"
+                />
+              </div>
+
+              {/* Quick Convenience Presets */}
+              <div className="flex flex-wrap items-center justify-center gap-1.5 mt-4">
+                {calculatedClosingBalance >= STANDARD_RETAIL_FLOAT && (
+                  <button
+                    type="button"
+                    onClick={() => setTakeHomeInput(String(r2(calculatedClosingBalance - STANDARD_RETAIL_FLOAT)))}
+                    className="rounded-full bg-jct-turquoise/15 hover:bg-jct-turquoise/25 border border-jct-turquoise/30 text-jct-turquoise text-xs font-bold px-3 py-1 transition"
+                  >
+                    Leave SAR 2,500 Float · Take SAR {fmt(calculatedClosingBalance - STANDARD_RETAIL_FLOAT)}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setTakeHomeInput(String(calculatedClosingBalance))}
+                  className="rounded-full bg-slate-100 dark:bg-[#1F1F1F] hover:bg-slate-200 dark:hover:bg-[#282828] text-slate-700 dark:text-slate-300 text-xs font-semibold px-3 py-1 transition"
+                >
+                  Withdraw All (SAR {fmt(calculatedClosingBalance)})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTakeHomeInput("0")}
+                  className="rounded-full bg-slate-100 dark:bg-[#1F1F1F] hover:bg-slate-200 dark:hover:bg-[#282828] text-slate-700 dark:text-slate-300 text-xs font-semibold px-3 py-1 transition"
+                >
+                  Leave All in Drawer
+                </button>
+              </div>
+            </div>
+
+            {/* Dynamic Intelligent Float Box & 2500 Rule */}
+            <div className="rounded-2xl border border-slate-200 dark:border-white/10 p-4 sm:p-5 transition-all">
+              {isNegativeShortage ? (
+                <div className="flex items-start gap-3 text-rose-500 bg-rose-500/10 border border-rose-500/30 rounded-xl p-4">
+                  <AlertTriangle size={20} className="shrink-0 mt-0.5" />
+                  <div className="text-xs sm:text-sm font-semibold leading-relaxed">
+                    <strong className="block font-bold">Invalid Take-Home Amount</strong>
+                    You cannot withdraw <span className="font-mono font-bold">SAR {fmt(effectiveTakeHome)}</span> when the total drawer contains only <span className="font-mono font-bold">SAR {fmt(calculatedClosingBalance)}</span>.
+                    Drawer balance cannot be negative (<span className="font-mono font-bold">-SAR {fmt(Math.abs(nextDayOpeningFloat))}</span>).
+                  </div>
+                </div>
+              ) : isDepletedFloat ? (
+                <div className="flex flex-col gap-3 bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 text-amber-600 dark:text-amber-400">
+                  <div className="flex items-start gap-2.5">
+                    <AlertTriangle size={20} className="shrink-0 mt-0.5 text-amber-500" />
+                    <div className="text-xs sm:text-sm font-medium leading-relaxed">
+                      <strong className="font-bold text-amber-600 dark:text-amber-300 block mb-0.5">
+                        Warning: Drawer float is depleted.
+                      </strong>
+                      To maintain a standard SAR 2,500 opening balance for tomorrow&apos;s shift, you must inject/leave{" "}
+                      <strong className="font-mono font-bold text-amber-600 dark:text-amber-300">
+                        SAR {fmt(floatDeficit)}
+                      </strong>{" "}
+                      in the register.
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-amber-500/20 text-xs">
+                    <span className="font-mono text-slate-600 dark:text-slate-300">
+                      Tomorrow Opening Float: <strong>SAR {fmt(nextDayOpeningFloat)}</strong>
+                    </span>
+                    {calculatedClosingBalance >= STANDARD_RETAIL_FLOAT && (
+                      <button
+                        type="button"
+                        onClick={() => setTakeHomeInput(String(r2(calculatedClosingBalance - STANDARD_RETAIL_FLOAT)))}
+                        className="bg-amber-500 text-black font-bold px-3 py-1.5 rounded-lg text-xs hover:brightness-105 transition shadow-sm"
+                      >
+                        ⚡ Fix: Leave SAR 2,500 Float
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-start gap-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 text-emerald-600 dark:text-emerald-400">
+                  <CheckCircle2 size={20} className="shrink-0 mt-0.5 text-emerald-500" />
+                  <div className="text-xs sm:text-sm font-medium leading-relaxed">
+                    <strong className="font-bold text-emerald-600 dark:text-emerald-300 block mb-0.5">
+                      Tomorrow&apos;s Opening Balance will be SAR {fmt(nextDayOpeningFloat)}.
+                    </strong>
+                    Standard retail float (SAR 2,500+) maintained. Drawer is ready for morning shift handover.
+                  </div>
+                </div>
+              )}
+
+              {/* Summary Math Strip */}
+              {!isNegativeShortage && (
+                <div className="grid grid-cols-3 gap-2 text-center pt-3 mt-3 border-t border-slate-200 dark:border-white/10 text-xs">
+                  <div>
+                    <span className="text-[10px] text-slate-400 block font-bold">Total Drawer</span>
+                    <span className="font-mono font-bold text-jct-charcoal dark:text-white">
+                      SAR {fmt(calculatedClosingBalance)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-amber-500 block font-bold">Take-Home Drop</span>
+                    <span className="font-mono font-bold text-amber-500">
+                      -SAR {fmt(effectiveTakeHome)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-emerald-500 block font-bold">Tomorrow Opening</span>
+                    <span className="font-mono font-black text-emerald-500">
+                      SAR {fmt(nextDayOpeningFloat)}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setDrawerCloseStep(1)}
+                className="w-full sm:w-auto px-5 py-3 rounded-xl font-bold border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#181818] transition text-xs"
+              >
+                ← Back to Cash Check
+              </button>
+
+              <button
+                type="button"
+                disabled={isNegativeShortage || isSaving}
+                onClick={() => onConfirmLock(effectiveTakeHome, nextDayOpeningFloat)}
+                className="w-full sm:w-auto px-6 py-3.5 rounded-xl font-bold bg-jct-turquoise text-jct-charcoal hover:brightness-95 transition-all shadow-lg disabled:opacity-40 disabled:hover:brightness-100 text-sm flex items-center justify-center gap-2"
+              >
+                <Lock size={16} />
+                <span>{isSaving ? "Locking & Syncing..." : "🔒 Confirm & Lock Register"}</span>
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function DailyRegisterView({
   trackingMode,
   setTrackingMode,
@@ -2323,16 +2627,8 @@ function DailyRegisterView({
   const [openingEditInput, setOpeningEditInput] = useState(String(openingBalance));
 
   // Intelligent Drawer Closing & Cash Handover Sequence
-  const [showDrawerCloseSequence, setShowDrawerCloseSequence] = useState(false);
-  const [drawerCloseStep, setDrawerCloseStep] = useState<1 | 2>(1);
-  const [takeHomeInput, setTakeHomeInput] = useState<string>("");
+  const [showHandover, setShowHandover] = useState(false);
   const [isSavingDrawerLock, setIsSavingDrawerLock] = useState(false);
-
-  const handleInitiateDrawerClose = () => {
-    setShowDrawerCloseSequence(true);
-    setDrawerCloseStep(1);
-    setTakeHomeInput("");
-  };
 
   // Step 3 (Credit & Cash Inflows & Split Payments) 2-Panel State
   const [step3Kind, setStep3Kind] = useState<
@@ -4231,12 +4527,12 @@ function DailyRegisterView({
         }),
       });
 
-      setShowDrawerCloseSequence(false);
+      setShowHandover(false);
       setTrackingMode("hub");
       setWizardStep(1);
     } catch (err) {
       console.error("Error saving archive lock to Neon", err);
-      setShowDrawerCloseSequence(false);
+      setShowHandover(false);
       setTrackingMode("hub");
       setWizardStep(1);
     } finally {
@@ -8230,7 +8526,7 @@ function DailyRegisterView({
               </button>
               <button
                 type="button"
-                onClick={handleInitiateDrawerClose}
+                onClick={() => setShowHandover(true)}
                 className="flex items-center justify-center gap-2.5 bg-jct-turquoise text-jct-charcoal font-bold hover:brightness-95 transition-all shadow-sm rounded-lg text-sm px-6 py-3 whitespace-nowrap w-full sm:w-auto"
               >
                 <Lock size={18} className="text-jct-charcoal" />
@@ -8238,6 +8534,19 @@ function DailyRegisterView({
               </button>
             </div>
           </div>
+
+          {/* Intelligent Drawer Closing & Cash Handover Sequence */}
+          {showHandover && (
+            <HandoverModalComponent
+              isOpen={showHandover}
+              onClose={() => setShowHandover(false)}
+              calculatedClosingBalance={calculatedClosingBalance}
+              totalCashInSalesAndReceipts={totalCashInSalesAndReceipts}
+              totalPreLoggedExpenses={totalPreLoggedExpenses}
+              onConfirmLock={handleConfirmLockWithFloat}
+              isSaving={isSavingDrawerLock}
+            />
+          )}
             </div>
           )}
         </div>
@@ -8894,289 +9203,6 @@ function DailyRegisterView({
           </div>
         </div>
       )}
-      {/* ──────────────────────────────────────────────────────────────
-          INTELLIGENT DRAWER CLOSING & CASH HANDOVER SEQUENCE MODAL
-         ────────────────────────────────────────────────────────────── */}
-      {showDrawerCloseSequence && (() => {
-        const parsedTakeHome = parseFloat(takeHomeInput);
-        const effectiveTakeHome = Number.isNaN(parsedTakeHome) ? 0 : parsedTakeHome;
-        const nextDayOpeningFloat = r2(calculatedClosingBalance - effectiveTakeHome);
-        const STANDARD_RETAIL_FLOAT = 2500;
-        const isNegativeShortage = effectiveTakeHome > calculatedClosingBalance || nextDayOpeningFloat < 0;
-        const isDepletedFloat = !isNegativeShortage && nextDayOpeningFloat < STANDARD_RETAIL_FLOAT;
-        const floatDeficit = isDepletedFloat ? r2(STANDARD_RETAIL_FLOAT - nextDayOpeningFloat) : 0;
-
-        return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-700 bg-[#0A0A0A]/95 backdrop-blur-xl text-jct-charcoal dark:text-jct-offwhite">
-            <div className="w-full max-w-xl bg-white dark:bg-[#111111] border border-slate-200 dark:border-white/10 rounded-3xl p-6 sm:p-8 shadow-2xl relative overflow-hidden transition-all duration-500">
-              
-              {/* ── STEP 1: PHYSICAL CASH VERIFICATION ── */}
-              {drawerCloseStep === 1 && (
-                <div className="flex flex-col gap-6 animate-in fade-in duration-500">
-                  {/* Step Header */}
-                  <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-4">
-                    <div className="flex items-center gap-2.5">
-                      <div className="h-10 w-10 rounded-2xl bg-jct-turquoise/20 text-jct-turquoise flex items-center justify-center font-bold">
-                        <Wallet size={20} />
-                      </div>
-                      <div>
-                        <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-jct-turquoise block">
-                          Step 1 of 2 · Physical Verification
-                        </span>
-                        <h3 className="font-display text-lg sm:text-xl font-extrabold text-jct-charcoal dark:text-white">
-                          Verify Physical Cash Drawer
-                        </h3>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setShowDrawerCloseSequence(false)}
-                      className="rounded-lg p-1.5 text-slate-400 hover:text-white transition"
-                    >
-                      <X size={18} />
-                    </button>
-                  </div>
-
-                  {/* Primary Verification Prompt */}
-                  <div className="text-center py-2">
-                    <p className="text-sm sm:text-base text-slate-600 dark:text-slate-300 leading-relaxed max-w-lg mx-auto">
-                      System calculates <span className="font-mono font-bold text-jct-charcoal dark:text-white">SAR {fmt(calculatedClosingBalance)}</span> in the physical drawer.
-                      <br />
-                      <span className="font-extrabold text-base sm:text-lg text-jct-charcoal dark:text-jct-turquoise mt-1 inline-block">
-                        Does the physical cash in the drawer exactly match this amount?
-                      </span>
-                    </p>
-                  </div>
-
-                  {/* Hero Balance Box with Inflow/Expense Math */}
-                  <div className="rounded-2xl border border-jct-turquoise/30 bg-jct-turquoise/5 p-6 flex flex-col items-center justify-center text-center">
-                    <span className="text-xs uppercase font-bold tracking-wider text-slate-500 dark:text-slate-400 mb-1">
-                      Calculated Drawer Physical Cash
-                    </span>
-                    <div className="font-mono text-4xl sm:text-5xl font-black text-jct-charcoal dark:text-white tracking-tight">
-                      SAR {fmt(calculatedClosingBalance)}
-                    </div>
-
-                    <div className="flex flex-wrap items-center justify-center gap-2 mt-4 pt-4 border-t border-slate-200 dark:border-white/10 text-xs font-mono text-slate-500 dark:text-slate-400">
-                      <span>Opening Float: <strong>+SAR {fmt(openingBalance)}</strong></span>
-                      <span>·</span>
-                      <span>Cash Inflows: <strong>+SAR {fmt(totalCashInSalesAndReceipts)}</strong></span>
-                      <span>·</span>
-                      <span className="text-rose-500">Expenses: <strong>-SAR {fmt(totalPreLoggedExpenses)}</strong></span>
-                    </div>
-                  </div>
-
-                  {/* Action Buttons */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowDrawerCloseSequence(false)}
-                      className="w-full py-3.5 px-4 rounded-xl font-bold border border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-[#181818] hover:bg-slate-200 dark:hover:bg-[#202020] text-slate-700 dark:text-slate-300 transition text-sm flex items-center justify-center gap-2"
-                    >
-                      <span>❌ No, I need to check</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setDrawerCloseStep(2)}
-                      className="w-full py-3.5 px-4 rounded-xl font-bold bg-jct-turquoise text-jct-charcoal hover:brightness-95 transition-all shadow-lg text-sm flex items-center justify-center gap-2"
-                    >
-                      <span>✅ Yes, it matches perfectly</span>
-                      <ArrowRight size={16} />
-                    </button>
-                  </div>
-
-                  <p className="text-[11px] text-center text-slate-400 dark:text-slate-500">
-                    Clicking &apos;No&apos; will safely return you to the register workbench to adjust entries or record an excess/shortage adjustment.
-                  </p>
-                </div>
-              )}
-
-              {/* ── STEP 2: OWNER WITHDRAWAL (CASH DROP) & STEP 3: FLOAT LOGIC ── */}
-              {drawerCloseStep === 2 && (
-                <div className="flex flex-col gap-5 animate-in fade-in duration-500">
-                  {/* Step Header */}
-                  <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-4">
-                    <div className="flex items-center gap-2.5">
-                      <div className="h-10 w-10 rounded-2xl bg-amber-500/20 text-amber-500 flex items-center justify-center font-bold">
-                        <Banknote size={20} />
-                      </div>
-                      <div>
-                        <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-amber-500 block">
-                          Step 2 of 2 · Owner Cash Drop &amp; Float Setup
-                        </span>
-                        <h3 className="font-display text-lg sm:text-xl font-extrabold text-jct-charcoal dark:text-white">
-                          Cash Drop &amp; Tomorrow&apos;s Opening Float
-                        </h3>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setShowDrawerCloseSequence(false)}
-                      className="rounded-lg p-1.5 text-slate-400 hover:text-white transition"
-                    >
-                      <X size={18} />
-                    </button>
-                  </div>
-
-                  {/* Primary Withdrawal Prompt */}
-                  <div className="text-center">
-                    <p className="text-sm sm:text-base font-bold text-jct-charcoal dark:text-slate-200">
-                      How much cash are you taking home / depositing to the bank?
-                    </p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                      Total Physical Drawer Cash: <strong className="text-jct-charcoal dark:text-white font-mono">SAR {fmt(calculatedClosingBalance)}</strong>
-                    </p>
-                  </div>
-
-                  {/* Large Centered Number Input */}
-                  <div className="flex flex-col items-center justify-center py-2">
-                    <div className="relative w-full max-w-sm">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400 font-mono">SAR</span>
-                      <input
-                        type="number"
-                        step="0.01"
-                        autoFocus
-                        value={takeHomeInput}
-                        onChange={(e) => setTakeHomeInput(e.target.value)}
-                        placeholder="0.00"
-                        className="w-full text-center text-4xl sm:text-5xl font-mono font-black py-3 px-12 bg-transparent border-b-2 border-jct-turquoise focus:outline-none text-jct-charcoal dark:text-white tracking-tight"
-                      />
-                    </div>
-
-                    {/* Quick Convenience Presets */}
-                    <div className="flex flex-wrap items-center justify-center gap-1.5 mt-4">
-                      {calculatedClosingBalance >= STANDARD_RETAIL_FLOAT && (
-                        <button
-                          type="button"
-                          onClick={() => setTakeHomeInput(String(r2(calculatedClosingBalance - STANDARD_RETAIL_FLOAT)))}
-                          className="rounded-full bg-jct-turquoise/15 hover:bg-jct-turquoise/25 border border-jct-turquoise/30 text-jct-turquoise text-xs font-bold px-3 py-1 transition"
-                        >
-                          Leave SAR 2,500 Float · Take SAR {fmt(calculatedClosingBalance - STANDARD_RETAIL_FLOAT)}
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => setTakeHomeInput(String(calculatedClosingBalance))}
-                        className="rounded-full bg-slate-100 dark:bg-[#1F1F1F] hover:bg-slate-200 dark:hover:bg-[#282828] text-slate-700 dark:text-slate-300 text-xs font-semibold px-3 py-1 transition"
-                      >
-                        Withdraw All (SAR {fmt(calculatedClosingBalance)})
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setTakeHomeInput("0")}
-                        className="rounded-full bg-slate-100 dark:bg-[#1F1F1F] hover:bg-slate-200 dark:hover:bg-[#282828] text-slate-700 dark:text-slate-300 text-xs font-semibold px-3 py-1 transition"
-                      >
-                        Leave All in Drawer
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Dynamic Intelligent Float Box & 2500 Rule */}
-                  <div className="rounded-2xl border border-slate-200 dark:border-white/10 p-4 sm:p-5 transition-all">
-                    {isNegativeShortage ? (
-                      <div className="flex items-start gap-3 text-rose-500 bg-rose-500/10 border border-rose-500/30 rounded-xl p-4">
-                        <AlertTriangle size={20} className="shrink-0 mt-0.5" />
-                        <div className="text-xs sm:text-sm font-semibold leading-relaxed">
-                          <strong className="block font-bold">Invalid Take-Home Amount</strong>
-                          You cannot withdraw <span className="font-mono font-bold">SAR {fmt(effectiveTakeHome)}</span> when the total drawer contains only <span className="font-mono font-bold">SAR {fmt(calculatedClosingBalance)}</span>.
-                          Drawer balance cannot be negative (<span className="font-mono font-bold">-SAR {fmt(Math.abs(nextDayOpeningFloat))}</span>).
-                        </div>
-                      </div>
-                    ) : isDepletedFloat ? (
-                      <div className="flex flex-col gap-3 bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 text-amber-600 dark:text-amber-400">
-                        <div className="flex items-start gap-2.5">
-                          <AlertTriangle size={20} className="shrink-0 mt-0.5 text-amber-500" />
-                          <div className="text-xs sm:text-sm font-medium leading-relaxed">
-                            <strong className="font-bold text-amber-600 dark:text-amber-300 block mb-0.5">
-                              Warning: Drawer float is depleted.
-                            </strong>
-                            To maintain a standard SAR 2,500 opening balance for tomorrow&apos;s shift, you must inject/leave{" "}
-                            <strong className="font-mono font-bold text-amber-600 dark:text-amber-300">
-                              SAR {fmt(floatDeficit)}
-                            </strong>{" "}
-                            in the register.
-                          </div>
-                        </div>
-
-                        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-amber-500/20 text-xs">
-                          <span className="font-mono text-slate-600 dark:text-slate-300">
-                            Tomorrow Opening Float: <strong>SAR {fmt(nextDayOpeningFloat)}</strong>
-                          </span>
-                          {calculatedClosingBalance >= STANDARD_RETAIL_FLOAT && (
-                            <button
-                              type="button"
-                              onClick={() => setTakeHomeInput(String(r2(calculatedClosingBalance - STANDARD_RETAIL_FLOAT)))}
-                              className="bg-amber-500 text-black font-bold px-3 py-1.5 rounded-lg text-xs hover:brightness-105 transition shadow-sm"
-                            >
-                              ⚡ Fix: Leave SAR 2,500 Float
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex items-start gap-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 text-emerald-600 dark:text-emerald-400">
-                        <CheckCircle2 size={20} className="shrink-0 mt-0.5 text-emerald-500" />
-                        <div className="text-xs sm:text-sm font-medium leading-relaxed">
-                          <strong className="font-bold text-emerald-600 dark:text-emerald-300 block mb-0.5">
-                            Tomorrow&apos;s Opening Balance will be SAR {fmt(nextDayOpeningFloat)}.
-                          </strong>
-                          Standard retail float (SAR 2,500+) maintained. Drawer is ready for morning shift handover.
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Summary Math Strip */}
-                    {!isNegativeShortage && (
-                      <div className="grid grid-cols-3 gap-2 text-center pt-3 mt-3 border-t border-slate-200 dark:border-white/10 text-xs">
-                        <div>
-                          <span className="text-[10px] text-slate-400 block font-bold">Total Drawer</span>
-                          <span className="font-mono font-bold text-jct-charcoal dark:text-white">
-                            SAR {fmt(calculatedClosingBalance)}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-amber-500 block font-bold">Take-Home Drop</span>
-                          <span className="font-mono font-bold text-amber-500">
-                            -SAR {fmt(effectiveTakeHome)}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-emerald-500 block font-bold">Tomorrow Opening</span>
-                          <span className="font-mono font-black text-emerald-500">
-                            SAR {fmt(nextDayOpeningFloat)}
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
-                    <button
-                      type="button"
-                      onClick={() => setDrawerCloseStep(1)}
-                      className="w-full sm:w-auto px-5 py-3 rounded-xl font-bold border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#181818] transition text-xs"
-                    >
-                      ← Back to Cash Check
-                    </button>
-
-                    <button
-                      type="button"
-                      disabled={isNegativeShortage || isSavingDrawerLock}
-                      onClick={() => handleConfirmLockWithFloat(effectiveTakeHome, nextDayOpeningFloat)}
-                      className="w-full sm:w-auto px-6 py-3.5 rounded-xl font-bold bg-jct-turquoise text-jct-charcoal hover:brightness-95 transition-all shadow-lg disabled:opacity-40 disabled:hover:brightness-100 text-sm flex items-center justify-center gap-2"
-                    >
-                      <Lock size={16} />
-                      <span>{isSavingDrawerLock ? "Locking & Syncing..." : "🔒 Confirm & Lock Register"}</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      })()}
     </div>
   );
 }
