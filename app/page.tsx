@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { POCKET_CUSTOMERS_KEY, pocketTag, usePocketTransactions, type BranchId } from "../lib/pocket-bridge";
 import * as Dropdown from "@radix-ui/react-dropdown-menu";
 import {
-  Activity, Building2, CalendarDays, Check, ChevronDown,
+  Activity, Building2, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight,
   FileSpreadsheet, Lock, Moon, 
   Package, Sparkles, Store, Sun, TrendingUp, 
   Crown, PaintRoller, SprayCan, Landmark, Repeat,
@@ -1361,6 +1361,8 @@ export function ClassicDataSheetTable({
   branchName = "Jubail Main",
   className = "",
 }: ClassicDataSheetTableProps) {
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const tableRef = useRef<HTMLDivElement>(null);
   const mappedRows = buildClassicDataSheetRows(
     sheetRows,
     activeErpList,
@@ -1397,7 +1399,13 @@ export function ClassicDataSheetTable({
   const tdClosing = "text-xs text-right font-mono font-bold px-4 py-3 border-b border-slate-100 dark:border-white/5 bg-jct-turquoise/5 text-jct-turquoise print:bg-transparent print:text-black print:border-black whitespace-nowrap";
 
   return (
-    <div className={`w-full text-slate-800 dark:text-slate-200 print:text-black print:w-full print:bg-white ${className}`}>
+    <div
+      className={
+        isFullscreen
+          ? "fixed inset-0 z-[100] bg-[#0A0A0A] p-4 md:p-8 flex flex-col h-screen w-screen overflow-hidden text-slate-800 dark:text-slate-200"
+          : `w-full text-slate-800 dark:text-slate-200 print:text-black print:w-full print:bg-white ${className}`
+      }
+    >
       {/* Strict Black & White Print Stylesheet */}
       <style
         dangerouslySetInnerHTML={{
@@ -1429,8 +1437,52 @@ export function ClassicDataSheetTable({
         </div>
       </div>
 
+      {/* Control Bar: Expand/Collapse & Programmatic Side-Scroll Buttons */}
+      <div className="flex flex-wrap items-center justify-between gap-2.5 mb-3 print:hidden">
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => tableRef.current?.scrollBy({ left: -300, behavior: "smooth" })}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#111111] hover:bg-slate-100 dark:hover:bg-[#1A1A1A] text-slate-700 dark:text-slate-200 text-xs font-semibold shadow-sm transition-all"
+            title="Scroll Left 300px"
+          >
+            <ChevronLeft size={14} />
+            <span>&lt; Scroll Left</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => tableRef.current?.scrollBy({ left: 300, behavior: "smooth" })}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#111111] hover:bg-slate-100 dark:hover:bg-[#1A1A1A] text-slate-700 dark:text-slate-200 text-xs font-semibold shadow-sm transition-all"
+            title="Scroll Right 300px"
+          >
+            <span>Scroll Right &gt;</span>
+            <ChevronRight size={14} />
+          </button>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setIsFullscreen((prev) => !prev)}
+          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border border-jct-turquoise/40 bg-jct-turquoise/10 text-jct-turquoise hover:bg-jct-turquoise/20 text-xs font-bold transition-all shadow-sm"
+        >
+          {isFullscreen ? (
+            <>
+              <X size={14} />
+              <span>✖ Close Full Screen</span>
+            </>
+          ) : (
+            <>
+              <Maximize2 size={14} />
+              <span>⛶ Expand</span>
+            </>
+          )}
+        </button>
+      </div>
+
       {/* Day / Dark Mode Responsive Main Table Wrapper */}
-      <div className="w-full overflow-x-auto hide-scrollbar pb-4 bg-white dark:bg-[#0A0A0A] rounded-xl border border-slate-200 dark:border-white/10 shadow-sm print:border-none print:shadow-none print:bg-white print:overflow-visible">
+      <div
+        ref={tableRef}
+        className={`w-full overflow-x-auto hide-scrollbar pb-4 bg-white dark:bg-[#0A0A0A] rounded-xl border border-slate-200 dark:border-white/10 shadow-sm print:border-none print:shadow-none print:bg-white print:overflow-visible ${isFullscreen ? "flex-1 overflow-y-auto" : ""}`}>
         <table className="w-full min-w-[1200px] text-left border-collapse whitespace-nowrap">
           <thead>
             <tr>
@@ -2766,6 +2818,8 @@ function DailyRegisterView({
 
   // Classic Digital Data Sheet State (15 Pre-Populated Rows matching client paper ledger)
   const [sheetRows, setSheetRows] = useState<DataSheetRow[]>(INITIAL_DATASHEET_ROWS);
+  const [isDatasheetFullscreen, setIsDatasheetFullscreen] = useState(false);
+  const datasheetTableRef = useRef<HTMLDivElement>(null);
 
   const numCell = (v: string): number => {
     const parsed = parseFloat(v);
@@ -4117,6 +4171,22 @@ function DailyRegisterView({
       }).catch((err) => console.error("Failed to update pocket txn", err));
     }
     setEditingEntryModal(null);
+  };
+
+  const handleUpdateInvoiceId = (oldIdOrNo: string, nextId: string) => {
+    setErpInvoices((prev) => {
+      const base = prev.length > 0 ? prev : buildMatchedErpList();
+      return base.map((inv) => {
+        if (inv.invoiceNo === oldIdOrNo || (inv.id && inv.id === oldIdOrNo)) {
+          return {
+            ...inv,
+            id: inv.id || oldIdOrNo,
+            invoiceNo: nextId,
+          };
+        }
+        return inv;
+      });
+    });
   };
 
   const handleEditErpInvoiceCustomer = (invoiceNo: string, nextCustomer: string) => {
@@ -5848,9 +5918,22 @@ function DailyRegisterView({
                     >
                       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
                         <div className="flex flex-wrap items-center gap-2.5 min-w-0 flex-1">
-                          <span className="font-mono text-xs font-medium text-slate-500 shrink-0">
-                            #{inv.invoiceNo}
-                          </span>
+                          {inv.isManualEntry || (inv.id && inv.id.startsWith("MANUAL-")) ? (
+                            <div className="flex items-center gap-0.5 shrink-0">
+                              <span className="font-mono text-xs font-semibold text-jct-turquoise">#</span>
+                              <input
+                                type="text"
+                                value={inv.invoiceNo}
+                                onChange={(e) => handleUpdateInvoiceId(inv.id || inv.invoiceNo, e.target.value)}
+                                placeholder="Invoice #"
+                                className="w-24 bg-transparent border-b border-white/20 text-slate-200 text-xs font-mono font-medium focus:outline-none focus:border-jct-turquoise transition-colors px-1 py-0.5"
+                              />
+                            </div>
+                          ) : (
+                            <span className="font-mono text-xs font-medium text-slate-500 shrink-0">
+                              #{inv.invoiceNo}
+                            </span>
+                          )}
                           {/* Editable Customer / Description Input */}
                           <input
                             type="text"
@@ -8741,8 +8824,58 @@ function DailyRegisterView({
           </div>
 
           {/* 2. Editable 19-Column Spreadsheet Grid */}
-          <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl overflow-hidden">
-            <div className="w-full overflow-x-auto hide-scrollbar max-h-[68vh] overflow-y-auto">
+          <div
+            className={
+              isDatasheetFullscreen
+                ? "fixed inset-0 z-[100] bg-[#0A0A0A] p-4 md:p-8 flex flex-col h-screen w-screen overflow-hidden text-slate-800 dark:text-slate-200"
+                : "bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl overflow-hidden flex flex-col"
+            }
+          >
+            {/* Control Bar: Expand/Collapse & Programmatic Side-Scroll Buttons */}
+            <div className="flex flex-wrap items-center justify-between gap-2.5 p-3.5 border-b border-slate-200 dark:border-[#1F1F1F] bg-slate-50/50 dark:bg-[#0E0E0E] print:hidden">
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => datasheetTableRef.current?.scrollBy({ left: -300, behavior: "smooth" })}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#111111] hover:bg-slate-100 dark:hover:bg-[#1A1A1A] text-slate-700 dark:text-slate-200 text-xs font-semibold shadow-sm transition-all"
+                  title="Scroll Left 300px"
+                >
+                  <ChevronLeft size={14} />
+                  <span>&lt; Scroll Left</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => datasheetTableRef.current?.scrollBy({ left: 300, behavior: "smooth" })}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#111111] hover:bg-slate-100 dark:hover:bg-[#1A1A1A] text-slate-700 dark:text-slate-200 text-xs font-semibold shadow-sm transition-all"
+                  title="Scroll Right 300px"
+                >
+                  <span>Scroll Right &gt;</span>
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsDatasheetFullscreen((prev) => !prev)}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border border-jct-turquoise/40 bg-jct-turquoise/10 text-jct-turquoise hover:bg-jct-turquoise/20 text-xs font-bold transition-all shadow-sm"
+              >
+                {isDatasheetFullscreen ? (
+                  <>
+                    <X size={14} />
+                    <span>✖ Close Full Screen</span>
+                  </>
+                ) : (
+                  <>
+                    <Maximize2 size={14} />
+                    <span>⛶ Expand</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            <div
+              ref={datasheetTableRef}
+              className={`w-full overflow-x-auto hide-scrollbar ${isDatasheetFullscreen ? "flex-1 overflow-y-auto" : "max-h-[68vh] overflow-y-auto"}`}>
               <table className="w-full min-w-[1200px] border-collapse text-xs font-mono">
                 <thead className="sticky top-0 z-20 text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-[#111111] shadow-sm">
                   <tr className="border-b border-slate-200 dark:border-[#1F1F1F] divide-x divide-slate-200 dark:divide-[#1F1F1F]">
