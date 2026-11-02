@@ -257,6 +257,31 @@ const nowHHMM = () => {
    COMPONENTS
    ════════════════════════════════════════════════════════════════════════ */
 
+const HEMPEL_CONSOLIDATED_ERP_INVOICES: ErpInvoiceItem[] = [
+  { invoiceNo: "H-8810", customer: "Eastern Marine Coatings", amount: 12400, originalAmount: 12400, paymentMode: "CASH", posTerminal: "SAB", splitCashAmount: 0, splitBankAmount: 0, splitBankMethod: "POS_SWIPE", autoMatched: false, time: "09:30" },
+  { invoiceNo: "H-8812", customer: "Coastal Shipping Est", amount: 9400, originalAmount: 9400, paymentMode: "POS_SWIPE", posTerminal: "SAB", splitCashAmount: 0, splitBankAmount: 0, splitBankMethod: "POS_SWIPE", autoMatched: true, time: "11:15" },
+  { invoiceNo: "H-8815", customer: "Jubail Industrial Supply", amount: 7800, originalAmount: 7800, paymentMode: "CASH", posTerminal: "SAB", splitCashAmount: 0, splitBankAmount: 0, splitBankMethod: "POS_SWIPE", autoMatched: false, time: "14:00" },
+  { invoiceNo: "H-8818", customer: "Petrochem Maintenance", amount: 8000, originalAmount: 8000, paymentMode: "CASH", posTerminal: "SAB", splitCashAmount: 0, splitBankAmount: 0, splitBankMethod: "POS_SWIPE", autoMatched: false, time: "16:20" },
+  { invoiceNo: "H-8820", customer: "Arabian Ship Repair Co", amount: 3200, originalAmount: 3200, paymentMode: "BANK_TRANSFER", bankPaymentMode: "SAB", posTerminal: "SAB", splitCashAmount: 0, splitBankAmount: 0, splitBankMethod: "POS_SWIPE", autoMatched: true, time: "17:10" },
+];
+
+const HEMPEL_CONSOLIDATED_PRELOGGED_ENTRIES: PreLoggedEntry[] = [
+  { id: "h-exp-1", type: "EXPENSE", title: "Store Packing Materials & Tape", amount: 150, expenseCategory: "Cash Purchase", paymentMode: "CASH", time: "10:00" },
+  { id: "h-exp-2", type: "EXPENSE", title: "Delivery Van Fuel - Jubail Port", amount: 350, expenseCategory: "Personal Reasons", paymentMode: "CASH", time: "13:30" },
+];
+
+const SIGMA_CONSOLIDATED_ERP_INVOICES: ErpInvoiceItem[] = [
+  { invoiceNo: "S-4011", customer: "Al Khobar Interior Finishing", amount: 18500, originalAmount: 18500, paymentMode: "CASH", posTerminal: "SAB", splitCashAmount: 0, splitBankAmount: 0, splitBankMethod: "POS_SWIPE", autoMatched: false, time: "09:15" },
+  { invoiceNo: "S-4014", customer: "Dammam Commercial Towers", amount: 11200, originalAmount: 11200, paymentMode: "POS_SWIPE", posTerminal: "AL_RAJHI", splitCashAmount: 0, splitBankAmount: 0, splitBankMethod: "POS_SWIPE", autoMatched: true, time: "11:45" },
+  { invoiceNo: "S-4018", customer: "Red Sea Commercial Decor", amount: 14000, originalAmount: 14000, paymentMode: "CASH", posTerminal: "SAB", splitCashAmount: 0, splitBankAmount: 0, splitBankMethod: "POS_SWIPE", autoMatched: false, time: "14:30" },
+  { invoiceNo: "S-4022", customer: "Gulf Contracting Corp", amount: 4500, originalAmount: 4500, paymentMode: "BANK_TRANSFER", bankPaymentMode: "AL_RAJHI", posTerminal: "AL_RAJHI", splitCashAmount: 0, splitBankAmount: 0, splitBankMethod: "POS_SWIPE", autoMatched: true, time: "16:50" },
+];
+
+const SIGMA_CONSOLIDATED_PRELOGGED_ENTRIES: PreLoggedEntry[] = [
+  { id: "s-exp-1", type: "EXPENSE", title: "Inter-city Cargo Freight (Jeddah to Dammam)", amount: 450, expenseCategory: "Cash Purchase", paymentMode: "CASH", time: "11:00" },
+  { id: "s-exp-2", type: "EXPENSE", title: "Warehouse Drinking Water & Refreshments", amount: 400, expenseCategory: "Water", paymentMode: "CASH", time: "15:00" },
+];
+
 function PrintReportHeader({ branch, date }: { branch: string; date: string }) {
   const [timestamp, setTimestamp] = useState("");
 
@@ -2672,8 +2697,9 @@ function DailyRegisterView({
   const [trackPosFees, setTrackPosFees] = useState(false);
   const [bankSettlementMode, setBankSettlementMode] = useState<"GROSS" | "NET">("GROSS");
   const [isDatasheetView, setIsDatasheetView] = useState(false);
-  const [printMode, setPrintMode] = useState<"summary" | "datasheet">("summary");
+  const [printMode] = useState<"summary" | "datasheet">("summary");
   const [creditModalInvNo, setCreditModalInvNo] = useState<string | null>(null);
+  const [isDatasheetPreviewOpen, setIsDatasheetPreviewOpen] = useState(false);
   const [justCompletedToast, setJustCompletedToast] = useState<string | null>(null);
   const [recentlyConfirmedId, setRecentlyConfirmedId] = useState<string | null>(null);
   const [syncBannerMsg, setSyncBannerMsg] = useState<{
@@ -7600,7 +7626,7 @@ function DailyRegisterView({
               STEP 5: FULL-WIDESCREEN EDITABLE AUDIT WORKBENCH WITH [⤢ EXPAND] ON ALL 3 BOXES
              ────────────────────────────────────────────────────────────── */}
           {wizardStep === 5 && (
-            <div className="animate-in fade-in slide-in-from-bottom-2 duration-400 ease-out flex flex-col gap-6 pb-8 print:block print:w-full print:bg-white print:text-black print:p-0 print:m-0">
+            <div className="animate-in fade-in slide-in-from-bottom-2 duration-400 ease-out flex flex-col gap-6 pb-8 print:hidden">
               {/* ──────────────────────────────────────────────────────────
                   PAGE 1: AUDIT SUMMARY (EXECUTIVE OVERVIEW)
                  ────────────────────────────────────────────────────────── */}
@@ -8872,25 +8898,17 @@ function DailyRegisterView({
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-3 w-full sm:w-auto print:hidden">
               <button
                 type="button"
-                onClick={() => {
-                  setPrintMode("summary");
-                  setTimeout(() => window.print(), 100);
-                }}
-                className="flex items-center justify-center gap-2 bg-jct-charcoal dark:bg-slate-800 text-white px-4 py-2.5 rounded-lg font-bold print:hidden hover:brightness-110 transition-all text-sm shadow-sm w-full sm:w-auto"
+                onClick={() => setIsDatasheetPreviewOpen(true)}
+                className="text-xs text-slate-400 hover:text-white border border-slate-700 hover:border-slate-500 px-3 py-1.5 rounded transition-all"
               >
-                <Printer size={16} />
-                <span>🖨️ Print Report</span>
+                📄 View Final Datasheet
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setPrintMode("datasheet");
-                  setTimeout(() => window.print(), 100);
-                }}
-                className="flex items-center justify-center gap-2 bg-white dark:bg-black border border-slate-300 dark:border-white/20 text-slate-800 dark:text-slate-100 px-4 py-2.5 rounded-lg font-bold print:hidden hover:bg-slate-100 dark:hover:bg-white/10 transition-all text-sm shadow-sm w-full sm:w-auto"
+                onClick={() => window.print()}
+                className="bg-white text-black font-bold px-6 py-3 rounded-md hover:bg-slate-200 text-xs sm:text-sm transition-all shadow-sm flex items-center justify-center gap-2 w-full sm:w-auto"
               >
-                <FileSpreadsheet size={16} />
-                <span>⬇️ Print Classic Datasheet</span>
+                🖨️ Print / Save Consolidated PDF
               </button>
               <button
                 type="button"
@@ -8915,8 +8933,294 @@ function DailyRegisterView({
               isSaving={isSavingDrawerLock}
             />
           )}
+
+          {/* Full-Screen Final Datasheet Review Modal (Focus Mode) */}
+          {isDatasheetPreviewOpen && (
+            <div className="fixed inset-0 z-[150] bg-[#0A0A0A] p-4 md:p-8 flex flex-col h-screen w-screen overflow-hidden text-slate-200 animate-in fade-in duration-200 print:hidden">
+              <div className="flex items-center justify-between pb-3 mb-2 border-b border-white/10 shrink-0">
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-xs font-bold bg-jct-turquoise text-jct-charcoal px-2.5 py-0.5 rounded">
+                    FINAL AUDIT REVIEW
+                  </span>
+                  <h3 className="font-display font-black text-sm sm:text-base text-white">
+                    19-Column Classic Physical Datasheet Review · {branchId === "JCT_HQ" ? "JCT Main HQ (Jubail)" : branchId}
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsDatasheetPreviewOpen(false)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/20 hover:bg-white/10 text-xs font-bold text-white transition-colors"
+                >
+                  <X size={15} />
+                  <span>Close Review</span>
+                </button>
+              </div>
+              <div className="flex-1 overflow-hidden">
+                <ClassicDataSheetTable
+                  sheetRows={sheetRows}
+                  activeErpList={activeErpList}
+                  preLoggedEntries={preLoggedEntries}
+                  openingBalance={openingBalance}
+                  date="12-09-2026"
+                  branchName={branchId === "JCT_HQ" ? "JCT Main HQ (Jubail)" : branchId}
+                />
+              </div>
             </div>
           )}
+            </div>
+          )}
+
+          {/* ──────────────────────────────────────────────────────────
+              MULTI-BRANCH CONSOLIDATED PRINT ARCHITECTURE (hidden on screen, visible in print)
+             ────────────────────────────────────────────────────────── */}
+          {wizardStep === 5 && (() => {
+            const jubailBankTransfers = r2(
+              activeErpList
+                .filter((inv) => inv.paymentMode === "BANK_TRANSFER" || inv.bankPaymentMode === "BANK_TRANSFER")
+                .reduce((s, inv) => s + inv.amount, 0)
+            );
+            const jubailTakeHome = calculatedClosingBalance > 2500 ? r2(calculatedClosingBalance - 2500) : 0;
+            const jubailNextDayOpening = r2(calculatedClosingBalance - jubailTakeHome);
+            const consolidatedTotalCashInDrawer = r2(calculatedClosingBalance + 29500 + 33650);
+            const consolidatedTotalTakeHome = r2(jubailTakeHome + 27700 + 31650);
+            const consolidatedTotalOpeningFloat = r2(jubailNextDayOpening + 1800 + 2000);
+            const consolidatedTotalCardSwipes = r2(bankSwipeGrossTotal + 9400 + 11200);
+            const consolidatedTotalBankTransfers = r2(jubailBankTransfers + 3200 + 4500);
+            const consolidatedTotalExpenses = r2(totalPreLoggedExpenses + 500 + 850);
+
+            const branchesData = [
+              {
+                id: "jct_hq",
+                name: "1. Jubail Main HQ · Hardware & Jotun Store",
+                sheetRows,
+                activeErpList,
+                preLoggedEntries,
+                openingBalance,
+              },
+              {
+                id: "hempel_jubail",
+                name: "2. Hempel - Jubail Franchise Outlet",
+                sheetRows: [],
+                activeErpList: HEMPEL_CONSOLIDATED_ERP_INVOICES,
+                preLoggedEntries: HEMPEL_CONSOLIDATED_PRELOGGED_ENTRIES,
+                openingBalance: 1800,
+              },
+              {
+                id: "sigma_dammam",
+                name: "3. Sigma Paints / Jotun - Dammam Franchise",
+                sheetRows: [],
+                activeErpList: SIGMA_CONSOLIDATED_ERP_INVOICES,
+                preLoggedEntries: SIGMA_CONSOLIDATED_PRELOGGED_ENTRIES,
+                openingBalance: 2000,
+              },
+            ];
+
+            return (
+              <div className="hidden print:block print:w-full print:bg-white print:text-black print:p-0 print:m-0">
+                {/* Global Print CSS - locked to landscape A4 with 5mm margin */}
+                <style
+                  dangerouslySetInnerHTML={{
+                    __html: `
+                      @media print {
+                        @page { size: A4 landscape; margin: 5mm; }
+                        body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background-color: white !important; color: black !important; }
+                        .print\\:break-after-page { page-break-after: always; break-after: page; }
+                        .print\\:break-before-page { page-break-before: always; break-before: page; }
+                        * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                      }
+                    `,
+                  }}
+                />
+
+                {/* 1. Sequential 19-Column Classic Physical Datasheets for all 3 Branches (Pages 1, 2, 3) */}
+                {branchesData.map((branch) => (
+                  <div key={branch.id} className="print:break-after-page print:w-full print:p-0 print:m-0">
+                    <ClassicDataSheetTable
+                      sheetRows={branch.sheetRows}
+                      activeErpList={branch.activeErpList}
+                      preLoggedEntries={branch.preLoggedEntries}
+                      openingBalance={branch.openingBalance}
+                      date="12-09-2026"
+                      branchName={branch.name}
+                    />
+                  </div>
+                ))}
+
+                {/* 2. Page 4: Master Consolidated Executive Financial Summary Block */}
+                <div className="print:break-before-page p-8 border-4 border-black min-h-[92vh] flex flex-col justify-between text-black bg-white">
+                  <div>
+                    {/* Official Executive Header */}
+                    <div className="flex justify-between items-start border-b-4 border-black pb-4 mb-6">
+                      <div>
+                        <span className="font-mono text-xs font-black tracking-widest uppercase bg-black text-white px-2.5 py-1">
+                          CONSOLIDATED MASTER FINANCIAL REPORT
+                        </span>
+                        <h1 className="text-3xl font-black uppercase tracking-tight font-display mt-2 text-black">
+                          JUBAIL CORP. TRADING EST. — ALL 3 SHOPS
+                        </h1>
+                        <p className="font-mono text-xs text-slate-700 mt-1">
+                          Official Executive EOD Ledger · Jubail Main HQ · Hempel Jubail · Sigma / Jotun Dammam
+                        </p>
+                      </div>
+                      <div className="text-right font-mono text-xs space-y-1 text-black">
+                        <p className="font-bold">Date: 12-09-2026</p>
+                        <p>Locked By: {isOwner ? "BONGSI (Nazim & Nadeem)" : "Owner Verified"}</p>
+                        <p>Status: <span className="font-bold uppercase">AUDITED &amp; CLOSED</span></p>
+                      </div>
+                    </div>
+
+                    {/* Master Consolidated Metric Cards */}
+                    <div className="grid grid-cols-2 gap-4 mb-6">
+                      <div className="border-2 border-black p-4 bg-slate-50">
+                        <span className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1">
+                          TOTAL CASH IN DRAWER (ALL 3 SHOPS)
+                        </span>
+                        <span className="text-3xl lg:text-4xl font-black font-mono tracking-tight block text-black">
+                          SAR {fmt(consolidatedTotalCashInDrawer)}
+                        </span>
+                        <span className="text-[10px] text-slate-600 block mt-1 font-mono">
+                          Jubail: SAR {fmt(calculatedClosingBalance)} | Hempel: SAR 29,500 | Sigma: SAR 33,650
+                        </span>
+                      </div>
+
+                      <div className="border-2 border-black p-4 bg-slate-50">
+                        <span className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1">
+                          OWNER TAKE-HOME AMOUNT (TOTAL CASH DROP)
+                        </span>
+                        <span className="text-3xl lg:text-4xl font-black font-mono tracking-tight block text-black">
+                          SAR {fmt(consolidatedTotalTakeHome)}
+                        </span>
+                        <span className="text-[10px] text-slate-600 block mt-1 font-mono">
+                          Consolidated cash safe withdrawal across 3 retail outlets
+                        </span>
+                      </div>
+
+                      <div className="border-2 border-black p-4">
+                        <span className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1">
+                          TOMORROW&apos;S OPENING FLOAT (DRAWER CASH)
+                        </span>
+                        <span className="text-2xl lg:text-3xl font-black font-mono tracking-tight block text-black">
+                          SAR {fmt(consolidatedTotalOpeningFloat)}
+                        </span>
+                        <span className="text-[10px] text-slate-600 block mt-1 font-mono">
+                          Jubail: SAR {fmt(jubailNextDayOpening)} | Hempel: SAR 1,800 | Sigma: SAR 2,000
+                        </span>
+                      </div>
+
+                      <div className="border-2 border-black p-4">
+                        <span className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1">
+                          TOTAL CARD SWIPES (POS TERMINALS)
+                        </span>
+                        <span className="text-2xl lg:text-3xl font-black font-mono tracking-tight block text-black">
+                          SAR {fmt(consolidatedTotalCardSwipes)}
+                        </span>
+                        <span className="text-[10px] text-slate-600 block mt-1 font-mono">
+                          SAB, Al Rajhi, SNB &amp; Visa/Mada settlements
+                        </span>
+                      </div>
+
+                      <div className="border-2 border-black p-4">
+                        <span className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1">
+                          TOTAL BANK TRANSFERS
+                        </span>
+                        <span className="text-2xl lg:text-3xl font-black font-mono tracking-tight block text-black">
+                          SAR {fmt(consolidatedTotalBankTransfers)}
+                        </span>
+                        <span className="text-[10px] text-slate-600 block mt-1 font-mono">
+                          Direct customer wire inflows verified
+                        </span>
+                      </div>
+
+                      <div className="border-2 border-black p-4">
+                        <span className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1">
+                          TOTAL EXPENSES &amp; PAYOUTS
+                        </span>
+                        <span className="text-2xl lg:text-3xl font-black font-mono tracking-tight block text-black">
+                          SAR {fmt(consolidatedTotalExpenses)}
+                        </span>
+                        <span className="text-[10px] text-slate-600 block mt-1 font-mono">
+                          Jubail: SAR {fmt(totalPreLoggedExpenses)} | Hempel: SAR 500 | Sigma: SAR 850
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Consolidated Cross-Branch Comparison Table */}
+                    <div className="border-2 border-black overflow-hidden mb-6">
+                      <table className="w-full text-left text-xs font-mono border-collapse">
+                        <thead>
+                          <tr className="bg-black text-white font-bold uppercase text-[11px]">
+                            <th className="p-2.5 border-r border-white/30">Branch Name</th>
+                            <th className="p-2.5 text-right border-r border-white/30">Opening Float</th>
+                            <th className="p-2.5 text-right border-r border-white/30">Cash Inflows</th>
+                            <th className="p-2.5 text-right border-r border-white/30">POS Card Swipes</th>
+                            <th className="p-2.5 text-right border-r border-white/30">Bank Transfers</th>
+                            <th className="p-2.5 text-right border-r border-white/30">Expenses</th>
+                            <th className="p-2.5 text-right border-r border-white/30">Take-Home (Drop)</th>
+                            <th className="p-2.5 text-right">Closing Cash</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-black/20 text-black">
+                          <tr>
+                            <td className="p-2.5 font-bold border-r border-black/20">1. Jubail Main HQ (Live)</td>
+                            <td className="p-2.5 text-right border-r border-black/20">SAR {fmt(openingBalance)}</td>
+                            <td className="p-2.5 text-right border-r border-black/20">SAR {fmt(cashSalesTotal)}</td>
+                            <td className="p-2.5 text-right border-r border-black/20">SAR {fmt(bankSwipeGrossTotal)}</td>
+                            <td className="p-2.5 text-right border-r border-black/20">SAR {fmt(jubailBankTransfers)}</td>
+                            <td className="p-2.5 text-right border-r border-black/20">SAR {fmt(totalPreLoggedExpenses)}</td>
+                            <td className="p-2.5 text-right border-r border-black/20 font-bold">SAR {fmt(jubailTakeHome)}</td>
+                            <td className="p-2.5 text-right font-black">SAR {fmt(calculatedClosingBalance)}</td>
+                          </tr>
+                          <tr>
+                            <td className="p-2.5 font-bold border-r border-black/20">2. Hempel - Jubail Franchise</td>
+                            <td className="p-2.5 text-right border-r border-black/20">SAR 1,800.00</td>
+                            <td className="p-2.5 text-right border-r border-black/20">SAR 28,200.00</td>
+                            <td className="p-2.5 text-right border-r border-black/20">SAR 9,400.00</td>
+                            <td className="p-2.5 text-right border-r border-black/20">SAR 3,200.00</td>
+                            <td className="p-2.5 text-right border-r border-black/20">SAR 500.00</td>
+                            <td className="p-2.5 text-right border-r border-black/20 font-bold">SAR 27,700.00</td>
+                            <td className="p-2.5 text-right font-black">SAR 29,500.00</td>
+                          </tr>
+                          <tr>
+                            <td className="p-2.5 font-bold border-r border-black/20">3. Sigma / Jotun - Dammam</td>
+                            <td className="p-2.5 text-right border-r border-black/20">SAR 2,000.00</td>
+                            <td className="p-2.5 text-right border-r border-black/20">SAR 32,500.00</td>
+                            <td className="p-2.5 text-right border-r border-black/20">SAR 11,200.00</td>
+                            <td className="p-2.5 text-right border-r border-black/20">SAR 4,500.00</td>
+                            <td className="p-2.5 text-right border-r border-black/20">SAR 850.00</td>
+                            <td className="p-2.5 text-right border-r border-black/20 font-bold">SAR 31,650.00</td>
+                            <td className="p-2.5 text-right font-black">SAR 33,650.00</td>
+                          </tr>
+                          <tr className="bg-black/5 font-black text-black border-t-2 border-black">
+                            <td className="p-2.5 uppercase border-r border-black/20">TOTAL CONSOLIDATED</td>
+                            <td className="p-2.5 text-right border-r border-black/20">SAR {fmt(consolidatedTotalOpeningFloat)}</td>
+                            <td className="p-2.5 text-right border-r border-black/20">SAR {fmt(cashSalesTotal + 28200 + 32500)}</td>
+                            <td className="p-2.5 text-right border-r border-black/20">SAR {fmt(consolidatedTotalCardSwipes)}</td>
+                            <td className="p-2.5 text-right border-r border-black/20">SAR {fmt(consolidatedTotalBankTransfers)}</td>
+                            <td className="p-2.5 text-right border-r border-black/20">SAR {fmt(consolidatedTotalExpenses)}</td>
+                            <td className="p-2.5 text-right border-r border-black/20 font-black">SAR {fmt(consolidatedTotalTakeHome)}</td>
+                            <td className="p-2.5 text-right font-black text-sm">SAR {fmt(consolidatedTotalCashInDrawer)}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Official Executive Sign-off Block */}
+                  <div className="pt-4 border-t-2 border-black flex justify-between items-end text-xs font-mono text-black">
+                    <div className="space-y-1">
+                      <p className="font-bold">REGISTER VERIFIED &amp; AUDITED</p>
+                      <p className="text-slate-600">Jubail Commercial Trading Est. (JCT)</p>
+                      <p className="text-[10px] text-slate-500">System Generated Document · Neon Cloud Verified</p>
+                    </div>
+                    <div className="text-center w-56 border-t border-black pt-1">
+                      <p className="font-bold uppercase">Owner Signature / Approval</p>
+                      <p className="text-[10px] text-slate-600">BONGSI (Nazim &amp; Nadeem)</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
 
