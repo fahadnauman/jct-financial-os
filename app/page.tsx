@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { POCKET_CUSTOMERS_KEY, pocketTag, usePocketTransactions, type BranchId } from "../lib/pocket-bridge";
 import * as Dropdown from "@radix-ui/react-dropdown-menu";
 import {
-  Activity, Building2, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight,
+  Activity, Building2, CalendarDays, Check, ChevronDown,
   FileSpreadsheet, Lock, Moon, 
   Package, Sparkles, Store, Sun, TrendingUp, 
   Crown, PaintRoller, SprayCan, Landmark, Repeat,
@@ -1157,6 +1157,7 @@ export interface ClassicDataSheetTableProps {
   date?: string;
   branchName?: string;
   className?: string;
+  hideFullscreenToggle?: boolean;
 }
 
 interface ClassicMappedRow {
@@ -1393,11 +1394,10 @@ export function ClassicDataSheetTable({
   date = "12-09-2026",
   branchName = "Jubail Main",
   className = "",
+  hideFullscreenToggle = false,
 }: ClassicDataSheetTableProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const tableRef = useRef<HTMLDivElement>(null);
-  const scrollLeft = () => tableRef.current?.scrollBy({ left: -400, behavior: "smooth" });
-  const scrollRight = () => tableRef.current?.scrollBy({ left: 400, behavior: "smooth" });
   const mappedRows = buildClassicDataSheetRows(
     sheetRows,
     activeErpList,
@@ -1437,10 +1437,20 @@ export function ClassicDataSheetTable({
     <div
       className={
         isFullscreen
-          ? "fixed inset-0 z-[100] bg-[#0A0A0A] p-4 md:p-8 flex flex-col h-screen w-screen overflow-hidden text-slate-800 dark:text-slate-200"
+          ? "fixed inset-0 z-[100] bg-[#0A0A0A]/95 backdrop-blur-xl p-4 md:p-8 flex flex-col h-screen w-screen overflow-hidden animate-in fade-in zoom-in-95 duration-200 text-slate-200 print:hidden"
           : `w-full text-slate-800 dark:text-slate-200 print:text-black print:w-full print:bg-white ${className}`
       }
     >
+      {isFullscreen && (
+        <button
+          type="button"
+          onClick={() => setIsFullscreen(false)}
+          className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-white font-bold py-2 px-4 rounded-lg self-start mb-4 transition-all shrink-0"
+        >
+          <X size={16} />
+          <span>Revert & Close View</span>
+        </button>
+      )}
       {/* Strict Black & White Print Stylesheet */}
       <style
         dangerouslySetInnerHTML={{
@@ -1472,52 +1482,24 @@ export function ClassicDataSheetTable({
         </div>
       </div>
 
-      {/* Control Bar: Expand/Collapse & Programmatic Side-Scroll Buttons */}
-      <div className="flex flex-wrap items-center justify-between gap-2.5 mb-3 print:hidden">
-        <div className="flex items-center gap-1.5">
+      {/* Control Bar: Expand to Full Screen */}
+      {!isFullscreen && !hideFullscreenToggle && (
+        <div className="flex items-center justify-end mb-3 print:hidden">
           <button
             type="button"
-            onClick={scrollLeft}
-            className="bg-slate-800 text-white px-4 py-2 rounded-md hover:bg-slate-700 text-xs font-bold transition-all shadow-md flex items-center gap-1.5"
-            title="Scroll Left"
+            onClick={() => setIsFullscreen(true)}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border border-jct-turquoise/40 bg-jct-turquoise/10 text-jct-turquoise hover:bg-jct-turquoise/20 text-xs font-bold transition-all shadow-sm"
           >
-            <ChevronLeft size={14} />
-            <span>&lt; Scroll Left</span>
-          </button>
-          <button
-            type="button"
-            onClick={scrollRight}
-            className="bg-slate-800 text-white px-4 py-2 rounded-md hover:bg-slate-700 text-xs font-bold transition-all shadow-md flex items-center gap-1.5"
-            title="Scroll Right"
-          >
-            <span>Scroll Right &gt;</span>
-            <ChevronRight size={14} />
+            <Maximize2 size={14} />
+            <span>⛶ Expand Full Screen</span>
           </button>
         </div>
+      )}
 
-        <button
-          type="button"
-          onClick={() => setIsFullscreen((prev) => !prev)}
-          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border border-jct-turquoise/40 bg-jct-turquoise/10 text-jct-turquoise hover:bg-jct-turquoise/20 text-xs font-bold transition-all shadow-sm"
-        >
-          {isFullscreen ? (
-            <>
-              <X size={14} />
-              <span>✖ Close Full Screen</span>
-            </>
-          ) : (
-            <>
-              <Maximize2 size={14} />
-              <span>⛶ Expand</span>
-            </>
-          )}
-        </button>
-      </div>
-
-      {/* Day / Dark Mode Responsive Main Table Wrapper */}
+      {/* Day / Dark Mode Responsive Main Table Wrapper with Custom Draggable Slider */}
       <div
         ref={tableRef}
-        className={`w-full overflow-x-auto hide-scrollbar pb-4 bg-white dark:bg-[#0A0A0A] rounded-xl border border-slate-200 dark:border-white/10 shadow-sm print:border-none print:shadow-none print:bg-white print:overflow-visible ${isFullscreen ? "flex-1 overflow-y-auto" : ""}`}>
+        className={`w-full overflow-x-auto [&::-webkit-scrollbar]:h-3 [&::-webkit-scrollbar-track]:bg-slate-800 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-jct-turquoise/80 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-jct-turquoise pb-4 bg-white dark:bg-[#0A0A0A] rounded-xl border border-slate-200 dark:border-white/10 shadow-sm print:border-none print:shadow-none print:bg-white print:overflow-visible ${isFullscreen ? "flex-1 overflow-y-auto" : ""}`}>
         <table className="w-full min-w-[1200px] text-left border-collapse whitespace-nowrap">
           <thead>
             <tr>
@@ -8934,28 +8916,26 @@ function DailyRegisterView({
             />
           )}
 
-          {/* Full-Screen Final Datasheet Review Modal (Focus Mode) */}
+          {/* Full-Screen Final Datasheet Review Modal */}
           {isDatasheetPreviewOpen && (
-            <div className="fixed inset-0 z-[150] bg-[#0A0A0A] p-4 md:p-8 flex flex-col h-screen w-screen overflow-hidden text-slate-200 animate-in fade-in duration-200 print:hidden">
-              <div className="flex items-center justify-between pb-3 mb-2 border-b border-white/10 shrink-0">
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-xs font-bold bg-jct-turquoise text-jct-charcoal px-2.5 py-0.5 rounded">
-                    FINAL AUDIT REVIEW
-                  </span>
-                  <h3 className="font-display font-black text-sm sm:text-base text-white">
-                    19-Column Classic Physical Datasheet Review · {branchId === "JCT_HQ" ? "JCT Main HQ (Jubail)" : branchId}
-                  </h3>
-                </div>
+            <div className="fixed inset-0 z-[100] bg-[#0A0A0A]/95 backdrop-blur-xl p-4 md:p-8 flex flex-col h-screen w-screen overflow-hidden animate-in fade-in zoom-in-95 duration-200 print:hidden text-slate-200">
+              <div className="flex items-center justify-between gap-3 mb-4 shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsDatasheetPreviewOpen(false)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/20 hover:bg-white/10 text-xs font-bold text-white transition-colors"
+                  className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-white font-bold py-2 px-4 rounded-lg self-start transition-all"
                 >
-                  <X size={15} />
-                  <span>Close Review</span>
+                  <X size={16} />
+                  <span>Revert & Close View</span>
                 </button>
+                <div className="flex items-center gap-2 text-xs font-mono text-slate-400">
+                  <span className="font-bold bg-jct-turquoise text-jct-charcoal px-2.5 py-0.5 rounded">
+                    FINAL AUDIT REVIEW
+                  </span>
+                  <span className="hidden sm:inline">19-Column Classic Physical Datasheet · {branchId === "JCT_HQ" ? "JCT Main HQ (Jubail)" : branchId}</span>
+                </div>
               </div>
-              <div className="flex-1 overflow-hidden">
+              <div className="flex-1 overflow-auto w-full">
                 <ClassicDataSheetTable
                   sheetRows={sheetRows}
                   activeErpList={activeErpList}
@@ -8963,6 +8943,7 @@ function DailyRegisterView({
                   openingBalance={openingBalance}
                   date="12-09-2026"
                   branchName={branchId === "JCT_HQ" ? "JCT Main HQ (Jubail)" : branchId}
+                  hideFullscreenToggle={true}
                 />
               </div>
             </div>
@@ -9379,55 +9360,39 @@ function DailyRegisterView({
           <div
             className={
               isDatasheetFullscreen
-                ? "fixed inset-0 z-[100] bg-[#0A0A0A] p-4 md:p-8 flex flex-col h-screen w-screen overflow-hidden text-slate-800 dark:text-slate-200"
+                ? "fixed inset-0 z-[100] bg-[#0A0A0A]/95 backdrop-blur-xl p-4 md:p-8 flex flex-col h-screen w-screen overflow-hidden animate-in fade-in zoom-in-95 duration-200 text-slate-200"
                 : "bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl overflow-hidden flex flex-col"
             }
           >
-            {/* Control Bar: Expand/Collapse & Programmatic Side-Scroll Buttons */}
-            <div className="flex flex-wrap items-center justify-between gap-2.5 p-3.5 border-b border-slate-200 dark:border-[#1F1F1F] bg-slate-50/50 dark:bg-[#0E0E0E] print:hidden">
-              <div className="flex items-center gap-1.5">
+            {isDatasheetFullscreen && (
+              <div className="p-4 md:p-6 pb-0">
                 <button
                   type="button"
-                  onClick={() => datasheetTableRef.current?.scrollBy({ left: -400, behavior: "smooth" })}
-                  className="bg-slate-800 text-white px-4 py-2 rounded-md hover:bg-slate-700 text-xs font-bold transition-all shadow-md flex items-center gap-1.5"
-                  title="Scroll Left 400px"
+                  onClick={() => setIsDatasheetFullscreen(false)}
+                  className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-white font-bold py-2 px-4 rounded-lg self-start transition-all shrink-0"
                 >
-                  <ChevronLeft size={14} />
-                  <span>&lt; Scroll Left</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => datasheetTableRef.current?.scrollBy({ left: 400, behavior: "smooth" })}
-                  className="bg-slate-800 text-white px-4 py-2 rounded-md hover:bg-slate-700 text-xs font-bold transition-all shadow-md flex items-center gap-1.5"
-                  title="Scroll Right 400px"
-                >
-                  <span>Scroll Right &gt;</span>
-                  <ChevronRight size={14} />
+                  <X size={16} />
+                  <span>Revert & Close View</span>
                 </button>
               </div>
-
-              <button
-                type="button"
-                onClick={() => setIsDatasheetFullscreen((prev) => !prev)}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border border-jct-turquoise/40 bg-jct-turquoise/10 text-jct-turquoise hover:bg-jct-turquoise/20 text-xs font-bold transition-all shadow-sm"
-              >
-                {isDatasheetFullscreen ? (
-                  <>
-                    <X size={14} />
-                    <span>✖ Close Full Screen</span>
-                  </>
-                ) : (
-                  <>
-                    <Maximize2 size={14} />
-                    <span>⛶ Expand</span>
-                  </>
-                )}
-              </button>
-            </div>
+            )}
+            {/* Control Bar: Expand */}
+            {!isDatasheetFullscreen && (
+              <div className="flex items-center justify-end p-3.5 border-b border-slate-200 dark:border-[#1F1F1F] bg-slate-50/50 dark:bg-[#0E0E0E] print:hidden">
+                <button
+                  type="button"
+                  onClick={() => setIsDatasheetFullscreen(true)}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border border-jct-turquoise/40 bg-jct-turquoise/10 text-jct-turquoise hover:bg-jct-turquoise/20 text-xs font-bold transition-all shadow-sm"
+                >
+                  <Maximize2 size={14} />
+                  <span>⛶ Expand</span>
+                </button>
+              </div>
+            )}
 
             <div
               ref={datasheetTableRef}
-              className={`w-full overflow-x-auto hide-scrollbar ${isDatasheetFullscreen ? "flex-1 overflow-y-auto" : "max-h-[68vh] overflow-y-auto"}`}>
+              className={`w-full overflow-x-auto [&::-webkit-scrollbar]:h-3 [&::-webkit-scrollbar-track]:bg-slate-800 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-jct-turquoise/80 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-jct-turquoise pb-4 ${isDatasheetFullscreen ? "flex-1 overflow-y-auto" : "max-h-[68vh] overflow-y-auto"}`}>
               <table className="w-full min-w-[1200px] border-collapse text-xs font-mono">
                 <thead className="sticky top-0 z-20 text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-[#111111] shadow-sm">
                   <tr className="border-b border-slate-200 dark:border-[#1F1F1F] divide-x divide-slate-200 dark:divide-[#1F1F1F]">
