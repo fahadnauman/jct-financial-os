@@ -513,6 +513,8 @@ export type InvoicePaymentMode =
   | "SPLIT"
   | "OTHER_RECD"
   | "CREDIT_SALE"
+  | "CREDIT_RECD"
+  | "Credit Received"
   | "Cash";
 export type PosTerminalBank = "SAB" | "AL_RAJHI" | "SNB" | "VISA_MC";
 
@@ -592,6 +594,8 @@ export interface PreLoggedBankInvoice {
 export interface PreLoggedEntry {
   id: string;
   invoiceNumber?: string;
+  linkedInvoiceNum?: string;
+  originalDate?: string;
   supplierInvoiceNum?: string;
   billPdfUrl?: string;
   type: PreLoggedEntryType;
@@ -631,6 +635,8 @@ export interface ErpInvoiceItem {
   customerName?: string;
   amount: number;
   originalAmount?: number;
+  originalDate?: string;
+  linkedInvoiceNum?: string;
   isEdited?: boolean;
   overrideReason?: OverrideReason;
   overrideNote?: string;
@@ -2084,6 +2090,7 @@ interface DailyRegisterViewProps {
     receiptNo?: string,
     mode?: "CREDIT_RECD" | "CREDIT_SALE"
   ) => void;
+  creditCustomers?: ContractorAccount[];
   onSwitchTab: (tab: TabId) => void;
   branchId?: string;
   isOwner?: boolean;
@@ -2655,6 +2662,7 @@ function DailyRegisterView({
   setCompletedDaysLog,
   onSyncCreditPurchase,
   onSyncCreditCustomer,
+  creditCustomers = [],
   onSwitchTab,
   branchId = "JCT_HQ",
   isOwner = false,
@@ -2734,7 +2742,8 @@ function DailyRegisterView({
   const [step3Network, setStep3Network] = useState<"mada" | "visa">("mada");
   const [step3SplitEnabled, setStep3SplitEnabled] = useState(false);
   const [step3Title, setStep3Title] = useState("");
-  const [step3FollowUpDate, setStep3FollowUpDate] = useState("2026-09-20");
+  const step3FollowUpDate = "2026-09-20";
+  const [step3OriginalDate, setStep3OriginalDate] = useState("");
   const [step3ReceiptNo, setStep3ReceiptNo] = useState("");
   const [step3Amount, setStep3Amount] = useState("");
   const [step3SplitCash, setStep3SplitCash] = useState("1000");
@@ -3085,6 +3094,62 @@ function DailyRegisterView({
 
   const matchedStep3Invoice = findErpInvoiceMatch(step3ReceiptNo);
   const matchedHubInvoice = findErpInvoiceMatch(hubReceiptNo);
+
+  const handleInvoiceLookup = (rawVal: string) => {
+    setStep3ReceiptNo(rawVal);
+    const clean = rawVal.trim().replace(/^#/i, "").toLowerCase();
+    if (!clean) {
+      setStep3OriginalDate("");
+      return;
+    }
+
+    // 1. Search in CreditRadar dataset (creditCustomers)
+    const list = creditCustomers || [];
+    let matchedCustomer: ContractorAccount | undefined;
+    let matchedDate: string | undefined;
+    let matchedAmount: number | undefined;
+
+    for (const c of list) {
+      const latestClean = c.latestInvoiceNo ? c.latestInvoiceNo.replace(/^#/i, "").toLowerCase() : "";
+      if (latestClean && (latestClean === clean || latestClean.includes(clean))) {
+        matchedCustomer = c;
+        matchedDate = c.dueDate || c.followUpDate || "2026-09-12";
+        matchedAmount = c.latestInvoiceAmount || c.outstanding;
+        break;
+      }
+      const foundHist = c.history?.find((h) => {
+        const hClean = h.id ? h.id.replace(/^#/i, "").toLowerCase() : "";
+        return hClean === clean || hClean.includes(clean);
+      });
+      if (foundHist) {
+        matchedCustomer = c;
+        matchedDate = foundHist.date;
+        matchedAmount = foundHist.amount;
+        break;
+      }
+    }
+
+    // 2. Fallback search in today's ERP invoices
+    if (!matchedCustomer) {
+      const erpMatch = findErpInvoiceMatch(rawVal);
+      if (erpMatch) {
+        setStep3Title(erpMatch.customer);
+        setStep3Amount(String(erpMatch.amount));
+        setStep3OriginalDate("2026-09-12");
+        return;
+      }
+    }
+
+    if (matchedCustomer) {
+      setStep3Title(matchedCustomer.name);
+      if (matchedDate) {
+        setStep3OriginalDate(matchedDate);
+      }
+      if (matchedAmount && (!step3Amount || parseFloat(step3Amount) === 0)) {
+        setStep3Amount(String(matchedAmount));
+      }
+    }
+  };
 
   const handleStep3InvoiceInput = (rawVal: string) => {
     setStep3ReceiptNo(rawVal);
@@ -3919,10 +3984,12 @@ function DailyRegisterView({
         : `ple-${step3Kind.toLowerCase()}-${cleanCustomer.toLowerCase().replace(/\s+/g, "-")}`,
       type: step3Kind,
       customerName: isCredit ? cleanCustomer : undefined,
-      followUpDate: isCredit ? step3FollowUpDate : undefined,
+      followUpDate: isCredit ? (step3Kind === "CREDIT_RECD" ? undefined : step3FollowUpDate) : undefined,
       receiptNo: formattedReceiptNo,
       invoiceNumber: cleanInv || undefined,
-      paymentMode: step3PaymentMode,
+      linkedInvoiceNum: step3Kind === "CREDIT_RECD" ? (step3ReceiptNo.trim() || cleanInv) : undefined,
+      originalDate: step3Kind === "CREDIT_RECD" ? step3OriginalDate : undefined,
+      paymentMode: step3Kind === "CREDIT_RECD" ? "Credit Received" : step3PaymentMode,
       terminal: (step3PaymentMode === "CARD" || step3PaymentMode === "BANK_TRANSFER") ? step3Terminal : undefined,
       network: step3PaymentMode === "CARD" ? step3Network : undefined,
       title: cleanCustomer,
@@ -3953,7 +4020,7 @@ function DailyRegisterView({
       onSyncCreditCustomer(
         cleanCustomer,
         val,
-        step3FollowUpDate || "2026-09-20",
+        step3Kind === "CREDIT_RECD" ? (step3OriginalDate || "2026-09-12") : (step3FollowUpDate || "2026-09-20"),
         formattedReceiptNo,
         step3Kind
       );
@@ -4209,14 +4276,53 @@ function DailyRegisterView({
           (inv.internalId && inv.internalId === identifier) ||
           (inv.id && inv.id === identifier) ||
           inv.invoiceNo === identifier;
-        if (matches) {
-          return {
-            ...inv,
-            id: nextId,
-            invoiceNo: nextId,
-          };
+        if (!matches) return inv;
+
+        const clean = nextId.trim().replace(/^#/i, "").toLowerCase();
+        let autoCust = inv.customer;
+        let autoDate = inv.originalDate;
+        let autoAmt = inv.amount;
+        let autoMode = inv.paymentMode;
+        let linkedNum = inv.linkedInvoiceNum;
+
+        if (clean && inv.isManualEntry) {
+          const list = creditCustomers || [];
+          for (const c of list) {
+            const latestClean = c.latestInvoiceNo ? c.latestInvoiceNo.replace(/^#/i, "").toLowerCase() : "";
+            if (latestClean && (latestClean === clean || latestClean.includes(clean))) {
+              if (!autoCust) autoCust = c.name;
+              autoDate = c.dueDate || c.followUpDate || "2026-09-12";
+              if (!autoAmt || autoAmt === 0) autoAmt = c.latestInvoiceAmount || c.outstanding;
+              autoMode = "Credit Received";
+              linkedNum = c.latestInvoiceNo || nextId;
+              break;
+            }
+            const foundHist = c.history?.find((h) => {
+              const hClean = h.id ? h.id.replace(/^#/i, "").toLowerCase() : "";
+              return hClean === clean || hClean.includes(clean);
+            });
+            if (foundHist) {
+              if (!autoCust) autoCust = c.name;
+              autoDate = foundHist.date;
+              if (!autoAmt || autoAmt === 0) autoAmt = foundHist.amount;
+              autoMode = "Credit Received";
+              linkedNum = foundHist.id || nextId;
+              break;
+            }
+          }
         }
-        return inv;
+
+        return {
+          ...inv,
+          id: nextId,
+          invoiceNo: nextId,
+          customer: autoCust,
+          customerName: autoCust,
+          amount: autoAmt,
+          originalDate: autoDate,
+          linkedInvoiceNum: linkedNum,
+          paymentMode: autoMode,
+        };
       });
     });
   };
@@ -4233,10 +4339,41 @@ function DailyRegisterView({
 
         const typedNo = (inv.invoiceNo && inv.invoiceNo.trim()) || (inv.id && inv.id.trim());
         const finalNo = typedNo || `MANUAL-${Math.floor(1000 + Math.random() * 9000)}`;
+        const isCreditReceived =
+          inv.paymentMode === "Credit Received" ||
+          (inv.paymentMode as string) === "CREDIT_RECD" ||
+          Boolean(inv.linkedInvoiceNum);
+
+        if (isCreditReceived && inv.amount > 0) {
+          const linkedInv = inv.linkedInvoiceNum || finalNo;
+          onSyncCreditCustomer(
+            inv.customer || "Contractor",
+            inv.amount,
+            inv.originalDate || "2026-09-12",
+            linkedInv,
+            "CREDIT_RECD"
+          );
+          upsertEntry({
+            id: `ple-credit_recd-${linkedInv}`,
+            type: "CREDIT_RECD",
+            customerName: inv.customer || "Contractor",
+            receiptNo: linkedInv,
+            invoiceNumber: linkedInv,
+            paymentMode: "Credit Received",
+            linkedInvoiceNum: linkedInv,
+            originalDate: inv.originalDate,
+            title: inv.customer || "Contractor",
+            amount: inv.amount,
+            time: nowHHMM(),
+          });
+        }
+
         return {
           ...inv,
           id: finalNo,
           invoiceNo: finalNo,
+          linkedInvoiceNum: isCreditReceived ? (inv.linkedInvoiceNum || finalNo) : undefined,
+          paymentMode: isCreditReceived ? "Credit Received" : inv.paymentMode,
           isConfirmed: true,
         };
       });
@@ -6049,6 +6186,11 @@ function DailyRegisterView({
                               Split Tender
                             </span>
                           )}
+                          {inv.originalDate && (
+                            <span className="rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 px-2.5 py-0.5 text-[10px] font-bold shrink-0">
+                              Orig: {inv.originalDate}
+                            </span>
+                          )}
                           {inv.autoMatched && isBankOrPos && (
                             <span className="rounded-full bg-jct-turquoise px-3 py-1 text-[10px] font-bold text-black shrink-0">
                               ✓ Auto-Matched
@@ -6177,6 +6319,17 @@ function DailyRegisterView({
                               }`}
                             >
                               Credit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleSetInvoiceMode(rowKey, "Credit Received")}
+                              className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                                inv.paymentMode === "Credit Received" || (inv.paymentMode as string) === "CREDIT_RECD"
+                                  ? "bg-jct-turquoise text-jct-charcoal font-bold"
+                                  : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                              }`}
+                            >
+                              Credit Recd
                             </button>
                           </div>
 
@@ -6696,13 +6849,13 @@ function DailyRegisterView({
                     ) : (
                       <div className="space-y-1.5">
                         <label className="block text-xs font-medium text-slate-500 dark:text-slate-400">
-                          Receipt / Reference Number (Optional)
+                          {step3Kind === "CREDIT_RECD" ? "Invoice Number (Smart Lookup)" : "Receipt / Reference Number (Optional)"}
                         </label>
                         <input
                           type="text"
                           value={step3ReceiptNo}
-                          onChange={(e) => handleStep3InvoiceInput(e.target.value)}
-                          placeholder="Receipt # (e.g. RCP-1042)..."
+                          onChange={(e) => step3Kind === "CREDIT_RECD" ? handleInvoiceLookup(e.target.value) : handleStep3InvoiceInput(e.target.value)}
+                          placeholder={step3Kind === "CREDIT_RECD" ? "Search Invoice # (e.g. 30051, INV-891)..." : "Receipt # (e.g. RCP-1042)..."}
                           className="w-full bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-3.5 py-2.5 font-mono text-sm font-medium placeholder:font-sans placeholder:text-slate-400 outline-none"
                         />
                       </div>
@@ -6728,18 +6881,11 @@ function DailyRegisterView({
                       />
                     </div>
 
-                    {/* 4. Follow-up Reminder Date */}
-                    {step3Kind === "CREDIT_RECD" && !step3SplitEnabled && (
-                      <div className="space-y-1.5">
-                        <label className="block text-xs font-medium text-slate-500 dark:text-slate-400">
-                          Follow-up Reminder Date (Credit Radar)
-                        </label>
-                        <input
-                          type="date"
-                          value={step3FollowUpDate}
-                          onChange={(e) => setStep3FollowUpDate(e.target.value)}
-                          className="w-full bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-3.5 py-2.5 text-sm font-medium outline-none"
-                        />
+                    {/* 4. Smart Original Date Indicator (Auto-Filled from Credit Radar) */}
+                    {step3Kind === "CREDIT_RECD" && step3OriginalDate && (
+                      <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs flex items-center justify-between">
+                        <span className="text-slate-500 dark:text-slate-400 font-medium">Original Invoice Date:</span>
+                        <span className="font-mono font-bold text-emerald-600 dark:text-jct-turquoise">{step3OriginalDate}</span>
                       </div>
                     )}
 
@@ -15667,6 +15813,7 @@ export default function Page() {
                 setCompletedDaysLog={setCompletedDaysLog}
                 onSyncCreditPurchase={handleSyncCreditPurchase}
                 onSyncCreditCustomer={handleSyncCreditCustomer}
+                creditCustomers={creditCustomers}
                 onSwitchTab={setTab}
                 branchId={activePocketBranch === "ALL" ? "JCT_HQ" : activePocketBranch}
                 isOwner={Boolean(profile?.isOwner)}

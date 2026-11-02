@@ -236,6 +236,71 @@ export async function POST(req: Request) {
             ...i,
             paymentMode: normalizePaymentMode(i.paymentMode, "CASH"),
           }));
+
+          // Smart Credit Radar Sync: Deduct received credit amount by linked invoice number
+          for (const inflow of parsed.inflows as Record<string, unknown>[]) {
+            const isCreditRecd =
+              inflow.paymentMode === "Credit Received" ||
+              inflow.paymentMode === "CREDIT_RECD" ||
+              inflow.type === "CREDIT_RECD";
+            const invNum = (inflow.linkedInvoiceNum || inflow.invoiceNumber || inflow.receiptNo) as string | undefined;
+            const amt = Number(inflow.amount) || 0;
+
+            if (isCreditRecd && invNum && amt > 0) {
+              const cleanInv = String(invNum).replace(/^#/i, "").trim();
+              try {
+                // 1. Decrement in CreditRadar
+                const radarMatches = await prisma.creditRadar.findMany({
+                  where: {
+                    OR: [
+                      { linkedInvoiceNum: invNum },
+                      { linkedInvoiceNum: cleanInv },
+                      { linkedInvoiceNum: `#${cleanInv}` },
+                      { invoiceNo: invNum },
+                      { invoiceNo: cleanInv },
+                      { invoiceNo: `#${cleanInv}` },
+                    ],
+                  },
+                });
+
+                for (const radar of radarMatches) {
+                  await prisma.creditRadar.update({
+                    where: { id: radar.id },
+                    data: {
+                      outstandingBalance: Math.max(0, radar.outstandingBalance - amt),
+                    },
+                  });
+                }
+
+                // 2. Decrement in CreditCustomer
+                const custMatches = await prisma.creditCustomer.findMany({
+                  where: {
+                    OR: [
+                      { linkedInvoiceNum: invNum },
+                      { linkedInvoiceNum: cleanInv },
+                      { linkedInvoiceNum: `#${cleanInv}` },
+                      ...(inflow.customer || inflow.customerName || inflow.title
+                        ? [{ name: { contains: String(inflow.customer || inflow.customerName || inflow.title), mode: "insensitive" as const } }]
+                        : []),
+                    ],
+                  },
+                });
+
+                for (const cust of custMatches) {
+                  const currentDue = cust.outstandingBalance ?? cust.totalDue ?? 0;
+                  await prisma.creditCustomer.update({
+                    where: { id: cust.id },
+                    data: {
+                      totalDue: Math.max(0, (cust.totalDue || 0) - amt),
+                      outstandingBalance: Math.max(0, currentDue - amt),
+                    },
+                  });
+                }
+              } catch (dbErr) {
+                console.warn("CreditRadar deduction error in /api/archive:", dbErr);
+              }
+            }
+          }
         }
         if (Array.isArray(parsed.expenses)) {
           parsed.expenses = parsed.expenses.map((e: Record<string, unknown>) => ({
@@ -332,6 +397,71 @@ export async function PUT(req: Request) {
             ...i,
             paymentMode: normalizePaymentMode(i.paymentMode, "CASH"),
           }));
+
+          // Smart Credit Radar Sync: Deduct received credit amount by linked invoice number
+          for (const inflow of parsed.inflows as Record<string, unknown>[]) {
+            const isCreditRecd =
+              inflow.paymentMode === "Credit Received" ||
+              inflow.paymentMode === "CREDIT_RECD" ||
+              inflow.type === "CREDIT_RECD";
+            const invNum = (inflow.linkedInvoiceNum || inflow.invoiceNumber || inflow.receiptNo) as string | undefined;
+            const amt = Number(inflow.amount) || 0;
+
+            if (isCreditRecd && invNum && amt > 0) {
+              const cleanInv = String(invNum).replace(/^#/i, "").trim();
+              try {
+                // 1. Decrement in CreditRadar
+                const radarMatches = await prisma.creditRadar.findMany({
+                  where: {
+                    OR: [
+                      { linkedInvoiceNum: invNum },
+                      { linkedInvoiceNum: cleanInv },
+                      { linkedInvoiceNum: `#${cleanInv}` },
+                      { invoiceNo: invNum },
+                      { invoiceNo: cleanInv },
+                      { invoiceNo: `#${cleanInv}` },
+                    ],
+                  },
+                });
+
+                for (const radar of radarMatches) {
+                  await prisma.creditRadar.update({
+                    where: { id: radar.id },
+                    data: {
+                      outstandingBalance: Math.max(0, radar.outstandingBalance - amt),
+                    },
+                  });
+                }
+
+                // 2. Decrement in CreditCustomer
+                const custMatches = await prisma.creditCustomer.findMany({
+                  where: {
+                    OR: [
+                      { linkedInvoiceNum: invNum },
+                      { linkedInvoiceNum: cleanInv },
+                      { linkedInvoiceNum: `#${cleanInv}` },
+                      ...(inflow.customer || inflow.customerName || inflow.title
+                        ? [{ name: { contains: String(inflow.customer || inflow.customerName || inflow.title), mode: "insensitive" as const } }]
+                        : []),
+                    ],
+                  },
+                });
+
+                for (const cust of custMatches) {
+                  const currentDue = cust.outstandingBalance ?? cust.totalDue ?? 0;
+                  await prisma.creditCustomer.update({
+                    where: { id: cust.id },
+                    data: {
+                      totalDue: Math.max(0, (cust.totalDue || 0) - amt),
+                      outstandingBalance: Math.max(0, currentDue - amt),
+                    },
+                  });
+                }
+              } catch (dbErr) {
+                console.warn("CreditRadar deduction error in /api/archive:", dbErr);
+              }
+            }
+          }
         }
         if (Array.isArray(parsed.expenses)) {
           parsed.expenses = parsed.expenses.map((e: Record<string, unknown>) => ({

@@ -87,13 +87,31 @@ model Invoice {
 }
 
 model CreditCustomer {
-  id          String   @id @default(cuid())
-  name        String
-  phone       String?
-  totalDue    Float    @default(0)
-  status      String   @default("CURRENT") // CURRENT, OVERDUE, HIGH_RISK
-  updatedAt   DateTime @updatedAt
-  createdAt   DateTime @default(now())
+  id                 String   @id @default(cuid())
+  name               String
+  phone              String?
+  totalDue           Float    @default(0)
+  outstandingBalance Float?   @default(0)
+  linkedInvoiceNum   String?
+  status             String   @default("CURRENT") // CURRENT, OVERDUE, HIGH_RISK
+  updatedAt          DateTime @updatedAt
+  createdAt          DateTime @default(now())
+}
+
+model CreditRadar {
+  id                 String   @id @default(cuid())
+  customerName       String
+  linkedInvoiceNum   String?
+  invoiceNo          String?
+  originalDate       String?
+  amount             Float    @default(0)
+  outstandingBalance Float    @default(0)
+  status             String   @default("CURRENT")
+  updatedAt          DateTime @updatedAt
+  createdAt          DateTime @default(now())
+
+  @@index([linkedInvoiceNum])
+  @@index([customerName])
 }
 
 model SupplierBill {
