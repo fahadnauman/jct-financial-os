@@ -624,6 +624,7 @@ export interface PreLoggedEntry {
 export type OverrideReason = "BUSINESS_COMMISSION" | "BILL_MISTAKE" | "CUSTOM";
 
 export interface ErpInvoiceItem {
+  internalId?: string;
   id?: string;
   invoiceNo: string;
   customer: string;
@@ -1363,6 +1364,8 @@ export function ClassicDataSheetTable({
 }: ClassicDataSheetTableProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const tableRef = useRef<HTMLDivElement>(null);
+  const scrollLeft = () => tableRef.current?.scrollBy({ left: -400, behavior: "smooth" });
+  const scrollRight = () => tableRef.current?.scrollBy({ left: 400, behavior: "smooth" });
   const mappedRows = buildClassicDataSheetRows(
     sheetRows,
     activeErpList,
@@ -1442,18 +1445,18 @@ export function ClassicDataSheetTable({
         <div className="flex items-center gap-1.5">
           <button
             type="button"
-            onClick={() => tableRef.current?.scrollBy({ left: -300, behavior: "smooth" })}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#111111] hover:bg-slate-100 dark:hover:bg-[#1A1A1A] text-slate-700 dark:text-slate-200 text-xs font-semibold shadow-sm transition-all"
-            title="Scroll Left 300px"
+            onClick={scrollLeft}
+            className="bg-slate-800 text-white px-4 py-2 rounded-md hover:bg-slate-700 text-xs font-bold transition-all shadow-md flex items-center gap-1.5"
+            title="Scroll Left"
           >
             <ChevronLeft size={14} />
             <span>&lt; Scroll Left</span>
           </button>
           <button
             type="button"
-            onClick={() => tableRef.current?.scrollBy({ left: 300, behavior: "smooth" })}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#111111] hover:bg-slate-100 dark:hover:bg-[#1A1A1A] text-slate-700 dark:text-slate-200 text-xs font-semibold shadow-sm transition-all"
-            title="Scroll Right 300px"
+            onClick={scrollRight}
+            className="bg-slate-800 text-white px-4 py-2 rounded-md hover:bg-slate-700 text-xs font-bold transition-all shadow-md flex items-center gap-1.5"
+            title="Scroll Right"
           >
             <span>Scroll Right &gt;</span>
             <ChevronRight size={14} />
@@ -3248,7 +3251,11 @@ function DailyRegisterView({
     setErpInvoices((prev) => {
       const base = prev.length > 0 ? prev : buildMatchedErpList();
       return base.map((inv) => {
-        if (inv.invoiceNo !== invoiceNo) return inv;
+        const matches =
+          (inv.internalId && inv.internalId === invoiceNo) ||
+          (inv.id && inv.id === invoiceNo) ||
+          inv.invoiceNo === invoiceNo;
+        if (!matches) return inv;
         const defaultCash =
           inv.splitCashAmount > 0 && inv.splitCashAmount < inv.amount
             ? inv.splitCashAmount
@@ -3351,7 +3358,11 @@ function DailyRegisterView({
     setErpInvoices((prev) => {
       const base = prev.length > 0 ? prev : buildMatchedErpList();
       return base.map((inv) => {
-        if (inv.invoiceNo !== invoiceNo) return inv;
+        const matches =
+          (inv.internalId && inv.internalId === invoiceNo) ||
+          (inv.id && inv.id === invoiceNo) ||
+          inv.invoiceNo === invoiceNo;
+        if (!matches) return inv;
         const clamped = Math.min(inv.amount, r2(parsed));
         const cashShare = editedField === "cash" ? clamped : r2(inv.amount - clamped);
         const bankShare = editedField === "bank" ? clamped : r2(inv.amount - clamped);
@@ -3374,7 +3385,11 @@ function DailyRegisterView({
     setErpInvoices((prev) => {
       const base = prev.length > 0 ? prev : buildMatchedErpList();
       return base.map((inv) => {
-        if (inv.invoiceNo !== invoiceNo) return inv;
+        const matches =
+          (inv.internalId && inv.internalId === invoiceNo) ||
+          (inv.id && inv.id === invoiceNo) ||
+          inv.invoiceNo === invoiceNo;
+        if (!matches) return inv;
         const nextTerm = terminal || inv.splitPosTerminal || inv.posTerminal || "SAB";
         return {
           ...inv,
@@ -3412,7 +3427,11 @@ function DailyRegisterView({
     setErpInvoices((prev) => {
       const base = prev.length > 0 ? prev : buildMatchedErpList();
       return base.map((inv) => {
-        if (inv.invoiceNo !== invoiceNo) return inv;
+        const matches =
+          (inv.internalId && inv.internalId === invoiceNo) ||
+          (inv.id && inv.id === invoiceNo) ||
+          inv.invoiceNo === invoiceNo;
+        if (!matches) return inv;
         const currentNetwork = inv.cardNetwork || inv.network || (inv.posTerminal === "VISA_MC" ? "visa" : "mada");
         const nextTerminal: PosTerminalBank = currentNetwork === "visa" ? "VISA_MC" : terminal;
         return {
@@ -3435,7 +3454,11 @@ function DailyRegisterView({
     setErpInvoices((prev) => {
       const base = prev.length > 0 ? prev : buildMatchedErpList();
       return base.map((inv) => {
-        if (inv.invoiceNo !== invoiceNo) return inv;
+        const matches =
+          (inv.internalId && inv.internalId === invoiceNo) ||
+          (inv.id && inv.id === invoiceNo) ||
+          inv.invoiceNo === invoiceNo;
+        if (!matches) return inv;
         const currentDevice =
           inv.posTerminalDevice || inv.terminal || (inv.posTerminal === "AL_RAJHI" ? "AL_RAJHI" : inv.posTerminal === "SNB" ? "SNB" : "SAB");
         const nextTerminal: PosTerminalBank = network === "visa" ? "VISA_MC" : currentDevice;
@@ -3752,11 +3775,14 @@ function DailyRegisterView({
     setPreLoggedEntries((prev) => prev.filter((item) => item.id !== id));
   };
 
-  const handleRemoveErpInvoice = (invoiceNo: string) => {
+  const handleRemoveErpInvoice = (identifier: string) => {
     setErpInvoices((prev) => {
       const base = prev.length > 0 ? prev : buildMatchedErpList();
       return base.filter(
-        (inv) => inv.invoiceNo !== invoiceNo && (!inv.id || inv.id !== invoiceNo)
+        (inv) =>
+          inv.invoiceNo !== identifier &&
+          (!inv.id || inv.id !== identifier) &&
+          (!inv.internalId || inv.internalId !== identifier)
       );
     });
   };
@@ -4173,14 +4199,18 @@ function DailyRegisterView({
     setEditingEntryModal(null);
   };
 
-  const handleUpdateInvoiceId = (oldIdOrNo: string, nextId: string) => {
+  const handleUpdateInvoiceId = (identifier: string, nextId: string) => {
     setErpInvoices((prev) => {
       const base = prev.length > 0 ? prev : buildMatchedErpList();
       return base.map((inv) => {
-        if (inv.invoiceNo === oldIdOrNo || (inv.id && inv.id === oldIdOrNo)) {
+        const matches =
+          (inv.internalId && inv.internalId === identifier) ||
+          (inv.id && inv.id === identifier) ||
+          inv.invoiceNo === identifier;
+        if (matches) {
           return {
             ...inv,
-            id: inv.id || oldIdOrNo,
+            id: nextId,
             invoiceNo: nextId,
           };
         }
@@ -4189,23 +4219,29 @@ function DailyRegisterView({
     });
   };
 
-  const handleEditErpInvoiceCustomer = (invoiceNo: string, nextCustomer: string) => {
+  const handleEditErpInvoiceCustomer = (identifier: string, nextCustomer: string) => {
     setErpInvoices((prev) => {
       const base = prev.length > 0 ? prev : buildMatchedErpList();
       return base.map((inv) =>
-        inv.invoiceNo === invoiceNo || (inv.id && inv.id === invoiceNo)
+        (inv.internalId && inv.internalId === identifier) ||
+        inv.invoiceNo === identifier ||
+        (inv.id && inv.id === identifier)
           ? { ...inv, customer: nextCustomer, customerName: nextCustomer }
           : inv
       );
     });
   };
 
-  const handleEditErpInvoiceAmount = (invoiceNo: string, rawVal: string) => {
+  const handleEditErpInvoiceAmount = (identifier: string, rawVal: string) => {
     const val = Math.max(0, parseFloat(rawVal) || 0);
     setErpInvoices((prev) => {
       const base = prev.length > 0 ? prev : buildMatchedErpList();
       return base.map((inv) => {
-        if (inv.invoiceNo !== invoiceNo && (!inv.id || inv.id !== invoiceNo)) return inv;
+        const matches =
+          (inv.internalId && inv.internalId === identifier) ||
+          inv.invoiceNo === identifier ||
+          (inv.id && inv.id === identifier);
+        if (!matches) return inv;
         const orig = inv.originalAmount ?? (inv.isManualEntry ? undefined : inv.amount);
         const isEdited = !inv.isManualEntry && orig !== undefined && val !== orig;
         const cashShare = inv.isSplit ? r2(val / 2) : inv.splitCashAmount;
@@ -4229,24 +4265,28 @@ function DailyRegisterView({
   };
 
   const handleEditErpInvoiceOverrideReason = (
-    invoiceNo: string,
+    identifier: string,
     reason: OverrideReason
   ) => {
     setErpInvoices((prev) => {
       const base = prev.length > 0 ? prev : buildMatchedErpList();
       return base.map((inv) =>
-        inv.invoiceNo === invoiceNo || (inv.id && inv.id === invoiceNo)
+        (inv.internalId && inv.internalId === identifier) ||
+        inv.invoiceNo === identifier ||
+        (inv.id && inv.id === identifier)
           ? { ...inv, overrideReason: reason }
           : inv
       );
     });
   };
 
-  const handleEditErpInvoiceOverrideNote = (invoiceNo: string, note: string) => {
+  const handleEditErpInvoiceOverrideNote = (identifier: string, note: string) => {
     setErpInvoices((prev) => {
       const base = prev.length > 0 ? prev : buildMatchedErpList();
       return base.map((inv) =>
-        inv.invoiceNo === invoiceNo || (inv.id && inv.id === invoiceNo)
+        (inv.internalId && inv.internalId === identifier) ||
+        inv.invoiceNo === identifier ||
+        (inv.id && inv.id === identifier)
           ? { ...inv, overrideNote: note }
           : inv
       );
@@ -4295,11 +4335,13 @@ function DailyRegisterView({
     });
   };
 
-  const handleEditErpInvoiceBankMode = (invoiceNo: string, nextBankMode: string) => {
+  const handleEditErpInvoiceBankMode = (identifier: string, nextBankMode: string) => {
     setErpInvoices((prev) => {
       const base = prev.length > 0 ? prev : buildMatchedErpList();
       return base.map((inv) =>
-        inv.invoiceNo === invoiceNo || (inv.id && inv.id === invoiceNo)
+        (inv.internalId && inv.internalId === identifier) ||
+        inv.invoiceNo === identifier ||
+        (inv.id && inv.id === identifier)
           ? { ...inv, bankPaymentMode: nextBankMode }
           : inv
       );
@@ -4307,10 +4349,14 @@ function DailyRegisterView({
   };
 
   const handleAddInvoiceRow = () => {
-    const manualId = `MANUAL-${Date.now()}`;
+    const internalId =
+      typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `manual-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
     const newRow: ErpInvoiceItem = {
-      id: manualId,
-      invoiceNo: manualId,
+      internalId,
+      id: "",
+      invoiceNo: "",
       customerName: "",
       customer: "",
       amount: 0,
@@ -5892,6 +5938,7 @@ function DailyRegisterView({
               {!isDatasheetView ? (
                 <div className="divide-y-0">
                 {activeErpList.map((inv) => {
+                  const rowKey = inv.internalId || inv.id || inv.invoiceNo;
                   const isBankOrPos =
                     inv.paymentMode === "BANK_TRANSFER" || inv.paymentMode === "POS_SWIPE";
                   const isPosSwipe = inv.paymentMode === "POS_SWIPE";
@@ -5913,7 +5960,7 @@ function DailyRegisterView({
 
                   return (
                     <div
-                      key={inv.invoiceNo}
+                      key={rowKey}
                       className="border-b border-slate-200 dark:border-[#1F1F1F] pt-2 pb-6 mb-4 last:border-b-0 last:pb-0 hover:bg-slate-50/50 dark:hover:bg-[#0A0A0A]/50 transition-colors rounded-xl px-2 -mx-2"
                     >
                       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
@@ -5923,8 +5970,8 @@ function DailyRegisterView({
                               <span className="font-mono text-xs font-semibold text-jct-turquoise">#</span>
                               <input
                                 type="text"
-                                value={inv.invoiceNo}
-                                onChange={(e) => handleUpdateInvoiceId(inv.id || inv.invoiceNo, e.target.value)}
+                                value={inv.id !== undefined ? inv.id : inv.invoiceNo}
+                                onChange={(e) => handleUpdateInvoiceId(rowKey, e.target.value)}
                                 placeholder="Invoice #"
                                 className="w-24 bg-transparent border-b border-white/20 text-slate-200 text-xs font-mono font-medium focus:outline-none focus:border-jct-turquoise transition-colors px-1 py-0.5"
                               />
@@ -5939,7 +5986,7 @@ function DailyRegisterView({
                             type="text"
                             value={inv.customer || inv.customerName || ""}
                             onChange={(e) =>
-                              handleEditErpInvoiceCustomer(inv.invoiceNo, e.target.value)
+                              handleEditErpInvoiceCustomer(rowKey, e.target.value)
                             }
                             placeholder="Customer / Description..."
                             className="min-w-[180px] flex-1 max-w-sm text-sm font-medium bg-transparent border-transparent text-jct-charcoal dark:text-white placeholder-slate-400 focus:outline-none focus:ring-0 focus:border-b-2 focus:border-jct-turquoise transition-all rounded-none px-2 py-1"
@@ -5982,7 +6029,7 @@ function DailyRegisterView({
                                 value={inv.amount === 0 ? "" : inv.amount}
                                 placeholder="0.00"
                                 onChange={(e) =>
-                                  handleEditErpInvoiceAmount(inv.invoiceNo, e.target.value)
+                                  handleEditErpInvoiceAmount(rowKey, e.target.value)
                                 }
                                 className={`w-24 font-mono text-sm font-semibold text-right bg-transparent border-b text-jct-charcoal dark:text-white placeholder-slate-400 focus:outline-none focus:ring-0 px-1.5 py-0.5 transition-colors ${
                                   inv.originalAmount !== undefined && inv.amount !== inv.originalAmount
@@ -6005,7 +6052,7 @@ function DailyRegisterView({
                                   value={inv.overrideReason || "BUSINESS_COMMISSION"}
                                   onChange={(e) =>
                                     handleEditErpInvoiceOverrideReason(
-                                      inv.invoiceNo,
+                                      rowKey,
                                       e.target.value as OverrideReason
                                     )
                                   }
@@ -6022,7 +6069,7 @@ function DailyRegisterView({
                                     placeholder="Enter note..."
                                     value={inv.overrideNote || ""}
                                     onChange={(e) =>
-                                      handleEditErpInvoiceOverrideNote(inv.invoiceNo, e.target.value)
+                                      handleEditErpInvoiceOverrideNote(rowKey, e.target.value)
                                     }
                                     className="w-28 rounded bg-white dark:bg-black px-2 py-0.5 text-xs text-jct-charcoal dark:text-white border border-amber-500/40 focus:outline-none focus:ring-1 focus:ring-amber-500"
                                   />
@@ -6035,7 +6082,7 @@ function DailyRegisterView({
                           <div className="bg-slate-100 dark:bg-[#111111] p-1 rounded-lg flex flex-wrap gap-1">
                             <button
                               type="button"
-                              onClick={() => handleSetInvoiceMode(inv.invoiceNo, "CASH")}
+                              onClick={() => handleSetInvoiceMode(rowKey, "CASH")}
                               className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
                                 inv.paymentMode === "CASH" || (inv.paymentMode as string) === "Cash"
                                   ? "bg-jct-turquoise text-jct-charcoal font-bold"
@@ -6046,7 +6093,7 @@ function DailyRegisterView({
                             </button>
                             <button
                               type="button"
-                              onClick={() => handleSetInvoiceMode(inv.invoiceNo, "BANK_TRANSFER")}
+                              onClick={() => handleSetInvoiceMode(rowKey, "BANK_TRANSFER")}
                               className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
                                 inv.paymentMode === "BANK_TRANSFER"
                                   ? "bg-jct-turquoise text-jct-charcoal font-bold"
@@ -6057,7 +6104,7 @@ function DailyRegisterView({
                             </button>
                             <button
                               type="button"
-                              onClick={() => handleSetInvoiceMode(inv.invoiceNo, "POS_SWIPE")}
+                              onClick={() => handleSetInvoiceMode(rowKey, "POS_SWIPE")}
                               className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
                                 inv.paymentMode === "POS_SWIPE"
                                   ? "bg-jct-turquoise text-jct-charcoal font-bold"
@@ -6068,7 +6115,7 @@ function DailyRegisterView({
                             </button>
                             <button
                               type="button"
-                              onClick={() => handleSetInvoiceMode(inv.invoiceNo, "SPLIT")}
+                              onClick={() => handleSetInvoiceMode(rowKey, "SPLIT")}
                               className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
                                 inv.paymentMode === "SPLIT"
                                   ? "bg-jct-turquoise text-jct-charcoal font-bold"
@@ -6094,10 +6141,10 @@ function DailyRegisterView({
                           {isOwner && (
                             <button
                               type="button"
-                              onClick={() => handleRemoveErpInvoice(inv.invoiceNo)}
+                              onClick={() => handleRemoveErpInvoice(rowKey)}
                               className="text-slate-400 hover:text-rose-500 p-1.5 rounded-lg hover:bg-rose-500/10 transition-colors"
                               title="Delete invoice row"
-                              aria-label={`Delete invoice ${inv.invoiceNo}`}
+                              aria-label={`Delete invoice ${inv.invoiceNo || "manual"}`}
                             >
                               <Trash2 size={14} />
                             </button>
@@ -6362,7 +6409,7 @@ function DailyRegisterView({
                               value={inv.bankPaymentMode || "SAB"}
                               onChange={(e) =>
                                 handleEditErpInvoiceBankMode(
-                                  inv.invoiceNo,
+                                  rowKey,
                                   e.target.value as UniversalPaymentMode
                                 )
                               }
@@ -8836,18 +8883,18 @@ function DailyRegisterView({
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
-                  onClick={() => datasheetTableRef.current?.scrollBy({ left: -300, behavior: "smooth" })}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#111111] hover:bg-slate-100 dark:hover:bg-[#1A1A1A] text-slate-700 dark:text-slate-200 text-xs font-semibold shadow-sm transition-all"
-                  title="Scroll Left 300px"
+                  onClick={() => datasheetTableRef.current?.scrollBy({ left: -400, behavior: "smooth" })}
+                  className="bg-slate-800 text-white px-4 py-2 rounded-md hover:bg-slate-700 text-xs font-bold transition-all shadow-md flex items-center gap-1.5"
+                  title="Scroll Left 400px"
                 >
                   <ChevronLeft size={14} />
                   <span>&lt; Scroll Left</span>
                 </button>
                 <button
                   type="button"
-                  onClick={() => datasheetTableRef.current?.scrollBy({ left: 300, behavior: "smooth" })}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#111111] hover:bg-slate-100 dark:hover:bg-[#1A1A1A] text-slate-700 dark:text-slate-200 text-xs font-semibold shadow-sm transition-all"
-                  title="Scroll Right 300px"
+                  onClick={() => datasheetTableRef.current?.scrollBy({ left: 400, behavior: "smooth" })}
+                  className="bg-slate-800 text-white px-4 py-2 rounded-md hover:bg-slate-700 text-xs font-bold transition-all shadow-md flex items-center gap-1.5"
+                  title="Scroll Right 400px"
                 >
                   <span>Scroll Right &gt;</span>
                   <ChevronRight size={14} />
