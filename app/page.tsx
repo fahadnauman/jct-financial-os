@@ -655,6 +655,7 @@ export interface ErpInvoiceItem {
   autoMatched: boolean;
   time: string;
   isManualEntry?: boolean;
+  isConfirmed?: boolean;
 }
 
 export interface CompletedDaySummary {
@@ -2666,6 +2667,7 @@ function DailyRegisterView({
   const [printMode, setPrintMode] = useState<"summary" | "datasheet">("summary");
   const [creditModalInvNo, setCreditModalInvNo] = useState<string | null>(null);
   const [justCompletedToast, setJustCompletedToast] = useState<string | null>(null);
+  const [recentlyConfirmedId, setRecentlyConfirmedId] = useState<string | null>(null);
   const [syncBannerMsg, setSyncBannerMsg] = useState<{
     text: string;
     targetTab: TabId;
@@ -4219,6 +4221,33 @@ function DailyRegisterView({
     });
   };
 
+  const handleConfirmManualRow = (identifier: string) => {
+    setErpInvoices((prev) => {
+      const base = prev.length > 0 ? prev : buildMatchedErpList();
+      return base.map((inv) => {
+        const matches =
+          (inv.internalId && inv.internalId === identifier) ||
+          (inv.id && inv.id === identifier) ||
+          inv.invoiceNo === identifier;
+        if (!matches) return inv;
+
+        const typedNo = (inv.invoiceNo && inv.invoiceNo.trim()) || (inv.id && inv.id.trim());
+        const finalNo = typedNo || `MANUAL-${Math.floor(1000 + Math.random() * 9000)}`;
+        return {
+          ...inv,
+          id: finalNo,
+          invoiceNo: finalNo,
+          isConfirmed: true,
+        };
+      });
+    });
+
+    setRecentlyConfirmedId(identifier);
+    setTimeout(() => {
+      setRecentlyConfirmedId(null);
+    }, 2000);
+  };
+
   const handleEditErpInvoiceCustomer = (identifier: string, nextCustomer: string) => {
     setErpInvoices((prev) => {
       const base = prev.length > 0 ? prev : buildMatchedErpList();
@@ -4362,6 +4391,7 @@ function DailyRegisterView({
       amount: 0,
       paymentMode: "Cash",
       isManualEntry: true,
+      isConfirmed: false,
       posTerminal: "SAB",
       bankPaymentMode: "CASH",
       isSplit: false,
@@ -5958,20 +5988,33 @@ function DailyRegisterView({
                       : inv.bankPaymentMode || "BANK_TRANSFER"
                   );
 
+                  const isJustConfirmed = recentlyConfirmedId === rowKey;
+                  const isUnconfirmedManual = (inv.isManualEntry || (inv.id && inv.id.startsWith("MANUAL-"))) && !inv.isConfirmed;
+
                   return (
                     <div
                       key={rowKey}
-                      className="border-b border-slate-200 dark:border-[#1F1F1F] pt-2 pb-6 mb-4 last:border-b-0 last:pb-0 hover:bg-slate-50/50 dark:hover:bg-[#0A0A0A]/50 transition-colors rounded-xl px-2 -mx-2"
+                      className={`border-b pt-2 pb-6 mb-4 last:border-b-0 last:pb-0 transition-all duration-500 rounded-xl px-2 -mx-2 ${
+                        isJustConfirmed
+                          ? "border-emerald-500/80 bg-emerald-500/10 shadow-[0_0_15px_rgba(16,185,129,0.15)] ring-1 ring-emerald-500/30"
+                          : "border-slate-200 dark:border-[#1F1F1F] hover:bg-slate-50/50 dark:hover:bg-[#0A0A0A]/50"
+                      }`}
                     >
                       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
                         <div className="flex flex-wrap items-center gap-2.5 min-w-0 flex-1">
-                          {inv.isManualEntry || (inv.id && inv.id.startsWith("MANUAL-")) ? (
+                          {isUnconfirmedManual ? (
                             <div className="flex items-center gap-0.5 shrink-0">
                               <span className="font-mono text-xs font-semibold text-jct-turquoise">#</span>
                               <input
                                 type="text"
                                 value={inv.id !== undefined ? inv.id : inv.invoiceNo}
                                 onChange={(e) => handleUpdateInvoiceId(rowKey, e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    handleConfirmManualRow(rowKey);
+                                  }
+                                }}
                                 placeholder="Invoice #"
                                 className="w-24 bg-transparent border-b border-white/20 text-slate-200 text-xs font-mono font-medium focus:outline-none focus:border-jct-turquoise transition-colors px-1 py-0.5"
                               />
@@ -6136,6 +6179,18 @@ function DailyRegisterView({
                               Credit
                             </button>
                           </div>
+
+                          {/* Inline Submit Button for Unconfirmed Manual Invoices */}
+                          {isUnconfirmedManual && (
+                            <button
+                              type="button"
+                              onClick={() => handleConfirmManualRow(rowKey)}
+                              className="bg-jct-turquoise/10 text-jct-turquoise hover:bg-jct-turquoise/20 px-3 py-1.5 rounded-md text-xs font-bold transition-colors flex items-center gap-1 shrink-0"
+                              title="Finalize and add manual invoice to list"
+                            >
+                              ✅ Submit
+                            </button>
+                          )}
 
                           {/* Subtle Trash Icon Delete Button (Owner Only) */}
                           {isOwner && (
