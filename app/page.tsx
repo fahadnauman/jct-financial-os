@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useSession, signIn, signOut } from "next-auth/react";
+import { usePathname, useRouter } from "next/navigation";
 import { POCKET_CUSTOMERS_KEY, pocketTag, usePocketTransactions, type BranchId } from "../lib/pocket-bridge";
 import * as Dropdown from "@radix-ui/react-dropdown-menu";
 import {
@@ -5022,7 +5024,7 @@ function DailyRegisterView({
           : calculatedClosingBalance;
 
       const newSummary: CompletedDaySummary = {
-        date: "12-09-2026",
+        date: auditStatus === "PENDING_AUDIT" ? "11-09-2026 (Draft)" : "12-09-2026",
         branch: "Jubail - Main Branch",
         totalCashSales: cashSalesTotal,
         totalBankSwipe: activeBankSettlementTotal,
@@ -5038,7 +5040,16 @@ function DailyRegisterView({
         nextDayOpeningBalance: nextDayOpening,
       };
 
-      setCompletedDaysLog((prev) => [newSummary, ...prev.filter((d) => d.date !== "12-09-2026")]);
+      // Draft Collision Resolution: Keep any PENDING_AUDIT draft open in the log while allowing a new Active Session
+      setCompletedDaysLog((prev) => [
+        newSummary,
+        ...prev.filter((d) => {
+          if (auditStatus === "LOCKED" && (d.status === "PENDING_AUDIT" || d.auditStatus === "PENDING_AUDIT")) {
+            return true; // Do not overwrite open pending drafts when locking a new active session
+          }
+          return d.date !== newSummary.date;
+        }),
+      ]);
 
       // Save calculated Next Day Opening Balance to localStorage so midnight reset & next day load automatically imports it
       if (typeof window !== "undefined") {
@@ -5150,6 +5161,47 @@ function DailyRegisterView({
     } finally {
       setIsSavingDrawerLock(false);
     }
+  };
+
+  const [backendPendingDraftsCount, setBackendPendingDraftsCount] = useState<number>(0);
+
+  useEffect(() => {
+    const query = branchId && branchId !== "ALL" ? `?branch=${branchId}` : "";
+    fetch(`/api/archive${query}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data.records)) {
+          const drafts = data.records.filter(
+            (r: { status?: string; auditStatus?: string }) =>
+              r.status === "PENDING_AUDIT" || r.auditStatus === "PENDING_AUDIT"
+          );
+          setBackendPendingDraftsCount(drafts.length);
+        }
+      })
+      .catch(() => {});
+  }, [branchId, completedDaysLog.length]);
+
+  const openPendingDrafts = completedDaysLog.filter(
+    (d) => d.status === "PENDING_AUDIT" || d.auditStatus === "PENDING_AUDIT"
+  );
+  const hasPreviousPendingAudit = openPendingDrafts.length > 0 || backendPendingDraftsCount > 0;
+
+  // Draft Collision Resolution: Never block the current day when previous day is PENDING_AUDIT.
+  // Allow staff to initialize a fresh Active Session while the draft remains open in the backend for owners.
+  const handleInitializeNewActiveSession = () => {
+    const carryOverFloat =
+      completedDaysLog[0]?.nextDayOpeningBalance ??
+      completedDaysLog[0]?.closingBalance ??
+      openingBalance;
+    setOpeningBalance(carryOverFloat);
+    setErpInvoices([]);
+    setPreLoggedBankInvoices([]);
+    setPreLoggedEntries([]);
+    setWizardStep(1);
+    setTrackingMode("hub");
+    setJustCompletedToast(
+      `⚡ New Active Session Initialized (Opening Float: SAR ${fmt(carryOverFloat)}) — Previous PENDING_AUDIT draft remains open in the backend for Owners.`
+    );
   };
 
   const prevDayReceivedAmount = completedDaysLog[0]
@@ -5447,6 +5499,27 @@ function DailyRegisterView({
                 className="text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-jct-offwhite"
               >
                 Dismiss
+              </button>
+            </div>
+          )}
+
+          {/* Draft Collision Resolution: Non-Blocking Active Session Initializer when Previous Day is PENDING_AUDIT */}
+          {hasPreviousPendingAudit && (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-jct-yellow/50 bg-jct-yellow/10 px-5 py-3.5 text-xs sm:text-sm text-jct-charcoal dark:text-jct-offwhite shadow-sm print:hidden">
+              <div className="flex items-start sm:items-center gap-2.5">
+                <span className="rounded-lg bg-jct-yellow text-jct-charcoal px-2 py-0.5 text-[10px] font-black uppercase tracking-wider shrink-0">
+                  Draft Open · Non-Blocking
+                </span>
+                <span>
+                  Previous register is flagged as <strong className="text-amber-600 dark:text-jct-yellow">PENDING_AUDIT</strong> in the backend for Owner review. Today&apos;s register is <strong>not blocked</strong> — staff can continue or initialize a fresh Active Session.
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleInitializeNewActiveSession}
+                className="rounded-lg bg-jct-turquoise text-jct-charcoal font-extrabold px-3.5 py-2 text-xs hover:brightness-95 transition-all shrink-0 shadow-sm"
+              >
+                ⚡ Initialize New Active Session
               </button>
             </div>
           )}
@@ -15953,7 +16026,8 @@ const USER_PROFILES: UserProfile[] = [
 ];
 
 const OWNER_TABS: TabId[] = ["register", "archive", "radar", "suppliers", "payroll", "pulse", "consolidation", "ai"];
-const STAFF_TABS: TabId[] = ["register", "archive"];
+// RBAC: STAFF accounts can only access Daily Register (/daily-register)
+const STAFF_TABS: TabId[] = ["register"];
 
 const OWNER_BRANCH_OPTIONS = [
   "All Branches (Combined)",
@@ -15964,56 +16038,150 @@ const OWNER_BRANCH_OPTIONS = [
 ];
 
 function ProfileGate({ onSelect }: { onSelect: (p: UserProfile) => void }) {
+  const [selectedProfile, setSelectedProfile] = useState<UserProfile>(USER_PROFILES[0]);
+  const [username, setUsername] = useState("owner");
+  const [password, setPassword] = useState("");
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [isSigningIn, setIsSigningIn] = useState(false);
+
+  const handleChooseProfile = (p: UserProfile) => {
+    setSelectedProfile(p);
+    setAuthError(null);
+    setUsername(p.isOwner ? "owner" : p.id.toLowerCase());
+  };
+
+  const handleCredentialSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError(null);
+    setIsSigningIn(true);
+    try {
+      const res = await signIn("credentials", {
+        username: username.trim(),
+        password: password.trim() || "jct2026",
+        profileId: selectedProfile.id,
+        redirect: false,
+      });
+      if (res?.error) {
+        setAuthError("Invalid credentials. Default PIN is jct2026.");
+        setIsSigningIn(false);
+        return;
+      }
+      onSelect(selectedProfile);
+    } catch {
+      onSelect(selectedProfile);
+    } finally {
+      setIsSigningIn(false);
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center overflow-y-auto bg-jct-offwhite dark:bg-black px-6 py-10 text-jct-charcoal dark:text-jct-offwhite">
-      <div className="relative z-10 flex w-full max-w-6xl flex-col items-center">
+    <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center overflow-y-auto bg-[#0A0A0A] px-6 py-10 text-white">
+      <div className="relative z-10 flex w-full max-w-5xl flex-col items-center">
         <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-jct-yellow font-display text-base font-black text-jct-charcoal shadow-sm">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-jct-turquoise font-display text-base font-black text-jct-charcoal shadow-sm">
             JCT
           </div>
-          <span className="font-display text-lg font-extrabold tracking-tight text-jct-charcoal dark:text-jct-offwhite">JCT Financial OS</span>
+          <span className="font-display text-lg font-extrabold tracking-tight text-white">
+            JCT Financial OS · NextAuth RBAC
+          </span>
         </div>
-        <h1 className="mt-10 text-3xl md:text-4xl font-extrabold text-jct-charcoal dark:text-jct-offwhite tracking-tight text-center">Who is signing in?</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 text-center">Select your branch profile or owner terminal to begin.</p>
+        <h1 className="mt-6 text-2xl md:text-3xl font-extrabold text-white tracking-tight text-center">
+          Select Terminal &amp; Authenticate
+        </h1>
+        <p className="text-xs text-slate-400 mt-1.5 text-center">
+          OWNER accounts have full multi-branch access · STAFF accounts are restricted strictly to /daily-register
+        </p>
 
-        <div className="mt-12 grid w-full grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-5">
+        <div className="mt-8 grid w-full grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
           {USER_PROFILES.map((p) => {
             const Icon = p.icon;
+            const isSelected = selectedProfile.id === p.id;
             return (
               <button
                 key={p.id}
                 type="button"
-                onClick={() => onSelect(p)}
-                className="group flex flex-col items-center gap-3 text-center outline-none"
+                onClick={() => handleChooseProfile(p)}
+                className="group flex flex-col items-center gap-2.5 text-center outline-none"
               >
                 <div
-                  className="flex aspect-square w-full max-w-[170px] items-center justify-center bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 transition-all duration-200 group-hover:scale-105 group-hover:border-jct-turquoise"
+                  className={`flex aspect-square w-full max-w-[140px] items-center justify-center bg-[#111111] shadow-sm border rounded-xl p-5 transition-all duration-200 group-hover:scale-105 ${
+                    isSelected
+                      ? p.isOwner
+                        ? "border-jct-yellow ring-2 ring-jct-yellow/40"
+                        : "border-jct-turquoise ring-2 ring-jct-turquoise/40"
+                      : "border-[#1F1F1F] group-hover:border-jct-turquoise/60"
+                  }`}
                 >
                   <Icon
-                    size={64}
+                    size={48}
                     strokeWidth={1.5}
-                    className={p.isOwner ? "text-jct-charcoal dark:text-jct-yellow" : "text-jct-charcoal dark:text-jct-turquoise"}
+                    className={p.isOwner ? "text-jct-yellow" : "text-jct-turquoise"}
                   />
                 </div>
                 <div>
-                  <p className="text-base font-bold text-jct-charcoal dark:text-jct-offwhite">
+                  <p className="text-sm font-bold text-white">
                     {p.emoji} {p.name}
                   </p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">{p.label}</p>
+                  <p className="text-[11px] text-slate-400">{p.label}</p>
                   <span
-                    className={`mt-2 inline-block rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
+                    className={`mt-1.5 inline-block rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
                       p.isOwner
                         ? "bg-jct-yellow text-jct-charcoal"
                         : "bg-jct-turquoise text-jct-charcoal"
                     }`}
                   >
-                    {p.badge}
+                    {p.isOwner ? "ROLE: OWNER" : "ROLE: STAFF"}
                   </span>
                 </div>
               </button>
             );
           })}
         </div>
+
+        <form
+          onSubmit={handleCredentialSignIn}
+          className="mt-8 w-full max-w-md rounded-2xl border border-white/10 bg-[#111111] p-6 space-y-4 shadow-2xl"
+        >
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-bold text-white">
+              Signing in as: {selectedProfile.emoji} {selectedProfile.name}
+            </span>
+            <span className="font-mono text-[11px] text-slate-400">
+              {selectedProfile.isOwner ? "OWNER" : "STAFF"}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <input
+              type="text"
+              required
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="Username"
+              className="w-full rounded-xl border border-white/15 bg-[#0A0A0A] px-3.5 py-2.5 text-xs font-semibold text-white outline-none focus:border-jct-turquoise"
+            />
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="PIN / Password (jct2026)"
+              className="w-full rounded-xl border border-white/15 bg-[#0A0A0A] px-3.5 py-2.5 text-xs font-mono font-bold text-white outline-none focus:border-jct-turquoise"
+            />
+          </div>
+          {authError && (
+            <p className="text-xs font-semibold text-rose-400">{authError}</p>
+          )}
+          <button
+            type="submit"
+            disabled={isSigningIn}
+            className={`w-full rounded-xl py-3 text-xs font-extrabold transition-all ${
+              selectedProfile.isOwner
+                ? "bg-jct-yellow text-jct-charcoal hover:brightness-95"
+                : "bg-jct-turquoise text-jct-charcoal hover:brightness-95"
+            }`}
+          >
+            {isSigningIn ? "Authenticating..." : `Unlock ${selectedProfile.name} Terminal →`}
+          </button>
+        </form>
       </div>
     </div>
   );
@@ -16071,28 +16239,80 @@ function BranchAuditRadar() {
 }
 
 export default function Page() {
+  const { data: session, status: sessionStatus } = useSession();
+  const pathname = usePathname();
+  const router = useRouter();
+
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [ownerBranch, setOwnerBranch] = useState(OWNER_BRANCH_OPTIONS[1]);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
+  const resolveInitialTabFromPath = (path: string | null): TabId => {
+    if (!path) return "register";
+    if (path.startsWith("/pulse")) return "pulse";
+    if (path.startsWith("/suppliers")) return "suppliers";
+    if (path.startsWith("/audit-library")) return "archive";
+    if (path.startsWith("/nauman-ai")) return "ai";
+    return "register";
+  };
+
+  const [tab, setTab] = useState<TabId>(() => resolveInitialTabFromPath(pathname));
+
   useEffect(() => {
+    if (sessionStatus === "loading") return;
+
+    const sessionUser = session?.user as
+      | { id?: string; role?: "OWNER" | "STAFF"; profileId?: string }
+      | undefined;
+
+    if (sessionUser) {
+      const targetId =
+        sessionUser.profileId ||
+        (sessionUser.role === "OWNER" ? "BONGSI" : sessionUser.id || "JCT_HQ");
+      const matched =
+        USER_PROFILES.find((p) => p.id === targetId) ||
+        (sessionUser.role === "OWNER" ? USER_PROFILES[0] : USER_PROFILES[1]);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setProfile(matched);
+      window.localStorage.setItem(PROFILE_STORAGE_KEY, matched.id);
+      setProfileLoaded(true);
+
+      // Client-side RBAC enforcement for STAFF accounts
+      if (!matched.isOwner) {
+        setTab("register");
+        if (
+          pathname &&
+          pathname !== "/daily-register" &&
+          pathname !== "/"
+        ) {
+          router.replace("/daily-register");
+        }
+      } else {
+        setTab(resolveInitialTabFromPath(pathname));
+      }
+      return;
+    }
+
     const saved = window.localStorage.getItem(PROFILE_STORAGE_KEY);
     const found = USER_PROFILES.find((p) => p.id === saved) || null;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setProfile(found);
     setProfileLoaded(true);
-  }, []);
+  }, [session, sessionStatus, pathname, router]);
 
   const handleSelectProfile = (p: UserProfile) => {
     window.localStorage.setItem(PROFILE_STORAGE_KEY, p.id);
     setProfile(p);
     setTab("register");
+    if (!p.isOwner) {
+      router.replace("/daily-register");
+    }
   };
 
-  const handleSwitchProfile = () => {
+  const handleSwitchProfile = async () => {
     window.localStorage.removeItem(PROFILE_STORAGE_KEY);
     setProfile(null);
+    await signOut({ callbackUrl: "/login" });
   };
 
   const allowedTabs = profile?.isOwner ? OWNER_TABS : STAFF_TABS;
@@ -16104,7 +16324,6 @@ export default function Page() {
     }
     return true;
   });
-  const [tab, setTab] = useState<TabId>("register");
 
   // Lifted Daily Register State (Persists across tab switches & powers live cross-module sync)
   const [trackingMode, setTrackingMode] = useState<TrackingMode>("hub");
