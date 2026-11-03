@@ -23,7 +23,7 @@ const OWNER_PIN = process.env.NEXT_PUBLIC_OWNER_PIN || "1234";
 
 const EXPENSE_CATEGORIES = ["Fuel / Vehicle", "Shop Maintenance", "Food & Refreshments", "Freight", "Misc"];
 const ADVANCE_PURPOSES = ["Salary Advance", "Daily Lunch / Travel Allowance", "Shop Runner Float"];
-const FALLBACK_CUSTOMERS = ["Al-Hamad Contracting", "Gulf Coast Painters", "Eastern Province Builders"];
+const FALLBACK_CUSTOMERS: string[] = [];
 
 type UniversalPaymentMode = "CASH" | "SAB" | "AL_RAJHI" | "SNB" | "VISA" | "MADA" | "BANK_TRANSFER";
 
@@ -267,7 +267,7 @@ export default function OwnerPocketPage() {
   const [newName, setNewName] = useState("");
   const [newBranch, setNewBranch] = useState<BranchId>("JCT_HQ");
   const [newRole, setNewRole] = useState("Cashier");
-  const [newSalary, setNewSalary] = useState("3500");
+  const [newSalary, setNewSalary] = useState("");
   const [newPhone, setNewPhone] = useState("");
   const [newIqama, setNewIqama] = useState("");
   const [isAddingStaff, setIsAddingStaff] = useState(false);

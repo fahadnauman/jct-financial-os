@@ -17,10 +17,17 @@ async function main() {
   console.log("Initializing clean production environment for JCT Financial OS...");
   console.log("Configured Branches:", PRODUCTION_BRANCHES.join(", "));
 
+  // Ensure any stale auto-seeded locks or demo transactions are purged
+  await prisma.dailyRegisterLock.deleteMany({});
+  await prisma.pocketTransaction.deleteMany({});
+  await prisma.payrollLog.deleteMany({});
+  await prisma.creditRadar.deleteMany({});
+  await prisma.creditCustomer.deleteMany({});
+
   // 1. Seed Owner Accounts & Branch Staff Accounts ONLY
   const productionAccounts = [
     {
-      name: "BONGSI (Nazim & Nadeem)",
+      name: "Owner (Nazim & Nadeem)",
       branch: "JCT_HQ",
       role: "OWNER",
       baseSalary: 0,
@@ -61,13 +68,9 @@ async function main() {
     },
   ];
 
+  await prisma.staff.deleteMany({});
   for (const acc of productionAccounts) {
-    const existing = await prisma.staff.findFirst({
-      where: { name: acc.name, branch: acc.branch },
-    });
-    if (!existing) {
-      await prisma.staff.create({ data: acc });
-    }
+    await prisma.staff.create({ data: acc });
   }
 
   // Dummy invoices, previous day balances, queued swipes, expenses, and historical daily registers

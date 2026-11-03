@@ -201,30 +201,10 @@ const nowHHMM = () => {
    COMPONENTS
    ════════════════════════════════════════════════════════════════════════ */
 
-const HEMPEL_CONSOLIDATED_ERP_INVOICES: ErpInvoiceItem[] = [
-  { invoiceNo: "H-8810", customer: "Eastern Marine Coatings", amount: 12400, originalAmount: 12400, paymentMode: "CASH", posTerminal: "SAB", splitCashAmount: 0, splitBankAmount: 0, splitBankMethod: "POS_SWIPE", autoMatched: false, time: "09:30" },
-  { invoiceNo: "H-8812", customer: "Coastal Shipping Est", amount: 9400, originalAmount: 9400, paymentMode: "POS_SWIPE", posTerminal: "SAB", splitCashAmount: 0, splitBankAmount: 0, splitBankMethod: "POS_SWIPE", autoMatched: true, time: "11:15" },
-  { invoiceNo: "H-8815", customer: "Jubail Industrial Supply", amount: 7800, originalAmount: 7800, paymentMode: "CASH", posTerminal: "SAB", splitCashAmount: 0, splitBankAmount: 0, splitBankMethod: "POS_SWIPE", autoMatched: false, time: "14:00" },
-  { invoiceNo: "H-8818", customer: "Petrochem Maintenance", amount: 8000, originalAmount: 8000, paymentMode: "CASH", posTerminal: "SAB", splitCashAmount: 0, splitBankAmount: 0, splitBankMethod: "POS_SWIPE", autoMatched: false, time: "16:20" },
-  { invoiceNo: "H-8820", customer: "Arabian Ship Repair Co", amount: 3200, originalAmount: 3200, paymentMode: "BANK_TRANSFER", bankPaymentMode: "SAB", posTerminal: "SAB", splitCashAmount: 0, splitBankAmount: 0, splitBankMethod: "POS_SWIPE", autoMatched: true, time: "17:10" },
-];
-
-const HEMPEL_CONSOLIDATED_PRELOGGED_ENTRIES: PreLoggedEntry[] = [
-  { id: "h-exp-1", type: "EXPENSE", title: "Store Packing Materials & Tape", amount: 150, expenseCategory: "Cash Purchase", paymentMode: "CASH", time: "10:00" },
-  { id: "h-exp-2", type: "EXPENSE", title: "Delivery Van Fuel - Jubail Port", amount: 350, expenseCategory: "Personal Reasons", paymentMode: "CASH", time: "13:30" },
-];
-
-const SIGMA_CONSOLIDATED_ERP_INVOICES: ErpInvoiceItem[] = [
-  { invoiceNo: "S-4011", customer: "Al Khobar Interior Finishing", amount: 18500, originalAmount: 18500, paymentMode: "CASH", posTerminal: "SAB", splitCashAmount: 0, splitBankAmount: 0, splitBankMethod: "POS_SWIPE", autoMatched: false, time: "09:15" },
-  { invoiceNo: "S-4014", customer: "Dammam Commercial Towers", amount: 11200, originalAmount: 11200, paymentMode: "POS_SWIPE", posTerminal: "AL_RAJHI", splitCashAmount: 0, splitBankAmount: 0, splitBankMethod: "POS_SWIPE", autoMatched: true, time: "11:45" },
-  { invoiceNo: "S-4018", customer: "Red Sea Commercial Decor", amount: 14000, originalAmount: 14000, paymentMode: "CASH", posTerminal: "SAB", splitCashAmount: 0, splitBankAmount: 0, splitBankMethod: "POS_SWIPE", autoMatched: false, time: "14:30" },
-  { invoiceNo: "S-4022", customer: "Gulf Contracting Corp", amount: 4500, originalAmount: 4500, paymentMode: "BANK_TRANSFER", bankPaymentMode: "AL_RAJHI", posTerminal: "AL_RAJHI", splitCashAmount: 0, splitBankAmount: 0, splitBankMethod: "POS_SWIPE", autoMatched: true, time: "16:50" },
-];
-
-const SIGMA_CONSOLIDATED_PRELOGGED_ENTRIES: PreLoggedEntry[] = [
-  { id: "s-exp-1", type: "EXPENSE", title: "Inter-city Cargo Freight (Jeddah to Dammam)", amount: 450, expenseCategory: "Cash Purchase", paymentMode: "CASH", time: "11:00" },
-  { id: "s-exp-2", type: "EXPENSE", title: "Warehouse Drinking Water & Refreshments", amount: 400, expenseCategory: "Water", paymentMode: "CASH", time: "15:00" },
-];
+const HEMPEL_CONSOLIDATED_ERP_INVOICES: ErpInvoiceItem[] = [];
+const HEMPEL_CONSOLIDATED_PRELOGGED_ENTRIES: PreLoggedEntry[] = [];
+const SIGMA_CONSOLIDATED_ERP_INVOICES: ErpInvoiceItem[] = [];
+const SIGMA_CONSOLIDATED_PRELOGGED_ENTRIES: PreLoggedEntry[] = [];
 
 function PrintReportHeader({ branch, date }: { branch: string; date: string }) {
   const [timestamp, setTimestamp] = useState("");
@@ -670,46 +650,7 @@ export interface ErpSeedItem {
   splitPosTerminal?: PosTerminalBank;
 }
 
-export const JUBAIL_ERP_18_SEED: ErpSeedItem[] = [
-  { invoiceNo: "30062", customer: "Walk-in · Jotun Fenomastic Matt", amount: 1840, time: "08:35" },
-  { invoiceNo: "30063", customer: "Al-Noor Contracting · POS Swipe", amount: 1450, time: "09:18" },
-  { invoiceNo: "30064", customer: "Retail · Jotashield Exterior", amount: 2300, time: "09:45" },
-  { invoiceNo: "30065", customer: "Dammam Marine Services · Bank Transfer", amount: 2150, time: "10:12" },
-  { invoiceNo: "30066", customer: "Walk-in · Hempel Hempadur Primer", amount: 1150, time: "10:40" },
-  { invoiceNo: "30067", customer: "Gulf Industrial Coatings", amount: 4600, time: "11:05" },
-  { invoiceNo: "30068", customer: "Jubail Port Logistics · POS Swipe", amount: 3820, time: "11:42" },
-  { invoiceNo: "30069", customer: "Walk-in · Sigma Wood Varnish", amount: 920, time: "12:15" },
-  {
-    invoiceNo: "30070",
-    customer: "Royal Commission Site Contractor · Split Tender",
-    amount: 5750,
-    time: "13:10",
-    isSplit: true,
-    splitCashAmount: 2750,
-    splitBankAmount: 3000,
-    splitBankMethod: "POS_SWIPE",
-    splitPosTerminal: "AL_RAJHI",
-  },
-  { invoiceNo: "30071", customer: "Walk-in · Hardware Rollers & Brushes", amount: 690, time: "13:35" },
-  {
-    invoiceNo: "30072",
-    customer: "Al-Futtaim Site Batch · Split Tender",
-    amount: 2000,
-    time: "14:00",
-    isSplit: true,
-    splitCashAmount: 1000,
-    splitBankAmount: 1000,
-    splitBankMethod: "POS_SWIPE",
-    splitPosTerminal: "SAB",
-  },
-  { invoiceNo: "30073", customer: "Walk-in · Industrial Thinner 200L", amount: 1725, time: "14:22" },
-  { invoiceNo: "30074", customer: "SAB POS Terminal Customer", amount: 960, time: "14:50" },
-  { invoiceNo: "30075", customer: "Eastern Paint Bros Cash Order", amount: 3450, time: "15:30" },
-  { invoiceNo: "30076", customer: "Walk-in · Jotun Majestic Silk", amount: 1380, time: "16:05" },
-  { invoiceNo: "30077", customer: "Industrial Marine Epoxy Batch", amount: 2990, time: "16:40" },
-  { invoiceNo: "30078", customer: "Walk-in · Putty & Sealers", amount: 1610, time: "17:15" },
-  { invoiceNo: "30079", customer: "Closing Shift Cash Walk-in", amount: 1799, time: "17:50" },
-];
+export const JUBAIL_ERP_18_SEED: ErpSeedItem[] = [];
 
 export interface DataSheetRow {
   id: string;
@@ -736,370 +677,30 @@ export interface DataSheetRow {
   excessAmt: string;
 }
 
-export const INITIAL_DATASHEET_ROWS: DataSheetRow[] = [
-  {
-    id: "ds-1",
-    invoiceNo: "30062",
-    amtCashSale: "1840",
-    creditInvAmt: "",
-    receiptNo: "Chicago",
-    creditSaleRecd: "12428",
-    openBal: "2634",
-    loanIn: "",
-    otherAmtRecd: "",
-    fromBank: "",
-    creditPurchaseSupplier: "Jotun",
-    creditPurchaseAmt: "2000",
-    cashPurchase: "640",
-    creditPurchasePayment: "",
-    crNote: "",
-    expenseLabel: "Food",
-    expenseAmt: "24",
-    toBankLabel: "",
-    toBankAmt: "",
-    toBankChecked: false,
-    loanOut: "",
-    excessAmt: "",
-  },
-  {
-    id: "ds-2",
-    invoiceNo: "30063",
-    amtCashSale: "1450",
-    creditInvAmt: "",
-    receiptNo: "",
-    creditSaleRecd: "",
-    openBal: "",
-    loanIn: "2000",
-    otherAmtRecd: "",
-    fromBank: "",
-    creditPurchaseSupplier: "Hempel",
-    creditPurchaseAmt: "1450",
-    cashPurchase: "",
-    creditPurchasePayment: "3200",
-    crNote: "",
-    expenseLabel: "Water",
-    expenseAmt: "150",
-    toBankLabel: "SAB Swipe #30063",
-    toBankAmt: "1450",
-    toBankChecked: true,
-    loanOut: "",
-    excessAmt: "",
-  },
-  {
-    id: "ds-3",
-    invoiceNo: "30064",
-    amtCashSale: "",
-    creditInvAmt: "2300",
-    receiptNo: "",
-    creditSaleRecd: "",
-    openBal: "",
-    loanIn: "",
-    otherAmtRecd: "",
-    fromBank: "",
-    creditPurchaseSupplier: "",
-    creditPurchaseAmt: "",
-    cashPurchase: "",
-    creditPurchasePayment: "",
-    crNote: "",
-    expenseLabel: "Salary",
-    expenseAmt: "1500",
-    toBankLabel: "",
-    toBankAmt: "",
-    toBankChecked: false,
-    loanOut: "",
-    excessAmt: "",
-  },
-  {
-    id: "ds-4",
-    invoiceNo: "30065",
-    amtCashSale: "2150",
-    creditInvAmt: "",
-    receiptNo: "",
-    creditSaleRecd: "",
-    openBal: "",
-    loanIn: "",
-    otherAmtRecd: "",
-    fromBank: "",
-    creditPurchaseSupplier: "",
-    creditPurchaseAmt: "",
-    cashPurchase: "",
-    creditPurchasePayment: "",
-    crNote: "",
-    expenseLabel: "",
-    expenseAmt: "",
-    toBankLabel: "Bank Transfer #30065",
-    toBankAmt: "2150",
-    toBankChecked: true,
-    loanOut: "",
-    excessAmt: "",
-  },
-  {
-    id: "ds-5",
-    invoiceNo: "30066",
-    amtCashSale: "1150",
-    creditInvAmt: "",
-    receiptNo: "",
-    creditSaleRecd: "",
-    openBal: "",
-    loanIn: "",
-    otherAmtRecd: "",
-    fromBank: "",
-    creditPurchaseSupplier: "",
-    creditPurchaseAmt: "",
-    cashPurchase: "",
-    creditPurchasePayment: "",
-    crNote: "",
-    expenseLabel: "",
-    expenseAmt: "",
-    toBankLabel: "",
-    toBankAmt: "",
-    toBankChecked: false,
-    loanOut: "",
-    excessAmt: "",
-  },
-  {
-    id: "ds-6",
-    invoiceNo: "30067",
-    amtCashSale: "2600",
-    creditInvAmt: "",
-    receiptNo: "",
-    creditSaleRecd: "",
-    openBal: "",
-    loanIn: "",
-    otherAmtRecd: "",
-    fromBank: "",
-    creditPurchaseSupplier: "",
-    creditPurchaseAmt: "",
-    cashPurchase: "",
-    creditPurchasePayment: "",
-    crNote: "",
-    expenseLabel: "",
-    expenseAmt: "",
-    toBankLabel: "",
-    toBankAmt: "",
-    toBankChecked: false,
-    loanOut: "",
-    excessAmt: "",
-  },
-  {
-    id: "ds-7",
-    invoiceNo: "30068",
-    amtCashSale: "3820",
-    creditInvAmt: "",
-    receiptNo: "",
-    creditSaleRecd: "",
-    openBal: "",
-    loanIn: "",
-    otherAmtRecd: "",
-    fromBank: "",
-    creditPurchaseSupplier: "",
-    creditPurchaseAmt: "",
-    cashPurchase: "",
-    creditPurchasePayment: "",
-    crNote: "",
-    expenseLabel: "",
-    expenseAmt: "",
-    toBankLabel: "Al Rajhi POS #30068",
-    toBankAmt: "3820",
-    toBankChecked: true,
-    loanOut: "",
-    excessAmt: "",
-  },
-  {
-    id: "ds-8",
-    invoiceNo: "30069",
-    amtCashSale: "920",
-    creditInvAmt: "",
-    receiptNo: "",
-    creditSaleRecd: "",
-    openBal: "",
-    loanIn: "",
-    otherAmtRecd: "",
-    fromBank: "",
-    creditPurchaseSupplier: "",
-    creditPurchaseAmt: "",
-    cashPurchase: "",
-    creditPurchasePayment: "",
-    crNote: "",
-    expenseLabel: "",
-    expenseAmt: "",
-    toBankLabel: "",
-    toBankAmt: "",
-    toBankChecked: false,
-    loanOut: "",
-    excessAmt: "",
-  },
-  {
-    id: "ds-9",
-    invoiceNo: "30070",
-    amtCashSale: "2750",
-    creditInvAmt: "",
-    receiptNo: "",
-    creditSaleRecd: "",
-    openBal: "",
-    loanIn: "",
-    otherAmtRecd: "",
-    fromBank: "",
-    creditPurchaseSupplier: "",
-    creditPurchaseAmt: "",
-    cashPurchase: "",
-    creditPurchasePayment: "",
-    crNote: "",
-    expenseLabel: "",
-    expenseAmt: "",
-    toBankLabel: "",
-    toBankAmt: "",
-    toBankChecked: false,
-    loanOut: "",
-    excessAmt: "",
-  },
-  {
-    id: "ds-10",
-    invoiceNo: "30071",
-    amtCashSale: "690",
-    creditInvAmt: "",
-    receiptNo: "",
-    creditSaleRecd: "",
-    openBal: "",
-    loanIn: "",
-    otherAmtRecd: "",
-    fromBank: "",
-    creditPurchaseSupplier: "",
-    creditPurchaseAmt: "",
-    cashPurchase: "",
-    creditPurchasePayment: "",
-    crNote: "",
-    expenseLabel: "",
-    expenseAmt: "",
-    toBankLabel: "",
-    toBankAmt: "",
-    toBankChecked: false,
-    loanOut: "",
-    excessAmt: "",
-  },
-  {
-    id: "ds-11",
-    invoiceNo: "30072",
-    amtCashSale: "3325",
-    creditInvAmt: "",
-    receiptNo: "",
-    creditSaleRecd: "",
-    openBal: "",
-    loanIn: "",
-    otherAmtRecd: "",
-    fromBank: "",
-    creditPurchaseSupplier: "",
-    creditPurchaseAmt: "",
-    cashPurchase: "",
-    creditPurchasePayment: "",
-    crNote: "",
-    expenseLabel: "",
-    expenseAmt: "",
-    toBankLabel: "",
-    toBankAmt: "",
-    toBankChecked: false,
-    loanOut: "",
-    excessAmt: "",
-  },
-  {
-    id: "ds-12",
-    invoiceNo: "30073",
-    amtCashSale: "1725",
-    creditInvAmt: "",
-    receiptNo: "",
-    creditSaleRecd: "",
-    openBal: "",
-    loanIn: "",
-    otherAmtRecd: "",
-    fromBank: "",
-    creditPurchaseSupplier: "",
-    creditPurchaseAmt: "",
-    cashPurchase: "",
-    creditPurchasePayment: "",
-    crNote: "",
-    expenseLabel: "",
-    expenseAmt: "",
-    toBankLabel: "",
-    toBankAmt: "",
-    toBankChecked: false,
-    loanOut: "",
-    excessAmt: "",
-  },
-  {
-    id: "ds-13",
-    invoiceNo: "30074",
-    amtCashSale: "960",
-    creditInvAmt: "",
-    receiptNo: "",
-    creditSaleRecd: "",
-    openBal: "",
-    loanIn: "",
-    otherAmtRecd: "",
-    fromBank: "",
-    creditPurchaseSupplier: "",
-    creditPurchaseAmt: "",
-    cashPurchase: "",
-    creditPurchasePayment: "",
-    crNote: "",
-    expenseLabel: "",
-    expenseAmt: "",
-    toBankLabel: "SAB Swipe #30074",
-    toBankAmt: "960",
-    toBankChecked: true,
-    loanOut: "",
-    excessAmt: "",
-  },
-  {
-    id: "ds-14",
-    invoiceNo: "30075",
-    amtCashSale: "2450",
-    creditInvAmt: "",
-    receiptNo: "",
-    creditSaleRecd: "",
-    openBal: "",
-    loanIn: "",
-    otherAmtRecd: "",
-    fromBank: "",
-    creditPurchaseSupplier: "",
-    creditPurchaseAmt: "",
-    cashPurchase: "",
-    creditPurchasePayment: "",
-    crNote: "",
-    expenseLabel: "",
-    expenseAmt: "",
-    toBankLabel: "",
-    toBankAmt: "",
-    toBankChecked: false,
-    loanOut: "",
-    excessAmt: "",
-  },
-  {
-    id: "ds-15",
-    invoiceNo: "30076",
-    amtCashSale: "2017",
-    creditInvAmt: "",
-    receiptNo: "",
-    creditSaleRecd: "",
-    openBal: "",
-    loanIn: "",
-    otherAmtRecd: "",
-    fromBank: "",
-    creditPurchaseSupplier: "",
-    creditPurchaseAmt: "",
-    cashPurchase: "",
-    creditPurchasePayment: "",
-    crNote: "",
-    expenseLabel: "",
-    expenseAmt: "",
-    toBankLabel: "Bank Cash Deposit",
-    toBankAmt: "26515",
-    toBankChecked: true,
-    loanOut: "",
-    excessAmt: "",
-  },
-];
-
-
+export const INITIAL_DATASHEET_ROWS: DataSheetRow[] = Array.from({ length: 15 }, (_, idx) => ({
+  id: `ds-${idx + 1}`,
+  invoiceNo: "",
+  amtCashSale: "",
+  creditInvAmt: "",
+  receiptNo: "",
+  creditSaleRecd: "",
+  openBal: "",
+  loanIn: "",
+  otherAmtRecd: "",
+  fromBank: "",
+  creditPurchaseSupplier: "",
+  creditPurchaseAmt: "",
+  cashPurchase: "",
+  creditPurchasePayment: "",
+  crNote: "",
+  expenseLabel: "",
+  expenseAmt: "",
+  toBankLabel: "",
+  toBankAmt: "",
+  toBankChecked: false,
+  loanOut: "",
+  excessAmt: "",
+}));
 
 /* ════════════════════════════════════════════════════════════════════════
    EXACT 19-COLUMN PHYSICAL "DAILY DATA SHEET" TABLE COMPONENT
@@ -1145,7 +746,7 @@ function buildClassicDataSheetRows(
   sheetRows?: DataSheetRow[],
   activeErpList: ErpInvoiceItem[] = [],
   preLoggedEntries: PreLoggedEntry[] = [],
-  openingBalance: number = 500
+  openingBalance: number = 0
 ): ClassicMappedRow[] {
   const parseNum = (v: string | number | undefined | null): number => {
     if (typeof v === "number") return Number.isNaN(v) ? 0 : v;
@@ -5167,13 +4768,12 @@ function DailyRegisterView({
         setPreLoggedEntries([]);
         setWizardStep(1);
         setTrackingMode("hub");
-        const savedNextDay = window.localStorage.getItem("jct_next_day_opening_balance");
-        if (savedNextDay && !isNaN(parseFloat(savedNextDay))) {
-          setOpeningBalance(parseFloat(savedNextDay));
-        } else if (completedDaysLog.length > 0 && completedDaysLog[0].nextDayOpeningBalance !== undefined) {
+        if (completedDaysLog.length > 0 && completedDaysLog[0].nextDayOpeningBalance !== undefined) {
           setOpeningBalance(completedDaysLog[0].nextDayOpeningBalance);
         } else if (completedDaysLog.length > 0) {
           setOpeningBalance(completedDaysLog[0].closingBalance);
+        } else {
+          setOpeningBalance(0);
         }
       }
       window.localStorage.setItem("jct_daily_hub_active_date", todayStr);
@@ -5532,7 +5132,7 @@ function DailyRegisterView({
                 SAR {fmt(prevDayReceivedAmount)}
               </span>
               <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 block">
-                Yesterday&apos;s verified total inflows ({completedDaysLog[0]?.date || "11-09-2026"})
+                Yesterday&apos;s verified total inflows ({completedDaysLog[0]?.date || "No prior shift"})
               </span>
             </div>
 
@@ -9258,14 +8858,14 @@ function DailyRegisterView({
                 .filter((inv) => inv.paymentMode === "BANK_TRANSFER" || inv.bankPaymentMode === "BANK_TRANSFER")
                 .reduce((s, inv) => s + inv.amount, 0)
             );
-            const jubailTakeHome = calculatedClosingBalance > 2500 ? r2(calculatedClosingBalance - 2500) : 0;
+            const jubailTakeHome = 0;
             const jubailNextDayOpening = r2(calculatedClosingBalance - jubailTakeHome);
-            const consolidatedTotalCashInDrawer = r2(calculatedClosingBalance + 29500 + 33650);
-            const consolidatedTotalTakeHome = r2(jubailTakeHome + 27700 + 31650);
-            const consolidatedTotalOpeningFloat = r2(jubailNextDayOpening + 1800 + 2000);
-            const consolidatedTotalCardSwipes = r2(bankSwipeGrossTotal + 9400 + 11200);
-            const consolidatedTotalBankTransfers = r2(jubailBankTransfers + 3200 + 4500);
-            const consolidatedTotalExpenses = r2(totalPreLoggedExpenses + 500 + 850);
+            const consolidatedTotalCashInDrawer = r2(calculatedClosingBalance);
+            const consolidatedTotalTakeHome = r2(jubailTakeHome);
+            const consolidatedTotalOpeningFloat = r2(jubailNextDayOpening);
+            const consolidatedTotalCardSwipes = r2(bankSwipeGrossTotal);
+            const consolidatedTotalBankTransfers = r2(jubailBankTransfers);
+            const consolidatedTotalExpenses = r2(totalPreLoggedExpenses);
 
             const branchesData = [
               {
@@ -9282,7 +8882,7 @@ function DailyRegisterView({
                 sheetRows: [],
                 activeErpList: HEMPEL_CONSOLIDATED_ERP_INVOICES,
                 preLoggedEntries: HEMPEL_CONSOLIDATED_PRELOGGED_ENTRIES,
-                openingBalance: 1800,
+                openingBalance: 0,
               },
               {
                 id: "sigma_dammam",
@@ -9290,7 +8890,7 @@ function DailyRegisterView({
                 sheetRows: [],
                 activeErpList: SIGMA_CONSOLIDATED_ERP_INVOICES,
                 preLoggedEntries: SIGMA_CONSOLIDATED_PRELOGGED_ENTRIES,
-                openingBalance: 2000,
+                openingBalance: 0,
               },
             ];
 
@@ -9319,20 +8919,20 @@ function DailyRegisterView({
                       activeErpList={branch.activeErpList}
                       preLoggedEntries={branch.preLoggedEntries}
                       openingBalance={branch.openingBalance}
-                      date="12-09-2026"
+                      date={new Date().toLocaleDateString("en-GB").replace(/\//g, "-")}
                       branchName={branch.name}
                     />
                   </div>
                 ))}
 
-                {/* 2. Page 4: Master Consolidated Executive Financial Summary Block */}
+                {/* 2. Page 4: Consolidated Executive Financial Summary Block */}
                 <div className="print:break-before-page p-8 border-4 border-black min-h-[92vh] flex flex-col justify-between text-black bg-white">
                   <div>
                     {/* Official Executive Header */}
                     <div className="flex justify-between items-start border-b-4 border-black pb-4 mb-6">
                       <div>
                         <span className="font-mono text-xs font-black tracking-widest uppercase bg-black text-white px-2.5 py-1">
-                          CONSOLIDATED MASTER FINANCIAL REPORT
+                          CONSOLIDATED FINANCIAL REPORT
                         </span>
                         <h1 className="text-3xl font-black uppercase tracking-tight font-display mt-2 text-black">
                           JUBAIL CORP. TRADING EST. — ALL 3 SHOPS
@@ -9342,13 +8942,13 @@ function DailyRegisterView({
                         </p>
                       </div>
                       <div className="text-right font-mono text-xs space-y-1 text-black">
-                        <p className="font-bold">Date: 12-09-2026</p>
-                        <p>Locked By: {isOwner ? "BONGSI (Nazim & Nadeem)" : "Owner Verified"}</p>
+                        <p className="font-bold">Date: {new Date().toLocaleDateString("en-GB").replace(/\//g, "-")}</p>
+                        <p>Locked By: {isOwner ? "Owner (Nazim & Nadeem)" : "Owner Verified"}</p>
                         <p>Status: <span className="font-bold uppercase">AUDITED &amp; CLOSED</span></p>
                       </div>
                     </div>
 
-                    {/* Master Consolidated Metric Cards */}
+                    {/* Consolidated Metric Cards */}
                     <div className="grid grid-cols-2 gap-4 mb-6">
                       <div className="border-2 border-black p-4 bg-slate-50">
                         <span className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1">
@@ -9358,7 +8958,7 @@ function DailyRegisterView({
                           SAR {fmt(consolidatedTotalCashInDrawer)}
                         </span>
                         <span className="text-[10px] text-slate-600 block mt-1 font-mono">
-                          Jubail: SAR {fmt(calculatedClosingBalance)} | Hempel: SAR 29,500 | Sigma: SAR 33,650
+                          Jubail: SAR {fmt(calculatedClosingBalance)} | Hempel: SAR 0.00 | Sigma: SAR 0.00
                         </span>
                       </div>
 
@@ -9382,7 +8982,7 @@ function DailyRegisterView({
                           SAR {fmt(consolidatedTotalOpeningFloat)}
                         </span>
                         <span className="text-[10px] text-slate-600 block mt-1 font-mono">
-                          Jubail: SAR {fmt(jubailNextDayOpening)} | Hempel: SAR 1,800 | Sigma: SAR 2,000
+                          Jubail: SAR {fmt(jubailNextDayOpening)} | Hempel: SAR 0.00 | Sigma: SAR 0.00
                         </span>
                       </div>
 
@@ -9418,7 +9018,7 @@ function DailyRegisterView({
                           SAR {fmt(consolidatedTotalExpenses)}
                         </span>
                         <span className="text-[10px] text-slate-600 block mt-1 font-mono">
-                          Jubail: SAR {fmt(totalPreLoggedExpenses)} | Hempel: SAR 500 | Sigma: SAR 850
+                          Jubail: SAR {fmt(totalPreLoggedExpenses)} | Hempel: SAR 0.00 | Sigma: SAR 0.00
                         </span>
                       </div>
                     </div>
@@ -9451,28 +9051,28 @@ function DailyRegisterView({
                           </tr>
                           <tr>
                             <td className="p-2.5 font-bold border-r border-black/20">2. Hempel - Jubail Franchise</td>
-                            <td className="p-2.5 text-right border-r border-black/20">SAR 1,800.00</td>
-                            <td className="p-2.5 text-right border-r border-black/20">SAR 28,200.00</td>
-                            <td className="p-2.5 text-right border-r border-black/20">SAR 9,400.00</td>
-                            <td className="p-2.5 text-right border-r border-black/20">SAR 3,200.00</td>
-                            <td className="p-2.5 text-right border-r border-black/20">SAR 500.00</td>
-                            <td className="p-2.5 text-right border-r border-black/20 font-bold">SAR 27,700.00</td>
-                            <td className="p-2.5 text-right font-black">SAR 29,500.00</td>
+                            <td className="p-2.5 text-right border-r border-black/20">SAR 0.00</td>
+                            <td className="p-2.5 text-right border-r border-black/20">SAR 0.00</td>
+                            <td className="p-2.5 text-right border-r border-black/20">SAR 0.00</td>
+                            <td className="p-2.5 text-right border-r border-black/20">SAR 0.00</td>
+                            <td className="p-2.5 text-right border-r border-black/20">SAR 0.00</td>
+                            <td className="p-2.5 text-right border-r border-black/20 font-bold">SAR 0.00</td>
+                            <td className="p-2.5 text-right font-black">SAR 0.00</td>
                           </tr>
                           <tr>
                             <td className="p-2.5 font-bold border-r border-black/20">3. Sigma / Jotun - Dammam</td>
-                            <td className="p-2.5 text-right border-r border-black/20">SAR 2,000.00</td>
-                            <td className="p-2.5 text-right border-r border-black/20">SAR 32,500.00</td>
-                            <td className="p-2.5 text-right border-r border-black/20">SAR 11,200.00</td>
-                            <td className="p-2.5 text-right border-r border-black/20">SAR 4,500.00</td>
-                            <td className="p-2.5 text-right border-r border-black/20">SAR 850.00</td>
-                            <td className="p-2.5 text-right border-r border-black/20 font-bold">SAR 31,650.00</td>
-                            <td className="p-2.5 text-right font-black">SAR 33,650.00</td>
+                            <td className="p-2.5 text-right border-r border-black/20">SAR 0.00</td>
+                            <td className="p-2.5 text-right border-r border-black/20">SAR 0.00</td>
+                            <td className="p-2.5 text-right border-r border-black/20">SAR 0.00</td>
+                            <td className="p-2.5 text-right border-r border-black/20">SAR 0.00</td>
+                            <td className="p-2.5 text-right border-r border-black/20">SAR 0.00</td>
+                            <td className="p-2.5 text-right border-r border-black/20 font-bold">SAR 0.00</td>
+                            <td className="p-2.5 text-right font-black">SAR 0.00</td>
                           </tr>
                           <tr className="bg-black/5 font-black text-black border-t-2 border-black">
                             <td className="p-2.5 uppercase border-r border-black/20">TOTAL CONSOLIDATED</td>
                             <td className="p-2.5 text-right border-r border-black/20">SAR {fmt(consolidatedTotalOpeningFloat)}</td>
-                            <td className="p-2.5 text-right border-r border-black/20">SAR {fmt(cashSalesTotal + 28200 + 32500)}</td>
+                            <td className="p-2.5 text-right border-r border-black/20">SAR {fmt(cashSalesTotal)}</td>
                             <td className="p-2.5 text-right border-r border-black/20">SAR {fmt(consolidatedTotalCardSwipes)}</td>
                             <td className="p-2.5 text-right border-r border-black/20">SAR {fmt(consolidatedTotalBankTransfers)}</td>
                             <td className="p-2.5 text-right border-r border-black/20">SAR {fmt(consolidatedTotalExpenses)}</td>
@@ -10741,10 +10341,14 @@ function SupplierHubView({
     }
   };
 
-  const [privateCommissions] = useState([
-    { id: 1, name: "Ali R. (Broker)", dealRef: "Jubail Port Proj.", amount: 15000, date: "2026-09-01", paymentMode: "CASH" as UniversalPaymentMode },
-    { id: 2, name: "Saad Contractor", dealRef: "Al-Noor Complex", amount: 8500, date: "2026-09-10", paymentMode: "AL_RAJHI" as UniversalPaymentMode },
-  ]);
+  const [privateCommissions] = useState<{
+    id: number;
+    name: string;
+    dealRef: string;
+    amount: number;
+    date: string;
+    paymentMode: UniversalPaymentMode;
+  }[]>([]);
 
   const [supplierSearch, setSupplierSearch] = useState("");
   const [logAmount, setLogAmount] = useState("");
@@ -11496,8 +11100,6 @@ function FinancialPulseView({
   onReopenDraft?: (record: ArchiveRecord) => void;
   onOpenAuditLibrary?: () => void;
 }) {
-  const mtdRevenue = r2(438000 + metrics.todayCashSales + metrics.todayBankNet);
-  const mtdCashCollected = r2(328000 + metrics.todayCashSales + metrics.todayBankNet);
   const [pulseArchiveRecords, setPulseArchiveRecords] = useState<ArchiveRecord[]>([]);
 
   useEffect(() => {
@@ -11515,6 +11117,28 @@ function FinancialPulseView({
     };
   }, []);
 
+  const archivedInflowsAndSwipes = r2(
+    pulseArchiveRecords.reduce(
+      (sum, r) => sum + (Number(r.inflows) || 0) + (Number(r.bankSwipes) || 0),
+      0
+    )
+  );
+  const mtdRevenue = r2(
+    archivedInflowsAndSwipes + metrics.todayCashSales + metrics.todayBankNet
+  );
+  const mtdCashCollected = r2(
+    archivedInflowsAndSwipes + metrics.todayCashSales + metrics.todayBankNet
+  );
+  const totalRadarPool = r2(mtdCashCollected + metrics.totalCreditOutstanding);
+  const cashRealizationPct =
+    totalRadarPool > 0 ? Math.round((mtdCashCollected / totalRadarPool) * 100) : 0;
+  const creditOutstandingPct = totalRadarPool > 0 ? 100 - cashRealizationPct : 0;
+  const monthlyTarget = 0;
+  const targetPct =
+    monthlyTarget > 0
+      ? Math.min(100, Math.round((mtdRevenue / monthlyTarget) * 100))
+      : 0;
+
   const pendingAuditDrafts: ArchiveRecord[] = (() => {
     const dbDrafts = pulseArchiveRecords.filter(
       (r) => r.auditStatus === "PENDING_AUDIT" || r.status === "PENDING_AUDIT"
@@ -11527,7 +11151,7 @@ function FinancialPulseView({
         branch: d.branch,
         date: d.date,
         closingCash: d.closingBalance,
-        openingCash: 2634,
+        openingCash: 0,
         inflows: d.totalCashSales,
         bankSwipes: d.totalBankSwipe,
         outflows: d.totalExpenses,
@@ -11535,7 +11159,7 @@ function FinancialPulseView({
         madaFees: 0,
         ccFees: 0,
         lockedAt: new Date().toISOString(),
-        lockedBy: "BONGSI",
+        lockedBy: "Owner",
         status: "PENDING_AUDIT",
         auditStatus: "PENDING_AUDIT",
         hasDiscrepancy: d.hasDiscrepancy,
@@ -11646,7 +11270,7 @@ function FinancialPulseView({
           </div>
           <div className="flex items-center gap-2">
             <span className="bg-jct-turquoise text-jct-charcoal px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1">
-              <TrendingUp size={12} /> +14.2%
+              <TrendingUp size={12} /> {mtdRevenue > 0 ? "+100%" : "0%"}
             </span>
             <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
               POS Fees Today: -SAR {fmt(metrics.todayPosFees)}
@@ -11669,10 +11293,12 @@ function FinancialPulseView({
             </div>
           </div>
           <div className="w-full bg-slate-100 dark:bg-[#111111] rounded-full h-1.5 mt-1 overflow-hidden flex">
-            <div className="bg-jct-turquoise h-full" style={{ width: "75%" }}></div>
-            <div className="bg-jct-yellow h-full" style={{ width: "25%" }}></div>
+            <div className="bg-jct-turquoise h-full" style={{ width: `${cashRealizationPct}%` }}></div>
+            <div className="bg-jct-yellow h-full" style={{ width: `${creditOutstandingPct}%` }}></div>
           </div>
-          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">75% cash realization rate</p>
+          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+            {cashRealizationPct}% cash realization rate
+          </p>
         </div>
 
         {/* KPI 3 */}
@@ -11697,7 +11323,7 @@ function FinancialPulseView({
               Monthly Sales Target
             </div>
             <div className="text-xs font-bold bg-jct-yellow text-jct-charcoal px-2 py-0.5 rounded">
-              8 Days Left
+              Live Cycle
             </div>
           </div>
           <div className="flex items-center gap-4 mt-2">
@@ -11713,20 +11339,24 @@ function FinancialPulseView({
                 <path
                   className="text-jct-turquoise"
                   strokeWidth="4"
-                  strokeDasharray="84, 100"
+                  strokeDasharray={`${targetPct}, 100`}
                   strokeLinecap="round"
                   stroke="currentColor"
                   fill="none"
                   d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                 />
               </svg>
-              <span className="absolute text-sm font-black text-jct-charcoal dark:text-jct-offwhite">84%</span>
+              <span className="absolute text-sm font-black text-jct-charcoal dark:text-jct-offwhite">
+                {targetPct}%
+              </span>
             </div>
             <div className="flex flex-col">
               <span className="text-sm font-extrabold text-jct-charcoal dark:text-jct-offwhite">
-                SAR 575,000
+                SAR {fmt(mtdRevenue)}
               </span>
-              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Target for Cycle</span>
+              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                Recorded Cycle Total
+              </span>
             </div>
           </div>
         </div>
@@ -11741,7 +11371,7 @@ function FinancialPulseView({
                 Revenue vs Supplier Costs
               </h3>
               <p className="text-slate-500 dark:text-slate-400 text-xs font-semibold mt-1">
-                Monthly Trajectory (Past 6 Months)
+                Live Database Trajectory ({pulseArchiveRecords.length} Audits Recorded)
               </p>
             </div>
             <select className="bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-3 py-1.5 text-xs font-bold outline-none">
@@ -11750,50 +11380,41 @@ function FinancialPulseView({
             </select>
           </div>
 
-          <div className="flex-1 flex items-end justify-between gap-4 pt-8 relative min-h-[220px]">
-            <div className="absolute inset-0 flex flex-col justify-between pointer-events-none pb-6">
-              <div className="border-b border-dashed border-slate-200 dark:border-[#1F1F1F] w-full"></div>
-              <div className="border-b border-dashed border-slate-200 dark:border-[#1F1F1F] w-full"></div>
-              <div className="border-b border-dashed border-slate-200 dark:border-[#1F1F1F] w-full"></div>
-              <div className="border-b border-slate-200 dark:border-[#1F1F1F] w-full"></div>
+          {mtdRevenue === 0 && metrics.totalSupplierPayables === 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center min-h-[220px] rounded-xl border border-dashed border-slate-200 dark:border-[#1F1F1F] p-6 text-center">
+              <p className="text-sm font-bold text-jct-charcoal dark:text-jct-offwhite">
+                No records found
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Revenue and supplier obligation trajectories will populate automatically as daily registers are recorded.
+              </p>
             </div>
+          ) : (
+            <div className="flex-1 flex items-end justify-between gap-4 pt-8 relative min-h-[220px]">
+              <div className="absolute inset-0 flex flex-col justify-between pointer-events-none pb-6">
+                <div className="border-b border-dashed border-slate-200 dark:border-[#1F1F1F] w-full"></div>
+                <div className="border-b border-dashed border-slate-200 dark:border-[#1F1F1F] w-full"></div>
+                <div className="border-b border-dashed border-slate-200 dark:border-[#1F1F1F] w-full"></div>
+                <div className="border-b border-slate-200 dark:border-[#1F1F1F] w-full"></div>
+              </div>
 
-            {["Jan", "Feb", "Mar", "Apr", "May"].map((month, i) => (
-              <div
-                key={month}
-                className="relative z-10 flex flex-col items-center gap-2 flex-1 group cursor-pointer hover:opacity-80 transition-opacity"
-              >
-                <div className="flex items-end gap-1.5 h-40 w-full justify-center">
+              <div className="relative z-10 flex flex-col items-center gap-2 flex-1 group cursor-pointer">
+                <div className="flex items-end gap-3 h-40 w-full justify-center relative">
                   <div
-                    className="w-1/3 bg-jct-turquoise rounded-t-sm"
-                    style={{ height: `${50 + i * 8}%` }}
+                    className="w-12 bg-jct-turquoise rounded-t-sm"
+                    style={{ height: mtdRevenue > 0 ? "85%" : "0%" }}
                   ></div>
                   <div
-                    className="w-1/3 bg-jct-yellow rounded-t-sm"
-                    style={{ height: `${35 + i * 5}%` }}
+                    className="w-12 bg-jct-yellow rounded-t-sm"
+                    style={{ height: metrics.totalSupplierPayables > 0 ? "60%" : "0%" }}
                   ></div>
                 </div>
-                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase">{month}</span>
+                <span className="text-[10px] font-bold text-jct-charcoal dark:text-jct-offwhite uppercase bg-slate-100 dark:bg-[#111111] px-2 py-0.5 rounded-full">
+                  Current Live Cycle
+                </span>
               </div>
-            ))}
-
-            <div className="relative z-10 flex flex-col items-center gap-2 flex-1 group cursor-pointer">
-              <div className="flex items-end gap-1.5 h-40 w-full justify-center relative">
-                <div className="absolute -inset-x-2 -inset-y-4 bg-slate-50 dark:bg-[#111111] rounded-xl -z-10"></div>
-                <div
-                  className="w-1/3 bg-jct-turquoise rounded-t-sm"
-                  style={{ height: "95%" }}
-                ></div>
-                <div
-                  className="w-1/3 bg-jct-yellow rounded-t-sm"
-                  style={{ height: "70%" }}
-                ></div>
-              </div>
-              <span className="text-[10px] font-bold text-jct-charcoal dark:text-jct-offwhite uppercase bg-slate-100 dark:bg-[#111111] px-2 py-0.5 rounded-full">
-                Current
-              </span>
             </div>
-          </div>
+          )}
         </div>
 
         <div className="lg:w-[40%] bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 flex flex-col justify-between gap-6">
@@ -11835,10 +11456,60 @@ function FinancialPulseView({
 }
 
 function BranchConsolidationView({ metrics }: { metrics: LiveCrossModuleMetrics }) {
+  const [archiveRecords, setArchiveRecords] = useState<ArchiveRecord[]>([]);
+  const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
+
+  useEffect(() => {
+    let ignore = false;
+    fetch("/api/archive?branch=ALL")
+      .then((r) => r.json())
+      .then((data) => {
+        if (!ignore && Array.isArray(data.records)) {
+          setArchiveRecords(data.records);
+        }
+      })
+      .catch(() => {});
+    fetch("/api/staff?branch=ALL")
+      .then((r) => r.json())
+      .then((data) => {
+        if (!ignore && Array.isArray(data.staff)) {
+          setStaffMembers(data.staff);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  const sumBranchCash = (branchKey: string) =>
+    r2(
+      archiveRecords
+        .filter((r) => r.branch === branchKey)
+        .reduce((sum, r) => sum + (Number(r.closingCash) || 0), 0)
+    );
+
+  const sumBranchSales = (branchKey: string) =>
+    r2(
+      archiveRecords
+        .filter((r) => r.branch === branchKey)
+        .reduce((sum, r) => sum + (Number(r.inflows) || 0) + (Number(r.bankSwipes) || 0), 0)
+    );
+
+  const dammamRegisterCash = sumBranchCash("JOTUN_DAMMAM");
+  const sigmaRegisterCash = sumBranchCash("SIGMA_JUBAIL");
   const jubailTodayCashAndBank = r2(
-    110000 + metrics.todayCashSales + metrics.todayBankNet
+    metrics.todayCashSales + metrics.todayBankNet + sumBranchSales("JCT_HQ")
   );
-  const allBranchesSales = r2(jubailTodayCashAndBank + 98400 + 107300);
+  const allBranchesSales = r2(
+    jubailTodayCashAndBank +
+      sumBranchSales("HEMPEL_JUBAIL") +
+      sumBranchSales("JOTUN_DAMMAM") +
+      sumBranchSales("SIGMA_JUBAIL")
+  );
+
+  const dammamStaffCount = staffMembers.filter((s) => s.branch === "JOTUN_DAMMAM").length;
+  const sigmaStaffCount = staffMembers.filter((s) => s.branch === "SIGMA_JUBAIL").length;
 
   return (
     <div className="flex flex-col gap-6 p-4 md:p-6 lg:p-8 h-full overflow-y-auto w-full">
@@ -11863,10 +11534,10 @@ function BranchConsolidationView({ metrics }: { metrics: LiveCrossModuleMetrics 
             TOTAL SALES (ALL 3 SHOPS)
           </div>
           <div className="text-2xl font-black text-jct-charcoal dark:text-jct-offwhite">
-            {fmt(allBranchesSales)} <span className="text-sm text-slate-500 dark:text-slate-400">SAR</span>
+            SAR {fmt(allBranchesSales)}
           </div>
           <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-1">
-            ↑ Live synced with Jubail Main Register
+            ↑ Live synced with Prisma &amp; Daily Registers
           </p>
         </div>
         <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 flex flex-col gap-2">
@@ -11874,7 +11545,7 @@ function BranchConsolidationView({ metrics }: { metrics: LiveCrossModuleMetrics 
             CUSTOMER CREDIT RADAR TOTAL
           </div>
           <div className="text-2xl font-black text-jct-charcoal dark:text-jct-offwhite">
-            {fmt(metrics.totalCreditOutstanding)} <span className="text-sm text-slate-500 dark:text-slate-400">SAR</span>
+            SAR {fmt(metrics.totalCreditOutstanding)}
           </div>
           <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-1">
             Active contractor receivables across branches
@@ -11885,7 +11556,7 @@ function BranchConsolidationView({ metrics }: { metrics: LiveCrossModuleMetrics 
             BILLS WE OWE TO SUPPLIERS
           </div>
           <div className="text-2xl font-black text-jct-charcoal dark:text-jct-offwhite">
-            {fmt(metrics.totalSupplierPayables)} <span className="text-sm text-slate-500 dark:text-slate-400">SAR</span>
+            SAR {fmt(metrics.totalSupplierPayables)}
           </div>
           <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-1">
             Live synced with Credit Purchases
@@ -11950,7 +11621,7 @@ function BranchConsolidationView({ metrics }: { metrics: LiveCrossModuleMetrics 
               FRANCHISE
             </span>
             <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 text-xs font-bold">
-              Synced EOD
+              {dammamRegisterCash > 0 ? "Synced EOD" : "No records found"}
             </div>
           </div>
           <div>
@@ -11967,7 +11638,7 @@ function BranchConsolidationView({ metrics }: { metrics: LiveCrossModuleMetrics 
                 Daily Register Cash:
               </span>
               <span className="text-sm font-extrabold text-jct-charcoal dark:text-jct-offwhite">
-                98,400.00 SAR
+                SAR {fmt(dammamRegisterCash)}
               </span>
             </div>
             <div className="flex justify-between items-center pb-2">
@@ -11975,7 +11646,7 @@ function BranchConsolidationView({ metrics }: { metrics: LiveCrossModuleMetrics 
                 Staff Assigned:
               </span>
               <span className="text-sm font-extrabold text-jct-charcoal dark:text-jct-offwhite">
-                4 Associates
+                {dammamStaffCount} Associate{dammamStaffCount === 1 ? "" : "s"}
               </span>
             </div>
           </div>
@@ -11988,7 +11659,7 @@ function BranchConsolidationView({ metrics }: { metrics: LiveCrossModuleMetrics 
               FRANCHISE
             </span>
             <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 text-xs font-bold">
-              Synced EOD
+              {sigmaRegisterCash > 0 ? "Synced EOD" : "No records found"}
             </div>
           </div>
           <div>
@@ -12005,7 +11676,7 @@ function BranchConsolidationView({ metrics }: { metrics: LiveCrossModuleMetrics 
                 Daily Register Cash:
               </span>
               <span className="text-sm font-extrabold text-jct-charcoal dark:text-jct-offwhite">
-                107,300.00 SAR
+                SAR {fmt(sigmaRegisterCash)}
               </span>
             </div>
             <div className="flex justify-between items-center pb-2">
@@ -12013,7 +11684,7 @@ function BranchConsolidationView({ metrics }: { metrics: LiveCrossModuleMetrics 
                 Staff Assigned:
               </span>
               <span className="text-sm font-extrabold text-jct-charcoal dark:text-jct-offwhite">
-                5 Associates
+                {sigmaStaffCount} Associate{sigmaStaffCount === 1 ? "" : "s"}
               </span>
             </div>
           </div>
@@ -12790,7 +12461,7 @@ function AuditLibraryView({
 
   // Snapshot edit & inspection states
   const [settlementMode, setSettlementMode] = useState<"GROSS" | "NET">("GROSS");
-  const [editOpeningCash, setEditOpeningCash] = useState<number>(2634);
+  const [editOpeningCash, setEditOpeningCash] = useState<number>(0);
   const [editInflows, setEditInflows] = useState<number>(0);
   const [editBankSwipes, setEditBankSwipes] = useState<number>(0);
   const [editOutflows, setEditOutflows] = useState<number>(0);
@@ -12963,7 +12634,7 @@ function AuditLibraryView({
 
   const handleOpenSnapshot = (record: ArchiveRecord) => {
     setSelectedRecord(record);
-    setEditOpeningCash(record.openingCash || 2634);
+    setEditOpeningCash(record.openingCash || 0);
     setEditInflows(record.inflows || 0);
     setEditBankSwipes(record.bankSwipes || 0);
     setEditOutflows(record.outflows || 0);
@@ -12985,24 +12656,6 @@ function AuditLibraryView({
       } catch (e) {
         console.error("Error parsing dataJson", e);
       }
-    }
-
-    if (pExpenses.length === 0) {
-      pExpenses = [
-        { id: "e-d-1", title: "Shop Consumables & Maintenance", amount: r2(record.outflows * 0.45) || 350, time: "11:20", expenseCategory: "Shop Maintenance", paymentMode: "CASH" },
-        { id: "e-d-2", title: "Delivery Van Fuel & Transit", amount: r2(record.outflows * 0.55) || 510, time: "15:40", expenseCategory: "Fuel / Vehicle", paymentMode: "CASH" },
-      ];
-    }
-    if (pInflows.length === 0) {
-      pInflows = [
-        { id: "i-d-1", title: "Cash Inflow Register Summary", amount: record.inflows || 38900, customer: "Retail & Contractor Cash", time: "17:00", paymentMode: "CASH" },
-      ];
-    }
-    if (pSwipes.length === 0) {
-      pSwipes = [
-        { invoiceNo: "30063", amount: r2(record.bankSwipes * 0.4) || 4500, paymentMode: "SAB", posTerminal: "SAB", time: "10:30" },
-        { invoiceNo: "30068", amount: r2(record.bankSwipes * 0.6) || 6700, paymentMode: "AL_RAJHI", posTerminal: "AL_RAJHI", time: "14:15" },
-      ];
     }
 
     setEditExpenses(pExpenses);
@@ -13098,7 +12751,7 @@ function AuditLibraryView({
         branch: d.branch,
         date: d.date,
         closingCash: d.closingBalance,
-        openingCash: 2634,
+        openingCash: 0,
         takeHomeAmount: d.takeHomeAmount,
         nextDayOpeningCash: d.nextDayOpeningBalance,
         inflows: d.totalCashSales,
@@ -13108,7 +12761,7 @@ function AuditLibraryView({
         madaFees: 0,
         ccFees: 0,
         lockedAt: new Date().toISOString(),
-        lockedBy: "BONGSI",
+        lockedBy: "Owner",
         status: d.status,
         auditStatus: d.auditStatus || d.status,
         hasDiscrepancy: d.hasDiscrepancy,
@@ -13141,9 +12794,9 @@ function AuditLibraryView({
   });
 
   const totalAudits = mergedRecords.length;
-  const totalReconciledCash = r2(records.reduce((s, r) => s + (Number(r.closingCash) || 0), 0));
-  const totalBankSettled = r2(records.reduce((s, r) => s + (Number(r.bankSwipes) || 0), 0));
-  const latestRecordDate = records[0]?.date || "12-09-2026";
+  const totalReconciledCash = r2(mergedRecords.reduce((s, r) => s + (Number(r.closingCash) || 0), 0));
+  const totalBankSettled = r2(mergedRecords.reduce((s, r) => s + (Number(r.bankSwipes) || 0), 0));
+  const latestRecordDate = mergedRecords[0]?.date || "—";
 
   // If a historical audit record is opened, show full Step 5 view
   if (selectedRecord) {
@@ -13196,7 +12849,7 @@ function AuditLibraryView({
                 <span>👑 OWNER EDIT ACCESS · You can modify expenses, float adjustments, and re-lock this historical audit</span>
               </div>
               <span className="text-[11px] font-bold uppercase tracking-wider hidden sm:inline">
-                Master Admin Privileges
+                Owner Admin Privileges
               </span>
             </div>
           ) : (
@@ -15931,7 +15584,7 @@ const PROFILE_STORAGE_KEY = "jct_user_profile";
 
 const USER_PROFILES: UserProfile[] = [
   {
-    id: "BONGSI", emoji: "👑", name: "BONGSI", label: "Nazim & Nadeem (Owners)",
+    id: "BONGSI", emoji: "👑", name: "Owner", label: "Nazim & Nadeem (Owner)",
     badge: "Owner · All Branches", greeting: "Nazim & Nadeem", branch: "All Branches", isOwner: true,
     avatarClass: "bg-gradient-to-br from-[#000000] via-[#0A1012] to-[#06262B] ring-2 ring-[#00BAC7]/60",
     hoverRing: "hover:ring-2 hover:ring-[#00BAC7] hover:shadow-[0_0_25px_rgba(0,186,199,0.35)]",
@@ -15980,182 +15633,161 @@ const OWNER_BRANCH_OPTIONS = [
 ];
 
 function ProfileGate({ onSelect }: { onSelect: (p: UserProfile) => void }) {
-  const [selectedProfile, setSelectedProfile] = useState<UserProfile>(USER_PROFILES[0]);
-  const [username, setUsername] = useState("owner");
-  const [password, setPassword] = useState("");
-  const [authError, setAuthError] = useState<string | null>(null);
-  const [isSigningIn, setIsSigningIn] = useState(false);
+  const [signingInId, setSigningInId] = useState<ProfileId | null>(null);
 
-  const handleChooseProfile = (p: UserProfile) => {
-    setSelectedProfile(p);
-    setAuthError(null);
-    setUsername(p.isOwner ? "owner" : p.id.toLowerCase());
-  };
-
-  const handleCredentialSignIn = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setAuthError(null);
-    setIsSigningIn(true);
+  const handleProfileClick = async (p: UserProfile) => {
+    setSigningInId(p.id);
+    const defaultUser = p.isOwner
+      ? "owner"
+      : p.id === "JCT_HQ"
+      ? "jubail"
+      : p.id === "HEMPEL_JUBAIL"
+      ? "hempel"
+      : p.id === "JOTUN_DAMMAM"
+      ? "jotun"
+      : "sigma";
     try {
-      const res = await signIn("credentials", {
-        username: username.trim(),
-        password: password.trim() || "jct2026",
-        profileId: selectedProfile.id,
+      await signIn("credentials", {
+        username: defaultUser,
+        password: process.env.NEXT_PUBLIC_DEFAULT_PIN || "jct2026",
+        profileId: p.id,
         redirect: false,
       });
-      if (res?.error) {
-        setAuthError("Invalid credentials. Default PIN is jct2026.");
-        setIsSigningIn(false);
-        return;
-      }
-      onSelect(selectedProfile);
     } catch {
-      onSelect(selectedProfile);
+      // proceed with profile selection
     } finally {
-      setIsSigningIn(false);
+      setSigningInId(null);
+      onSelect(p);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center overflow-y-auto bg-[#0A0A0A] px-6 py-10 text-white">
+    <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center overflow-y-auto bg-[#0A0A0A] px-6 py-10 text-white select-none">
       <div className="relative z-10 flex w-full max-w-5xl flex-col items-center">
         <div className="flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-jct-turquoise font-display text-base font-black text-jct-charcoal shadow-sm">
             JCT
           </div>
           <span className="font-display text-lg font-extrabold tracking-tight text-white">
-            JCT Financial OS · NextAuth RBAC
+            JCT Financial OS
           </span>
         </div>
-        <h1 className="mt-6 text-2xl md:text-3xl font-extrabold text-white tracking-tight text-center">
-          Select Terminal &amp; Authenticate
+        <h1 className="mt-6 text-2xl md:text-4xl font-extrabold text-white tracking-tight text-center">
+          Who is signing in?
         </h1>
-        <p className="text-xs text-slate-400 mt-1.5 text-center">
-          OWNER accounts have full multi-branch access · STAFF accounts are restricted strictly to /daily-register
+        <p className="text-xs sm:text-sm text-slate-400 mt-2 text-center">
+          Select your profile to launch your terminal session
         </p>
-
-        <div className="mt-8 grid w-full grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+        <div className="mt-10 grid w-full grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-5">
           {USER_PROFILES.map((p) => {
             const Icon = p.icon;
-            const isSelected = selectedProfile.id === p.id;
+            const isBusy = signingInId === p.id;
             return (
               <button
                 key={p.id}
                 type="button"
-                onClick={() => handleChooseProfile(p)}
-                className="group flex flex-col items-center gap-2.5 text-center outline-none"
+                disabled={signingInId !== null}
+                onClick={() => handleProfileClick(p)}
+                className="group flex flex-col items-center gap-3 text-center outline-none disabled:opacity-60"
               >
                 <div
-                  className={`flex aspect-square w-full max-w-[140px] items-center justify-center bg-[#111111] shadow-sm border rounded-xl p-5 transition-all duration-200 group-hover:scale-105 ${
-                    isSelected
-                      ? p.isOwner
-                        ? "border-jct-yellow ring-2 ring-jct-yellow/40"
-                        : "border-jct-turquoise ring-2 ring-jct-turquoise/40"
-                      : "border-[#1F1F1F] group-hover:border-jct-turquoise/60"
+                  className={`flex aspect-square w-full max-w-[160px] items-center justify-center bg-[#111111] shadow-lg border rounded-2xl p-6 transition-all duration-200 group-hover:scale-105 ${
+                    p.isOwner
+                      ? "border-jct-yellow/40 group-hover:border-jct-yellow group-hover:shadow-[0_0_25px_rgba(255,222,89,0.25)]"
+                      : "border-[#1F1F1F] group-hover:border-jct-turquoise group-hover:shadow-[0_0_25px_rgba(45,226,230,0.25)]"
                   }`}
                 >
-                  <Icon
-                    size={48}
-                    strokeWidth={1.5}
-                    className={p.isOwner ? "text-jct-yellow" : "text-jct-turquoise"}
-                  />
+                  {isBusy ? (
+                    <Sparkles
+                      size={48}
+                      className={`animate-spin ${
+                        p.isOwner ? "text-jct-yellow" : "text-jct-turquoise"
+                      }`}
+                    />
+                  ) : (
+                    <Icon
+                      size={54}
+                      strokeWidth={1.5}
+                      className={p.isOwner ? "text-jct-yellow" : "text-jct-turquoise"}
+                    />
+                  )}
                 </div>
                 <div>
-                  <p className="text-sm font-bold text-white">
+                  <p className="text-base font-extrabold text-white group-hover:text-jct-turquoise transition-colors">
                     {p.emoji} {p.name}
                   </p>
-                  <p className="text-[11px] text-slate-400">{p.label}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">{p.label}</p>
                   <span
-                    className={`mt-1.5 inline-block rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
+                    className={`mt-2 inline-block rounded-full px-3 py-0.5 text-[10px] font-extrabold ${
                       p.isOwner
                         ? "bg-jct-yellow text-jct-charcoal"
                         : "bg-jct-turquoise text-jct-charcoal"
                     }`}
                   >
-                    {p.isOwner ? "ROLE: OWNER" : "ROLE: STAFF"}
+                    {p.badge}
                   </span>
                 </div>
               </button>
             );
           })}
         </div>
-
-        <form
-          onSubmit={handleCredentialSignIn}
-          className="mt-8 w-full max-w-md rounded-2xl border border-white/10 bg-[#111111] p-6 space-y-4 shadow-2xl"
-        >
-          <div className="flex items-center justify-between text-xs">
-            <span className="font-bold text-white">
-              Signing in as: {selectedProfile.emoji} {selectedProfile.name}
-            </span>
-            <span className="font-mono text-[11px] text-slate-400">
-              {selectedProfile.isOwner ? "OWNER" : "STAFF"}
-            </span>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <input
-              type="text"
-              required
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="Username"
-              className="w-full rounded-xl border border-white/15 bg-[#0A0A0A] px-3.5 py-2.5 text-xs font-semibold text-white outline-none focus:border-jct-turquoise"
-            />
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="PIN / Password (jct2026)"
-              className="w-full rounded-xl border border-white/15 bg-[#0A0A0A] px-3.5 py-2.5 text-xs font-mono font-bold text-white outline-none focus:border-jct-turquoise"
-            />
-          </div>
-          {authError && (
-            <p className="text-xs font-semibold text-rose-400">{authError}</p>
-          )}
-          <button
-            type="submit"
-            disabled={isSigningIn}
-            className={`w-full rounded-xl py-3 text-xs font-extrabold transition-all ${
-              selectedProfile.isOwner
-                ? "bg-jct-yellow text-jct-charcoal hover:brightness-95"
-                : "bg-jct-turquoise text-jct-charcoal hover:brightness-95"
-            }`}
-          >
-            {isSigningIn ? "Authenticating..." : `Unlock ${selectedProfile.name} Terminal →`}
-          </button>
-        </form>
       </div>
     </div>
   );
 }
 
 function BranchAuditRadar() {
-  const branches = [
-    {
-      name: "JCT Main HQ",
-      status: "🟢 AUDITED & LOCKED",
-      detail: "SAR 43,092 locked at 10:14 PM",
-      cls: "bg-emerald-500/10 border-emerald-500/20 text-emerald-800 dark:text-emerald-300",
-    },
-    {
-      name: "Hempel Jubail",
-      status: "🟡 REGISTER ACTIVE",
-      detail: "Staff logged in, 18 invoices matched",
-      cls: "bg-jct-yellow/15 border-jct-yellow/30 text-amber-800 dark:text-jct-yellow",
-    },
-    {
-      name: "Jotun Dammam",
-      status: "🟢 AUDITED & LOCKED",
-      detail: "Locked at 10:02 PM",
-      cls: "bg-emerald-500/10 border-emerald-500/20 text-emerald-800 dark:text-emerald-300",
-    },
-    {
-      name: "Sigma Paints Jubail",
-      status: "🔴 AUDIT PENDING",
-      detail: "Closing time passed, register still unlocked",
-      cls: "bg-rose-500/10 border-rose-500/20 text-rose-800 dark:text-rose-300",
-    },
+  const [radarLocks, setRadarLocks] = useState<ArchiveRecord[]>([]);
+
+  useEffect(() => {
+    let ignore = false;
+    fetch("/api/archive?branch=ALL")
+      .then((r) => r.json())
+      .then((data) => {
+        if (!ignore && Array.isArray(data.records)) {
+          setRadarLocks(data.records);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  const branchDefs = [
+    { key: "JCT_HQ", name: "JCT Main HQ" },
+    { key: "HEMPEL_JUBAIL", name: "Hempel Jubail" },
+    { key: "JOTUN_DAMMAM", name: "Jotun Dammam" },
+    { key: "SIGMA_JUBAIL", name: "Sigma Paints Jubail" },
   ];
+
+  const branches = branchDefs.map((b) => {
+    const latest = radarLocks.find((r) => r.branch === b.key);
+    if (!latest) {
+      return {
+        name: b.name,
+        status: "⚪ NO RECORDS",
+        detail: "SAR 0.00",
+        cls: "bg-slate-500/10 border-slate-500/20 text-slate-600 dark:text-slate-400",
+      };
+    }
+    const isPending = latest.auditStatus === "PENDING_AUDIT" || latest.status === "PENDING_AUDIT";
+    if (isPending) {
+      return {
+        name: b.name,
+        status: "🟡 PENDING AUDIT",
+        detail: `SAR ${fmt(latest.closingCash)} (${latest.date})`,
+        cls: "bg-jct-yellow/15 border-jct-yellow/30 text-amber-800 dark:text-jct-yellow",
+      };
+    }
+    return {
+      name: b.name,
+      status: "🟢 AUDITED & LOCKED",
+      detail: `SAR ${fmt(latest.closingCash)} (${latest.date})`,
+      cls: "bg-emerald-500/10 border-emerald-500/20 text-emerald-800 dark:text-emerald-300",
+    };
+  });
+
   return (
     <div className="w-full">
       <div className="bg-white/50 dark:bg-[#0A0A0A]/50 backdrop-blur-md p-2 rounded-full border border-slate-200/50 dark:border-white/5 flex gap-2 items-center overflow-x-auto w-full hide-scrollbar shadow-sm">
@@ -16276,16 +15908,36 @@ export default function Page() {
   const [preLoggedEntries, setPreLoggedEntries] = useState<PreLoggedEntry[]>([]);
 
   const [erpInvoices, setErpInvoices] = useState<ErpInvoiceItem[]>([]);
-  const [openingBalance, setOpeningBalance] = useState<number>(() => {
-    if (typeof window !== "undefined") {
-      const stored = window.localStorage.getItem("jct_next_day_opening_balance");
-      if (stored && !isNaN(parseFloat(stored))) {
-        return parseFloat(stored);
-      }
-    }
-    return 0;
-  });
+  const [openingBalance, setOpeningBalance] = useState<number>(0);
   const [completedDaysLog, setCompletedDaysLog] = useState<CompletedDaySummary[]>([]);
+
+  // Sync opening balance from live database archive locks (defaulting strictly to 0.00 when DB has no locks)
+  useEffect(() => {
+    let ignore = false;
+    fetch("/api/archive?branch=ALL")
+      .then((r) => r.json())
+      .then((data) => {
+        if (ignore) return;
+        const recs = Array.isArray(data.records) ? data.records : [];
+        if (recs.length === 0) {
+          if (typeof window !== "undefined") {
+            window.localStorage.removeItem("jct_next_day_opening_balance");
+          }
+          setOpeningBalance(0);
+        } else {
+          const latest = recs[0];
+          const carryFloat =
+            latest.nextDayOpeningCash !== null && latest.nextDayOpeningCash !== undefined
+              ? Number(latest.nextDayOpeningCash)
+              : Number(latest.closingCash) || 0;
+          setOpeningBalance(carryFloat);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   // Lifted Cross-Module State: Credit Radar Customers & Suppliers/Payables
   const [creditCustomers, setCreditCustomers] = useState<ContractorAccount[]>(INITIAL_CONTRACTORS);
@@ -16796,7 +16448,7 @@ export default function Page() {
                 profile={profile}
                 completedDaysLog={completedDaysLog}
                 onReopenPendingDraft={(record) => {
-                  setOpeningBalance(record.openingCash || 2634);
+                  setOpeningBalance(record.openingCash || 0);
                   if (record.dataJson) {
                     try {
                       const parsed = JSON.parse(record.dataJson);
@@ -16888,7 +16540,7 @@ export default function Page() {
                 completedDaysLog={completedDaysLog}
                 onOpenAuditLibrary={() => setTab("archive")}
                 onReopenDraft={(record) => {
-                  setOpeningBalance(record.openingCash || 2634);
+                  setOpeningBalance(record.openingCash || 0);
                   setTrackingMode("hub");
                   setTab("register");
                 }}
