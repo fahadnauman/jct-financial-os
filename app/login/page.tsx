@@ -217,7 +217,7 @@ export default function LoginPage() {
               }`}
             >
               <Crown size={15} />
-              <span>OWNER (MASTER)</span>
+              <span>OWNER</span>
             </button>
 
             <button
@@ -336,7 +336,7 @@ export default function LoginPage() {
                   <Lock size={15} />
                   <span>
                     {role === "OWNER"
-                      ? "Sign In as Master Owner"
+                      ? "Sign In as Owner"
                       : "Sign In to Daily Register"}
                   </span>
                   <ArrowRight size={15} />

@@ -177,75 +177,17 @@ export interface PayrollLogItem {
   };
 }
 
-const SEED_TXNS: Txn[] = [
-  { id: "1", flow: "in", kind: "cash_sale", amount: 1150, serialNo: "INV-2026-8491", title: "Walk-in · Jotun Fenomastic", time: "08:42" },
-  { id: "2", flow: "in", kind: "cash_sale", amount: 6325, serialNo: "INV-2026-8492", title: "Contractor · Bulk Paint", time: "10:20" },
-  { id: "3", flow: "in", kind: "credit_received", amount: 8500, serialNo: "ERP-JBL-0934", title: "Al Noor Contracting", time: "09:30" },
-  { id: "4", flow: "out", kind: "jotun", amount: 12400, serialNo: "ERP-JBL-0935", title: "Jotun Arabia Restock", time: "10:00" },
-  { id: "5", flow: "out", kind: "hempel", amount: 7850, serialNo: "ERP-JBL-0936", title: "Hempel Marine Coatings", time: "10:45" },
-  { id: "6", flow: "out", kind: "salaries", amount: 4500, serialNo: "HR-2026-004", title: "Staff advances", time: "12:00" },
-];
+const SEED_TXNS: Txn[] = [];
 
-const INITIAL_CONTRACTORS: ContractorAccount[] = [
-  {
-    id: "c1", name: "Al-Futtaim Contractors", outstanding: 124500, dueDate: "2026-08-30", followUpDate: "2026-09-18", latestInvoiceNo: "#30051", latestInvoiceAmount: 45000, status: "overdue", daysLate: 12,
-    riskLevel: "High", avgPaymentTime: "18 Days Late", clearedInvoices: 14,
-    history: [
-      { id: "INV-891", amount: 45000, date: "2026-07-15", status: "paid_late" },
-      { id: "INV-840", amount: 22000, date: "2026-06-01", status: "paid_on_time" },
-      { id: "INV-710", amount: 18500, date: "2026-04-20", status: "paid_late" },
-    ]
-  },
-  {
-    id: "c2", name: "Eastern Paint Bros", outstanding: 45200, dueDate: "2026-09-14", followUpDate: "2026-09-14", latestInvoiceNo: "#30058", latestInvoiceAmount: 12000, status: "due_soon",
-    riskLevel: "Medium", avgPaymentTime: "2 Days Late", clearedInvoices: 42,
-    history: [
-      { id: "INV-902", amount: 12000, date: "2026-08-10", status: "paid_on_time" },
-      { id: "INV-885", amount: 8400, date: "2026-07-22", status: "paid_on_time" },
-      { id: "INV-850", amount: 15600, date: "2026-06-15", status: "paid_late" },
-    ]
-  },
-  {
-    id: "c3", name: "Jubail Coastal Development", outstanding: 8500, dueDate: "2026-10-05", followUpDate: "2026-10-05", latestInvoiceNo: "#30060", latestInvoiceAmount: 8500, status: "on_track",
-    riskLevel: "Low", avgPaymentTime: "On Time", clearedInvoices: 89,
-    history: [
-      { id: "INV-915", amount: 32000, date: "2026-08-28", status: "paid_on_time" },
-      { id: "INV-900", amount: 14500, date: "2026-08-01", status: "paid_on_time" },
-      { id: "INV-870", amount: 26000, date: "2026-07-10", status: "paid_on_time" },
-    ]
-  }
-];
+const INITIAL_CONTRACTORS: ContractorAccount[] = [];
 
 const INITIAL_SUPPLIER_BRANDS: SupplierPayableBrand[] = [
-  { id: 1, brand: "Jotun", amountPaid: 45000, pendingBills: 12000, color: "blue" },
-  { id: 2, brand: "Hempel", amountPaid: 28000, pendingBills: 5400, color: "purple" },
-  { id: 3, brand: "Sigma", amountPaid: 15500, pendingBills: 0, color: "fuchsia" },
+  { id: 1, brand: "Jotun", amountPaid: 0, pendingBills: 0, color: "blue" },
+  { id: 2, brand: "Hempel", amountPaid: 0, pendingBills: 0, color: "purple" },
+  { id: 3, brand: "Sigma", amountPaid: 0, pendingBills: 0, color: "fuchsia" },
 ];
 
-const INITIAL_SUPPLIER_BILLS: SupplierBillItem[] = [
-  {
-    id: "sb-1",
-    supplierName: "Jotun",
-    amount: 12000,
-    dueDate: "2026-09-18",
-    category: "Credit Purchase",
-    paymentMode: "SAB",
-    createdAt: "10-09-2026",
-    source: "Supplier Hub",
-    supplierInvoiceNum: "INV-9021",
-  },
-  {
-    id: "sb-2",
-    supplierName: "Hempel",
-    amount: 5400,
-    dueDate: "2026-09-22",
-    category: "Credit Purchase",
-    paymentMode: "AL_RAJHI",
-    createdAt: "11-09-2026",
-    source: "Supplier Hub",
-    supplierInvoiceNum: "INV-8840",
-  },
-];
+const INITIAL_SUPPLIER_BILLS: SupplierBillItem[] = [];
 
 const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 const nf = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -5206,7 +5148,7 @@ function DailyRegisterView({
 
   const prevDayReceivedAmount = completedDaysLog[0]
     ? r2((completedDaysLog[0].totalCashSales || 0) + (completedDaysLog[0].totalBankSwipe || 0))
-    : 41980;
+    : 0;
   const yesterdayClosingBalance = completedDaysLog[0]?.closingBalance ?? openingBalance;
 
   // 12:00 AM Automatic Daily Reset: resets active hub day at midnight without manual purge
@@ -15990,7 +15932,7 @@ const PROFILE_STORAGE_KEY = "jct_user_profile";
 const USER_PROFILES: UserProfile[] = [
   {
     id: "BONGSI", emoji: "👑", name: "BONGSI", label: "Nazim & Nadeem (Owners)",
-    badge: "Master Admin · All Branches", greeting: "Nazim & Nadeem", branch: "All Branches", isOwner: true,
+    badge: "Owner · All Branches", greeting: "Nazim & Nadeem", branch: "All Branches", isOwner: true,
     avatarClass: "bg-gradient-to-br from-[#000000] via-[#0A1012] to-[#06262B] ring-2 ring-[#00BAC7]/60",
     hoverRing: "hover:ring-2 hover:ring-[#00BAC7] hover:shadow-[0_0_25px_rgba(0,186,199,0.35)]",
     icon: Crown,
@@ -16329,41 +16271,9 @@ export default function Page() {
   const [trackingMode, setTrackingMode] = useState<TrackingMode>("hub");
   const [wizardStep, setWizardStep] = useState<WizardStep>(1);
 
-  const [preLoggedBankInvoices, setPreLoggedBankInvoices] = useState<PreLoggedBankInvoice[]>([
-    { invoiceNo: "30065", amount: 2150, paymentMode: "BANK_TRANSFER", time: "10:12" },
-    { invoiceNo: "30063", amount: 1450, paymentMode: "POS_SWIPE", posTerminal: "SAB", time: "09:18" },
-    { invoiceNo: "30068", amount: 3820, paymentMode: "POS_SWIPE", posTerminal: "AL_RAJHI", time: "11:42" },
-    { invoiceNo: "30074", amount: 960, paymentMode: "POS_SWIPE", posTerminal: "VISA_MC", time: "14:05" },
-  ]);
+  const [preLoggedBankInvoices, setPreLoggedBankInvoices] = useState<PreLoggedBankInvoice[]>([]);
 
-  const [preLoggedEntries, setPreLoggedEntries] = useState<PreLoggedEntry[]>([
-    {
-      id: "ple-food",
-      type: "EXPENSE",
-      expenseCategory: "Food",
-      title: "Food",
-      amount: 24,
-      time: "12:30",
-    },
-    {
-      id: "ple-water",
-      type: "EXPENSE",
-      expenseCategory: "Water",
-      title: "Water",
-      amount: 150,
-      time: "13:45",
-    },
-    {
-      id: "ple-chicago",
-      type: "CREDIT_RECD",
-      customerName: "Chicago Credit Recd",
-      followUpDate: "2026-09-20",
-      receiptNo: "RCP-1042",
-      title: "Chicago Credit Recd",
-      amount: 12428,
-      time: "15:10",
-    },
-  ]);
+  const [preLoggedEntries, setPreLoggedEntries] = useState<PreLoggedEntry[]>([]);
 
   const [erpInvoices, setErpInvoices] = useState<ErpInvoiceItem[]>([]);
   const [openingBalance, setOpeningBalance] = useState<number>(() => {
@@ -16373,30 +16283,9 @@ export default function Page() {
         return parseFloat(stored);
       }
     }
-    return 2634;
+    return 0;
   });
-  const [completedDaysLog, setCompletedDaysLog] = useState<CompletedDaySummary[]>([
-    {
-      date: "11-09-2026",
-      branch: "Jubail - Main Branch",
-      totalCashSales: 28450,
-      totalBankSwipe: 13530,
-      totalPosFees: 108.24,
-      totalExpenses: 4120,
-      closingBalance: 4500,
-      status: "AUDITED",
-    },
-    {
-      date: "10-09-2026",
-      branch: "Jubail - Main Branch",
-      totalCashSales: 31900,
-      totalBankSwipe: 9840,
-      totalPosFees: 78.72,
-      totalExpenses: 2890,
-      closingBalance: 4500,
-      status: "LOCKED",
-    },
-  ]);
+  const [completedDaysLog, setCompletedDaysLog] = useState<CompletedDaySummary[]>([]);
 
   // Lifted Cross-Module State: Credit Radar Customers & Suppliers/Payables
   const [creditCustomers, setCreditCustomers] = useState<ContractorAccount[]>(INITIAL_CONTRACTORS);
