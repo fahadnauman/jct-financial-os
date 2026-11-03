@@ -207,10 +207,28 @@ export async function POST(req: Request) {
       ccFees = 0,
       lockedBy = "Staff",
       status = "LOCKED",
+      auditStatus: rawAuditStatus,
+      hasDiscrepancy: rawHasDiscrepancy,
+      varianceAmount: rawVarianceAmount,
+      varianceType: rawVarianceType,
       dataJson,
       takeHomeAmount: rawTakeHome,
       nextDayOpeningCash: rawNextDayOpening,
     } = body;
+
+    const resolvedAuditStatus = rawAuditStatus
+      ? String(rawAuditStatus)
+      : status === "PENDING_AUDIT"
+      ? "PENDING_AUDIT"
+      : "LOCKED";
+    const resolvedStatus =
+      resolvedAuditStatus === "PENDING_AUDIT" ? "PENDING_AUDIT" : String(status || "LOCKED");
+    const hasDiscrepancy = Boolean(rawHasDiscrepancy);
+    const varianceAmount =
+      rawVarianceAmount !== undefined && rawVarianceAmount !== null && !Number.isNaN(Number(rawVarianceAmount))
+        ? Number(rawVarianceAmount)
+        : null;
+    const varianceType = rawVarianceType ? String(rawVarianceType) : null;
 
     const takeHomeAmount =
       rawTakeHome !== undefined && rawTakeHome !== null ? Number(rawTakeHome) : null;
@@ -335,7 +353,11 @@ export async function POST(req: Request) {
           madaFees: Number(madaFees),
           ccFees: Number(ccFees),
           lockedBy: String(lockedBy),
-          status: String(status),
+          status: resolvedStatus,
+          auditStatus: resolvedAuditStatus,
+          hasDiscrepancy,
+          varianceAmount,
+          varianceType,
           dataJson: sanitizedDataJson !== null ? sanitizedDataJson : existing.dataJson,
           lockedAt: new Date(),
         },
@@ -356,7 +378,11 @@ export async function POST(req: Request) {
           madaFees: Number(madaFees),
           ccFees: Number(ccFees),
           lockedBy: String(lockedBy),
-          status: String(status),
+          status: resolvedStatus,
+          auditStatus: resolvedAuditStatus,
+          hasDiscrepancy,
+          varianceAmount,
+          varianceType,
           dataJson: sanitizedDataJson,
         },
       });
@@ -376,7 +402,23 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: "Owner authorization required to update historical audit records" }, { status: 403 });
     }
 
-    const { id, closingCash, openingCash, inflows, bankSwipes, outflows, posFees, madaFees, ccFees, status, dataJson } = body;
+    const {
+      id,
+      closingCash,
+      openingCash,
+      inflows,
+      bankSwipes,
+      outflows,
+      posFees,
+      madaFees,
+      ccFees,
+      status,
+      auditStatus,
+      hasDiscrepancy,
+      varianceAmount,
+      varianceType,
+      dataJson,
+    } = body;
 
     if (!id) {
       return NextResponse.json({ error: "Record ID required" }, { status: 400 });
@@ -487,6 +529,10 @@ export async function PUT(req: Request) {
         ...(madaFees !== undefined ? { madaFees: Number(madaFees) } : {}),
         ...(ccFees !== undefined ? { ccFees: Number(ccFees) } : {}),
         ...(status ? { status: String(status) } : {}),
+        ...(auditStatus ? { auditStatus: String(auditStatus) } : status === "AUDITED" || status === "LOCKED" ? { auditStatus: "LOCKED" } : {}),
+        ...(hasDiscrepancy !== undefined ? { hasDiscrepancy: Boolean(hasDiscrepancy) } : {}),
+        ...(varianceAmount !== undefined ? { varianceAmount: varianceAmount !== null ? Number(varianceAmount) : null } : {}),
+        ...(varianceType !== undefined ? { varianceType: varianceType !== null ? String(varianceType) : null } : {}),
         ...(sanitizedDataJson !== undefined ? { dataJson: sanitizedDataJson } : {}),
       },
     });

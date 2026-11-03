@@ -46,6 +46,10 @@ model DailyRegisterLock {
   lockedAt           DateTime @default(now())
   lockedBy           String
   status             String   @default("LOCKED")
+  auditStatus        String   @default("LOCKED")
+  hasDiscrepancy     Boolean  @default(false)
+  varianceAmount     Float?
+  varianceType       String?
   dataJson           String?
 
   @@index([branch, date])
@@ -64,6 +68,10 @@ model DailyRegister {
   overrideReason String?  // "BUSINESS_COMMISSION", "BILL_MISTAKE", "CUSTOM"
   overrideNote   String?
   paymentMode    String?  // e.g., "SAB", "AL_RAJHI", "SNB", "VISA", "MADA", "BANK_TRANSFER", "CASH"
+  auditStatus    String   @default("LOCKED")
+  hasDiscrepancy Boolean  @default(false)
+  varianceAmount Float?
+  varianceType   String?
   notes          String?
   createdAt      DateTime @default(now())
 }

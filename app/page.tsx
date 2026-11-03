@@ -697,9 +697,21 @@ export interface CompletedDaySummary {
   totalPosFees: number;
   totalExpenses: number;
   closingBalance: number;
-  status: "LOCKED" | "AUDITED";
+  status: "LOCKED" | "AUDITED" | "PENDING_AUDIT";
+  auditStatus?: "LOCKED" | "PENDING_AUDIT";
+  hasDiscrepancy?: boolean;
+  varianceAmount?: number | null;
+  varianceType?: "EXCESS" | "SHORTAGE" | null;
   takeHomeAmount?: number;
   nextDayOpeningBalance?: number;
+}
+
+export interface HandoverLockOptions {
+  auditStatus?: "LOCKED" | "PENDING_AUDIT";
+  hasDiscrepancy?: boolean;
+  varianceAmount?: number | null;
+  varianceType?: "EXCESS" | "SHORTAGE" | null;
+  actualPhysicalCash?: number | null;
 }
 
 export interface ErpSeedItem {
@@ -2366,22 +2378,35 @@ function HandoverModalComponent({
   calculatedClosingBalance: number;
   totalCashInSalesAndReceipts: number;
   totalPreLoggedExpenses: number;
-  onConfirmLock: (takeHomeAmount: number, nextDayOpening: number) => Promise<void>;
+  onConfirmLock: (
+    takeHomeAmount: number,
+    nextDayOpening: number,
+    options?: HandoverLockOptions
+  ) => Promise<void>;
   isSaving: boolean;
 }) {
-  const [drawerCloseStep, setDrawerCloseStep] = useState<1 | 2>(1);
+  const [drawerCloseStep, setDrawerCloseStep] = useState<
+    1 | 2 | "DISCREPANCY_CHOICE" | "DISCREPANCY_LOG"
+  >(1);
   const [takeHomeInput, setTakeHomeInput] = useState<string>("");
-
+  const [varianceType, setVarianceType] = useState<"EXCESS" | "SHORTAGE">("SHORTAGE");
+  const [actualCashInput, setActualCashInput] = useState<string>("");
 
   if (!isOpen) return null;
 
   const parsedTakeHome = parseFloat(takeHomeInput);
-  const effectiveTakeHome = Number.isNaN(parsedTakeHome) ? 0 : parsedTakeHome;
+  const effectiveTakeHome = Number.isNaN(parsedTakeHome) || parsedTakeHome < 0 ? 0 : parsedTakeHome;
   const nextDayOpeningFloat = r2(calculatedClosingBalance - effectiveTakeHome);
-  const STANDARD_RETAIL_FLOAT = 2500;
-  const isNegativeShortage = effectiveTakeHome > calculatedClosingBalance || nextDayOpeningFloat < 0;
-  const isDepletedFloat = !isNegativeShortage && nextDayOpeningFloat < STANDARD_RETAIL_FLOAT;
-  const floatDeficit = isDepletedFloat ? r2(STANDARD_RETAIL_FLOAT - nextDayOpeningFloat) : 0;
+  const isNegativeShortage =
+    effectiveTakeHome > calculatedClosingBalance || nextDayOpeningFloat < 0;
+
+  const parsedActualCash = parseFloat(actualCashInput);
+  const hasValidActualCash = !Number.isNaN(parsedActualCash) && parsedActualCash >= 0;
+  const countedPhysicalCash = hasValidActualCash ? r2(parsedActualCash) : calculatedClosingBalance;
+  const calculatedVariance = hasValidActualCash
+    ? r2(Math.abs(countedPhysicalCash - calculatedClosingBalance))
+    : 0;
+  const discrepancyNextDayFloat = Math.max(0, r2(countedPhysicalCash - effectiveTakeHome));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-700 bg-[#0A0A0A]/95 backdrop-blur-xl text-jct-charcoal dark:text-jct-offwhite">
@@ -2444,10 +2469,10 @@ function HandoverModalComponent({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
               <button
                 type="button"
-                onClick={onClose}
-                className="w-full py-3.5 px-4 rounded-xl font-bold border border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-[#181818] hover:bg-slate-200 dark:hover:bg-[#202020] text-slate-700 dark:text-slate-300 transition text-sm flex items-center justify-center gap-2"
+                onClick={() => setDrawerCloseStep("DISCREPANCY_CHOICE")}
+                className="w-full py-3.5 px-4 rounded-xl font-bold border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 transition text-sm flex items-center justify-center gap-2"
               >
-                <span>❌ No, I need to check</span>
+                <span>❌ No, it doesn&apos;t match</span>
               </button>
 
               <button
@@ -2461,12 +2486,263 @@ function HandoverModalComponent({
             </div>
 
             <p className="text-[11px] text-center text-slate-400 dark:text-slate-500">
-              Clicking &apos;No&apos; will safely return you to the register workbench to adjust entries or record an excess/shortage adjustment.
+              Clicking &apos;No&apos; lets you either return to edit invoices or log an Excess / Shortage discrepancy.
             </p>
           </div>
         )}
 
-        {/* ── STEP 2: OWNER WITHDRAWAL (CASH DROP) & STEP 3: FLOAT LOGIC ── */}
+        {/* ── DISCREPANCY TYPE VIEW: HOW TO HANDLE MISMATCH ── */}
+        {drawerCloseStep === "DISCREPANCY_CHOICE" && (
+          <div className="flex flex-col gap-6 animate-in fade-in duration-500">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="h-10 w-10 rounded-2xl bg-amber-500/20 text-amber-500 flex items-center justify-center font-bold">
+                  <AlertTriangle size={20} />
+                </div>
+                <div>
+                  <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-amber-500 block">
+                    Discrepancy Resolution
+                  </span>
+                  <h3 className="font-display text-lg sm:text-xl font-extrabold text-jct-charcoal dark:text-white">
+                    How would you like to handle this mismatch?
+                  </h3>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-lg p-1.5 text-slate-400 hover:text-white transition"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-5 text-center">
+              <span className="text-xs uppercase font-bold tracking-wider text-slate-500 dark:text-slate-400 block mb-1">
+                System Expected Drawer Cash
+              </span>
+              <span className="font-mono text-3xl font-black text-jct-charcoal dark:text-amber-400">
+                SAR {fmt(calculatedClosingBalance)}
+              </span>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+                Choose whether to go back and fix unrecorded bills/invoices, or log a physical drawer variance (Excess / Shortage).
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-3">
+              <button
+                type="button"
+                onClick={onClose}
+                className="w-full py-4 px-5 rounded-2xl font-bold border border-slate-200 dark:border-white/15 bg-slate-100 dark:bg-[#181818] hover:bg-slate-200 dark:hover:bg-[#222222] text-jct-charcoal dark:text-white transition text-sm flex items-center justify-between group"
+              >
+                <span className="flex items-center gap-2.5">
+                  <span>✏️ Go Back &amp; Edit Data</span>
+                </span>
+                <span className="text-xs text-slate-400 group-hover:text-white transition">
+                  Fix Invoices / Expenses →
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDrawerCloseStep("DISCREPANCY_LOG")}
+                className="w-full py-4 px-5 rounded-2xl font-bold border border-amber-500/50 bg-amber-500/15 hover:bg-amber-500/25 text-amber-600 dark:text-amber-400 transition text-sm flex items-center justify-between group"
+              >
+                <span className="flex items-center gap-2.5">
+                  <span>⚠️ Log Discrepancy (Excess / Shortage)</span>
+                </span>
+                <ArrowRight size={16} />
+              </button>
+            </div>
+
+            <div className="flex justify-start pt-1">
+              <button
+                type="button"
+                onClick={() => setDrawerCloseStep(1)}
+                className="text-xs font-bold text-slate-400 hover:text-white transition"
+              >
+                ← Back to Verification
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── SMART DISCREPANCY LOGGING & RESOLUTION ── */}
+        {drawerCloseStep === "DISCREPANCY_LOG" && (
+          <div className="flex flex-col gap-5 animate-in fade-in duration-500">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="h-10 w-10 rounded-2xl bg-rose-500/20 text-rose-500 flex items-center justify-center font-bold">
+                  <AlertTriangle size={20} />
+                </div>
+                <div>
+                  <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-rose-400 block">
+                    Smart Discrepancy Logger
+                  </span>
+                  <h3 className="font-display text-lg sm:text-xl font-extrabold text-jct-charcoal dark:text-white">
+                    Log Drawer Variance &amp; Resolution
+                  </h3>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-lg p-1.5 text-slate-400 hover:text-white transition"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* 1. Select Discrepancy Type: Excess (+) or Shortage (-) */}
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
+                1. Select Discrepancy Type
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setVarianceType("EXCESS")}
+                  className={`py-3 px-4 rounded-xl font-bold text-xs sm:text-sm border transition-all flex items-center justify-center gap-2 ${
+                    varianceType === "EXCESS"
+                      ? "bg-emerald-500/20 border-emerald-500 text-emerald-400 shadow-sm"
+                      : "bg-slate-100 dark:bg-[#181818] border-slate-200 dark:border-white/10 text-slate-500"
+                  }`}
+                >
+                  <span>[Excess (+)]</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setVarianceType("SHORTAGE")}
+                  className={`py-3 px-4 rounded-xl font-bold text-xs sm:text-sm border transition-all flex items-center justify-center gap-2 ${
+                    varianceType === "SHORTAGE"
+                      ? "bg-rose-500/20 border-rose-500 text-rose-400 shadow-sm"
+                      : "bg-slate-100 dark:bg-[#181818] border-slate-200 dark:border-white/10 text-slate-500"
+                  }`}
+                >
+                  <span>[Shortage (-)]</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 2. Enter Actual Physical Cash Counted */}
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
+                2. Enter Actual Physical Cash Counted (SAR)
+              </label>
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400 font-mono">
+                  SAR
+                </span>
+                <input
+                  type="number"
+                  step="0.01"
+                  autoFocus
+                  value={actualCashInput}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setActualCashInput(val);
+                    const num = parseFloat(val);
+                    if (!Number.isNaN(num)) {
+                      if (num > calculatedClosingBalance) {
+                        setVarianceType("EXCESS");
+                      } else if (num < calculatedClosingBalance) {
+                        setVarianceType("SHORTAGE");
+                      }
+                    }
+                  }}
+                  placeholder={String(calculatedClosingBalance)}
+                  className="w-full text-center text-3xl sm:text-4xl font-mono font-black py-3 px-14 bg-slate-50 dark:bg-[#161616] rounded-2xl border-2 border-slate-300 dark:border-white/15 focus:border-jct-turquoise focus:outline-none text-jct-charcoal dark:text-white"
+                />
+              </div>
+            </div>
+
+            {/* Auto-Calculated Variance Display Box */}
+            <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 flex flex-col gap-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-500 dark:text-slate-400 font-semibold">System Calculated Drawer:</span>
+                <span className="font-mono font-bold text-jct-charcoal dark:text-white">SAR {fmt(calculatedClosingBalance)}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-500 dark:text-slate-400 font-semibold">Actual Physical Cash Counted:</span>
+                <span className="font-mono font-bold text-jct-charcoal dark:text-white">
+                  SAR {fmt(countedPhysicalCash)}
+                </span>
+              </div>
+              <div className="border-t border-amber-500/20 pt-2 mt-1 flex items-center justify-between">
+                <span className="text-xs font-extrabold uppercase tracking-wider text-amber-500">
+                  Auto-Calculated Variance ({varianceType === "EXCESS" ? "Excess +" : "Shortage -"}):
+                </span>
+                <span
+                  className={`font-mono text-lg sm:text-xl font-black ${
+                    varianceType === "EXCESS" ? "text-emerald-400" : "text-rose-400"
+                  }`}
+                >
+                  {varianceType === "EXCESS" ? "+" : "-"}SAR {fmt(calculatedVariance)}
+                </span>
+              </div>
+            </div>
+
+            {/* Resolution Actions */}
+            <div className="flex flex-col gap-2.5 pt-1">
+              <button
+                type="button"
+                disabled={isSaving || !hasValidActualCash}
+                onClick={() =>
+                  onConfirmLock(effectiveTakeHome, discrepancyNextDayFloat, {
+                    auditStatus: "LOCKED",
+                    hasDiscrepancy: true,
+                    varianceAmount: calculatedVariance,
+                    varianceType,
+                    actualPhysicalCash: countedPhysicalCash,
+                  })
+                }
+                className="w-full py-3.5 px-4 rounded-xl font-bold bg-rose-500 hover:bg-rose-600 text-white transition shadow-lg disabled:opacity-40 text-xs sm:text-sm flex items-center justify-center gap-2"
+              >
+                <Lock size={15} />
+                <span>
+                  {isSaving
+                    ? "Saving..."
+                    : `🔒 Force Close & Save As-Is (Variance: SAR ${fmt(calculatedVariance)})`}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                disabled={isSaving || !hasValidActualCash}
+                onClick={() =>
+                  onConfirmLock(effectiveTakeHome, discrepancyNextDayFloat, {
+                    auditStatus: "PENDING_AUDIT",
+                    hasDiscrepancy: true,
+                    varianceAmount: calculatedVariance,
+                    varianceType,
+                    actualPhysicalCash: countedPhysicalCash,
+                  })
+                }
+                className="w-full py-3.5 px-4 rounded-xl font-bold bg-jct-yellow hover:brightness-95 text-jct-charcoal transition shadow-lg disabled:opacity-40 text-xs sm:text-sm flex items-center justify-center gap-2"
+              >
+                <FileText size={15} />
+                <span>
+                  {isSaving ? "Saving Draft..." : "📝 Save as Pending Audit (Draft)"}
+                </span>
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between pt-1">
+              <button
+                type="button"
+                onClick={() => setDrawerCloseStep("DISCREPANCY_CHOICE")}
+                className="text-xs font-bold text-slate-400 hover:text-white transition"
+              >
+                ← Back
+              </button>
+              <span className="text-[11px] text-slate-400">
+                Drafts can be reopened from Audit Library
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* ── STEP 2: OWNER WITHDRAWAL (CASH DROP) & FLOAT LOGIC (NO MINIMUM LIMIT) ── */}
         {drawerCloseStep === 2 && (
           <div className="flex flex-col gap-5 animate-in fade-in duration-500">
             {/* Step Header */}
@@ -2520,21 +2796,12 @@ function HandoverModalComponent({
 
               {/* Quick Convenience Presets */}
               <div className="flex flex-wrap items-center justify-center gap-1.5 mt-4">
-                {calculatedClosingBalance >= STANDARD_RETAIL_FLOAT && (
-                  <button
-                    type="button"
-                    onClick={() => setTakeHomeInput(String(r2(calculatedClosingBalance - STANDARD_RETAIL_FLOAT)))}
-                    className="rounded-full bg-jct-turquoise/15 hover:bg-jct-turquoise/25 border border-jct-turquoise/30 text-jct-turquoise text-xs font-bold px-3 py-1 transition"
-                  >
-                    Leave SAR 2,500 Float · Take SAR {fmt(calculatedClosingBalance - STANDARD_RETAIL_FLOAT)}
-                  </button>
-                )}
                 <button
                   type="button"
                   onClick={() => setTakeHomeInput(String(calculatedClosingBalance))}
                   className="rounded-full bg-slate-100 dark:bg-[#1F1F1F] hover:bg-slate-200 dark:hover:bg-[#282828] text-slate-700 dark:text-slate-300 text-xs font-semibold px-3 py-1 transition"
                 >
-                  Withdraw All (SAR {fmt(calculatedClosingBalance)})
+                  Withdraw All · Leave SAR 0 Float (SAR {fmt(calculatedClosingBalance)})
                 </button>
                 <button
                   type="button"
@@ -2546,7 +2813,7 @@ function HandoverModalComponent({
               </div>
             </div>
 
-            {/* Dynamic Intelligent Float Box & 2500 Rule */}
+            {/* Dynamic Float Box (No Minimum Float Restriction) */}
             <div className="rounded-2xl border border-slate-200 dark:border-white/10 p-4 sm:p-5 transition-all">
               {isNegativeShortage ? (
                 <div className="flex items-start gap-3 text-rose-500 bg-rose-500/10 border border-rose-500/30 rounded-xl p-4">
@@ -2557,37 +2824,6 @@ function HandoverModalComponent({
                     Drawer balance cannot be negative (<span className="font-mono font-bold">-SAR {fmt(Math.abs(nextDayOpeningFloat))}</span>).
                   </div>
                 </div>
-              ) : isDepletedFloat ? (
-                <div className="flex flex-col gap-3 bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 text-amber-600 dark:text-amber-400">
-                  <div className="flex items-start gap-2.5">
-                    <AlertTriangle size={20} className="shrink-0 mt-0.5 text-amber-500" />
-                    <div className="text-xs sm:text-sm font-medium leading-relaxed">
-                      <strong className="font-bold text-amber-600 dark:text-amber-300 block mb-0.5">
-                        Warning: Drawer float is depleted.
-                      </strong>
-                      To maintain a standard SAR 2,500 opening balance for tomorrow&apos;s shift, you must inject/leave{" "}
-                      <strong className="font-mono font-bold text-amber-600 dark:text-amber-300">
-                        SAR {fmt(floatDeficit)}
-                      </strong>{" "}
-                      in the register.
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-amber-500/20 text-xs">
-                    <span className="font-mono text-slate-600 dark:text-slate-300">
-                      Tomorrow Opening Float: <strong>SAR {fmt(nextDayOpeningFloat)}</strong>
-                    </span>
-                    {calculatedClosingBalance >= STANDARD_RETAIL_FLOAT && (
-                      <button
-                        type="button"
-                        onClick={() => setTakeHomeInput(String(r2(calculatedClosingBalance - STANDARD_RETAIL_FLOAT)))}
-                        className="bg-amber-500 text-black font-bold px-3 py-1.5 rounded-lg text-xs hover:brightness-105 transition shadow-sm"
-                      >
-                        ⚡ Fix: Leave SAR 2,500 Float
-                      </button>
-                    )}
-                  </div>
-                </div>
               ) : (
                 <div className="flex items-start gap-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 text-emerald-600 dark:text-emerald-400">
                   <CheckCircle2 size={20} className="shrink-0 mt-0.5 text-emerald-500" />
@@ -2595,7 +2831,7 @@ function HandoverModalComponent({
                     <strong className="font-bold text-emerald-600 dark:text-emerald-300 block mb-0.5">
                       Tomorrow&apos;s Opening Balance will be SAR {fmt(nextDayOpeningFloat)}.
                     </strong>
-                    Standard retail float (SAR 2,500+) maintained. Drawer is ready for morning shift handover.
+                    Drawer float configured and ready for morning shift handover.
                   </div>
                 </div>
               )}
@@ -2638,7 +2874,15 @@ function HandoverModalComponent({
               <button
                 type="button"
                 disabled={isNegativeShortage || isSaving}
-                onClick={() => onConfirmLock(effectiveTakeHome, nextDayOpeningFloat)}
+                onClick={() =>
+                  onConfirmLock(effectiveTakeHome, nextDayOpeningFloat, {
+                    auditStatus: "LOCKED",
+                    hasDiscrepancy: false,
+                    varianceAmount: null,
+                    varianceType: null,
+                    actualPhysicalCash: calculatedClosingBalance,
+                  })
+                }
                 className="w-full sm:w-auto px-6 py-3.5 rounded-xl font-bold bg-jct-turquoise text-jct-charcoal hover:brightness-95 transition-all shadow-lg disabled:opacity-40 disabled:hover:brightness-100 text-sm flex items-center justify-center gap-2"
               >
                 <Lock size={16} />
@@ -4758,11 +5002,24 @@ function DailyRegisterView({
   const totalMoneyOutDrawer = r2(totalPreLoggedExpenses);
   const calculatedClosingBalance = r2(totalMoneyInDrawer - totalMoneyOutDrawer);
 
-  // Intelligent Drawer Closing: Lock with Owner Take-Home & Next-Day Float Sync
-  const handleConfirmLockWithFloat = async (takeHomeAmount: number, nextDayOpening: number) => {
+  // Intelligent Drawer Closing: Lock or Save Pending Audit Draft with Discrepancy & Float Sync
+  const handleConfirmLockWithFloat = async (
+    takeHomeAmount: number,
+    nextDayOpening: number,
+    options?: HandoverLockOptions
+  ) => {
     setIsSavingDrawerLock(true);
     try {
       syncCommissionExpenses();
+
+      const auditStatus = options?.auditStatus || "LOCKED";
+      const hasDiscrepancy = Boolean(options?.hasDiscrepancy);
+      const varianceAmount = options?.varianceAmount ?? null;
+      const varianceType = options?.varianceType ?? null;
+      const finalClosingCash =
+        options?.actualPhysicalCash !== undefined && options?.actualPhysicalCash !== null
+          ? options.actualPhysicalCash
+          : calculatedClosingBalance;
 
       const newSummary: CompletedDaySummary = {
         date: "12-09-2026",
@@ -4771,8 +5028,12 @@ function DailyRegisterView({
         totalBankSwipe: activeBankSettlementTotal,
         totalPosFees: bankSettlementMode === "NET" || trackPosFees ? totalPosFees : 0,
         totalExpenses: totalPreLoggedExpenses,
-        closingBalance: calculatedClosingBalance,
-        status: "LOCKED",
+        closingBalance: finalClosingCash,
+        status: auditStatus,
+        auditStatus,
+        hasDiscrepancy,
+        varianceAmount,
+        varianceType,
         takeHomeAmount,
         nextDayOpeningBalance: nextDayOpening,
       };
@@ -4788,9 +5049,19 @@ function DailyRegisterView({
       // Update active openingBalance state so today's next cycle/reset receives exact float
       setOpeningBalance(nextDayOpening);
 
-      setJustCompletedToast(
-        `Register Locked — Cash Drop: SAR ${fmt(takeHomeAmount)} | Tomorrow's Opening Float: SAR ${fmt(nextDayOpening)}`
-      );
+      if (auditStatus === "PENDING_AUDIT") {
+        setJustCompletedToast(
+          `📝 Saved as Pending Audit (Draft) — Discrepancy: ${varianceType === "EXCESS" ? "Excess +" : "Shortage -"}SAR ${fmt(varianceAmount || 0)} · Reopen anytime in Audit Library`
+        );
+      } else if (hasDiscrepancy) {
+        setJustCompletedToast(
+          `🔒 Force-Closed with Discrepancy (${varianceType === "EXCESS" ? "Excess +" : "Shortage -"}SAR ${fmt(varianceAmount || 0)}) · Tomorrow's Float: SAR ${fmt(nextDayOpening)}`
+        );
+      } else {
+        setJustCompletedToast(
+          `Register Locked — Cash Drop: SAR ${fmt(takeHomeAmount)} | Tomorrow's Opening Float: SAR ${fmt(nextDayOpening)}`
+        );
+      }
 
       // Persist any auto-generated business commission expenses to Neon /api/pocket
       activeErpList.forEach((inv) => {
@@ -4821,7 +5092,7 @@ function DailyRegisterView({
         }
       });
 
-      // Persist lock record with Next Day Opening Cash & Take Home Amount to Neon PostgreSQL
+      // Persist lock or pending draft record to Neon PostgreSQL
       await fetch("/api/archive", {
         method: "POST",
         headers: {
@@ -4833,7 +5104,7 @@ function DailyRegisterView({
           branch: branchId || "JCT_HQ",
           branchId: branchId || "JCT_HQ",
           date: "12-09-2026",
-          closingCash: calculatedClosingBalance,
+          closingCash: finalClosingCash,
           openingCash: openingBalance,
           takeHomeAmount,
           nextDayOpeningCash: nextDayOpening,
@@ -4844,14 +5115,26 @@ function DailyRegisterView({
           madaFees: totalMadaFees,
           ccFees: totalCcFees,
           lockedBy: isOwner ? "BONGSI" : (branchId || "JCT_HQ"),
-          status: "LOCKED",
+          status: auditStatus,
+          auditStatus,
+          hasDiscrepancy,
+          varianceAmount,
+          varianceType,
           dataJson: JSON.stringify({
             takeHomeAmount,
             nextDayOpeningCash: nextDayOpening,
-            floatDeficit: nextDayOpening < 2500 ? (2500 - nextDayOpening) : 0,
+            auditStatus,
+            hasDiscrepancy,
+            varianceAmount,
+            varianceType,
+            systemCalculatedClosingCash: calculatedClosingBalance,
+            actualPhysicalCash: finalClosingCash,
             expenses: expenseEntries,
             inflows: cashInflowEntries,
             bankSwipes: bankSwipeInvoices,
+            erpInvoices: activeErpList,
+            preLoggedBankInvoices,
+            preLoggedEntries,
           }),
         }),
       });
@@ -11187,9 +11470,65 @@ interface LiveCrossModuleMetrics {
   totalSupplierPayables: number;
 }
 
-function FinancialPulseView({ metrics }: { metrics: LiveCrossModuleMetrics }) {
+function FinancialPulseView({
+  metrics,
+  completedDaysLog = [],
+  onReopenDraft,
+  onOpenAuditLibrary,
+}: {
+  metrics: LiveCrossModuleMetrics;
+  completedDaysLog?: CompletedDaySummary[];
+  onReopenDraft?: (record: ArchiveRecord) => void;
+  onOpenAuditLibrary?: () => void;
+}) {
   const mtdRevenue = r2(438000 + metrics.todayCashSales + metrics.todayBankNet);
   const mtdCashCollected = r2(328000 + metrics.todayCashSales + metrics.todayBankNet);
+  const [pulseArchiveRecords, setPulseArchiveRecords] = useState<ArchiveRecord[]>([]);
+
+  useEffect(() => {
+    let ignore = false;
+    fetch("/api/archive?branch=ALL")
+      .then((r) => r.json())
+      .then((data) => {
+        if (!ignore && Array.isArray(data.records)) {
+          setPulseArchiveRecords(data.records);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  const pendingAuditDrafts: ArchiveRecord[] = (() => {
+    const dbDrafts = pulseArchiveRecords.filter(
+      (r) => r.auditStatus === "PENDING_AUDIT" || r.status === "PENDING_AUDIT"
+    );
+    const localDrafts: ArchiveRecord[] = completedDaysLog
+      .filter((d) => d.auditStatus === "PENDING_AUDIT" || d.status === "PENDING_AUDIT")
+      .filter((d) => !dbDrafts.some((r) => r.date === d.date))
+      .map((d, idx) => ({
+        id: `local-draft-${idx}`,
+        branch: d.branch,
+        date: d.date,
+        closingCash: d.closingBalance,
+        openingCash: 2634,
+        inflows: d.totalCashSales,
+        bankSwipes: d.totalBankSwipe,
+        outflows: d.totalExpenses,
+        posFees: d.totalPosFees,
+        madaFees: 0,
+        ccFees: 0,
+        lockedAt: new Date().toISOString(),
+        lockedBy: "BONGSI",
+        status: "PENDING_AUDIT",
+        auditStatus: "PENDING_AUDIT",
+        hasDiscrepancy: d.hasDiscrepancy,
+        varianceAmount: d.varianceAmount,
+        varianceType: d.varianceType,
+      }));
+    return [...dbDrafts, ...localDrafts];
+  })();
 
   return (
     <div className="flex flex-col gap-6 p-4 md:p-6 lg:p-8 h-full overflow-y-auto w-full">
@@ -11205,6 +11544,79 @@ function FinancialPulseView({ metrics }: { metrics: LiveCrossModuleMetrics }) {
         <span className="text-xs font-bold bg-jct-yellow text-jct-charcoal px-3 py-1.5 rounded-full">
           ● Live Register Sync Active
         </span>
+      </div>
+
+      {/* Prominent Yellow Alert Widget: Pending Audits */}
+      <div className="rounded-2xl border-2 border-jct-yellow bg-jct-yellow/15 dark:bg-amber-500/10 p-5 shadow-md flex flex-col gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl bg-jct-yellow text-jct-charcoal flex items-center justify-center font-black shrink-0">
+              <AlertTriangle size={20} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-display font-black text-base sm:text-lg text-jct-charcoal dark:text-jct-yellow">
+                  Pending Audits Monitor
+                </h3>
+                <span className="rounded-full bg-jct-yellow text-jct-charcoal px-2.5 py-0.5 text-xs font-black font-mono">
+                  {pendingAuditDrafts.length} Pending Draft{pendingAuditDrafts.length === 1 ? "" : "s"}
+                </span>
+              </div>
+              <p className="text-xs text-slate-600 dark:text-slate-300 font-medium mt-0.5">
+                {pendingAuditDrafts.length > 0
+                  ? "Unfinished daily register drafts flagged with cash discrepancy require owner verification."
+                  : "All recent daily register audits are verified and locked. Any saved discrepancy drafts will appear here immediately."}
+              </p>
+            </div>
+          </div>
+          {onOpenAuditLibrary && (
+            <button
+              type="button"
+              onClick={onOpenAuditLibrary}
+              className="rounded-xl bg-jct-yellow text-jct-charcoal font-bold px-4 py-2 text-xs hover:brightness-95 transition shrink-0 self-start sm:self-center shadow-sm"
+            >
+              Open Pending Audits →
+            </button>
+          )}
+        </div>
+
+        {pendingAuditDrafts.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-jct-yellow/30">
+            {pendingAuditDrafts.map((draft) => {
+              const bInfo = getBranchBadgeInfo(draft.branch);
+              return (
+                <div
+                  key={draft.id}
+                  onClick={() => onReopenDraft && onReopenDraft(draft)}
+                  className="rounded-xl bg-white dark:bg-[#0D0D0D] border border-jct-yellow/50 p-3.5 flex items-center justify-between gap-3 cursor-pointer hover:border-jct-yellow transition"
+                >
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-black text-xs text-jct-charcoal dark:text-white">
+                        {draft.date}
+                      </span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-jct-yellow text-jct-charcoal">
+                        {bInfo.name}
+                      </span>
+                      <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-400">
+                        PENDING_AUDIT
+                      </span>
+                    </div>
+                    <span className="text-xs font-mono text-slate-500 dark:text-slate-400">
+                      Drawer Counted: <strong>SAR {fmt(draft.closingCash)}</strong>
+                      {draft.varianceAmount
+                        ? ` · ${draft.varianceType === "EXCESS" ? "Excess +" : "Shortage -"}SAR ${fmt(draft.varianceAmount)}`
+                        : ""}
+                    </span>
+                  </div>
+                  <span className="text-xs font-bold text-jct-turquoise whitespace-nowrap">
+                    📝 Resume Audit →
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* 1. Top Row: Primary Sales & Cash KPIs */}
@@ -11601,13 +12013,57 @@ function NaumanAiView({
   erpInvoices = [],
   preLoggedEntries = [],
   branchId = "JCT_HQ",
+  completedDaysLog = [],
 }: {
   txns: Txn[];
   erpInvoices?: ErpInvoiceItem[];
   preLoggedEntries?: PreLoggedEntry[];
   branchId?: string;
+  completedDaysLog?: CompletedDaySummary[];
 }) {
   const [activeAiTab, setActiveAiTab] = useState<"chat" | "pulse">("chat");
+  const [aiArchiveRecords, setAiArchiveRecords] = useState<ArchiveRecord[]>([]);
+
+  useEffect(() => {
+    let ignore = false;
+    fetch("/api/archive?branch=ALL")
+      .then((r) => r.json())
+      .then((data) => {
+        if (!ignore && Array.isArray(data.records)) {
+          setAiArchiveRecords(data.records);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  const combinedAuditRecordsForAi = [
+    ...aiArchiveRecords.map((r) => ({
+      id: r.id,
+      branch: r.branch,
+      date: r.date,
+      closingCash: r.closingCash,
+      status: r.status,
+      auditStatus: r.auditStatus || (r.status === "PENDING_AUDIT" ? "PENDING_AUDIT" : "LOCKED"),
+      hasDiscrepancy: r.hasDiscrepancy,
+      varianceAmount: r.varianceAmount,
+      varianceType: r.varianceType,
+    })),
+    ...completedDaysLog
+      .filter((d) => !aiArchiveRecords.some((r) => r.date === d.date))
+      .map((d) => ({
+        branch: d.branch,
+        date: d.date,
+        closingCash: d.closingBalance,
+        status: d.status,
+        auditStatus: d.auditStatus || (d.status === "PENDING_AUDIT" ? "PENDING_AUDIT" : "LOCKED"),
+        hasDiscrepancy: d.hasDiscrepancy,
+        varianceAmount: d.varianceAmount,
+        varianceType: d.varianceType,
+      })),
+  ];
   const [aiInsights, setAiInsights] = useState<{
     summary?: {
       headline?: string;
@@ -11741,6 +12197,7 @@ Ask me anything regarding **cash mismatches**, **bill mistakes**, **business com
           inflows,
           outflows,
           totals,
+          auditRecords: combinedAuditRecordsForAi,
           csvAuditContext: {
             totalOriginalAmount: r2(totalOriginalAmount),
             totalFinalAmount: r2(totalFinalAmount),
@@ -11850,6 +12307,7 @@ Ask me anything regarding **cash mismatches**, **bill mistakes**, **business com
   };
 
   const samplePrompts = [
+    "📝 Are there any pending drafts this week?",
     "🔍 Why is there a cash mismatch in today's register?",
     "⚠️ Check for missing or altered business commissions",
     "💸 Audit today's expenses and supplier purchases",
@@ -12239,6 +12697,10 @@ interface ArchiveRecord {
   lockedAt: string | Date;
   lockedBy: string;
   status: string;
+  auditStatus?: string;
+  hasDiscrepancy?: boolean;
+  varianceAmount?: number | null;
+  varianceType?: string | null;
   dataJson?: string | null;
 }
 
@@ -12290,7 +12752,15 @@ interface ParsedSwipeItem {
   time?: string;
 }
 
-function AuditLibraryView({ profile }: { profile: UserProfile | null }) {
+function AuditLibraryView({
+  profile,
+  onReopenPendingDraft,
+  completedDaysLog = [],
+}: {
+  profile: UserProfile | null;
+  onReopenPendingDraft?: (record: ArchiveRecord) => void;
+  completedDaysLog?: CompletedDaySummary[];
+}) {
   const isOwner = Boolean(profile?.isOwner);
   const staffBranchId = profile?.id && profile.id !== "BONGSI" ? profile.id : "JCT_HQ";
 
@@ -12299,6 +12769,7 @@ function AuditLibraryView({ profile }: { profile: UserProfile | null }) {
   const [selectedBranchFilter, setSelectedBranchFilter] = useState<string>(
     isOwner ? "ALL" : staffBranchId
   );
+  const [auditTabFilter, setAuditTabFilter] = useState<"ALL" | "PENDING_AUDIT" | "LOCKED">("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedRecord, setSelectedRecord] = useState<ArchiveRecord | null>(null);
 
@@ -12602,8 +13073,46 @@ function AuditLibraryView({ profile }: { profile: UserProfile | null }) {
     }
   };
 
-  // Filter records by search query
-  const filteredRecords = records.filter((r) => {
+  // Merge local completedDaysLog drafts if not already in DB records
+  const mergedRecords: ArchiveRecord[] = [
+    ...records,
+    ...completedDaysLog
+      .filter((d) => !records.some((r) => r.date === d.date))
+      .map((d, idx) => ({
+        id: `local-rec-${idx}`,
+        branch: d.branch,
+        date: d.date,
+        closingCash: d.closingBalance,
+        openingCash: 2634,
+        takeHomeAmount: d.takeHomeAmount,
+        nextDayOpeningCash: d.nextDayOpeningBalance,
+        inflows: d.totalCashSales,
+        bankSwipes: d.totalBankSwipe,
+        outflows: d.totalExpenses,
+        posFees: d.totalPosFees,
+        madaFees: 0,
+        ccFees: 0,
+        lockedAt: new Date().toISOString(),
+        lockedBy: "BONGSI",
+        status: d.status,
+        auditStatus: d.auditStatus || d.status,
+        hasDiscrepancy: d.hasDiscrepancy,
+        varianceAmount: d.varianceAmount,
+        varianceType: d.varianceType,
+      })),
+  ];
+
+  const isRecordPendingDraft = (r: ArchiveRecord) =>
+    r.auditStatus === "PENDING_AUDIT" || r.status === "PENDING_AUDIT";
+
+  const pendingAuditsCount = mergedRecords.filter(isRecordPendingDraft).length;
+  const lockedAuditsCount = mergedRecords.filter((r) => !isRecordPendingDraft(r)).length;
+
+  // Filter records by tab (ALL / PENDING_AUDIT / LOCKED) and search query
+  const filteredRecords = mergedRecords.filter((r) => {
+    if (auditTabFilter === "PENDING_AUDIT" && !isRecordPendingDraft(r)) return false;
+    if (auditTabFilter === "LOCKED" && isRecordPendingDraft(r)) return false;
+
     const q = searchQuery.trim().toLowerCase();
     if (!q) return true;
     const bInfo = getBranchBadgeInfo(r.branch);
@@ -12611,11 +13120,12 @@ function AuditLibraryView({ profile }: { profile: UserProfile | null }) {
       r.date.toLowerCase().includes(q) ||
       bInfo.name.toLowerCase().includes(q) ||
       r.lockedBy.toLowerCase().includes(q) ||
-      r.status.toLowerCase().includes(q)
+      r.status.toLowerCase().includes(q) ||
+      (r.auditStatus || "").toLowerCase().includes(q)
     );
   });
 
-  const totalAudits = records.length;
+  const totalAudits = mergedRecords.length;
   const totalReconciledCash = r2(records.reduce((s, r) => s + (Number(r.closingCash) || 0), 0));
   const totalBankSettled = r2(records.reduce((s, r) => s + (Number(r.bankSwipes) || 0), 0));
   const latestRecordDate = records[0]?.date || "12-09-2026";
@@ -13376,6 +13886,51 @@ function AuditLibraryView({ profile }: { profile: UserProfile | null }) {
         </div>
       </div>
 
+      {/* Audit Status Filter Tabs: All / Pending Audits / Locked */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-[#1F1F1F] pb-3">
+        <div className="inline-flex rounded-xl bg-slate-100 dark:bg-[#111111] p-1 border border-slate-200 dark:border-[#1F1F1F] gap-1">
+          <button
+            type="button"
+            onClick={() => setAuditTabFilter("ALL")}
+            className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all ${
+              auditTabFilter === "ALL"
+                ? "bg-jct-turquoise text-jct-charcoal shadow-sm"
+                : "text-slate-600 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-white"
+            }`}
+          >
+            All Audits ({mergedRecords.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setAuditTabFilter("PENDING_AUDIT")}
+            className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+              auditTabFilter === "PENDING_AUDIT"
+                ? "bg-jct-yellow text-jct-charcoal shadow-sm"
+                : "text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
+            }`}
+          >
+            <span>📝 Pending Audits</span>
+            <span className="rounded-full bg-black/15 px-2 py-0.5 text-[10px] font-mono">
+              {pendingAuditsCount}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setAuditTabFilter("LOCKED")}
+            className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all ${
+              auditTabFilter === "LOCKED"
+                ? "bg-jct-turquoise text-jct-charcoal shadow-sm"
+                : "text-slate-600 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-white"
+            }`}
+          >
+            🔒 Locked &amp; Audited ({lockedAuditsCount})
+          </button>
+        </div>
+        <span className="text-xs text-slate-500 dark:text-slate-400">
+          Click any <strong>Pending Audit</strong> draft to reopen the Daily Hub populated with that day&apos;s data.
+        </span>
+      </div>
+
       {/* Table / Cards List */}
       <div className="flex flex-col gap-3">
         {loading ? (
@@ -13386,32 +13941,60 @@ function AuditLibraryView({ profile }: { profile: UserProfile | null }) {
         ) : filteredRecords.length === 0 ? (
           <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-12 text-center text-slate-500 dark:text-slate-400">
             <Archive size={32} className="mx-auto mb-2" />
-            <p className="font-bold text-base text-jct-charcoal dark:text-jct-offwhite">No historical audits found</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Try switching branch or clearing your search query.</p>
+            <p className="font-bold text-base text-jct-charcoal dark:text-jct-offwhite">
+              {auditTabFilter === "PENDING_AUDIT" ? "No pending audit drafts found" : "No historical audits found"}
+            </p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              {auditTabFilter === "PENDING_AUDIT"
+                ? "All daily registers have been finalized and locked."
+                : "Try switching branch or clearing your search query."}
+            </p>
           </div>
         ) : (
           <div className="flex flex-col gap-3">
             {filteredRecords.map((r) => {
               const bInfo = getBranchBadgeInfo(r.branch);
               const lockTime = formatLockTime(r.lockedAt);
+              const isPending = isRecordPendingDraft(r);
+              const hasVariance = Boolean(r.hasDiscrepancy || (r.varianceAmount && r.varianceAmount > 0));
 
               return (
                 <div
                   key={r.id}
-                  className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 transition-all duration-300 flex flex-col lg:flex-row lg:items-center justify-between gap-4"
+                  onClick={() => {
+                    if (isPending && onReopenPendingDraft) {
+                      onReopenPendingDraft(r);
+                    }
+                  }}
+                  className={`bg-white dark:bg-[#0A0A0A] shadow-sm border rounded-xl p-6 transition-all duration-300 flex flex-col lg:flex-row lg:items-center justify-between gap-4 ${
+                    isPending
+                      ? "border-jct-yellow bg-jct-yellow/5 hover:shadow-[0_0_20px_rgba(255,222,89,0.15)] cursor-pointer"
+                      : "border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)]"
+                  }`}
                 >
                   {/* Left Column: Date & Branch & Status */}
                   <div className="flex flex-wrap items-center gap-3 min-w-[200px]">
                     <div className="flex flex-col">
-                      <div className="flex items-center gap-2">
-                        <CalendarDays size={14} className="text-jct-turquoise" />
+                      <div className="flex flex-wrap items-center gap-2">
+                        <CalendarDays size={14} className={isPending ? "text-jct-yellow" : "text-jct-turquoise"} />
                         <span className="font-mono text-sm font-black text-jct-charcoal dark:text-jct-offwhite">{r.date}</span>
-                        <span className="rounded-full bg-jct-turquoise text-jct-charcoal px-2 py-0.5 text-[10px] font-bold">
-                          {r.status || "LOCKED"}
-                        </span>
+                        {isPending ? (
+                          <span className="rounded-full bg-jct-yellow text-jct-charcoal px-2.5 py-0.5 text-[10px] font-black">
+                            📝 PENDING AUDIT (DRAFT)
+                          </span>
+                        ) : (
+                          <span className="rounded-full bg-jct-turquoise text-jct-charcoal px-2 py-0.5 text-[10px] font-bold">
+                            {r.status || "LOCKED"}
+                          </span>
+                        )}
+                        {hasVariance && (
+                          <span className="rounded-full bg-rose-500/20 border border-rose-500/40 text-rose-400 px-2.5 py-0.5 text-[10px] font-mono font-bold">
+                            ⚠️ {r.varianceType === "EXCESS" ? "Excess +" : "Shortage -"}SAR {fmt(r.varianceAmount || 0)}
+                          </span>
+                        )}
                       </div>
                       <span className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                        Locked by {r.lockedBy} at {lockTime}
+                        {isPending ? `Saved as draft by ${r.lockedBy} at ${lockTime}` : `Locked by ${r.lockedBy} at ${lockTime}`}
                       </span>
                     </div>
 
@@ -13452,7 +14035,20 @@ function AuditLibraryView({ profile }: { profile: UserProfile | null }) {
                   </div>
 
                   {/* Right Column: Action Buttons (Role-Based CRUD) */}
-                  <div className="flex flex-wrap items-center justify-end gap-2 print:hidden">
+                  <div
+                    className="flex flex-wrap items-center justify-end gap-2 print:hidden"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {isPending && onReopenPendingDraft && (
+                      <button
+                        type="button"
+                        onClick={() => onReopenPendingDraft(r)}
+                        className="inline-flex items-center gap-2 bg-jct-yellow text-jct-charcoal font-black hover:brightness-95 transition-all shadow-sm rounded-lg text-xs px-4 py-2.5 whitespace-nowrap"
+                      >
+                        <span>📝 Reopen in Daily Hub</span>
+                        <ArrowRight size={13} />
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => {
@@ -16088,7 +16684,60 @@ export default function Page() {
                 isOwner={Boolean(profile?.isOwner)}
               />
             ) : safeTab === "archive" ? (
-              <AuditLibraryView profile={profile} />
+              <AuditLibraryView
+                profile={profile}
+                completedDaysLog={completedDaysLog}
+                onReopenPendingDraft={(record) => {
+                  setOpeningBalance(record.openingCash || 2634);
+                  if (record.dataJson) {
+                    try {
+                      const parsed = JSON.parse(record.dataJson);
+                      if (Array.isArray(parsed.erpInvoices)) {
+                        setErpInvoices(parsed.erpInvoices);
+                      }
+                      if (Array.isArray(parsed.preLoggedBankInvoices)) {
+                        setPreLoggedBankInvoices(parsed.preLoggedBankInvoices);
+                      }
+                      if (Array.isArray(parsed.preLoggedEntries)) {
+                        setPreLoggedEntries(parsed.preLoggedEntries);
+                      } else {
+                        const restoredEntries: PreLoggedEntry[] = [];
+                        if (Array.isArray(parsed.expenses)) {
+                          parsed.expenses.forEach((e: ParsedExpenseItem, i: number) => {
+                            restoredEntries.push({
+                              id: e.id || `draft-exp-${i}`,
+                              type: "EXPENSE",
+                              expenseCategory: (e.expenseCategory as StrictExpenseCategory) || "Cash Purchase",
+                              title: e.title || "Expense",
+                              amount: Number(e.amount) || 0,
+                              time: e.time || "12:00",
+                            });
+                          });
+                        }
+                        if (Array.isArray(parsed.inflows)) {
+                          parsed.inflows.forEach((inf: ParsedInflowItem, i: number) => {
+                            restoredEntries.push({
+                              id: inf.id || `draft-inf-${i}`,
+                              type: "CREDIT_RECD",
+                              title: inf.title || "Inflow",
+                              customerName: inf.customer,
+                              amount: Number(inf.amount) || 0,
+                              time: inf.time || "12:00",
+                            });
+                          });
+                        }
+                        if (restoredEntries.length > 0) {
+                          setPreLoggedEntries(restoredEntries);
+                        }
+                      }
+                    } catch (err) {
+                      console.error("Failed to parse draft dataJson on reopen:", err);
+                    }
+                  }
+                  setTrackingMode("hub");
+                  setTab("register");
+                }}
+              />
             ) : safeTab === "radar" ? (
               <CreditRadarView
                 customers={creditCustomers}
@@ -16118,6 +16767,7 @@ export default function Page() {
                 erpInvoices={erpInvoices}
                 preLoggedEntries={preLoggedEntries}
                 branchId={activePocketBranch === "ALL" ? "JCT_HQ" : activePocketBranch}
+                completedDaysLog={completedDaysLog}
               />
             ) : safeTab === "consolidation" ? (
               <div className="flex flex-1 flex-col overflow-y-auto">
@@ -16125,7 +16775,16 @@ export default function Page() {
                 <BranchConsolidationView metrics={liveMetrics} />
               </div>
             ) : safeTab === "pulse" ? (
-              <FinancialPulseView metrics={liveMetrics} />
+              <FinancialPulseView
+                metrics={liveMetrics}
+                completedDaysLog={completedDaysLog}
+                onOpenAuditLibrary={() => setTab("archive")}
+                onReopenDraft={(record) => {
+                  setOpeningBalance(record.openingCash || 2634);
+                  setTrackingMode("hub");
+                  setTab("register");
+                }}
+              />
             ) : null}
             </div>
           </main>
