@@ -14,6 +14,7 @@ const withPWA = withPWAInit({
 
 const nextConfig: NextConfig = {
   turbopack: {},
+  serverExternalPackages: ["pdf-parse", "pdfjs-dist"],
 };
 
 export default withPWA(nextConfig);
