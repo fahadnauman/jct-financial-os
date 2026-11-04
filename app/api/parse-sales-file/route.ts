@@ -199,6 +199,51 @@ const buildInvoiceItem = (
 };
 
 /**
+ * Extracts the official business date from the JCT Sales Summary PDF "Duration" line
+ * (e.g. "Duration : 01-November-2026 To 01-November-2026" -> "01-November-2026").
+ */
+export const extractJctReportDate = (rawText: string): string | null => {
+  if (!rawText || !rawText.trim()) return null;
+
+  const flat = rawText
+    .replace(/[|\t\r\n]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  // 1. Match "Duration : 01-November-2026..." (handles spaces or pipes around colons/hyphens)
+  const durationAlphaMatch = flat.match(
+    /Duration\s*[:=-]?\s*(\d{1,2})\s*[-/\s]\s*([A-Za-z]{3,9})\s*[-/\s]\s*(\d{2,4})/i
+  );
+  if (durationAlphaMatch) {
+    const day = durationAlphaMatch[1].padStart(2, "0");
+    const month = durationAlphaMatch[2];
+    const year = durationAlphaMatch[3];
+    return `${day}-${month}-${year}`;
+  }
+
+  // 2. Match numeric date after "Duration" (e.g. "Duration : 01-11-2026" or "Duration : 01/11/2026" or "Duration : 2026-11-01")
+  const durationNumMatch = flat.match(
+    /Duration\s*[:=-]?\s*(\d{1,4})\s*[-/]\s*(\d{1,2})\s*[-/]\s*(\d{2,4})/i
+  );
+  if (durationNumMatch) {
+    return `${durationNumMatch[1]}-${durationNumMatch[2]}-${durationNumMatch[3]}`;
+  }
+
+  // 3. Fallback: standalone DD-MonthName-YYYY pattern in header
+  const standaloneMonthMatch = flat.match(
+    /\b(\d{1,2})\s*[-/\s]\s*(January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\s*[-/\s]\s*(\d{4})\b/i
+  );
+  if (standaloneMonthMatch) {
+    const day = standaloneMonthMatch[1].padStart(2, "0");
+    const month = standaloneMonthMatch[2];
+    const year = standaloneMonthMatch[3];
+    return `${day}-${month}-${year}`;
+  }
+
+  return null;
+};
+
+/**
  * Multi-line Token State Machine Parser for fragmented JCT Sales Summary PDFs.
  *
  * Handles raw pdf-parse output where columns are broken across newlines and pipe `|` characters:
@@ -562,6 +607,7 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(arrayBuffer);
 
     let invoices: ParsedErpInvoiceItem[] = [];
+    let reportDate: string | null = null;
 
     if (fileName.endsWith(".pdf") || file.type === "application/pdf") {
       const parser = new PDFParse({ data: new Uint8Array(buffer) });
@@ -570,14 +616,20 @@ export async function POST(req: NextRequest) {
         const textResult = await parser.getText({ cellSeparator: " | " });
         const fullText = textResult?.text || "";
         if (fullText) {
+          reportDate = extractJctReportDate(fullText);
           invoices = parseJctPdfTextToInvoices(fullText);
         }
 
-        // Fallback: if 0 rows matched, also try default getText() or table rows flattened to text
-        if (invoices.length === 0) {
+        // Fallback: if 0 rows matched or reportDate not yet extracted, also try default getText()
+        if (invoices.length === 0 || !reportDate) {
           const fallbackTextResult = await parser.getText();
           if (fallbackTextResult?.text) {
-            invoices = parseJctPdfTextToInvoices(fallbackTextResult.text);
+            if (!reportDate) {
+              reportDate = extractJctReportDate(fallbackTextResult.text);
+            }
+            if (invoices.length === 0) {
+              invoices = parseJctPdfTextToInvoices(fallbackTextResult.text);
+            }
           }
         }
       } finally {
@@ -590,12 +642,15 @@ export async function POST(req: NextRequest) {
         const sheet = workbook.Sheets[sheetName];
         if (!sheet) continue;
         const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "" });
+        const flatText = rows.map((r) => (Array.isArray(r) ? r.join(" | ") : "")).join("\n");
+        if (!reportDate && flatText) {
+          reportDate = extractJctReportDate(flatText);
+        }
         const parsed = parseTableRowsToInvoices(rows);
         if (parsed.length > 0) {
           invoices.push(...parsed);
         } else {
           // If the Excel sheet also has fragmented multi-line cells, run the token state machine on its flattened text
-          const flatText = rows.map((r) => (Array.isArray(r) ? r.join(" | ") : "")).join("\n");
           const fallbackParsed = parseJctPdfTextToInvoices(flatText);
           if (fallbackParsed.length > 0) {
             invoices.push(...fallbackParsed);
@@ -604,7 +659,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ invoices });
+    return NextResponse.json({ invoices, reportDate });
   } catch (err) {
     console.error("Error parsing uploaded sales file:", err);
     return NextResponse.json(

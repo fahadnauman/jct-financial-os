@@ -1658,6 +1658,8 @@ interface DailyRegisterViewProps {
   onSwitchTab: (tab: TabId) => void;
   branchId?: string;
   isOwner?: boolean;
+  activeSessionDate?: string;
+  setActiveSessionDate?: React.Dispatch<React.SetStateAction<string>>;
 }
 
 export interface CascadingPaymentSelectorProps {
@@ -2462,7 +2464,16 @@ function DailyRegisterView({
   onSwitchTab,
   branchId = "JCT_HQ",
   isOwner = false,
+  activeSessionDate: propSessionDate,
+  setActiveSessionDate: propSetSessionDate,
 }: DailyRegisterViewProps) {
+  const [localSessionDate, setLocalSessionDate] = useState<string>(() => {
+    const d = new Date();
+    const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    return `${String(d.getDate()).padStart(2, "0")}-${months[d.getMonth()]}-${d.getFullYear()}`;
+  });
+  const activeSessionDate = propSessionDate || localSessionDate;
+  const setActiveSessionDate = propSetSessionDate || setLocalSessionDate;
   const [activeLoggerTab, setActiveLoggerTab] = useState<"bank" | "expense">("bank");
   const [showManualEntry, setShowManualEntry] = useState(false);
   const [trackPosFees, setTrackPosFees] = useState(false);
@@ -3086,6 +3097,17 @@ function DailyRegisterView({
       const lowerName = file.name.toLowerCase();
       let extracted: ErpInvoiceItem[] = [];
 
+      let extractedReportDate: string | null = null;
+      const extractClientDurationDate = (rawText: string): string | null => {
+        if (!rawText) return null;
+        const flat = rawText.replace(/[|\t\r\n]+/g, " ").replace(/\s+/g, " ").trim();
+        const m1 = flat.match(/Duration\s*[:=-]?\s*(\d{1,2})\s*[-/\s]\s*([A-Za-z]{3,9})\s*[-/\s]\s*(\d{2,4})/i);
+        if (m1) return `${m1[1].padStart(2, "0")}-${m1[2]}-${m1[3]}`;
+        const m2 = flat.match(/Duration\s*[:=-]?\s*(\d{1,4})\s*[-/]\s*(\d{1,2})\s*[-/]\s*(\d{2,4})/i);
+        if (m2) return `${m2[1]}-${m2[2]}-${m2[3]}`;
+        return null;
+      };
+
       // 1. Call server-side PDF & Excel parser (/api/parse-sales-file) powered by pdf-parse & xlsx
       try {
         const formData = new FormData();
@@ -3096,6 +3118,9 @@ function DailyRegisterView({
         });
         if (res.ok) {
           const data = await res.json();
+          if (typeof data?.reportDate === "string" && data.reportDate.trim()) {
+            extractedReportDate = data.reportDate.trim();
+          }
           if (Array.isArray(data?.invoices) && data.invoices.length > 0) {
             extracted = data.invoices;
           }
@@ -3115,6 +3140,10 @@ function DailyRegisterView({
           const sheet = workbook.Sheets[sheetName];
           if (!sheet) continue;
           const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "" });
+          if (!extractedReportDate) {
+            const flatSheet = rows.map((r) => (Array.isArray(r) ? r.join(" | ") : "")).join("\n");
+            extractedReportDate = extractClientDurationDate(flatSheet);
+          }
           const parsed = parseExcelSheetRowsClient(rows);
           if (parsed.length > 0) {
             extracted.push(...parsed);
@@ -3125,6 +3154,9 @@ function DailyRegisterView({
       // 3. Plain text fallback for .csv
       if (extracted.length === 0 && lowerName.endsWith(".csv")) {
         const text = await file.text();
+        if (!extractedReportDate) {
+          extractedReportDate = extractClientDurationDate(text);
+        }
         extracted = parseErpCsvText(text, []);
       }
 
@@ -3134,6 +3166,10 @@ function DailyRegisterView({
         );
         setCsvLoadedBanner(false);
         return;
+      }
+
+      if (extractedReportDate) {
+        setActiveSessionDate(extractedReportDate);
       }
 
       const matched = applyPreLoggedMatchesToImported(extracted);
@@ -4638,8 +4674,9 @@ function DailyRegisterView({
           ? options.actualPhysicalCash
           : calculatedClosingBalance;
 
+      const effectiveReportDate = activeSessionDate;
       const newSummary: CompletedDaySummary = {
-        date: auditStatus === "PENDING_AUDIT" ? "11-09-2026 (Draft)" : "12-09-2026",
+        date: auditStatus === "PENDING_AUDIT" ? `${effectiveReportDate} (Draft)` : effectiveReportDate,
         branch: "Jubail - Main Branch",
         totalCashSales: cashSalesTotal,
         totalBankSwipe: activeBankSettlementTotal,
@@ -4712,7 +4749,7 @@ function DailyRegisterView({
               paymentSource: "DRAWER_CASH",
               paymentMode: "CASH",
               note: `Auto-synced from CSV invoice edit (Inv #${inv.invoiceNo})`,
-              date: "2026-09-12",
+              date: effectiveReportDate,
             }),
           }).catch((e) => console.error("Error saving commission expense to pocket:", e));
         }
@@ -4729,7 +4766,7 @@ function DailyRegisterView({
         body: JSON.stringify({
           branch: branchId || "JCT_HQ",
           branchId: branchId || "JCT_HQ",
-          date: "12-09-2026",
+          date: effectiveReportDate,
           closingCash: finalClosingCash,
           openingCash: openingBalance,
           takeHomeAmount,
@@ -4747,6 +4784,7 @@ function DailyRegisterView({
           varianceAmount,
           varianceType,
           dataJson: JSON.stringify({
+            reportDate: effectiveReportDate,
             takeHomeAmount,
             nextDayOpeningCash: nextDayOpening,
             auditStatus,
@@ -5011,7 +5049,7 @@ function DailyRegisterView({
     });
 
     const newSummary: CompletedDaySummary = {
-      date: "12-09-2026",
+      date: activeSessionDate,
       branch: "Jubail - Main Branch",
       totalCashSales: dsCashSaleTotal,
       totalBankSwipe: dsToBankTotal,
@@ -5020,7 +5058,7 @@ function DailyRegisterView({
       closingBalance: dsClosingBalance,
       status: "LOCKED",
     };
-    setCompletedDaysLog((prev) => [newSummary, ...prev.filter((d) => d.date !== "12-09-2026")]);
+    setCompletedDaysLog((prev) => [newSummary, ...prev.filter((d) => d.date !== activeSessionDate)]);
     setJustCompletedToast(
       `Classic Daily Data Sheet Saved & Closed — Total Amt: SAR ${fmt(dsTotalAmt)} | Closing Balance: SAR ${fmt(dsClosingBalance)}`
     );
@@ -6013,7 +6051,7 @@ function DailyRegisterView({
                 <div className="mt-5 inline-flex items-center gap-2 rounded-lg bg-jct-yellow text-jct-charcoal font-bold px-4 py-2 text-xs">
                   <Check size={15} className="text-jct-charcoal" />
                   <span>
-                    {erpInvoices.length} Invoices Extracted from {importedFileName || "Report"} · Advancing to Verification...
+                    {erpInvoices.length} Invoices Extracted from {importedFileName || "Report"} (Date: {activeSessionDate}) · Advancing to Verification...
                   </span>
                 </div>
               )}
@@ -6028,11 +6066,15 @@ function DailyRegisterView({
               {/* Header + Optional MDR Toggle + Summary Cards */}
               <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 pb-5 border-b border-slate-200 dark:border-[#1F1F1F]">
                 <div className="space-y-2">
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex flex-wrap items-center gap-2">
                     <h2 className="font-display text-xl sm:text-2xl font-extrabold tracking-tight text-jct-charcoal dark:text-white uppercase">
                       VERIFY SALES
                     </h2>
                     <InfoTooltip text="Inspect imported invoices, edit tender breakdowns, override line-items, and toggle POS merchant fee estimates." />
+                    <span className="inline-flex items-center gap-1.5 rounded-lg border border-jct-turquoise/40 bg-jct-turquoise/10 px-2.5 py-1 text-xs font-mono font-bold text-jct-charcoal dark:text-jct-turquoise">
+                      <CalendarDays size={13} />
+                      <span>Report Date: {activeSessionDate}</span>
+                    </span>
                   </div>
                   {/* Clean Optional Toggle Switch: Estimate POS Merchant Fees (MDR) - Staff RBAC */}
                   {isOwner && (
@@ -7627,7 +7669,7 @@ function DailyRegisterView({
                 {/* Print-Only Report Header */}
                 <PrintReportHeader
                   branch={branchId === "JCT_HQ" ? "JCT Main HQ (Jubail)" : branchId}
-                  date="12-09-2026"
+                  date={activeSessionDate}
                 />
 
                 {/* 1. Consolidated Settlement & Merchant Fee Header Strip - Staff RBAC */}
@@ -8874,7 +8916,7 @@ function DailyRegisterView({
             activeErpList={activeErpList}
             preLoggedEntries={preLoggedEntries}
             openingBalance={openingBalance}
-            date="12-09-2026"
+            date={activeSessionDate}
             branchName={branchId === "JCT_HQ" ? "JCT Main HQ (Jubail)" : branchId}
           />
           <PrintReportFooter />
@@ -8885,7 +8927,7 @@ function DailyRegisterView({
           <div className="sticky bottom-4 z-20 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 transition-all duration-300 print:hidden">
             <div className="flex items-center gap-2.5 text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400">
               <span className="inline-flex h-2 w-2 rounded-full bg-jct-turquoise" />
-              <span>Ready to lock register for Jubail - Main Branch · 12-09-2026</span>
+              <span>Ready to lock register for {branchId === "JCT_HQ" ? "Jubail - Main Branch" : branchId} · {activeSessionDate}</span>
             </div>
 
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-3 w-full sm:w-auto print:hidden">
@@ -8952,7 +8994,7 @@ function DailyRegisterView({
                   activeErpList={activeErpList}
                   preLoggedEntries={preLoggedEntries}
                   openingBalance={openingBalance}
-                  date="12-09-2026"
+                  date={activeSessionDate}
                   branchName={branchId === "JCT_HQ" ? "JCT Main HQ (Jubail)" : branchId}
                   hideFullscreenToggle={true}
                 />
@@ -9032,7 +9074,7 @@ function DailyRegisterView({
                       activeErpList={branch.activeErpList}
                       preLoggedEntries={branch.preLoggedEntries}
                       openingBalance={branch.openingBalance}
-                      date={new Date().toLocaleDateString("en-GB").replace(/\//g, "-")}
+                      date={activeSessionDate}
                       branchName={branch.name}
                     />
                   </div>
@@ -9055,7 +9097,7 @@ function DailyRegisterView({
                         </p>
                       </div>
                       <div className="text-right font-mono text-xs space-y-1 text-black">
-                        <p className="font-bold">Date: {new Date().toLocaleDateString("en-GB").replace(/\//g, "-")}</p>
+                        <p className="font-bold">Date: {activeSessionDate}</p>
                         <p>Locked By: {isOwner ? "Owner (Nazim & Nadeem)" : "Owner Verified"}</p>
                         <p>Status: <span className="font-bold uppercase">AUDITED &amp; CLOSED</span></p>
                       </div>
@@ -9284,7 +9326,7 @@ function DailyRegisterView({
             <div className="mt-4 pt-4 border-t border-slate-200 dark:border-[#1F1F1F] grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
               <div className="rounded-xl border border-slate-200 dark:border-[#1F1F1F] bg-slate-50 dark:bg-[#111111] px-3.5 py-2">
                 <span className="block text-[10px] font-bold text-slate-500 dark:text-slate-400">DATE &amp; BRANCH</span>
-                <span className="font-mono font-extrabold text-jct-charcoal dark:text-jct-offwhite">12-09-2026 · Jubail Main</span>
+                <span className="font-mono font-extrabold text-jct-charcoal dark:text-jct-offwhite">{activeSessionDate} · Jubail Main</span>
               </div>
               <div className="rounded-xl border border-slate-200 dark:border-[#1F1F1F] bg-slate-50 dark:bg-[#111111] px-3.5 py-2">
                 <span className="block text-[10px] font-bold text-slate-500 dark:text-slate-400">AMT CASH SALE</span>
@@ -16002,6 +16044,11 @@ export default function Page() {
   const [erpInvoices, setErpInvoices] = useState<ErpInvoiceItem[]>([]);
   const [openingBalance, setOpeningBalance] = useState<number>(0);
   const [completedDaysLog, setCompletedDaysLog] = useState<CompletedDaySummary[]>([]);
+  const [activeSessionDate, setActiveSessionDate] = useState<string>(() => {
+    const d = new Date();
+    const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    return `${String(d.getDate()).padStart(2, "0")}-${months[d.getMonth()]}-${d.getFullYear()}`;
+  });
 
   // Sync opening balance from live database archive locks (defaulting strictly to 0.00 when DB has no locks)
   useEffect(() => {
@@ -16411,7 +16458,7 @@ export default function Page() {
             </button>
             <div className="h-4 w-px bg-slate-200 dark:bg-[#1F1F1F] hidden sm:block"></div>
             <div className="flex items-center gap-2 bg-slate-50 dark:bg-[#111111] border border-slate-200 dark:border-[#1F1F1F] text-jct-charcoal dark:text-jct-offwhite text-xs font-medium px-3 py-1.5 rounded-lg">
-              <CalendarDays size={14} className="text-jct-charcoal dark:text-jct-turquoise" /> 12-09-2026
+              <CalendarDays size={14} className="text-jct-charcoal dark:text-jct-turquoise" /> {activeSessionDate}
             </div>
             <div className="h-4 w-px bg-slate-200 dark:bg-[#1F1F1F] hidden sm:block"></div>
             {profile.isOwner ? (
@@ -16489,6 +16536,8 @@ export default function Page() {
                 onSwitchTab={setTab}
                 branchId={activePocketBranch === "ALL" ? "JCT_HQ" : activePocketBranch}
                 isOwner={Boolean(profile?.isOwner)}
+                activeSessionDate={activeSessionDate}
+                setActiveSessionDate={setActiveSessionDate}
               />
             ) : safeTab === "archive" ? (
               <AuditLibraryView
@@ -16496,6 +16545,9 @@ export default function Page() {
                 completedDaysLog={completedDaysLog}
                 onReopenPendingDraft={(record) => {
                   setOpeningBalance(record.openingCash || 0);
+                  if (record.date) {
+                    setActiveSessionDate(record.date.replace(/\s*\(Draft\)$/i, "").trim());
+                  }
                   if (record.dataJson) {
                     try {
                       const parsed = JSON.parse(record.dataJson);
@@ -16588,6 +16640,9 @@ export default function Page() {
                 onOpenAuditLibrary={() => setTab("archive")}
                 onReopenDraft={(record) => {
                   setOpeningBalance(record.openingCash || 0);
+                  if (record.date) {
+                    setActiveSessionDate(record.date.replace(/\s*\(Draft\)$/i, "").trim());
+                  }
                   setTrackingMode("hub");
                   setTab("register");
                 }}
