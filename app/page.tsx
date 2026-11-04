@@ -650,7 +650,6 @@ export interface ErpSeedItem {
   splitPosTerminal?: PosTerminalBank;
 }
 
-export const JUBAIL_ERP_18_SEED: ErpSeedItem[] = [];
 
 export interface DataSheetRow {
   id: string;
@@ -2817,75 +2816,11 @@ function DailyRegisterView({
     });
   };
 
-  const buildMatchedErpList = (): ErpInvoiceItem[] => {
-    const bankMap = new Map<string, PreLoggedBankInvoice>();
-    preLoggedBankInvoices.forEach((b) => bankMap.set(b.invoiceNo.trim(), b));
-
-    const creditSaleInvSet = new Set<string>();
-    const splitSaleMap = new Map<string, PreLoggedEntry>();
-    preLoggedEntries.forEach((entry) => {
-      if (entry.type === "CREDIT_SALE" && entry.receiptNo) {
-        const cleaned = cleanErpInvNo(entry.receiptNo);
-        if (cleaned) creditSaleInvSet.add(cleaned);
-      } else if (entry.type === "SPLIT_SALE" && entry.receiptNo) {
-        const cleaned = cleanErpInvNo(entry.receiptNo);
-        if (cleaned) splitSaleMap.set(cleaned, entry);
-      }
-    });
-
-    return JUBAIL_ERP_18_SEED.map((inv) => {
-      const matchedInfo = bankMap.get(inv.invoiceNo);
-      const isCreditSale = creditSaleInvSet.has(inv.invoiceNo);
-      const splitEntry = splitSaleMap.get(inv.invoiceNo);
-      const defaultTerminal: PosTerminalBank =
-        inv.splitPosTerminal || (inv.invoiceNo === "30068" ? "AL_RAJHI" : "SAB");
-
-      const isSplitRow = Boolean(splitEntry) || Boolean(inv.isSplit);
-      const halfGross = r2(inv.amount / 2);
-      const resolvedCash = splitEntry?.splitCashAmount ?? inv.splitCashAmount ?? halfGross;
-      const resolvedBank =
-        splitEntry?.splitBankAmount ?? inv.splitBankAmount ?? r2(inv.amount - resolvedCash);
-      const resolvedSplitMethod =
-        splitEntry?.splitBankMethod ?? inv.splitBankMethod ?? "POS_SWIPE";
-      const resolvedSplitTerm =
-        splitEntry?.splitPosTerminal ?? inv.splitPosTerminal ?? defaultTerminal;
-
-      const resolvedMode: InvoicePaymentMode = isCreditSale
-        ? "CREDIT_SALE"
-        : isSplitRow
-        ? "SPLIT"
-        : matchedInfo
-        ? matchedInfo.paymentMode
-        : "CASH";
-
-      const matchedTerm = (matchedInfo?.posTerminal === "AL_RAJHI" ? "AL_RAJHI" : matchedInfo?.posTerminal === "SNB" ? "SNB" : "SAB") as "SAB" | "AL_RAJHI" | "SNB";
-      const matchedNet = matchedInfo?.cardNetwork || (matchedInfo?.posTerminal === "VISA_MC" ? "visa" : "mada");
-
-      return {
-        ...inv,
-        originalAmount: inv.amount,
-        isEdited: false,
-        paymentMode: resolvedMode,
-        posTerminal: matchedInfo?.posTerminal || resolvedSplitTerm,
-        posTerminalDevice: matchedTerm,
-        terminal: matchedTerm,
-        cardNetwork: matchedNet,
-        network: matchedNet,
-        isSplit: resolvedMode === "SPLIT",
-        splitCashAmount: resolvedCash,
-        splitBankAmount: resolvedBank,
-        splitBankMethod: resolvedSplitMethod,
-        splitPosTerminal: resolvedSplitTerm,
-        autoMatched: Boolean(matchedInfo) || isCreditSale || isSplitRow,
-      };
-    });
-  };
-
   // Auto-Lookup helper for ERP invoices (searches loaded erpInvoices or JUBAIL_ERP_18_SEED)
   const findErpInvoiceMatch = (rawInput: string): ErpInvoiceItem | undefined => {
     const cleaned = cleanErpInvNo(rawInput);
     if (!cleaned) return undefined;
-    const pool = erpInvoices.length > 0 ? erpInvoices : buildMatchedErpList();
+    const pool = erpInvoices;
     return pool.find((inv) => inv.invoiceNo === cleaned);
   };
 
@@ -3054,49 +2989,380 @@ function DailyRegisterView({
   };
 
   const handleStartWizard = () => {
-    if (erpInvoices.length === 0) {
-      setErpInvoices(buildMatchedErpList());
-    }
     setTrackingMode("wizard");
     setWizardStep(1);
     setCsvLoadedBanner(false);
     setJustCompletedToast(null);
   };
 
-  const handleSimulateCsvUpload = () => {
-    const matched = buildMatchedErpList();
-    setErpInvoices(matched);
-    setCsvLoadedBanner(true);
-    if (trackingMode === "wizard") {
-      setTimeout(() => {
-        setWizardStep(2);
-      }, 650);
-    }
-  };
-
   const handleCsvFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) {
-      handleSimulateCsvUpload();
       return;
     }
     const reader = new FileReader();
     reader.onload = () => {
       const text = typeof reader.result === "string" ? reader.result : "";
-      const fallback = buildMatchedErpList();
-      const parsed = parseErpCsvText(text, fallback);
+      const parsed = parseErpCsvText(text, []);
       setErpInvoices(parsed);
-      setCsvLoadedBanner(true);
-      if (trackingMode === "wizard") {
+      setCsvLoadedBanner(parsed.length > 0);
+      if (trackingMode === "wizard" && parsed.length > 0) {
         setTimeout(() => {
           setWizardStep(2);
         }, 650);
       }
     };
     reader.onerror = () => {
-      handleSimulateCsvUpload();
+      setCsvLoadedBanner(false);
     };
     reader.readAsText(file);
+  };
+
+  const collectActiveRegisterExportRows = async () => {
+    type ExportRow = {
+      time: string;
+      referenceId: string;
+      description: string;
+      category: string;
+      paymentMethod: string;
+      amount: number;
+      isInflow: boolean;
+      isExpense: boolean;
+    };
+
+    const rows: ExportRow[] = [];
+    const seenIds = new Set<string>();
+
+    // 1. Active ERP / Manual Sales Invoices
+    erpInvoices.forEach((inv) => {
+      const refId = inv.invoiceNo ? `#${inv.invoiceNo.replace(/^#/, "")}` : inv.id || "MANUAL";
+      const key = `inv-${refId}`;
+      seenIds.add(key);
+      const modeLabel =
+        inv.paymentMode === "SPLIT"
+          ? `SPLIT (Cash SAR ${fmt(inv.splitCashAmount)} + ${inv.splitBankMethod === "BANK_TRANSFER" ? "Bank" : "POS"} SAR ${fmt(inv.splitBankAmount)})`
+          : inv.paymentMode === "POS_SWIPE"
+          ? `POS_SWIPE (${inv.posTerminal || "SAB"})`
+          : String(inv.paymentMode || "CASH");
+
+      rows.push({
+        time: inv.time || "12:00",
+        referenceId: refId,
+        description: inv.customer || inv.customerName || "Walk-in Customer",
+        category: "Sale Invoice",
+        paymentMethod: modeLabel,
+        amount: Number(inv.amount) || 0,
+        isInflow: inv.paymentMode !== "CREDIT_SALE",
+        isExpense: false,
+      });
+    });
+
+    // 2. Queued Bank / POS Swipes not already in erpInvoices
+    preLoggedBankInvoices.forEach((b) => {
+      const refId = `#${b.invoiceNo.replace(/^#/, "")}`;
+      const key = `inv-${refId}`;
+      if (seenIds.has(key)) return;
+      seenIds.add(key);
+      rows.push({
+        time: b.time || "12:00",
+        referenceId: refId,
+        description: "POS / Bank Swipe",
+        category: "POS / Bank Swipe",
+        paymentMethod: b.paymentMode === "POS_SWIPE" ? `POS_SWIPE (${b.posTerminal || "SAB"})` : "BANK_TRANSFER",
+        amount: Number(b.amount) || 0,
+        isInflow: true,
+        isExpense: false,
+      });
+    });
+
+    // 3. Pre-logged Inflows & Expenses in active session
+    preLoggedEntries.forEach((entry) => {
+      if (entry.type === "SPLIT_SALE") return; // already represented in erpInvoices
+      const key = entry.id || `ple-${entry.title}-${entry.amount}`;
+      if (seenIds.has(key)) return;
+      seenIds.add(key);
+      const isExp = entry.type === "EXPENSE";
+      rows.push({
+        time: entry.time || "12:00",
+        referenceId: entry.receiptNo || entry.supplierInvoiceNum || entry.id,
+        description: entry.title || entry.customerName || entry.supplierName || "Register Entry",
+        category: isExp ? (entry.expenseCategory || "Expense") : entry.type,
+        paymentMethod: String(entry.paymentMode || "CASH"),
+        amount: Number(entry.amount) || 0,
+        isInflow: !isExp && entry.type !== "CREDIT_SALE",
+        isExpense: isExp,
+      });
+    });
+
+    // 4. Fetch live database records from /api/pocket for the active branch
+    try {
+      const res = await fetch(`/api/pocket?branch=${encodeURIComponent(branchId || "JCT_HQ")}`, {
+        cache: "no-store",
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const txns = Array.isArray(data?.transactions) ? data.transactions : [];
+        txns.forEach((t: {
+          id: string;
+          type: string;
+          amount: number;
+          category?: string | null;
+          recipientName?: string | null;
+          paymentSource?: string | null;
+          paymentMode?: string | null;
+          supplierInvoiceNum?: string | null;
+          createdAt?: string;
+        }) => {
+          const pkKey = `pk-${t.id}`;
+          if (seenIds.has(pkKey)) return;
+          seenIds.add(pkKey);
+          const timeStr = t.createdAt
+            ? new Date(t.createdAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
+            : "12:00";
+          const isExp = t.type === "EXPENSE" || t.type === "ADVANCE";
+          rows.push({
+            time: timeStr,
+            referenceId: t.supplierInvoiceNum || t.id.slice(0, 10).toUpperCase(),
+            description: [t.category, t.recipientName].filter(Boolean).join(" — ") || t.type,
+            category: t.type,
+            paymentMethod: String(t.paymentMode || t.paymentSource || "CASH"),
+            amount: Number(t.amount) || 0,
+            isInflow: !isExp,
+            isExpense: isExp,
+          });
+        });
+      }
+    } catch (err) {
+      console.warn("Export live fetch fallback to local state:", err);
+    }
+
+    const totalInflowsVal = r2(
+      rows.filter((r) => r.isInflow).reduce((sum, r) => sum + r.amount, 0)
+    );
+    const totalExpensesVal = r2(
+      rows.filter((r) => r.isExpense).reduce((sum, r) => sum + r.amount, 0)
+    );
+
+    return { rows, totalInflowsVal, totalExpensesVal };
+  };
+
+  const handleExportSalesSummaryCsv = async () => {
+    const { rows, totalInflowsVal, totalExpensesVal } = await collectActiveRegisterExportRows();
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const escapeCsv = (val: string | number) => {
+      const str = String(val ?? "");
+      if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
+    const csvLines: string[] = [
+      ["Time", "Reference ID", "Customer / Description", "Category", "Payment Method", "Amount (SAR)"].join(","),
+    ];
+
+    if (rows.length === 0) {
+      csvLines.push(
+        ["--", "--", "No entries recorded", "EMPTY_REGISTER", "--", "0.00"].map(escapeCsv).join(",")
+      );
+    } else {
+      rows.forEach((r) => {
+        csvLines.push(
+          [
+            r.time,
+            r.referenceId,
+            r.description,
+            r.category,
+            r.paymentMethod,
+            r.amount.toFixed(2),
+          ]
+            .map(escapeCsv)
+            .join(",")
+        );
+      });
+    }
+
+    csvLines.push("");
+    csvLines.push(["", "", "Opening Cash Balance", "", "", openingBalance.toFixed(2)].map(escapeCsv).join(","));
+    csvLines.push(["", "", "Total Sales & Inflows", "", "", totalInflowsVal.toFixed(2)].map(escapeCsv).join(","));
+    csvLines.push(["", "", "Total Expenses", "", "", totalExpensesVal.toFixed(2)].map(escapeCsv).join(","));
+    csvLines.push(["", "", "Calculated Closing Cash Drawer", "", "", calculatedClosingBalance.toFixed(2)].map(escapeCsv).join(","));
+
+    const blob = new Blob([csvLines.join("\r\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `JCT-Sales-Summary-${branchId || "JCT_HQ"}-${todayStr}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportSalesSummaryPdf = async () => {
+    const { rows, totalInflowsVal, totalExpensesVal } = await collectActiveRegisterExportRows();
+    const todayStr = new Date().toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+    const escapeHtml = (s: string) =>
+      String(s ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+
+    const tableRowsHtml =
+      rows.length === 0
+        ? `<tr>
+            <td colspan="5" style="text-align:center; padding: 20px; color: #64748b; font-style: italic;">
+              No sales or register entries recorded for this session.
+            </td>
+            <td style="text-align:right; padding: 20px; font-family: monospace; font-weight: 700;">SAR 0.00</td>
+          </tr>`
+        : rows
+            .map(
+              (r) => `<tr>
+                <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-family: monospace;">${escapeHtml(r.time)}</td>
+                <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-family: monospace; font-weight: 600;">${escapeHtml(r.referenceId)}</td>
+                <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0;">${escapeHtml(r.description)}</td>
+                <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0;">${escapeHtml(r.category)}</td>
+                <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0;">${escapeHtml(r.paymentMethod)}</td>
+                <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; text-align: right; font-family: monospace; font-weight: 700; color: ${r.isExpense ? "#e11d48" : "#0f172a"};">
+                  ${r.isExpense ? "-" : ""}SAR ${r.amount.toFixed(2)}
+                </td>
+              </tr>`
+            )
+            .join("");
+
+    const htmlDoc = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>JCT Sales Summary Report - ${escapeHtml(branchId || "JCT_HQ")} - ${escapeHtml(todayStr)}</title>
+  <style>
+    @page { size: A4 portrait; margin: 14mm; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #0f172a; margin: 0; padding: 0; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #0f172a; padding-bottom: 14px; margin-bottom: 20px; }
+    .brand { font-size: 22px; font-weight: 900; letter-spacing: -0.02em; text-transform: uppercase; }
+    .sub { font-size: 12px; color: #475569; margin-top: 4px; }
+    .meta { text-align: right; font-size: 12px; color: #334155; }
+    .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 22px; }
+    .kpi-card { border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; background: #f8fafc; }
+    .kpi-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #64748b; display: block; }
+    .kpi-val { font-size: 16px; font-weight: 800; font-family: monospace; margin-top: 4px; display: block; color: #0f172a; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th { background: #0f172a; color: #ffffff; text-align: left; padding: 9px 10px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
+    th:last-child { text-align: right; }
+    .footer-totals { margin-top: 18px; border-top: 2px solid #0f172a; padding-top: 12px; display: flex; justify-content: flex-end; }
+    .footer-box { width: 280px; font-size: 12px; }
+    .footer-row { display: flex; justify-content: space-between; padding: 4px 0; }
+    .footer-row.bold { font-weight: 800; font-size: 14px; border-top: 1px solid #cbd5e1; padding-top: 8px; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div class="brand">Jubail Colour Town (JCT)</div>
+      <div class="sub">Official Daily Sales Summary &amp; Register Closing Report</div>
+    </div>
+    <div class="meta">
+      <div><strong>Branch:</strong> ${escapeHtml(branchId || "JCT_HQ")}</div>
+      <div><strong>Date:</strong> ${escapeHtml(todayStr)}</div>
+      <div><strong>Total Records:</strong> ${rows.length}</div>
+    </div>
+  </div>
+
+  <div class="kpi-grid">
+    <div class="kpi-card">
+      <span class="kpi-label">Opening Cash</span>
+      <span class="kpi-val">SAR ${openingBalance.toFixed(2)}</span>
+    </div>
+    <div class="kpi-card">
+      <span class="kpi-label">Total Sales / Inflows</span>
+      <span class="kpi-val">SAR ${totalInflowsVal.toFixed(2)}</span>
+    </div>
+    <div class="kpi-card">
+      <span class="kpi-label">Total Expenses</span>
+      <span class="kpi-val">SAR ${totalExpensesVal.toFixed(2)}</span>
+    </div>
+    <div class="kpi-card">
+      <span class="kpi-label">Closing Drawer Cash</span>
+      <span class="kpi-val">SAR ${calculatedClosingBalance.toFixed(2)}</span>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Time</th>
+        <th>Reference ID</th>
+        <th>Customer / Description</th>
+        <th>Category</th>
+        <th>Payment Method</th>
+        <th>Amount (SAR)</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${tableRowsHtml}
+    </tbody>
+  </table>
+
+  <div class="footer-totals">
+    <div class="footer-box">
+      <div class="footer-row">
+        <span>Total Inflows:</span>
+        <span style="font-family: monospace; font-weight: 700;">SAR ${totalInflowsVal.toFixed(2)}</span>
+      </div>
+      <div class="footer-row">
+        <span>Total Expenses:</span>
+        <span style="font-family: monospace; font-weight: 700;">SAR ${totalExpensesVal.toFixed(2)}</span>
+      </div>
+      <div class="footer-row bold">
+        <span>Closing Drawer Balance:</span>
+        <span style="font-family: monospace;">SAR ${calculatedClosingBalance.toFixed(2)}</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    window.onload = function() {
+      setTimeout(function() {
+        window.focus();
+        window.print();
+      }, 200);
+    };
+  </script>
+</body>
+</html>`;
+
+    const printWin = window.open("", "_blank", "width=960,height=800");
+    if (printWin) {
+      printWin.document.open();
+      printWin.document.write(htmlDoc);
+      printWin.document.close();
+    } else {
+      const iframe = document.createElement("iframe");
+      iframe.style.position = "fixed";
+      iframe.style.right = "0";
+      iframe.style.bottom = "0";
+      iframe.style.width = "0";
+      iframe.style.height = "0";
+      iframe.style.border = "0";
+      document.body.appendChild(iframe);
+      const doc = iframe.contentWindow?.document;
+      if (doc) {
+        doc.open();
+        doc.write(htmlDoc);
+        doc.close();
+        setTimeout(() => {
+          iframe.contentWindow?.focus();
+          iframe.contentWindow?.print();
+          setTimeout(() => document.body.removeChild(iframe), 2000);
+        }, 300);
+      }
+    }
   };
 
   const handleSetInvoiceMode = (invoiceNo: string, mode: InvoicePaymentMode) => {
@@ -3113,7 +3379,7 @@ function DailyRegisterView({
       )
     );
     setErpInvoices((prev) => {
-      const base = prev.length > 0 ? prev : buildMatchedErpList();
+      const base = prev;
       return base.map((inv) => {
         const matches =
           (inv.internalId && inv.internalId === invoiceNo) ||
@@ -3155,7 +3421,7 @@ function DailyRegisterView({
       followUpDate: string;
     }
   ) => {
-    const base = erpInvoices.length > 0 ? erpInvoices : buildMatchedErpList();
+    const base = erpInvoices;
     const target = base.find((i) => i.invoiceNo === invoiceNo);
     if (!target) return;
 
@@ -3220,7 +3486,7 @@ function DailyRegisterView({
   ) => {
     const parsed = Math.max(0, parseFloat(rawValue) || 0);
     setErpInvoices((prev) => {
-      const base = prev.length > 0 ? prev : buildMatchedErpList();
+      const base = prev;
       return base.map((inv) => {
         const matches =
           (inv.internalId && inv.internalId === invoiceNo) ||
@@ -3247,7 +3513,7 @@ function DailyRegisterView({
     terminal?: PosTerminalBank
   ) => {
     setErpInvoices((prev) => {
-      const base = prev.length > 0 ? prev : buildMatchedErpList();
+      const base = prev;
       return base.map((inv) => {
         const matches =
           (inv.internalId && inv.internalId === invoiceNo) ||
@@ -3269,7 +3535,7 @@ function DailyRegisterView({
 
   const handleSetInvoiceTerminal = (invoiceNo: string, terminal: PosTerminalBank) => {
     setErpInvoices((prev) => {
-      const base = prev.length > 0 ? prev : buildMatchedErpList();
+      const base = prev;
       return base.map((inv) =>
         inv.invoiceNo === invoiceNo
           ? {
@@ -3289,7 +3555,7 @@ function DailyRegisterView({
     terminal: "SAB" | "AL_RAJHI" | "SNB"
   ) => {
     setErpInvoices((prev) => {
-      const base = prev.length > 0 ? prev : buildMatchedErpList();
+      const base = prev;
       return base.map((inv) => {
         const matches =
           (inv.internalId && inv.internalId === invoiceNo) ||
@@ -3316,7 +3582,7 @@ function DailyRegisterView({
     network: "mada" | "visa"
   ) => {
     setErpInvoices((prev) => {
-      const base = prev.length > 0 ? prev : buildMatchedErpList();
+      const base = prev;
       return base.map((inv) => {
         const matches =
           (inv.internalId && inv.internalId === invoiceNo) ||
@@ -3341,7 +3607,7 @@ function DailyRegisterView({
 
   const handleSetInvoiceOtherNote = (invoiceNo: string, note: string) => {
     setErpInvoices((prev) => {
-      const base = prev.length > 0 ? prev : buildMatchedErpList();
+      const base = prev;
       return base.map((inv) =>
         inv.invoiceNo === invoiceNo ? { ...inv, otherNote: note } : inv
       );
@@ -3424,7 +3690,7 @@ function DailyRegisterView({
       });
 
       setErpInvoices((prev) => {
-        const base = prev.length > 0 ? prev : buildMatchedErpList();
+        const base = prev;
         const exists = base.some((inv) => inv.invoiceNo === invNumber);
         if (exists) {
           return base.map((inv) =>
@@ -3598,7 +3864,7 @@ function DailyRegisterView({
     // Reclassify matched ERP invoice as a Credit Sale (No Double Cash Counting)
     if (entryType === "CREDIT_SALE" && cleanInv) {
       setErpInvoices((prev) => {
-        const base = prev.length > 0 ? prev : buildMatchedErpList();
+        const base = prev;
         return base.map((inv) =>
           inv.invoiceNo === cleanInv
             ? {
@@ -3641,7 +3907,7 @@ function DailyRegisterView({
 
   const handleRemoveErpInvoice = (identifier: string) => {
     setErpInvoices((prev) => {
-      const base = prev.length > 0 ? prev : buildMatchedErpList();
+      const base = prev;
       return base.filter(
         (inv) =>
           inv.invoiceNo !== identifier &&
@@ -3697,7 +3963,7 @@ function DailyRegisterView({
       });
 
       setErpInvoices((prev) => {
-        const base = prev.length > 0 ? prev : buildMatchedErpList();
+        const base = prev;
         const exists = base.some((inv) => inv.invoiceNo === invNumber);
         if (exists) {
           return base.map((inv) =>
@@ -3797,7 +4063,7 @@ function DailyRegisterView({
     // If a matched ERP invoice is saved as a Credit Sale, reclassify it in erpInvoices as CREDIT_SALE so it is not double-counted in Cash Drawer Sales
     if (step3Kind === "CREDIT_SALE" && cleanInv) {
       setErpInvoices((prev) => {
-        const base = prev.length > 0 ? prev : buildMatchedErpList();
+        const base = prev;
         return base.map((inv) =>
           inv.invoiceNo === cleanInv
             ? {
@@ -3961,7 +4227,7 @@ function DailyRegisterView({
     if (rowKey.startsWith("erp-cash-")) {
       const invNo = rowKey.replace("erp-cash-", "");
       setErpInvoices((prev) => {
-        const base = prev.length > 0 ? prev : buildMatchedErpList();
+        const base = prev;
         return base.map((inv) => {
           if (inv.invoiceNo !== invNo) return inv;
           if (inv.paymentMode === "SPLIT") {
@@ -3978,7 +4244,7 @@ function DailyRegisterView({
     } else if (rowKey.startsWith("erp-bank-")) {
       const invNo = rowKey.replace("erp-bank-", "");
       setErpInvoices((prev) => {
-        const base = prev.length > 0 ? prev : buildMatchedErpList();
+        const base = prev;
         return base.map((inv) => {
           if (inv.invoiceNo !== invNo) return inv;
           if (inv.paymentMode === "SPLIT") {
@@ -3995,7 +4261,7 @@ function DailyRegisterView({
     } else if (rowKey.startsWith("erp-")) {
       const invNo = rowKey.replace("erp-", "");
       setErpInvoices((prev) => {
-        const base = prev.length > 0 ? prev : buildMatchedErpList();
+        const base = prev;
         return base.map((inv) =>
           inv.invoiceNo === invNo
             ? { ...inv, originalAmount: inv.originalAmount ?? inv.amount, amount: val }
@@ -4067,7 +4333,7 @@ function DailyRegisterView({
 
   const handleUpdateInvoiceId = (identifier: string, nextId: string) => {
     setErpInvoices((prev) => {
-      const base = prev.length > 0 ? prev : buildMatchedErpList();
+      const base = prev;
       return base.map((inv) => {
         const matches =
           (inv.internalId && inv.internalId === identifier) ||
@@ -4126,7 +4392,7 @@ function DailyRegisterView({
 
   const handleConfirmManualRow = (identifier: string) => {
     setErpInvoices((prev) => {
-      const base = prev.length > 0 ? prev : buildMatchedErpList();
+      const base = prev;
       return base.map((inv) => {
         const matches =
           (inv.internalId && inv.internalId === identifier) ||
@@ -4184,7 +4450,7 @@ function DailyRegisterView({
 
   const handleEditErpInvoiceCustomer = (identifier: string, nextCustomer: string) => {
     setErpInvoices((prev) => {
-      const base = prev.length > 0 ? prev : buildMatchedErpList();
+      const base = prev;
       return base.map((inv) =>
         (inv.internalId && inv.internalId === identifier) ||
         inv.invoiceNo === identifier ||
@@ -4198,7 +4464,7 @@ function DailyRegisterView({
   const handleEditErpInvoiceAmount = (identifier: string, rawVal: string) => {
     const val = Math.max(0, parseFloat(rawVal) || 0);
     setErpInvoices((prev) => {
-      const base = prev.length > 0 ? prev : buildMatchedErpList();
+      const base = prev;
       return base.map((inv) => {
         const matches =
           (inv.internalId && inv.internalId === identifier) ||
@@ -4232,7 +4498,7 @@ function DailyRegisterView({
     reason: OverrideReason
   ) => {
     setErpInvoices((prev) => {
-      const base = prev.length > 0 ? prev : buildMatchedErpList();
+      const base = prev;
       return base.map((inv) =>
         (inv.internalId && inv.internalId === identifier) ||
         inv.invoiceNo === identifier ||
@@ -4245,7 +4511,7 @@ function DailyRegisterView({
 
   const handleEditErpInvoiceOverrideNote = (identifier: string, note: string) => {
     setErpInvoices((prev) => {
-      const base = prev.length > 0 ? prev : buildMatchedErpList();
+      const base = prev;
       return base.map((inv) =>
         (inv.internalId && inv.internalId === identifier) ||
         inv.invoiceNo === identifier ||
@@ -4258,7 +4524,7 @@ function DailyRegisterView({
 
   const syncCommissionExpenses = (targetInvoices?: ErpInvoiceItem[]) => {
     const invoices =
-      targetInvoices || (erpInvoices.length > 0 ? erpInvoices : buildMatchedErpList());
+      targetInvoices || (erpInvoices);
     setPreLoggedEntries((prev) => {
       let updated = [...prev];
       for (const inv of invoices) {
@@ -4300,7 +4566,7 @@ function DailyRegisterView({
 
   const handleEditErpInvoiceBankMode = (identifier: string, nextBankMode: string) => {
     setErpInvoices((prev) => {
-      const base = prev.length > 0 ? prev : buildMatchedErpList();
+      const base = prev;
       return base.map((inv) =>
         (inv.internalId && inv.internalId === identifier) ||
         inv.invoiceNo === identifier ||
@@ -4337,14 +4603,14 @@ function DailyRegisterView({
       time: nowHHMM(),
     };
     setErpInvoices((prev) => {
-      const base = prev.length > 0 ? prev : buildMatchedErpList();
+      const base = prev;
       return [...base, newRow];
     });
   };
 
   const handleAddManualErpInvoice = () => {
     setErpInvoices((prev) => {
-      const base = prev.length > 0 ? prev : buildMatchedErpList();
+      const base = prev;
       const maxNo = base.reduce(
         (m, i) => Math.max(m, parseInt(i.invoiceNo, 10) || 30079),
         30079
@@ -4439,7 +4705,7 @@ function DailyRegisterView({
   };
 
   // Live Derived Totals (with Full Split / Partial Tender Support)
-  const activeErpList = erpInvoices.length > 0 ? erpInvoices : buildMatchedErpList();
+  const activeErpList = erpInvoices;
   // Cash Drawer Sales include "CASH", "OTHER_RECD", and the Cash Share of "SPLIT" invoices
   const cashSaleInvoices = activeErpList.filter(
     (i) =>
@@ -4830,7 +5096,7 @@ function DailyRegisterView({
   );
 
   const handleSyncSheetFromWizard = () => {
-    const baseList = activeErpList.length > 0 ? activeErpList : buildMatchedErpList();
+    const baseList = activeErpList.length > 0 ? activeErpList : [];
     const syncedRows: DataSheetRow[] = baseList.map((inv, idx) => {
       const isCreditSale = inv.paymentMode === "CREDIT_SALE";
       const isSplit = inv.paymentMode === "SPLIT";
@@ -5182,7 +5448,27 @@ function DailyRegisterView({
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full sm:w-auto shrink-0">
+            <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto shrink-0">
+              <button
+                type="button"
+                onClick={handleExportSalesSummaryPdf}
+                className="bg-white dark:bg-[#111111] text-jct-charcoal dark:text-slate-200 border border-slate-300 dark:border-slate-700 hover:border-jct-turquoise dark:hover:border-jct-turquoise text-xs sm:text-sm font-bold px-4 py-2.5 rounded-lg transition-all flex items-center justify-center gap-2 whitespace-nowrap shadow-sm"
+                title="Export Daily Sales Summary as PDF"
+              >
+                <FileText size={15} className="text-jct-turquoise" />
+                <span>Export PDF</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleExportSalesSummaryCsv}
+                className="bg-white dark:bg-[#111111] text-jct-charcoal dark:text-slate-200 border border-slate-300 dark:border-slate-700 hover:border-jct-turquoise dark:hover:border-jct-turquoise text-xs sm:text-sm font-bold px-4 py-2.5 rounded-lg transition-all flex items-center justify-center gap-2 whitespace-nowrap shadow-sm"
+                title="Export Daily Sales Summary as CSV / Excel"
+              >
+                <FileSpreadsheet size={15} className="text-emerald-500" />
+                <span>Export CSV</span>
+              </button>
+
               <button
                 type="button"
                 onClick={handleStartWizard}
@@ -5830,7 +6116,7 @@ function DailyRegisterView({
                       key={s}
                       onClick={() => {
                         if (erpInvoices.length === 0 && s > 1) {
-                          setErpInvoices(buildMatchedErpList());
+                          setErpInvoices([]);
                         }
                         syncCommissionExpenses();
                         setWizardStep(s);
@@ -5889,18 +6175,18 @@ function DailyRegisterView({
 
               <button
                 type="button"
-                onClick={handleSimulateCsvUpload}
+                onClick={() => setWizardStep(2)}
                 className="mt-6 flex items-center gap-2.5 bg-jct-turquoise text-jct-charcoal font-bold hover:brightness-95 transition-all shadow-sm rounded-lg px-6 py-3 text-sm"
               >
-                <Zap size={16} className="text-jct-charcoal" />
-                <span>Load Today&apos;s ERP Batch (18 Invoices · Split Tenders Auto-Detected)</span>
+                <span>Continue to Manual / Live POS Entry</span>
+                <ArrowRight size={16} className="text-jct-charcoal" />
               </button>
 
-              {csvLoadedBanner && (
+              {csvLoadedBanner && erpInvoices.length > 0 && (
                 <div className="mt-5 inline-flex items-center gap-2 rounded-lg bg-jct-yellow text-jct-charcoal font-bold px-4 py-2 text-xs">
                   <Check size={15} className="text-jct-charcoal" />
                   <span>
-                    18 ERP Invoices Loaded · 2 Split Tenders Auto-Detected (#30070 &amp; #30072)
+                    {erpInvoices.length} ERP Invoices Imported from CSV
                   </span>
                 </div>
               )}
@@ -9149,16 +9435,6 @@ function DailyRegisterView({
 
                 <button
                   type="button"
-                  onClick={handleSimulateCsvUpload}
-                  className="flex items-center gap-1.5 bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 transition-all rounded-lg px-3.5 py-2.5 text-xs whitespace-nowrap"
-                  title="Simulate loading 18 ERP Invoices"
-                >
-                  <Zap size={14} />
-                  <span>Load 18 ERP Invoices</span>
-                </button>
-
-                <button
-                  type="button"
                   onClick={handleAdd5SheetRows}
                   className="flex items-center gap-1.5 bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 transition-all rounded-lg px-3.5 py-2.5 text-xs whitespace-nowrap"
                 >
@@ -9232,17 +9508,6 @@ function DailyRegisterView({
                 <span className="rounded-lg bg-jct-turquoise text-jct-charcoal px-4 py-2 text-xs font-bold whitespace-nowrap shadow-sm hover:brightness-95">
                   Browse File
                 </span>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    handleSimulateCsvUpload();
-                  }}
-                  className="rounded-lg bg-jct-yellow text-jct-charcoal px-3.5 py-2 text-xs font-bold whitespace-nowrap shadow-sm hover:brightness-95"
-                >
-                  ⚡ Load 18 Invoices
-                </button>
               </div>
 
               <input
@@ -16135,52 +16400,7 @@ export default function Page() {
   };
 
   // Compute Live Cross-Module Totals for Financial Pulse, Branch Consolidation & Nauman AI
-  const activeErpForMetrics: ErpInvoiceItem[] =
-    erpInvoices.length > 0
-      ? erpInvoices
-      : JUBAIL_ERP_18_SEED.map((inv) => {
-          const matched = preLoggedBankInvoices.find((b) => b.invoiceNo === inv.invoiceNo);
-          const isCreditSale = preLoggedEntries.some(
-            (e) =>
-              e.type === "CREDIT_SALE" &&
-              e.receiptNo &&
-              e.receiptNo.replace(/^#/i, "").trim() === inv.invoiceNo
-          );
-          const splitEntry = preLoggedEntries.find(
-            (e) =>
-              e.type === "SPLIT_SALE" &&
-              e.receiptNo &&
-              e.receiptNo.replace(/^#/i, "").trim() === inv.invoiceNo
-          );
-          const isSplitRow = Boolean(splitEntry) || Boolean(inv.isSplit);
-          const halfGross = r2(inv.amount / 2);
-          const resolvedCash = splitEntry?.splitCashAmount ?? inv.splitCashAmount ?? halfGross;
-          const resolvedBank =
-            splitEntry?.splitBankAmount ?? inv.splitBankAmount ?? r2(inv.amount - resolvedCash);
-          const defaultTerm: PosTerminalBank =
-            inv.splitPosTerminal || (inv.invoiceNo === "30068" ? "AL_RAJHI" : "SAB");
-          const resolvedTerm =
-            splitEntry?.splitPosTerminal ?? inv.splitPosTerminal ?? defaultTerm;
-          const resolvedMode: InvoicePaymentMode = isCreditSale
-            ? "CREDIT_SALE"
-            : isSplitRow
-            ? "SPLIT"
-            : matched
-            ? matched.paymentMode
-            : "CASH";
-
-          return {
-            ...inv,
-            paymentMode: resolvedMode,
-            posTerminal: matched?.posTerminal || resolvedTerm,
-            isSplit: resolvedMode === "SPLIT",
-            splitCashAmount: resolvedCash,
-            splitBankAmount: resolvedBank,
-            splitBankMethod: splitEntry?.splitBankMethod ?? inv.splitBankMethod ?? "POS_SWIPE",
-            splitPosTerminal: resolvedTerm,
-            autoMatched: Boolean(matched) || isCreditSale || isSplitRow,
-          };
-        });
+  const activeErpForMetrics: ErpInvoiceItem[] = erpInvoices;
 
   const todayCashSales = r2(
     activeErpForMetrics.reduce((sum, inv) => sum + calcInvoiceCashPortion(inv), 0)
