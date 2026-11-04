@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { PDFParse } from "pdf-parse";
+import { getData as getPdfWorkerData } from "pdf-parse/worker";
 
 export const runtime = "nodejs";
+
+// Ensure pdfjs worker is configured inline so serverless / Edge-like Node environments never fail to locate pdf.worker.mjs
+try {
+  PDFParse.setWorker(getPdfWorkerData());
+} catch {
+  // Ignore if already initialized
+}
 
 type PosTerminalBank = "SAB" | "AL_RAJHI" | "SNB" | "VISA_MC";
 type InvoicePaymentMode =
@@ -15,12 +23,16 @@ type InvoicePaymentMode =
   | "Cash"
   | "Credit Received";
 
-interface ParsedErpInvoiceItem {
+export interface ParsedErpInvoiceItem {
+  id: string;
+  referenceId: string;
   invoiceNo: string;
   customer: string;
+  customerName: string;
   amount: number;
   originalAmount: number;
   isEdited: boolean;
+  paymentMethod: InvoicePaymentMode;
   paymentMode: InvoicePaymentMode;
   posTerminal: PosTerminalBank;
   isSplit: boolean;
@@ -132,6 +144,8 @@ const buildInvoiceItem = (
   cashCol = NaN,
   bankCol = NaN
 ): ParsedErpInvoiceItem => {
+  const cleanId = invoiceNo.replace(/^#/i, "").trim();
+  const cleanCustomer = (customer || "Walk-in Customer").trim();
   const { mode, isSplit, terminal, splitBankMethod } = mapJctPayTypeToMode(rawPayType);
   const hasDualTenderValues = cashCol > 0 && bankCol > 0;
   const finalIsSplit = isSplit || hasDualTenderValues;
@@ -140,11 +154,15 @@ const buildInvoiceItem = (
     const cashShare = cashCol > 0 ? cashCol : r2(grossAmt / 2);
     const bankShare = bankCol > 0 ? bankCol : Math.max(0, r2(grossAmt - cashShare));
     return {
-      invoiceNo,
-      customer: customer || "Walk-in Customer",
+      id: cleanId,
+      referenceId: cleanId,
+      invoiceNo: cleanId,
+      customer: cleanCustomer,
+      customerName: cleanCustomer,
       amount: grossAmt,
       originalAmount: grossAmt,
       isEdited: false,
+      paymentMethod: "SPLIT",
       paymentMode: "SPLIT",
       posTerminal: terminal,
       isSplit: true,
@@ -158,11 +176,15 @@ const buildInvoiceItem = (
   }
 
   return {
-    invoiceNo,
-    customer: customer || "Walk-in Customer",
+    id: cleanId,
+    referenceId: cleanId,
+    invoiceNo: cleanId,
+    customer: cleanCustomer,
+    customerName: cleanCustomer,
     amount: grossAmt,
     originalAmount: grossAmt,
     isEdited: false,
+    paymentMethod: mode,
     paymentMode: mode,
     posTerminal: terminal,
     isSplit: false,
@@ -177,11 +199,162 @@ const buildInvoiceItem = (
 };
 
 /**
+ * Multi-line Token State Machine Parser for fragmented JCT Sales Summary PDFs.
+ *
+ * Handles raw pdf-parse output where columns are broken across newlines and pipe `|` characters:
+ * Example:
+ * 1
+ *  | 39915
+ * KHAMIS AL BUANAIN
+ *  |  | Cash
+ *  | 347.15
+ *  |  | 0.0
+ *  | 45.28
+ *  | W#JB033431
+ */
+export const parseJctPdfTextToInvoices = (rawText: string): ParsedErpInvoiceItem[] => {
+  if (!rawText || !rawText.trim()) return [];
+
+  // 1. Normalize the fragmented text:
+  // - Strip page boundary markers ("-- 1 of 3 --", "Page 1 of 3")
+  // - Neutralize "CASH CUSTOMER" / "CASH SALE" in customer names so "CASH" inside a customer name
+  //   is not mistaken for the Payment Type token
+  // - Separate Payment Type keywords if glued to adjacent text/numbers
+  // - Replace all pipes (`|`), tabs, newlines, and multiple spaces with single spaces to form a clean token stream
+  const normalized = rawText
+    .replace(/--\s*\d+\s*of\s*\d+\s*--/gi, " ")
+    .replace(/Page\s+\d+\s+of\s+\d+/gi, " ")
+    .replace(/\bJubail\s+31951\b/gi, "Jubail")
+    .replace(/\bCASH\s+(CUSTOMER|CUST|SALE|SALES|A\/C|ACCOUNT|PARTY|CLIENT)\b/gi, "WALKIN_$1")
+    // Separate 2-decimal currency amounts glued to a following digit
+    .replace(/(\d+\.\d{1,2})(?=\d)/g, "$1 ")
+    // Separate standalone 5-digit invoice numbers glued to a Payment Type or Date
+    .replace(/(\b\d{5})(?=(?:Cash|Card|Bank|Credit|\d{2}[/-]\d{2}[/-]\d{2,4}))/gi, "$1 ")
+    // Separate Payment Type keywords glued to a number (e.g. "Cash347.15" -> "Cash 347.15")
+    .replace(/\b(Cash|Card|Bank|Credit)(?=\d)/gi, "$1 ")
+    // Separate customer text glued to a Payment Type when followed by pipe/space and a number
+    .replace(/([A-Za-z])(Cash|Card|Bank|Credit)(?=[\s|]+\d)/gi, "$1 $2 ")
+    // Replace pipes, tabs, and newlines with spaces
+    .replace(/[|\t\r\n]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const tokens = normalized.split(" ").filter(Boolean);
+  const results: ParsedErpInvoiceItem[] = [];
+  const seenInvoices = new Set<string>();
+  const timeNow = nowHHMM();
+
+  const isFiveDigitInv = (tok: string): boolean => /^\d{5}$/.test(tok) && tok !== "31951";
+  const isPayTypeToken = (tok: string): boolean =>
+    /^(Cash|Card|Bank|Credit|POS|Mada|Visa|Split)$/i.test(tok.replace(/^[:|]+|[:|]+$/g, ""));
+  const isNumericAmountToken = (tok: string): boolean =>
+    /^(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?$/.test(tok);
+
+  // 2. Scan the token stream sequentially with a state machine:
+  // Look for a 5-digit Invoice No (e.g. 39915), followed shortly by Payment Type (Cash, Card, Bank, Credit),
+  // followed immediately by the numeric Inv. Amount (e.g. 347.15).
+  let i = 0;
+  while (i < tokens.length) {
+    const tok = tokens[i];
+    if (!isFiveDigitInv(tok)) {
+      i++;
+      continue;
+    }
+
+    let currentInvNo = tok;
+    let currentInvIdx = i;
+    let matchedRow = false;
+
+    // Scan forward up to 25 tokens for the Payment Type + Amount pair belonging to this 5-digit Invoice No
+    const maxLookahead = Math.min(i + 25, tokens.length);
+    for (let j = i + 1; j < maxLookahead; j++) {
+      const candidate = tokens[j];
+
+      // If another 5-digit number appears before Payment Type + Amount, update the anchor to the newer 5-digit number
+      // (handles cases where both Invoice No and Branch Inv No. are 5-digit numbers, or skips stray header numbers)
+      if (isFiveDigitInv(candidate)) {
+        currentInvNo = candidate;
+        currentInvIdx = j;
+        continue;
+      }
+
+      if (isPayTypeToken(candidate)) {
+        // Check the token immediately after Payment Type for the numeric Inv. Amount
+        // (Also handle two-word payment types like "Bank Transfer" or "Credit Sale", or optional "SAR" prefix)
+        let amtIdx = j + 1;
+        if (
+          amtIdx < tokens.length &&
+          /^(Transfer|Sale|Sales|SAR)$/i.test(tokens[amtIdx])
+        ) {
+          amtIdx++;
+        }
+        if (amtIdx < tokens.length && /^SAR$/i.test(tokens[amtIdx])) {
+          amtIdx++;
+        }
+
+        if (amtIdx < tokens.length && isNumericAmountToken(tokens[amtIdx])) {
+          const amountVal = cleanNum(tokens[amtIdx]);
+          if (amountVal > 0 && !seenInvoices.has(currentInvNo)) {
+            // Reconstruct customer name from tokens between currentInvIdx and j
+            const rawCustomerTokens = tokens.slice(currentInvIdx + 1, j);
+            const rawCustomerJoined = rawCustomerTokens.join(" ");
+
+            // Ensure this isn't a document summary block
+            if (
+              !/\b(grand\s+total|sub\s+total|sales\s+summary|payment\s+summary)\b/i.test(
+                rawCustomerJoined
+              )
+            ) {
+              let customerName = rawCustomerJoined
+                .replace(/\bWALKIN_/g, "Cash ")
+                .replace(/\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b/g, " ")
+                .replace(/\b\d{4}[/-]\d{1,2}[/-]\d{1,2}\b/g, " ")
+                .replace(/\b([01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d)?\s*(?:AM|PM)?\b/gi, " ")
+                .replace(/\bW#[A-Za-z0-9_-]+\b/gi, " ")
+                .replace(/^[\d\s/|-]+/, "")
+                .replace(/\s+/g, " ")
+                .trim();
+
+              if (!customerName || customerName.length < 2 || /^\d+$/.test(customerName)) {
+                customerName = "Walk-in Customer";
+              }
+
+              seenInvoices.add(currentInvNo);
+              results.push(
+                buildInvoiceItem(
+                  currentInvNo,
+                  customerName,
+                  amountVal,
+                  candidate,
+                  timeNow
+                )
+              );
+
+              // Advance outer cursor past the matched amount token so trailing row tokens
+              // (e.g. "| 0.0 | 45.28 | W#JB033431") are skipped cleanly
+              i = amtIdx + 1;
+              matchedRow = true;
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    if (!matchedRow) {
+      i++;
+    }
+  }
+
+  return results;
+};
+
+/**
  * Header-aware table row parser for Excel (.xls, .xlsx) and structured tables.
- * Specifically maps:
- * - "Invoice No" or "Branch Inv No." -> Reference ID (invoiceNo)
+ * Maps:
+ * - "Invoice No" or "Branch Inv No." -> Reference ID (invoiceNo / referenceId)
  * - "Inv. Amount" -> Amount (amount)
- * - "Pay. Type" -> Payment Method (paymentMode)
+ * - "Pay. Type" -> Payment Method (paymentMode / paymentMethod)
  */
 const parseTableRowsToInvoices = (rows: unknown[][]): ParsedErpInvoiceItem[] => {
   const result: ParsedErpInvoiceItem[] = [];
@@ -324,11 +497,10 @@ const parseTableRowsToInvoices = (rows: unknown[][]): ParsedErpInvoiceItem[] => 
     if (headerIdx !== -1 && (colMap.inv !== -1 || colMap.branchInv !== -1 || amountColIdx !== -1)) {
       const primaryInv = colMap.inv !== -1 ? cols[colMap.inv] || "" : "";
       const branchInv = colMap.branchInv !== -1 ? cols[colMap.branchInv] || "" : "";
-      // Prefer whichever holds the 5-digit JCT invoice number, or fallback to primary/branch
-      if (/^\d{5}$/.test(branchInv.trim())) {
-        invoiceNo = branchInv.trim();
-      } else if (/^\d{5}$/.test(primaryInv.trim())) {
+      if (/^\d{5}$/.test(primaryInv.trim())) {
         invoiceNo = primaryInv.trim();
+      } else if (/^\d{5}$/.test(branchInv.trim())) {
+        invoiceNo = branchInv.trim();
       } else {
         invoiceNo = (primaryInv || branchInv).trim();
       }
@@ -377,190 +549,6 @@ const parseTableRowsToInvoices = (rows: unknown[][]): ParsedErpInvoiceItem[] => 
   return result;
 };
 
-/**
- * Dedicated JCT Sales Summary PDF Parser.
- * Handles pdf-parse raw text where columns merge or wrap across line breaks.
- *
- * Rules:
- * 1. Header Mapping:
- *    - "Invoice No" / "Branch Inv No." -> Reference ID (5-digit invoice number, e.g., 39915)
- *    - "Inv. Amount" -> Amount (e.g., 347.15)
- *    - "Pay. Type" -> Payment Method (Cash, Card, Bank, or Credit)
- * 2. Regex Extraction:
- *    - Scans normalized text for the JCT transaction row pattern:
- *      5-digit invoice number + Pay. Type (Cash | Card | Bank | Credit) + numeric amount
- * 3. Validation:
- *    - Ignores document summary headers/footers and extracts only the actual transaction rows.
- */
-export const parseJctPdfTextToInvoices = (rawText: string): ParsedErpInvoiceItem[] => {
-  if (!rawText || !rawText.trim()) return [];
-
-  // 1. Strip page markers and isolate the transaction table body from document summary headers/footers
-  let cleanedText = rawText
-    .replace(/--\s*\d+\s*of\s*\d+\s*--/gi, "\n")
-    .replace(/Page\s+\d+\s+of\s+\d+/gi, "\n");
-
-  // If the table header ("Invoice No" / "Branch Inv No." / "Pay. Type" / "Inv. Amount") appears after
-  // a top document summary block, slice from the first table header onward so summary numbers are ignored.
-  const tableHeaderMatch = cleanedText.match(
-    /(?:Invoice\s*No\.?|Branch\s*Inv\s*No\.?|Inv\.?\s*Amount|Pay\.?\s*Type)/i
-  );
-  if (tableHeaderMatch && tableHeaderMatch.index !== undefined) {
-    cleanedText = cleanedText.slice(tableHeaderMatch.index);
-  }
-
-  // Remove repeated column header lines and explicit summary/total lines
-  const filteredLines = cleanedText
-    .split(/\r?\n/)
-    .filter((line) => {
-      const l = line.trim().toLowerCase();
-      if (!l) return false;
-      // Ignore table column header rows
-      if (
-        (l.includes("invoice no") || l.includes("branch inv")) &&
-        (l.includes("pay. type") || l.includes("pay type") || l.includes("inv. amount") || l.includes("inv amount"))
-      ) {
-        return false;
-      }
-      // Ignore document summary headers and grand total footers that lack a 5-digit invoice number
-      const has5DigitInv = /(?<!\d|[.,/])\d{5}(?!\d|[.,/])/.test(line);
-      if (
-        !has5DigitInv &&
-        (l.includes("grand total") ||
-          l.includes("sub total") ||
-          l.includes("total :") ||
-          l.includes("total:") ||
-          l.includes("sales summary") ||
-          l.includes("payment summary") ||
-          l.includes("cash sales") ||
-          l.includes("card sales") ||
-          l.includes("credit sales") ||
-          l.includes("bank transfer") ||
-          l.includes("net amount") ||
-          l.includes("p.o. box") ||
-          l.includes("jubail 31951"))
-      ) {
-        return false;
-      }
-      return true;
-    });
-
-  // 2. Normalize merged columns caused by pdf-parse line breaks / missing spaces
-  let normalized = filteredLines
-    .join(" ")
-    .replace(/\t+/g, " ")
-    // Separate 2-decimal currency amounts merged directly into the next row's number (e.g. "347.1539916" -> "347.15 39916")
-    .replace(/(\d+\.\d{2})(?=\d)/g, "$1 ")
-    // Separate 5-digit invoice numbers merged directly into a date (e.g. "3991504/11/2026" -> "39915 04/11/2026")
-    .replace(/(\b\d{5})(?=\d{2}[/-]\d{2}[/-]\d{2,4}|\d{4}[/-]\d{2}[/-]\d{2})/g, "$1 ")
-    // Separate dates merged directly into a following number
-    .replace(/(\d{2}[/-]\d{2}[/-]\d{2,4}|\d{4}[/-]\d{2}[/-]\d{2})(?=\d)/g, "$1 ")
-    // Separate letters and digits that got glued together (e.g. "Cash347.15" -> "Cash 347.15", "39915Cash" -> "39915 Cash")
-    .replace(/([A-Za-z])(\d)/g, "$1 $2")
-    .replace(/(\d)([A-Za-z])/g, "$1 $2")
-    // Separate customer text glued directly to Pay. Type keywords (e.g. "CUSTOMERCash 347.15" -> "CUSTOMER Cash 347.15")
-    .replace(/([A-Za-z])(Cash|Card|Bank|Credit)(?=\s+[\d,]+(?:\.\d{1,2})?)/gi, "$1 $2 ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  // Neutralize "CASH CUSTOMER" / "CASH SALE" in customer names so "CASH" inside a customer name
-  // is never mistaken for the Pay. Type column
-  normalized = normalized
-    .replace(/\bJubail\s+31951\b/gi, "Jubail")
-    .replace(/\bCASH\s+(CUSTOMER|CUST|SALE|SALES|A\/C|ACCOUNT|PARTY|CLIENT)\b/gi, "WALKIN_$1");
-
-  // Check header order in rawText to know if Inv. Amount is the first or last amount column after Pay. Type
-  const headerLine =
-    rawText
-      .split(/\r?\n/)
-      .find(
-        (l) =>
-          /pay\.?\s*type/i.test(l) &&
-          (/inv\.?\s*amount/i.test(l) || /amount/i.test(l))
-      ) || "";
-  const invAmtPos = headerLine.search(/inv\.?\s*amount/i);
-  const grossPos = headerLine.search(/gross|sub\s*total|tax|vat|disc/i);
-  const preferFirstAmount = invAmtPos !== -1 && grossPos !== -1 && invAmtPos < grossPos;
-
-  // 3. Pattern A: 5-digit Invoice No / Branch Inv No. -> (optional Branch Inv No. / Date / Customer) -> Pay. Type (Cash|Card|Bank|Credit) -> numeric Inv. Amount(s)
-  // Using a tempered token `(?:(?!\b\d{5}\b).)*?` ensures we never jump across another 5-digit invoice row.
-  const patternA =
-    /(?<!\d|[.,/])(\d{5})(?!\d|[.,/])(?:\s+(?<!\d|[.,/])(\d{5})(?!\d|[.,/]))?((?:(?!\b\d{5}\b).){0,220}?)\b(Cash|Card|Bank(?:\s*Transfer)?|Credit(?:\s*Sale)?)\b((?:(?!\b\d{5}\b|\b(?:Cash|Card|Bank|Credit)\b).){0,80}?)((?:\d{1,3}(?:,\d{3})*\.\d{1,2}|\d+\.\d{1,2})(?:\s+(?:\d{1,3}(?:,\d{3})*\.\d{1,2}|\d+\.\d{1,2}))*)/gi;
-
-  // Pattern B (in case Inv. Amount precedes Pay. Type in the PDF column order):
-  // 5-digit Invoice No -> (optional Date / Customer / cols) -> numeric Inv. Amount -> Pay. Type (Cash|Card|Bank|Credit)
-  const patternB =
-    /(?<!\d|[.,/])(\d{5})(?!\d|[.,/])(?:\s+(?<!\d|[.,/])(\d{5})(?!\d|[.,/]))?((?:(?!\b\d{5}\b).){0,220}?)((?:\d{1,3}(?:,\d{3})*\.\d{1,2}|\d+\.\d{1,2})(?:\s+(?:\d{1,3}(?:,\d{3})*\.\d{1,2}|\d+\.\d{1,2}))*)\s+\b(Cash|Card|Bank(?:\s*Transfer)?|Credit(?:\s*Sale)?)\b/gi;
-
-  const extractWithPattern = (regex: RegExp, modeFirst: boolean): ParsedErpInvoiceItem[] => {
-    const items: ParsedErpInvoiceItem[] = [];
-    const seenInv = new Set<string>();
-    let match: RegExpExecArray | null;
-
-    while ((match = regex.exec(normalized)) !== null) {
-      const inv1 = match[1];
-      const inv2 = match[2];
-      const middleText = ((match[3] || "") + " " + (modeFirst ? match[5] || "" : "")).trim();
-      const rawPayType = modeFirst ? match[4] : match[5];
-      const rawAmountsBlock = modeFirst ? match[6] : match[4];
-
-      // Map Invoice No or Branch Inv No. to Reference ID
-      const invoiceNo = (inv2 || inv1 || "").trim();
-      if (!invoiceNo || invoiceNo === "31951") continue;
-
-      // Reject if middleText contains summary/total keywords
-      if (/\b(grand\s+total|sub\s+total|sales\s+summary|payment\s+summary|total\s+sales)\b/i.test(middleText)) {
-        continue;
-      }
-
-      // Extract numeric amounts from the row's amount block
-      const amountTokens = (rawAmountsBlock.match(/\d{1,3}(?:,\d{3})*\.\d{1,2}|\d+\.\d{1,2}/g) || [])
-        .map((t) => cleanNum(t))
-        .filter((n) => n > 0);
-
-      if (amountTokens.length === 0) continue;
-
-      const invAmount = preferFirstAmount
-        ? amountTokens[0]
-        : amountTokens[amountTokens.length - 1];
-
-      if (invAmount <= 0) continue;
-
-      // Avoid duplicate invoice rows if header/footer echoed a number
-      if (seenInv.has(invoiceNo)) continue;
-      seenInv.add(invoiceNo);
-
-      // Clean customer name from middleText (strip dates, times, serial numbers, and currency symbols)
-      const timeMatch = middleText.match(/\b([01]?\d|2[0-3]):[0-5]\d\b/);
-      const timeVal = timeMatch ? timeMatch[0] : nowHHMM();
-
-      let customer = middleText
-        .replace(/\bWALKIN_/g, "Cash ")
-        .replace(/\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b/g, " ")
-        .replace(/\b\d{4}[/-]\d{1,2}[/-]\d{1,2}\b/g, " ")
-        .replace(/\b([01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d)?\s*(?:AM|PM)?\b/gi, " ")
-        .replace(/\b\d{1,3}(?:,\d{3})*\.\d{1,2}\b/g, " ")
-        .replace(/\bSAR\b/gi, " ")
-        .replace(/^[\d\s/|-]+/, "")
-        .replace(/\s+/g, " ")
-        .trim();
-
-      if (!customer || customer.length < 2 || /^\d+$/.test(customer)) {
-        customer = "Walk-in Customer";
-      }
-
-      items.push(buildInvoiceItem(invoiceNo, customer, invAmount, rawPayType, timeVal));
-    }
-
-    return items;
-  };
-
-  const resultsA = extractWithPattern(patternA, true);
-  const resultsB = extractWithPattern(patternB, false);
-
-  return resultsA.length >= resultsB.length ? resultsA : resultsB;
-};
-
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
@@ -578,34 +566,18 @@ export async function POST(req: NextRequest) {
     if (fileName.endsWith(".pdf") || file.type === "application/pdf") {
       const parser = new PDFParse({ data: new Uint8Array(buffer) });
       try {
-        // 1. Primary: Extract raw text via pdf-parse and run the JCT regex row extractor
-        const textResult = await parser.getText();
+        // Extract raw text (with pipe cellSeparator to match JCT PDF layout) and run the multi-line token state machine
+        const textResult = await parser.getText({ cellSeparator: " | " });
         const fullText = textResult?.text || "";
         if (fullText) {
           invoices = parseJctPdfTextToInvoices(fullText);
         }
 
-        // 2. Fallback: If regex extraction found 0 rows, try vector table extraction
+        // Fallback: if 0 rows matched, also try default getText() or table rows flattened to text
         if (invoices.length === 0) {
-          try {
-            const tableResult = await parser.getTable();
-            if (tableResult?.pages) {
-              const allTableRows: unknown[][] = [];
-              for (const page of tableResult.pages) {
-                if (Array.isArray(page.tables)) {
-                  for (const tbl of page.tables) {
-                    if (Array.isArray(tbl)) {
-                      allTableRows.push(...tbl);
-                    }
-                  }
-                }
-              }
-              if (allTableRows.length > 0) {
-                invoices = parseTableRowsToInvoices(allTableRows);
-              }
-            }
-          } catch {
-            // Ignore vector table fallback errors
+          const fallbackTextResult = await parser.getText();
+          if (fallbackTextResult?.text) {
+            invoices = parseJctPdfTextToInvoices(fallbackTextResult.text);
           }
         }
       } finally {
@@ -621,6 +593,13 @@ export async function POST(req: NextRequest) {
         const parsed = parseTableRowsToInvoices(rows);
         if (parsed.length > 0) {
           invoices.push(...parsed);
+        } else {
+          // If the Excel sheet also has fragmented multi-line cells, run the token state machine on its flattened text
+          const flatText = rows.map((r) => (Array.isArray(r) ? r.join(" | ") : "")).join("\n");
+          const fallbackParsed = parseJctPdfTextToInvoices(flatText);
+          if (fallbackParsed.length > 0) {
+            invoices.push(...fallbackParsed);
+          }
         }
       }
     }
