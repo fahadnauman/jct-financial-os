@@ -195,3 +195,16 @@ model PayrollLog {
   @@index([branch])
   @@index([date])
 }
+
+// Live multi-device Daily Register session (one active draft per branch)
+model ActiveRegisterSession {
+  id         String   @id @default(cuid())
+  branch     String   @unique // JCT_HQ | HEMPEL_JUBAIL | JOTUN_DAMMAM | SIGMA_JUBAIL
+  status     String   @default("DRAFT") // DRAFT | IN_PROGRESS | CLEARED | COMPLETED
+  reportDate String?
+  dataJson   String?  // { erpInvoices, preLoggedBankInvoices, preLoggedEntries, reportDate }
+  revision   Int      @default(0)
+  updatedBy  String?  // client/device id that wrote the latest revision
+  updatedAt  DateTime @updatedAt
+  createdAt  DateTime @default(now())
+}

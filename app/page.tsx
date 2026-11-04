@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSession, signIn, signOut } from "next-auth/react";
 import { usePathname, useRouter } from "next/navigation";
 import { POCKET_CUSTOMERS_KEY, pocketTag, usePocketTransactions, type BranchId } from "../lib/pocket-bridge";
+import { useActiveSessionSync, type ActiveSessionSyncStatus } from "../lib/active-session-sync";
 import * as Dropdown from "@radix-ui/react-dropdown-menu";
 import * as XLSX from "xlsx";
 import {
@@ -1660,6 +1661,9 @@ interface DailyRegisterViewProps {
   isOwner?: boolean;
   activeSessionDate?: string;
   setActiveSessionDate?: React.Dispatch<React.SetStateAction<string>>;
+  onClearActiveSession?: (finalStatus?: "CLEARED" | "COMPLETED") => void;
+  syncStatus?: ActiveSessionSyncStatus;
+  remoteClearSignal?: number;
 }
 
 export interface CascadingPaymentSelectorProps {
@@ -1876,6 +1880,43 @@ export const CascadingPaymentSelector: React.FC<CascadingPaymentSelectorProps> =
 /* ════════════════════════════════════════════════════════════════════════
    MINIMALIST INFO TOOLTIP / POPOVER COMPONENT
    ════════════════════════════════════════════════════════════════════════ */
+
+const SESSION_MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+export const getTodaySessionDate = (): string => {
+  const d = new Date();
+  return `${String(d.getDate()).padStart(2, "0")}-${SESSION_MONTHS[d.getMonth()]}-${d.getFullYear()}`;
+};
+
+function LiveSyncPill({ status }: { status?: ActiveSessionSyncStatus }) {
+  if (!status) return null;
+  const meta =
+    status.state === "offline"
+      ? { dot: "bg-rose-500", text: "Offline · Retrying", cls: "border-rose-500/40 text-rose-600 dark:text-rose-400" }
+      : status.state === "saving"
+      ? { dot: "bg-jct-yellow animate-pulse", text: "Syncing…", cls: "border-jct-yellow/50 text-amber-700 dark:text-jct-yellow" }
+      : status.state === "connecting"
+      ? { dot: "bg-slate-400 animate-pulse", text: "Connecting…", cls: "border-slate-300 dark:border-[#1F1F1F] text-slate-500 dark:text-slate-400" }
+      : { dot: "bg-emerald-500", text: "Live Sync", cls: "border-emerald-500/40 text-emerald-700 dark:text-emerald-400" };
+  const syncedTime = status.lastSyncedAt
+    ? new Date(status.lastSyncedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+    : null;
+  return (
+    <span
+      title="Active register is saved to the cloud and shared live across all devices for this branch."
+      className={`inline-flex items-center gap-1.5 rounded-full border bg-white dark:bg-[#0A0A0A] px-3 py-1.5 text-[11px] font-bold whitespace-nowrap shadow-sm ${meta.cls}`}
+    >
+      <span className={`h-2 w-2 rounded-full ${meta.dot}`} />
+      <span>{meta.text}</span>
+      {syncedTime && status.state === "synced" && (
+        <span className="font-mono text-[10px] font-medium opacity-70">· {syncedTime}</span>
+      )}
+    </span>
+  );
+}
 
 function InfoTooltip({ text, label }: { text: string; label?: string }) {
   const [open, setOpen] = useState(false);
@@ -2466,6 +2507,9 @@ function DailyRegisterView({
   isOwner = false,
   activeSessionDate: propSessionDate,
   setActiveSessionDate: propSetSessionDate,
+  onClearActiveSession,
+  syncStatus,
+  remoteClearSignal = 0,
 }: DailyRegisterViewProps) {
   const [localSessionDate, setLocalSessionDate] = useState<string>(() => {
     const d = new Date();
@@ -3004,6 +3048,54 @@ function DailyRegisterView({
   const [importedFileName, setImportedFileName] = useState<string | null>(null);
   const [importErrorMsg, setImportErrorMsg] = useState<string | null>(null);
   const [isDragActive, setIsDragActive] = useState(false);
+
+  // ── Clear / Start Over ──────────────────────────────────────────────
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const hasActiveSessionData =
+    erpInvoices.length > 0 || preLoggedBankInvoices.length > 0 || preLoggedEntries.length > 0;
+
+  const resetLocalSessionUi = () => {
+    setCsvLoadedBanner(false);
+    setImportedFileName(null);
+    setImportErrorMsg(null);
+    setIsDragActive(false);
+    setIsParsingImportFile(false);
+    setSheetRows(INITIAL_DATASHEET_ROWS);
+    setEditingRowId(null);
+    setEditingEntryModal(null);
+    setCreditModalInvNo(null);
+    setShowHandover(false);
+    setIsDatasheetPreviewOpen(false);
+    setExpandedAuditBox("NONE");
+  };
+
+  const handleConfirmClearSession = () => {
+    resetLocalSessionUi();
+    if (onClearActiveSession) {
+      // Wipes Page-level invoices, POS/bank matches, entries & report date + clears the shared DB draft
+      onClearActiveSession("CLEARED");
+    } else {
+      setErpInvoices([]);
+      setPreLoggedBankInvoices([]);
+      setPreLoggedEntries([]);
+      setActiveSessionDate(getTodaySessionDate());
+    }
+    setShowClearConfirm(false);
+    setJustCompletedToast(null);
+    setSyncBannerMsg(null);
+    setTrackingMode("wizard");
+    setWizardStep(1);
+  };
+
+  // Another device cleared / locked the shared session: reset this device's local UI too
+  const lastRemoteClearSignalRef = useRef(remoteClearSignal);
+  useEffect(() => {
+    if (remoteClearSignal === lastRemoteClearSignalRef.current) return;
+    lastRemoteClearSignalRef.current = remoteClearSignal;
+        resetLocalSessionUi();
+    setShowClearConfirm(false);
+    setJustCompletedToast("🔄 The active register was reset from another device — ready for a fresh upload.");
+      }, [remoteClearSignal]);
 
   const handleStartWizard = () => {
     setTrackingMode("wizard");
@@ -4756,7 +4848,7 @@ function DailyRegisterView({
       });
 
       // Persist lock or pending draft record to Neon PostgreSQL
-      await fetch("/api/archive", {
+      const archiveRes = await fetch("/api/archive", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -4802,6 +4894,14 @@ function DailyRegisterView({
           }),
         }),
       });
+
+      // Close the shared live session on every device once the audit is safely stored
+      if (archiveRes.ok) {
+        resetLocalSessionUi();
+        if (onClearActiveSession) {
+          onClearActiveSession("COMPLETED");
+        }
+      }
 
       setShowHandover(false);
       setTrackingMode("hub");
@@ -5005,11 +5105,11 @@ function DailyRegisterView({
   // Two-way synchronization: Keep sheetRows in sync when erpInvoices change
   useEffect(() => {
     if (erpInvoices.length > 0) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      handleSyncSheetFromWizard();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+            handleSyncSheetFromWizard();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [erpInvoices]);
+      }, [erpInvoices]);
 
   const handleSaveAndCloseSheet = () => {
     // 1. Sync any Credit Purchases to Suppliers & Payables
@@ -5213,6 +5313,18 @@ function DailyRegisterView({
                       }`}
                     />
                   </span>
+                </button>
+              )}
+
+              <LiveSyncPill status={syncStatus} />
+              {hasActiveSessionData && (
+                <button
+                  type="button"
+                  onClick={() => setShowClearConfirm(true)}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-rose-500/40 bg-rose-500/10 hover:bg-rose-500/20 px-3 py-1.5 text-xs font-bold text-rose-600 dark:text-rose-400 transition whitespace-nowrap shadow-sm"
+                >
+                  <RotateCcw size={13} />
+                  <span>Clear Session</span>
                 </button>
               )}
 
@@ -5789,6 +5901,48 @@ function DailyRegisterView({
         </div>
       )}
 
+      {/* Clear / Start Over Confirmation Modal */}
+      {showClearConfirm && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm animate-fadeIn print:hidden">
+          <div className="w-full max-w-md bg-white dark:bg-[#0A0A0A] shadow-2xl border border-rose-500/40 rounded-2xl p-6">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-500/15 text-rose-500">
+                <RotateCcw size={20} />
+              </div>
+              <div>
+                <h3 className="font-display text-lg font-extrabold text-jct-charcoal dark:text-white">
+                  Clear session &amp; start over?
+                </h3>
+                <p className="mt-1 text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                  This removes all <strong>{erpInvoices.length}</strong> imported invoices,{" "}
+                  <strong>{preLoggedBankInvoices.length}</strong> POS / bank matches and{" "}
+                  <strong>{preLoggedEntries.length}</strong> logged entries, and resets the report date
+                  {activeSessionDate ? <> (<span className="font-mono">{activeSessionDate}</span>)</> : null}.
+                  The reset is applied on <strong>every device</strong> using this branch. Locked audits in the Audit Library are not affected.
+                </p>
+              </div>
+            </div>
+            <div className="mt-6 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setShowClearConfirm(false)}
+                className="rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-black px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-jct-charcoal dark:hover:text-white transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmClearSession}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-rose-500 hover:bg-rose-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition"
+              >
+                <Trash2 size={14} />
+                <span>Yes, Clear &amp; Start Over</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Universal Entry Edit Modal (Hub, Step 3, Step 4, Step 5) */}
       {editingEntryModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm animate-fadeIn">
@@ -5923,6 +6077,19 @@ function DailyRegisterView({
                 <ArrowLeft size={15} className="text-slate-500 dark:text-slate-400" />
                 <span>Daily Hub</span>
               </button>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <LiveSyncPill status={syncStatus} />
+                <button
+                  type="button"
+                  onClick={() => setShowClearConfirm(true)}
+                  disabled={!hasActiveSessionData && wizardStep === 1}
+                  className="flex items-center gap-1.5 rounded-lg border border-rose-500/50 bg-rose-500/10 hover:bg-rose-500/20 px-3.5 py-2 text-xs font-bold text-rose-600 dark:text-rose-400 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <RotateCcw size={14} />
+                  <span>Clear / Start Over</span>
+                </button>
+              </div>
 
               <div className="flex flex-wrap items-center gap-2">
                 {([1, 2, 3, 4, 5] as WizardStep[]).map((s) => {
@@ -9301,6 +9468,15 @@ function DailyRegisterView({
                     className="hidden"
                   />
                 </label>
+
+                <button
+                  type="button"
+                  onClick={() => setShowClearConfirm(true)}
+                  className="flex items-center gap-1.5 rounded-lg border border-rose-500/50 bg-rose-500/10 hover:bg-rose-500/20 px-3.5 py-2.5 text-xs font-bold text-rose-600 dark:text-rose-400 transition whitespace-nowrap"
+                >
+                  <RotateCcw size={14} />
+                  <span>Clear / Start Over</span>
+                </button>
 
                 <button
                   type="button"
@@ -15982,7 +16158,7 @@ export default function Page() {
         USER_PROFILES.find((p) => p.id === targetId) ||
         (sessionUser.role === "OWNER" ? USER_PROFILES[0] : USER_PROFILES[1]);
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setProfile(matched);
+            setProfile(matched);
       window.localStorage.setItem(PROFILE_STORAGE_KEY, matched.id);
       setProfileLoaded(true);
 
@@ -16343,6 +16519,42 @@ export default function Page() {
     : (profile?.id as BranchId) || "JCT_HQ";
 
   const { transactions: pocketTxns } = usePocketTransactions(activePocketBranch, Boolean(profile));
+
+  // Multi-device live Daily Register session (Prisma ActiveRegisterSession, polled every 4s)
+  const syncBranch = activePocketBranch === "ALL" ? "JCT_HQ" : activePocketBranch;
+  const [remoteClearSignal, setRemoteClearSignal] = useState(0);
+  const { syncStatus, clearRemoteSession } = useActiveSessionSync<
+    ErpInvoiceItem,
+    PreLoggedBankInvoice,
+    PreLoggedEntry
+  >({
+    branch: syncBranch,
+    enabled: Boolean(profile),
+    snapshot: {
+      erpInvoices,
+      preLoggedBankInvoices,
+      preLoggedEntries,
+      reportDate: activeSessionDate,
+    },
+    onRemoteSnapshot: (snap, meta) => {
+      setErpInvoices(snap.erpInvoices);
+      setPreLoggedBankInvoices(snap.preLoggedBankInvoices);
+      setPreLoggedEntries(snap.preLoggedEntries);
+      setActiveSessionDate(snap.reportDate || getTodaySessionDate());
+      if (meta.isEmpty) {
+        setRemoteClearSignal((n) => n + 1);
+        if (trackingMode === "wizard") setWizardStep(1);
+      }
+    },
+  });
+
+  const handleClearActiveSession = (finalStatus: "CLEARED" | "COMPLETED" = "CLEARED") => {
+    setErpInvoices([]);
+    setPreLoggedBankInvoices([]);
+    setPreLoggedEntries([]);
+    setActiveSessionDate(getTodaySessionDate());
+    void clearRemoteSession(finalStatus);
+  };
   const pocketSyncedRef = useRef<Set<string>>(new Set());
   const syncCustomerRef = useRef(handleSyncCreditCustomer);
   useEffect(() => {
@@ -16538,6 +16750,9 @@ export default function Page() {
                 isOwner={Boolean(profile?.isOwner)}
                 activeSessionDate={activeSessionDate}
                 setActiveSessionDate={setActiveSessionDate}
+                onClearActiveSession={handleClearActiveSession}
+                syncStatus={syncStatus}
+                remoteClearSignal={remoteClearSignal}
               />
             ) : safeTab === "archive" ? (
               <AuditLibraryView
