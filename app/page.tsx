@@ -5,6 +5,7 @@ import { useSession, signIn, signOut } from "next-auth/react";
 import { usePathname, useRouter } from "next/navigation";
 import { POCKET_CUSTOMERS_KEY, pocketTag, usePocketTransactions, type BranchId } from "../lib/pocket-bridge";
 import * as Dropdown from "@radix-ui/react-dropdown-menu";
+import * as XLSX from "xlsx";
 import {
   Activity, Building2, CalendarDays, Check, ChevronDown,
   FileSpreadsheet, Lock, Moon, 
@@ -2988,381 +2989,186 @@ function DailyRegisterView({
     }
   };
 
+  const [isParsingImportFile, setIsParsingImportFile] = useState(false);
+  const [importedFileName, setImportedFileName] = useState<string | null>(null);
+  const [importErrorMsg, setImportErrorMsg] = useState<string | null>(null);
+  const [isDragActive, setIsDragActive] = useState(false);
+
   const handleStartWizard = () => {
     setTrackingMode("wizard");
     setWizardStep(1);
     setCsvLoadedBanner(false);
+    setImportErrorMsg(null);
     setJustCompletedToast(null);
   };
 
-  const handleCsvFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) {
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const text = typeof reader.result === "string" ? reader.result : "";
-      const parsed = parseErpCsvText(text, []);
-      setErpInvoices(parsed);
-      setCsvLoadedBanner(parsed.length > 0);
-      if (trackingMode === "wizard" && parsed.length > 0) {
+  const applyPreLoggedMatchesToImported = (rawList: ErpInvoiceItem[]): ErpInvoiceItem[] => {
+    const bankMap = new Map<string, PreLoggedBankInvoice>();
+    preLoggedBankInvoices.forEach((b) => bankMap.set(b.invoiceNo.trim(), b));
+
+    const creditSaleInvSet = new Set<string>();
+    const splitSaleMap = new Map<string, PreLoggedEntry>();
+    preLoggedEntries.forEach((entry) => {
+      if (entry.type === "CREDIT_SALE" && entry.receiptNo) {
+        const cleaned = cleanErpInvNo(entry.receiptNo);
+        if (cleaned) creditSaleInvSet.add(cleaned);
+      } else if (entry.type === "SPLIT_SALE" && entry.receiptNo) {
+        const cleaned = cleanErpInvNo(entry.receiptNo);
+        if (cleaned) splitSaleMap.set(cleaned, entry);
+      }
+    });
+
+    return rawList.map((inv) => {
+      const cleanNo = cleanErpInvNo(inv.invoiceNo);
+      const matchedInfo = bankMap.get(cleanNo);
+      const isCreditSale = creditSaleInvSet.has(cleanNo);
+      const splitEntry = splitSaleMap.get(cleanNo);
+
+      if (!matchedInfo && !isCreditSale && !splitEntry) {
+        return inv;
+      }
+
+      const isSplitRow = Boolean(splitEntry) || Boolean(inv.isSplit);
+      const halfGross = r2(inv.amount / 2);
+      const resolvedCash = splitEntry?.splitCashAmount ?? inv.splitCashAmount ?? halfGross;
+      const resolvedBank =
+        splitEntry?.splitBankAmount ?? inv.splitBankAmount ?? r2(inv.amount - resolvedCash);
+      const resolvedSplitMethod =
+        splitEntry?.splitBankMethod ?? inv.splitBankMethod ?? "POS_SWIPE";
+      const resolvedSplitTerm =
+        splitEntry?.splitPosTerminal ?? inv.splitPosTerminal ?? inv.posTerminal ?? "SAB";
+
+      const resolvedMode: InvoicePaymentMode = isCreditSale
+        ? "CREDIT_SALE"
+        : isSplitRow
+        ? "SPLIT"
+        : matchedInfo
+        ? matchedInfo.paymentMode
+        : inv.paymentMode;
+
+      return {
+        ...inv,
+        paymentMode: resolvedMode,
+        posTerminal: matchedInfo?.posTerminal || resolvedSplitTerm,
+        isSplit: resolvedMode === "SPLIT",
+        splitCashAmount: resolvedCash,
+        splitBankAmount: resolvedBank,
+        splitBankMethod: resolvedSplitMethod,
+        splitPosTerminal: resolvedSplitTerm,
+        autoMatched: true,
+      };
+    });
+  };
+
+  const parseExcelSheetRowsClient = (rows: unknown[][]): ErpInvoiceItem[] => {
+    if (!Array.isArray(rows) || rows.length === 0) return [];
+    const csvLines = rows
+      .filter((r) => Array.isArray(r) && r.some((cell) => String(cell ?? "").trim() !== ""))
+      .map((r) =>
+        r
+          .map((cell) => {
+            const s = String(cell ?? "")
+              .replace(/SAR/gi, "")
+              .trim();
+            return s.includes(",") ? `"${s}"` : s;
+          })
+          .join(",")
+      );
+    return parseErpCsvText(csvLines.join("\n"), []);
+  };
+
+  const processSalesImportFile = async (file: File) => {
+    setIsParsingImportFile(true);
+    setImportErrorMsg(null);
+    setImportedFileName(file.name);
+
+    try {
+      const lowerName = file.name.toLowerCase();
+      let extracted: ErpInvoiceItem[] = [];
+
+      // 1. Call server-side PDF & Excel parser (/api/parse-sales-file) powered by pdf-parse & xlsx
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        const res = await fetch("/api/parse-sales-file", {
+          method: "POST",
+          body: formData,
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data?.invoices) && data.invoices.length > 0) {
+            extracted = data.invoices;
+          }
+        }
+      } catch (apiErr) {
+        console.warn("Server parse fallback to client parser:", apiErr);
+      }
+
+      // 2. Client-side Excel (.xls, .xlsx) or CSV fallback via SheetJS (xlsx)
+      if (
+        extracted.length === 0 &&
+        (lowerName.endsWith(".xlsx") || lowerName.endsWith(".xls") || lowerName.endsWith(".csv"))
+      ) {
+        const arrayBuf = await file.arrayBuffer();
+        const workbook = XLSX.read(arrayBuf, { type: "array" });
+        for (const sheetName of workbook.SheetNames) {
+          const sheet = workbook.Sheets[sheetName];
+          if (!sheet) continue;
+          const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "" });
+          const parsed = parseExcelSheetRowsClient(rows);
+          if (parsed.length > 0) {
+            extracted.push(...parsed);
+          }
+        }
+      }
+
+      // 3. Plain text fallback for .csv
+      if (extracted.length === 0 && lowerName.endsWith(".csv")) {
+        const text = await file.text();
+        extracted = parseErpCsvText(text, []);
+      }
+
+      if (extracted.length === 0) {
+        setImportErrorMsg(
+          "No valid invoice rows (Reference ID, Amount, Payment Method) were detected in this file. Please check the file format or proceed to manual entry."
+        );
+        setCsvLoadedBanner(false);
+        return;
+      }
+
+      const matched = applyPreLoggedMatchesToImported(extracted);
+      setErpInvoices(matched);
+      setCsvLoadedBanner(true);
+
+      // Seamless handoff to Step 2 of the tracking procedure
+      if (trackingMode === "wizard") {
         setTimeout(() => {
           setWizardStep(2);
         }, 650);
       }
-    };
-    reader.onerror = () => {
-      setCsvLoadedBanner(false);
-    };
-    reader.readAsText(file);
-  };
-
-  const collectActiveRegisterExportRows = async () => {
-    type ExportRow = {
-      time: string;
-      referenceId: string;
-      description: string;
-      category: string;
-      paymentMethod: string;
-      amount: number;
-      isInflow: boolean;
-      isExpense: boolean;
-    };
-
-    const rows: ExportRow[] = [];
-    const seenIds = new Set<string>();
-
-    // 1. Active ERP / Manual Sales Invoices
-    erpInvoices.forEach((inv) => {
-      const refId = inv.invoiceNo ? `#${inv.invoiceNo.replace(/^#/, "")}` : inv.id || "MANUAL";
-      const key = `inv-${refId}`;
-      seenIds.add(key);
-      const modeLabel =
-        inv.paymentMode === "SPLIT"
-          ? `SPLIT (Cash SAR ${fmt(inv.splitCashAmount)} + ${inv.splitBankMethod === "BANK_TRANSFER" ? "Bank" : "POS"} SAR ${fmt(inv.splitBankAmount)})`
-          : inv.paymentMode === "POS_SWIPE"
-          ? `POS_SWIPE (${inv.posTerminal || "SAB"})`
-          : String(inv.paymentMode || "CASH");
-
-      rows.push({
-        time: inv.time || "12:00",
-        referenceId: refId,
-        description: inv.customer || inv.customerName || "Walk-in Customer",
-        category: "Sale Invoice",
-        paymentMethod: modeLabel,
-        amount: Number(inv.amount) || 0,
-        isInflow: inv.paymentMode !== "CREDIT_SALE",
-        isExpense: false,
-      });
-    });
-
-    // 2. Queued Bank / POS Swipes not already in erpInvoices
-    preLoggedBankInvoices.forEach((b) => {
-      const refId = `#${b.invoiceNo.replace(/^#/, "")}`;
-      const key = `inv-${refId}`;
-      if (seenIds.has(key)) return;
-      seenIds.add(key);
-      rows.push({
-        time: b.time || "12:00",
-        referenceId: refId,
-        description: "POS / Bank Swipe",
-        category: "POS / Bank Swipe",
-        paymentMethod: b.paymentMode === "POS_SWIPE" ? `POS_SWIPE (${b.posTerminal || "SAB"})` : "BANK_TRANSFER",
-        amount: Number(b.amount) || 0,
-        isInflow: true,
-        isExpense: false,
-      });
-    });
-
-    // 3. Pre-logged Inflows & Expenses in active session
-    preLoggedEntries.forEach((entry) => {
-      if (entry.type === "SPLIT_SALE") return; // already represented in erpInvoices
-      const key = entry.id || `ple-${entry.title}-${entry.amount}`;
-      if (seenIds.has(key)) return;
-      seenIds.add(key);
-      const isExp = entry.type === "EXPENSE";
-      rows.push({
-        time: entry.time || "12:00",
-        referenceId: entry.receiptNo || entry.supplierInvoiceNum || entry.id,
-        description: entry.title || entry.customerName || entry.supplierName || "Register Entry",
-        category: isExp ? (entry.expenseCategory || "Expense") : entry.type,
-        paymentMethod: String(entry.paymentMode || "CASH"),
-        amount: Number(entry.amount) || 0,
-        isInflow: !isExp && entry.type !== "CREDIT_SALE",
-        isExpense: isExp,
-      });
-    });
-
-    // 4. Fetch live database records from /api/pocket for the active branch
-    try {
-      const res = await fetch(`/api/pocket?branch=${encodeURIComponent(branchId || "JCT_HQ")}`, {
-        cache: "no-store",
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const txns = Array.isArray(data?.transactions) ? data.transactions : [];
-        txns.forEach((t: {
-          id: string;
-          type: string;
-          amount: number;
-          category?: string | null;
-          recipientName?: string | null;
-          paymentSource?: string | null;
-          paymentMode?: string | null;
-          supplierInvoiceNum?: string | null;
-          createdAt?: string;
-        }) => {
-          const pkKey = `pk-${t.id}`;
-          if (seenIds.has(pkKey)) return;
-          seenIds.add(pkKey);
-          const timeStr = t.createdAt
-            ? new Date(t.createdAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
-            : "12:00";
-          const isExp = t.type === "EXPENSE" || t.type === "ADVANCE";
-          rows.push({
-            time: timeStr,
-            referenceId: t.supplierInvoiceNum || t.id.slice(0, 10).toUpperCase(),
-            description: [t.category, t.recipientName].filter(Boolean).join(" — ") || t.type,
-            category: t.type,
-            paymentMethod: String(t.paymentMode || t.paymentSource || "CASH"),
-            amount: Number(t.amount) || 0,
-            isInflow: !isExp,
-            isExpense: isExp,
-          });
-        });
-      }
     } catch (err) {
-      console.warn("Export live fetch fallback to local state:", err);
+      console.error("Failed to parse imported sales file:", err);
+      setImportErrorMsg("Unable to read the uploaded file. Please try a valid PDF or Excel (.xls, .xlsx) report.");
+      setCsvLoadedBanner(false);
+    } finally {
+      setIsParsingImportFile(false);
     }
-
-    const totalInflowsVal = r2(
-      rows.filter((r) => r.isInflow).reduce((sum, r) => sum + r.amount, 0)
-    );
-    const totalExpensesVal = r2(
-      rows.filter((r) => r.isExpense).reduce((sum, r) => sum + r.amount, 0)
-    );
-
-    return { rows, totalInflowsVal, totalExpensesVal };
   };
 
-  const handleExportSalesSummaryCsv = async () => {
-    const { rows, totalInflowsVal, totalExpensesVal } = await collectActiveRegisterExportRows();
-    const todayStr = new Date().toISOString().slice(0, 10);
-    const escapeCsv = (val: string | number) => {
-      const str = String(val ?? "");
-      if (str.includes(",") || str.includes('"') || str.includes("\n")) {
-        return `"${str.replace(/"/g, '""')}"`;
-      }
-      return str;
-    };
-
-    const csvLines: string[] = [
-      ["Time", "Reference ID", "Customer / Description", "Category", "Payment Method", "Amount (SAR)"].join(","),
-    ];
-
-    if (rows.length === 0) {
-      csvLines.push(
-        ["--", "--", "No entries recorded", "EMPTY_REGISTER", "--", "0.00"].map(escapeCsv).join(",")
-      );
-    } else {
-      rows.forEach((r) => {
-        csvLines.push(
-          [
-            r.time,
-            r.referenceId,
-            r.description,
-            r.category,
-            r.paymentMethod,
-            r.amount.toFixed(2),
-          ]
-            .map(escapeCsv)
-            .join(",")
-        );
-      });
-    }
-
-    csvLines.push("");
-    csvLines.push(["", "", "Opening Cash Balance", "", "", openingBalance.toFixed(2)].map(escapeCsv).join(","));
-    csvLines.push(["", "", "Total Sales & Inflows", "", "", totalInflowsVal.toFixed(2)].map(escapeCsv).join(","));
-    csvLines.push(["", "", "Total Expenses", "", "", totalExpensesVal.toFixed(2)].map(escapeCsv).join(","));
-    csvLines.push(["", "", "Calculated Closing Cash Drawer", "", "", calculatedClosingBalance.toFixed(2)].map(escapeCsv).join(","));
-
-    const blob = new Blob([csvLines.join("\r\n")], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `JCT-Sales-Summary-${branchId || "JCT_HQ"}-${todayStr}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+  const handleCsvFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    void processSalesImportFile(file);
+    e.target.value = "";
   };
 
-  const handleExportSalesSummaryPdf = async () => {
-    const { rows, totalInflowsVal, totalExpensesVal } = await collectActiveRegisterExportRows();
-    const todayStr = new Date().toLocaleDateString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-    const escapeHtml = (s: string) =>
-      String(s ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;");
-
-    const tableRowsHtml =
-      rows.length === 0
-        ? `<tr>
-            <td colspan="5" style="text-align:center; padding: 20px; color: #64748b; font-style: italic;">
-              No sales or register entries recorded for this session.
-            </td>
-            <td style="text-align:right; padding: 20px; font-family: monospace; font-weight: 700;">SAR 0.00</td>
-          </tr>`
-        : rows
-            .map(
-              (r) => `<tr>
-                <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-family: monospace;">${escapeHtml(r.time)}</td>
-                <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-family: monospace; font-weight: 600;">${escapeHtml(r.referenceId)}</td>
-                <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0;">${escapeHtml(r.description)}</td>
-                <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0;">${escapeHtml(r.category)}</td>
-                <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0;">${escapeHtml(r.paymentMethod)}</td>
-                <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; text-align: right; font-family: monospace; font-weight: 700; color: ${r.isExpense ? "#e11d48" : "#0f172a"};">
-                  ${r.isExpense ? "-" : ""}SAR ${r.amount.toFixed(2)}
-                </td>
-              </tr>`
-            )
-            .join("");
-
-    const htmlDoc = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <title>JCT Sales Summary Report - ${escapeHtml(branchId || "JCT_HQ")} - ${escapeHtml(todayStr)}</title>
-  <style>
-    @page { size: A4 portrait; margin: 14mm; }
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #0f172a; margin: 0; padding: 0; }
-    .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #0f172a; padding-bottom: 14px; margin-bottom: 20px; }
-    .brand { font-size: 22px; font-weight: 900; letter-spacing: -0.02em; text-transform: uppercase; }
-    .sub { font-size: 12px; color: #475569; margin-top: 4px; }
-    .meta { text-align: right; font-size: 12px; color: #334155; }
-    .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 22px; }
-    .kpi-card { border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; background: #f8fafc; }
-    .kpi-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #64748b; display: block; }
-    .kpi-val { font-size: 16px; font-weight: 800; font-family: monospace; margin-top: 4px; display: block; color: #0f172a; }
-    table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    th { background: #0f172a; color: #ffffff; text-align: left; padding: 9px 10px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
-    th:last-child { text-align: right; }
-    .footer-totals { margin-top: 18px; border-top: 2px solid #0f172a; padding-top: 12px; display: flex; justify-content: flex-end; }
-    .footer-box { width: 280px; font-size: 12px; }
-    .footer-row { display: flex; justify-content: space-between; padding: 4px 0; }
-    .footer-row.bold { font-weight: 800; font-size: 14px; border-top: 1px solid #cbd5e1; padding-top: 8px; margin-top: 4px; }
-  </style>
-</head>
-<body>
-  <div class="header">
-    <div>
-      <div class="brand">Jubail Colour Town (JCT)</div>
-      <div class="sub">Official Daily Sales Summary &amp; Register Closing Report</div>
-    </div>
-    <div class="meta">
-      <div><strong>Branch:</strong> ${escapeHtml(branchId || "JCT_HQ")}</div>
-      <div><strong>Date:</strong> ${escapeHtml(todayStr)}</div>
-      <div><strong>Total Records:</strong> ${rows.length}</div>
-    </div>
-  </div>
-
-  <div class="kpi-grid">
-    <div class="kpi-card">
-      <span class="kpi-label">Opening Cash</span>
-      <span class="kpi-val">SAR ${openingBalance.toFixed(2)}</span>
-    </div>
-    <div class="kpi-card">
-      <span class="kpi-label">Total Sales / Inflows</span>
-      <span class="kpi-val">SAR ${totalInflowsVal.toFixed(2)}</span>
-    </div>
-    <div class="kpi-card">
-      <span class="kpi-label">Total Expenses</span>
-      <span class="kpi-val">SAR ${totalExpensesVal.toFixed(2)}</span>
-    </div>
-    <div class="kpi-card">
-      <span class="kpi-label">Closing Drawer Cash</span>
-      <span class="kpi-val">SAR ${calculatedClosingBalance.toFixed(2)}</span>
-    </div>
-  </div>
-
-  <table>
-    <thead>
-      <tr>
-        <th>Time</th>
-        <th>Reference ID</th>
-        <th>Customer / Description</th>
-        <th>Category</th>
-        <th>Payment Method</th>
-        <th>Amount (SAR)</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${tableRowsHtml}
-    </tbody>
-  </table>
-
-  <div class="footer-totals">
-    <div class="footer-box">
-      <div class="footer-row">
-        <span>Total Inflows:</span>
-        <span style="font-family: monospace; font-weight: 700;">SAR ${totalInflowsVal.toFixed(2)}</span>
-      </div>
-      <div class="footer-row">
-        <span>Total Expenses:</span>
-        <span style="font-family: monospace; font-weight: 700;">SAR ${totalExpensesVal.toFixed(2)}</span>
-      </div>
-      <div class="footer-row bold">
-        <span>Closing Drawer Balance:</span>
-        <span style="font-family: monospace;">SAR ${calculatedClosingBalance.toFixed(2)}</span>
-      </div>
-    </div>
-  </div>
-
-  <script>
-    window.onload = function() {
-      setTimeout(function() {
-        window.focus();
-        window.print();
-      }, 200);
-    };
-  </script>
-</body>
-</html>`;
-
-    const printWin = window.open("", "_blank", "width=960,height=800");
-    if (printWin) {
-      printWin.document.open();
-      printWin.document.write(htmlDoc);
-      printWin.document.close();
-    } else {
-      const iframe = document.createElement("iframe");
-      iframe.style.position = "fixed";
-      iframe.style.right = "0";
-      iframe.style.bottom = "0";
-      iframe.style.width = "0";
-      iframe.style.height = "0";
-      iframe.style.border = "0";
-      document.body.appendChild(iframe);
-      const doc = iframe.contentWindow?.document;
-      if (doc) {
-        doc.open();
-        doc.write(htmlDoc);
-        doc.close();
-        setTimeout(() => {
-          iframe.contentWindow?.focus();
-          iframe.contentWindow?.print();
-          setTimeout(() => document.body.removeChild(iframe), 2000);
-        }, 300);
-      }
-    }
+  const handleDropSalesFile = (e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragActive(false);
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+    void processSalesImportFile(file);
   };
 
   const handleSetInvoiceMode = (invoiceNo: string, mode: InvoicePaymentMode) => {
@@ -5448,27 +5254,7 @@ function DailyRegisterView({
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto shrink-0">
-              <button
-                type="button"
-                onClick={handleExportSalesSummaryPdf}
-                className="bg-white dark:bg-[#111111] text-jct-charcoal dark:text-slate-200 border border-slate-300 dark:border-slate-700 hover:border-jct-turquoise dark:hover:border-jct-turquoise text-xs sm:text-sm font-bold px-4 py-2.5 rounded-lg transition-all flex items-center justify-center gap-2 whitespace-nowrap shadow-sm"
-                title="Export Daily Sales Summary as PDF"
-              >
-                <FileText size={15} className="text-jct-turquoise" />
-                <span>Export PDF</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleExportSalesSummaryCsv}
-                className="bg-white dark:bg-[#111111] text-jct-charcoal dark:text-slate-200 border border-slate-300 dark:border-slate-700 hover:border-jct-turquoise dark:hover:border-jct-turquoise text-xs sm:text-sm font-bold px-4 py-2.5 rounded-lg transition-all flex items-center justify-center gap-2 whitespace-nowrap shadow-sm"
-                title="Export Daily Sales Summary as CSV / Excel"
-              >
-                <FileSpreadsheet size={15} className="text-emerald-500" />
-                <span>Export CSV</span>
-              </button>
-
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full sm:w-auto shrink-0">
               <button
                 type="button"
                 onClick={handleStartWizard}
@@ -6157,17 +5943,51 @@ function DailyRegisterView({
                 <h2 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-jct-charcoal dark:text-white uppercase">
                   IMPORT SALES
                 </h2>
-                <InfoTooltip text="Drop your daily CSV export or load today's Jubail invoices. Automatically detects split tenders and payment methods." />
+                <InfoTooltip text="Upload your daily sales report as PDF (.pdf) or Excel (.xls, .xlsx). Automatically extracts Reference IDs, Amounts, and Payment Methods into the active register." />
               </div>
 
-              <label className="mt-7 flex w-full cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 dark:border-[#1F1F1F] bg-slate-50 dark:bg-black hover:bg-slate-100 dark:hover:bg-[#111111] px-6 py-10 transition-colors">
-                <UploadCloud size={26} className="text-slate-500 dark:text-slate-400 mb-2.5" />
-                <span className="text-sm font-medium text-jct-charcoal dark:text-jct-offwhite">
-                  Drop ERP `.csv` file here or click to browse
+              <p className="mt-2 text-xs sm:text-sm text-slate-500 dark:text-slate-400 max-w-md">
+                Upload your daily ERP sales report in <strong>PDF</strong> or <strong>Excel</strong> format to automatically populate the active register.
+              </p>
+
+              <label
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsDragActive(true);
+                }}
+                onDragLeave={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsDragActive(false);
+                }}
+                onDrop={handleDropSalesFile}
+                className={`mt-7 flex w-full cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed px-6 py-10 transition-all ${
+                  isDragActive
+                    ? "border-jct-turquoise bg-jct-turquoise/10"
+                    : "border-slate-300 dark:border-[#1F1F1F] bg-slate-50 dark:bg-black hover:border-jct-turquoise/60 hover:bg-slate-100 dark:hover:bg-[#111111]"
+                }`}
+              >
+                <UploadCloud size={30} className="text-jct-turquoise mb-3" />
+                <span className="text-sm sm:text-base font-bold text-jct-charcoal dark:text-jct-offwhite">
+                  {isParsingImportFile
+                    ? `Extracting invoices from ${importedFileName || "file"}...`
+                    : "Drop Daily Sales PDF (.pdf) or Excel (.xls, .xlsx) here or click to browse"}
+                </span>
+                <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 rounded-md bg-rose-500/10 border border-rose-500/30 px-2.5 py-1 text-[11px] font-bold text-rose-600 dark:text-rose-400">
+                    <FileText size={13} /> PDF (.pdf)
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                    <FileSpreadsheet size={13} /> Excel (.xls, .xlsx)
+                  </span>
+                </div>
+                <span className="mt-2.5 text-[11px] text-slate-400 dark:text-slate-500">
+                  Auto-extracts Reference ID, Customer, Amount &amp; Payment Method
                 </span>
                 <input
                   type="file"
-                  accept=".csv"
+                  accept=".pdf,.xls,.xlsx,.csv,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                   onChange={handleCsvFileUpload}
                   className="hidden"
                 />
@@ -6182,11 +6002,18 @@ function DailyRegisterView({
                 <ArrowRight size={16} className="text-jct-charcoal" />
               </button>
 
+              {importErrorMsg && (
+                <div className="mt-5 inline-flex items-center gap-2 rounded-lg border border-rose-500/40 bg-rose-500/10 text-rose-600 dark:text-rose-400 font-semibold px-4 py-2.5 text-xs text-left">
+                  <AlertTriangle size={15} className="shrink-0" />
+                  <span>{importErrorMsg}</span>
+                </div>
+              )}
+
               {csvLoadedBanner && erpInvoices.length > 0 && (
                 <div className="mt-5 inline-flex items-center gap-2 rounded-lg bg-jct-yellow text-jct-charcoal font-bold px-4 py-2 text-xs">
                   <Check size={15} className="text-jct-charcoal" />
                   <span>
-                    {erpInvoices.length} ERP Invoices Imported from CSV
+                    {erpInvoices.length} Invoices Extracted from {importedFileName || "Report"} · Advancing to Verification...
                   </span>
                 </div>
               )}
@@ -9424,10 +9251,10 @@ function DailyRegisterView({
 
                 <label className="flex cursor-pointer items-center gap-1.5 bg-jct-turquoise text-jct-charcoal font-bold hover:brightness-95 transition-all shadow-sm rounded-lg px-3.5 py-2.5 text-xs whitespace-nowrap border border-jct-turquoise">
                   <UploadCloud size={14} />
-                  <span>Upload CSV</span>
+                  <span>Upload PDF / Excel</span>
                   <input
                     type="file"
-                    accept=".csv"
+                    accept=".pdf,.xls,.xlsx,.csv,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     onChange={handleCsvFileUpload}
                     className="hidden"
                   />
@@ -9491,10 +9318,10 @@ function DailyRegisterView({
                 </div>
                 <div className="text-left">
                   <span className="text-sm font-bold text-jct-charcoal dark:text-jct-offwhite block">
-                    Drop daily ERP `.csv` export here or click to browse
+                    Drop daily ERP PDF (`.pdf`) or Excel (`.xls`, `.xlsx`) report here or click to browse
                   </span>
                   <span className="text-xs text-slate-500 dark:text-slate-400 block mt-0.5">
-                    Unified import auto-detects `PARTIAL`, `SPLIT`, `CASH/BANK` tenders and syncs instantly to Guided Tracking.
+                    Unified import auto-extracts Reference IDs, Amounts &amp; Payment Methods and syncs instantly to Guided Tracking.
                   </span>
                 </div>
               </div>
@@ -9506,13 +9333,13 @@ function DailyRegisterView({
                   </span>
                 )}
                 <span className="rounded-lg bg-jct-turquoise text-jct-charcoal px-4 py-2 text-xs font-bold whitespace-nowrap shadow-sm hover:brightness-95">
-                  Browse File
+                  Browse PDF / Excel
                 </span>
               </div>
 
               <input
                 type="file"
-                accept=".csv"
+                accept=".pdf,.xls,.xlsx,.csv,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 onChange={handleCsvFileUpload}
                 className="hidden"
               />
