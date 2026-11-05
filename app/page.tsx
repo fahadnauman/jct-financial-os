@@ -8893,24 +8893,28 @@ function DailyRegisterView({
                             bankSettlementMode === "NET" ||
                             trackPosFees
                           );
+                        // Interactive switcher only displays when actively editing or when box is expanded
+                        const showInteractiveSwitcher = isEditing || expandedAuditBox === "BANK_POS";
 
                         return (
                           <div
                             key={`bank-${inv.invoiceNo}`}
-                            className="flex flex-col gap-2 px-4 py-3 hover:bg-slate-100/70 dark:hover:bg-[#111111] transition print:flex print:flex-row print:justify-between print:py-2 print:border-b print:border-slate-200 print:text-sm print:text-black print:bg-white print:break-inside-avoid"
+                            className="flex flex-col gap-2.5 px-4 py-3 hover:bg-slate-100/70 dark:hover:bg-[#111111] transition border-b border-slate-200/60 dark:border-[#1F1F1F]/60 last:border-b-0 print:flex print:flex-row print:justify-between print:py-2 print:border-b print:border-slate-200 print:text-sm print:text-black print:bg-white print:break-inside-avoid"
                           >
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 print:flex print:flex-row print:justify-between print:items-center print:w-full">
+                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 print:flex print:flex-row print:justify-between print:items-center print:w-full">
                               <div className="flex flex-wrap items-center gap-2.5 min-w-0 flex-1">
                                 <span className="font-mono text-xs font-extrabold text-slate-500 dark:text-slate-400 w-14 shrink-0 print:text-black print:font-bold print:w-20">
                                   #{inv.invoiceNo}
                                 </span>
-                                <span className="text-xs font-semibold text-jct-charcoal dark:text-jct-offwhite truncate print:text-black print:text-sm">
+                                <span className="text-xs font-semibold text-jct-charcoal dark:text-jct-offwhite truncate max-w-[200px] sm:max-w-[260px] print:text-black print:text-sm">
                                   {inv.customer}
                                 </span>
 
-                                {/* Card Type Tag: [mada · SAB], [mada · Al Rajhi], [💳 Visa / MC], or [Bank Transfer] */}
+                                {/* Card Type Tag: Display clean chosen badge in review mode; hide on screen when interactive bar is shown */}
                                 <span
-                                  className={`rounded px-2 py-0.5 font-mono text-[10px] font-bold shrink-0 print:border print:border-black print:bg-white print:text-black ${
+                                  className={`rounded px-2.5 py-1 font-mono text-[10px] font-bold shrink-0 shadow-sm print:inline-block print:border print:border-black print:bg-white print:text-black ${
+                                    showInteractiveSwitcher ? "hidden print:inline-block" : "inline-block"
+                                  } ${
                                     isBankTransferRow
                                       ? "bg-jct-turquoise/25 border border-jct-turquoise/40 text-jct-charcoal dark:text-jct-offwhite"
                                       : "bg-jct-yellow text-jct-charcoal"
@@ -8935,56 +8939,58 @@ function DailyRegisterView({
                                 )}
                               </div>
 
-                              {/* Terminal Switcher Pill (mada · SAB, mada · Al Rajhi, 💳 Visa / MC, Bank) */}
-                              <div className="flex flex-wrap items-center gap-2 shrink-0 print:hidden">
-                                <div className="inline-flex flex-wrap rounded-lg bg-white dark:bg-[#0A0A0A] p-0.5 border border-slate-200 dark:border-[#1F1F1F] gap-0.5">
-                                  {(["SAB", "AL_RAJHI", "SNB", "VISA_MC"] as PosTerminalBank[]).map(
-                                    (term) => (
-                                      <button
-                                        key={term}
-                                        type="button"
-                                        onClick={() =>
-                                          isSplitRow
-                                            ? handleSetInvoiceSplitMethod(
-                                                inv.invoiceNo,
-                                                "POS_SWIPE",
-                                                term
-                                              )
-                                            : handleSetInvoiceTerminal(inv.invoiceNo, term)
-                                        }
-                                        className={`rounded px-2 py-0.5 text-[10px] font-bold transition ${
-                                          (isSplitRow
-                                            ? inv.splitBankMethod === "POS_SWIPE" &&
-                                              activeTerm === term
-                                            : inv.paymentMode === "POS_SWIPE" &&
-                                              inv.posTerminal === term)
-                                            ? "bg-jct-turquoise text-jct-charcoal"
-                                            : "text-slate-500 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-jct-offwhite"
-                                        }`}
-                                      >
-                                        {POS_TERMINAL_META[term].badgeTag}
-                                      </button>
-                                    )
-                                  )}
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      isSplitRow
-                                        ? handleSetInvoiceSplitMethod(
-                                            inv.invoiceNo,
-                                            "BANK_TRANSFER"
-                                          )
-                                        : handleSetInvoiceMode(inv.invoiceNo, "BANK_TRANSFER")
-                                    }
-                                    className={`rounded px-2 py-0.5 text-[10px] font-bold transition ${
-                                      isBankTransferRow
-                                        ? "bg-jct-turquoise text-jct-charcoal"
-                                        : "text-slate-500 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-jct-offwhite"
-                                    }`}
-                                  >
-                                    Bank
-                                  </button>
-                                </div>
+                              {/* Action Area: Interactive Terminal Switcher & Amount / Edit Controls */}
+                              <div className="flex flex-wrap items-center justify-between md:justify-end gap-3 shrink-0 print:hidden">
+                                {showInteractiveSwitcher && (
+                                  <div className="inline-flex flex-wrap rounded-lg bg-white dark:bg-[#0A0A0A] p-0.5 border border-slate-200 dark:border-[#1F1F1F] gap-0.5 shadow-sm">
+                                    {(["SAB", "AL_RAJHI", "SNB", "VISA_MC"] as PosTerminalBank[]).map(
+                                      (term) => (
+                                        <button
+                                          key={term}
+                                          type="button"
+                                          onClick={() =>
+                                            isSplitRow
+                                              ? handleSetInvoiceSplitMethod(
+                                                  inv.invoiceNo,
+                                                  "POS_SWIPE",
+                                                  term
+                                                )
+                                              : handleSetInvoiceTerminal(inv.invoiceNo, term)
+                                          }
+                                          className={`rounded px-2 py-0.5 text-[10px] font-bold transition ${
+                                            (isSplitRow
+                                              ? inv.splitBankMethod === "POS_SWIPE" &&
+                                                activeTerm === term
+                                              : inv.paymentMode === "POS_SWIPE" &&
+                                                inv.posTerminal === term)
+                                              ? "bg-jct-turquoise text-jct-charcoal shadow-sm"
+                                              : "text-slate-500 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-jct-offwhite"
+                                          }`}
+                                        >
+                                          {POS_TERMINAL_META[term].badgeTag}
+                                        </button>
+                                      )
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        isSplitRow
+                                          ? handleSetInvoiceSplitMethod(
+                                              inv.invoiceNo,
+                                              "BANK_TRANSFER"
+                                            )
+                                          : handleSetInvoiceMode(inv.invoiceNo, "BANK_TRANSFER")
+                                      }
+                                      className={`rounded px-2 py-0.5 text-[10px] font-bold transition ${
+                                        isBankTransferRow
+                                          ? "bg-jct-turquoise text-jct-charcoal shadow-sm"
+                                          : "text-slate-500 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-jct-offwhite"
+                                      }`}
+                                    >
+                                      Bank
+                                    </button>
+                                  </div>
+                                )}
 
                                 {isEditing ? (
                                   <div className="flex items-center gap-1.5">
@@ -8999,13 +9005,20 @@ function DailyRegisterView({
                                     <button
                                       type="button"
                                       onClick={() => handleSaveInlineEdit(rowKey)}
-                                      className="rounded-lg bg-jct-turquoise text-jct-charcoal font-bold px-2 py-1 text-[10px]"
+                                      className="rounded-lg bg-jct-turquoise text-jct-charcoal font-bold px-2.5 py-1 text-[10px] shadow-sm hover:brightness-95 transition"
                                     >
                                       Save
                                     </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingRowId(null)}
+                                      className="rounded-lg bg-slate-200 dark:bg-white/10 text-slate-600 dark:text-slate-300 font-bold px-2 py-1 text-[10px] hover:bg-slate-300 dark:hover:bg-white/15 transition"
+                                    >
+                                      Cancel
+                                    </button>
                                   </div>
                                 ) : (
-                                  <>
+                                  <div className="flex items-center gap-2.5">
                                     <div className="text-right">
                                       <span className="block font-display text-xs font-extrabold text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap">
                                         SAR{" "}
@@ -9020,23 +9033,22 @@ function DailyRegisterView({
                                         setEditingRowId(rowKey);
                                         setEditingRowVal(String(bankGross));
                                       }}
-                                      className="rounded bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-2 py-0.5 text-[10px]"
+                                      className="rounded bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-2.5 py-1 text-[10px] shadow-sm transition"
                                     >
-                                      Edit
+                                      ✏️ Edit
                                     </button>
                                     <button
                                       type="button"
                                       onClick={() => handleRemoveErpInvoice(inv.invoiceNo)}
-                                      className="text-slate-400 hover:text-rose-500 text-xs font-bold px-1"
+                                      className="text-slate-400 hover:text-rose-500 text-sm font-bold px-1 transition"
                                       title="Remove invoice"
                                     >
                                       ×
                                     </button>
-                                  </>
+                                  </div>
                                 )}
                               </div>
-
-                              {/* Print-only Amount */}
+{/* Print-only Amount */}
                               <div className="hidden print:block text-right">
                                 <span className="font-display text-xs font-extrabold text-black whitespace-nowrap print:text-sm print:font-bold">
                                   SAR {fmt(bankSettlementMode === "NET" ? fb.net : bankGross)}
