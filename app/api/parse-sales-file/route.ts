@@ -27,6 +27,8 @@ export interface ParsedErpInvoiceItem {
   id: string;
   referenceId: string;
   invoiceNo: string;
+  branchInvNo?: string;
+  seqInvoiceNo?: string;
   customer: string;
   customerName: string;
   amount: number;
@@ -142,13 +144,17 @@ const buildInvoiceItem = (
   rawPayType: string,
   timeVal: string,
   cashCol = NaN,
-  bankCol = NaN
+  bankCol = NaN,
+  branchInvNo?: string,
+  seqInvoiceNo?: string
 ): ParsedErpInvoiceItem => {
   const cleanId = invoiceNo.replace(/^#/i, "").trim();
   const cleanCustomer = (customer || "Walk-in Customer").trim();
   const { mode, isSplit, terminal, splitBankMethod } = mapJctPayTypeToMode(rawPayType);
   const hasDualTenderValues = cashCol > 0 && bankCol > 0;
   const finalIsSplit = isSplit || hasDualTenderValues;
+  const branchInv = branchInvNo ? branchInvNo.replace(/^#/i, "").trim() : cleanId;
+  const seqInv = seqInvoiceNo ? seqInvoiceNo.replace(/^#/i, "").trim() : undefined;
 
   if (finalIsSplit) {
     const cashShare = cashCol > 0 ? cashCol : r2(grossAmt / 2);
@@ -157,6 +163,8 @@ const buildInvoiceItem = (
       id: cleanId,
       referenceId: cleanId,
       invoiceNo: cleanId,
+      branchInvNo: branchInv,
+      seqInvoiceNo: seqInv,
       customer: cleanCustomer,
       customerName: cleanCustomer,
       amount: grossAmt,
@@ -179,6 +187,8 @@ const buildInvoiceItem = (
     id: cleanId,
     referenceId: cleanId,
     invoiceNo: cleanId,
+    branchInvNo: branchInv,
+    seqInvoiceNo: seqInv,
     customer: cleanCustomer,
     customerName: cleanCustomer,
     amount: grossAmt,
@@ -271,6 +281,8 @@ export const parseJctPdfTextToInvoices = (rawText: string): ParsedErpInvoiceItem
     .replace(/Page\s+\d+\s+of\s+\d+/gi, " ")
     .replace(/\bJubail\s+31951\b/gi, "Jubail")
     .replace(/\bCASH\s+(CUSTOMER|CUST|SALE|SALES|A\/C|ACCOUNT|PARTY|CLIENT)\b/gi, "WALKIN_$1")
+    // Normalize branch invoice numbers like "W # JB 033431" or "W #JB 033431" to "W#JB033431"
+    .replace(/\bW\s*#\s*([A-Za-z0-9_-]+)\b/gi, "W#$1")
     // Separate 2-decimal currency amounts glued to a following digit
     .replace(/(\d+\.\d{1,2})(?=\d)/g, "$1 ")
     // Separate standalone 5-digit invoice numbers glued to a Payment Type or Date
@@ -294,6 +306,8 @@ export const parseJctPdfTextToInvoices = (rawText: string): ParsedErpInvoiceItem
     /^(Cash|Card|Bank|Credit|POS|Mada|Visa|Split)$/i.test(tok.replace(/^[:|]+|[:|]+$/g, ""));
   const isNumericAmountToken = (tok: string): boolean =>
     /^(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?$/.test(tok);
+  const isBranchInvToken = (tok: string): boolean =>
+    /^W#(?:[A-Za-z0-9_-]+)$/i.test(tok.replace(/^[:|]+|[:|]+$/g, ""));
 
   // 2. Scan the token stream sequentially with a state machine:
   // Look for a 5-digit Invoice No (e.g. 39915), followed shortly by Payment Type (Cash, Card, Bank, Credit),
@@ -364,20 +378,59 @@ export const parseJctPdfTextToInvoices = (rawText: string): ParsedErpInvoiceItem
                 customerName = "Walk-in Customer";
               }
 
+              // Scan trailing tokens after the amount for the Branch Inv No. (e.g. W#JB033431)
+              let foundBranchInv: string | null = null;
+              let branchInvIdx = -1;
+              const maxTrailing = Math.min(amtIdx + 15, tokens.length);
+              for (let k = amtIdx + 1; k < maxTrailing; k++) {
+                const t = tokens[k].replace(/^[:|]+|[:|]+$/g, "");
+                if (isFiveDigitInv(t) || /^(grand|sub|summary|duration|report)$/i.test(t)) {
+                  break;
+                }
+                if (isBranchInvToken(t)) {
+                  foundBranchInv = t;
+                  branchInvIdx = k;
+                  break;
+                }
+              }
+
+              // Fallback: check if the branch inv token appeared earlier in the row (e.g. within rawCustomerTokens)
+              if (!foundBranchInv) {
+                for (let c = 0; c < rawCustomerTokens.length; c++) {
+                  const ct = rawCustomerTokens[c].replace(/^[:|]+|[:|]+$/g, "");
+                  if (isBranchInvToken(ct)) {
+                    foundBranchInv = ct;
+                    break;
+                  }
+                }
+              }
+
+              // Priority rule: Use extracted Branch Inv No. (e.g. W#JB033431) as the primary identifier,
+              // overriding standard sequential 5-digit invoice number (e.g. 39915)
+              const primaryId = foundBranchInv || currentInvNo;
+
               seenInvoices.add(currentInvNo);
+              seenInvoices.add(primaryId);
+              if (foundBranchInv) {
+                seenInvoices.add(foundBranchInv);
+              }
+
               results.push(
                 buildInvoiceItem(
-                  currentInvNo,
+                  primaryId,
                   customerName,
                   amountVal,
                   candidate,
-                  timeNow
+                  timeNow,
+                  NaN,
+                  NaN,
+                  foundBranchInv || primaryId,
+                  currentInvNo
                 )
               );
 
-              // Advance outer cursor past the matched amount token so trailing row tokens
-              // (e.g. "| 0.0 | 45.28 | W#JB033431") are skipped cleanly
-              i = amtIdx + 1;
+              // Advance outer cursor past the branch invoice index if present, or past amount token
+              i = branchInvIdx !== -1 ? Math.max(amtIdx + 1, branchInvIdx + 1) : amtIdx + 1;
               matchedRow = true;
               break;
             }
@@ -539,13 +592,36 @@ const parseTableRowsToInvoices = (rows: unknown[][]): ParsedErpInvoiceItem[] => 
     let bankCol = NaN;
     let timeVal = nowHHMM();
 
+    let detectedBranch = "";
+    let detectedSeq = "";
+
     if (headerIdx !== -1 && (colMap.inv !== -1 || colMap.branchInv !== -1 || amountColIdx !== -1)) {
       const primaryInv = colMap.inv !== -1 ? cols[colMap.inv] || "" : "";
       const branchInv = colMap.branchInv !== -1 ? cols[colMap.branchInv] || "" : "";
-      if (/^\d{5}$/.test(primaryInv.trim())) {
-        invoiceNo = primaryInv.trim();
-      } else if (/^\d{5}$/.test(branchInv.trim())) {
+
+      // Scan row cols for branch invoice pattern (e.g. W#JB033431)
+      let foundBranch = branchInv;
+      if (!foundBranch || !/^W#[A-Za-z0-9_-]+$/i.test(foundBranch.trim())) {
+        for (const col of cols) {
+          const m = col.match(/\bW#[A-Za-z0-9_-]+\b/i);
+          if (m) {
+            foundBranch = m[0];
+            break;
+          }
+        }
+      }
+
+      if (foundBranch && foundBranch.trim()) {
+        invoiceNo = foundBranch.trim();
+        detectedBranch = foundBranch.trim();
+        detectedSeq = primaryInv.trim();
+      } else if (branchInv && branchInv.trim()) {
         invoiceNo = branchInv.trim();
+        detectedBranch = branchInv.trim();
+        detectedSeq = primaryInv.trim();
+      } else if (primaryInv && primaryInv.trim()) {
+        invoiceNo = primaryInv.trim();
+        detectedSeq = primaryInv.trim();
       } else {
         invoiceNo = (primaryInv || branchInv).trim();
       }
@@ -587,7 +663,17 @@ const parseTableRowsToInvoices = (rows: unknown[][]): ParsedErpInvoiceItem[] => 
     if (!invoiceNo || invoiceNo === "--" || grossAmt <= 0) continue;
 
     result.push(
-      buildInvoiceItem(invoiceNo, customer, grossAmt, rawModeText, timeVal, cashCol, bankCol)
+      buildInvoiceItem(
+        invoiceNo,
+        customer,
+        grossAmt,
+        rawModeText,
+        timeVal,
+        cashCol,
+        bankCol,
+        detectedBranch || invoiceNo,
+        detectedSeq || undefined
+      )
     );
   }
 

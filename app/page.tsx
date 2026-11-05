@@ -581,7 +581,10 @@ export type OverrideReason = "BUSINESS_COMMISSION" | "BILL_MISTAKE" | "CUSTOM";
 export interface ErpInvoiceItem {
   internalId?: string;
   id?: string;
+  referenceId?: string;
   invoiceNo: string;
+  branchInvNo?: string;
+  seqInvoiceNo?: string;
   customer: string;
   customerName?: string;
   amount: number;
@@ -1061,7 +1064,7 @@ export function ClassicDataSheetTable({
         <table className="w-full min-w-[1200px] text-left border-collapse whitespace-nowrap">
           <thead>
             <tr>
-              <th className={thClass}>1. INVOICE NO.</th>
+              <th className={thClass}>1. BRANCH INV NO.</th>
               <th className={thClass}>2. AMT CASH SALE</th>
               <th className={thClass}>3. CREDIT INV. AMOUNT</th>
               <th className={thClass}>4. RECEIPT NO.</th>
@@ -1094,7 +1097,7 @@ export function ClassicDataSheetTable({
                 key={`ds-row-${idx}`}
                 className="hover:bg-slate-50/80 dark:hover:bg-white/[0.02] transition-colors print:break-inside-avoid print:hover:bg-transparent"
               >
-                {/* 1. INVOICE NO. */}
+                {/* 1. BRANCH INV NO. */}
                 <td className={`${tdBase} text-center font-mono font-medium`}>
                   {row.invoiceNo ? `#${row.invoiceNo}` : null}
                 </td>
@@ -3254,7 +3257,7 @@ function DailyRegisterView({
 
       if (extracted.length === 0) {
         setImportErrorMsg(
-          "No valid invoice rows (Reference ID, Amount, Payment Method) were detected in this file. Please check the file format or proceed to manual entry."
+          "No valid invoice rows (Branch Inv No., Amount, Payment Method) were detected in this file. Please check the file format or proceed to manual entry."
         );
         setCsvLoadedBanner(false);
         return;
@@ -6148,7 +6151,7 @@ function DailyRegisterView({
                 <h2 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-jct-charcoal dark:text-white uppercase">
                   IMPORT SALES
                 </h2>
-                <InfoTooltip text="Upload your daily sales report as PDF (.pdf) or Excel (.xls, .xlsx). Automatically extracts Reference IDs, Amounts, and Payment Methods into the active register." />
+                <InfoTooltip text="Upload your daily sales report as PDF (.pdf) or Excel (.xls, .xlsx). Automatically extracts Branch Inv Nos., Amounts, and Payment Methods into the active register." />
               </div>
 
               <p className="mt-2 text-xs sm:text-sm text-slate-500 dark:text-slate-400 max-w-md">
@@ -6188,7 +6191,7 @@ function DailyRegisterView({
                   </span>
                 </div>
                 <span className="mt-2.5 text-[11px] text-slate-400 dark:text-slate-500">
-                  Auto-extracts Reference ID, Customer, Amount &amp; Payment Method
+                  Auto-extracts Branch Inv No., Customer, Amount &amp; Payment Method
                 </span>
                 <input
                   type="file"
@@ -6330,6 +6333,19 @@ function DailyRegisterView({
               </div>
 
               {/* Clean Spreadsheet Table of Imported Invoices with Progressive Disclosure */}
+              {!isDatasheetView && (
+                <div className="hidden sm:flex items-center justify-between px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 bg-slate-100/70 dark:bg-[#141414] rounded-lg border border-slate-200 dark:border-white/5 mb-1">
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <span className="w-28 shrink-0">Branch Inv No.</span>
+                    <span className="min-w-[180px] flex-1 max-w-sm">Customer / Description</span>
+                    <span className="shrink-0 text-center">Payment Method</span>
+                  </div>
+                  <div className="flex items-center justify-end gap-3 shrink-0">
+                    <span className="w-32 text-right">Amount (SAR)</span>
+                    <span className="w-8"></span>
+                  </div>
+                </div>
+              )}
               {!isDatasheetView ? (
                 <div className="divide-y-0">
                 {activeErpList.map((inv) => {
@@ -6380,14 +6396,21 @@ function DailyRegisterView({
                                     handleConfirmManualRow(rowKey);
                                   }
                                 }}
-                                placeholder="Invoice #"
-                                className="w-24 bg-transparent border-b border-white/20 text-slate-200 text-xs font-mono font-medium focus:outline-none focus:border-jct-turquoise transition-colors px-1 py-0.5"
+                                placeholder="Branch Inv #"
+                                className="w-28 bg-transparent border-b border-white/20 text-slate-200 text-xs font-mono font-medium focus:outline-none focus:border-jct-turquoise transition-colors px-1 py-0.5"
                               />
                             </div>
                           ) : (
-                            <span className="font-mono text-xs font-medium text-slate-500 shrink-0">
-                              #{inv.invoiceNo}
-                            </span>
+                            <div className="flex items-center gap-1.5 shrink-0 min-w-[110px]" title={inv.seqInvoiceNo ? `Branch Inv No: ${inv.invoiceNo} (Seq: #${inv.seqInvoiceNo})` : `Branch Inv No: ${inv.invoiceNo}`}>
+                              <span className="font-mono text-xs font-semibold text-jct-turquoise">
+                                {inv.invoiceNo?.startsWith("W#") || inv.invoiceNo?.startsWith("#") ? inv.invoiceNo : `#${inv.invoiceNo}`}
+                              </span>
+                              {inv.seqInvoiceNo && inv.seqInvoiceNo !== inv.invoiceNo && (
+                                <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 hidden sm:inline">
+                                  (#{inv.seqInvoiceNo})
+                                </span>
+                              )}
+                            </div>
                           )}
                           {/* Editable Customer / Description Input */}
                           <input
@@ -8850,7 +8873,7 @@ function DailyRegisterView({
               {/* Table Column Headers */}
               <div className="print:flex print:justify-between print:items-center print:py-2.5 print:border-b-2 print:border-black print:text-xs print:font-bold print:uppercase print:text-slate-800">
                 <div className="flex items-center gap-4 min-w-0 flex-1">
-                  <span className="w-24 shrink-0 font-mono">Invoice #</span>
+                  <span className="w-28 shrink-0 font-mono">Branch Inv No.</span>
                   <span className="truncate">Customer Name</span>
                 </div>
                 <div className="flex items-center gap-6 shrink-0">
@@ -8960,7 +8983,7 @@ function DailyRegisterView({
               {/* Table Column Headers */}
               <div className="print:flex print:justify-between print:items-center print:py-2.5 print:border-b-2 print:border-black print:text-xs print:font-bold print:uppercase print:text-slate-800">
                 <div className="flex items-center gap-4 min-w-0 flex-1">
-                  <span className="w-24 shrink-0 font-mono">Invoice #</span>
+                  <span className="w-28 shrink-0 font-mono">Branch Inv No.</span>
                   <span className="truncate">Customer Name</span>
                 </div>
                 <div className="flex items-center gap-6 shrink-0">
@@ -9020,7 +9043,7 @@ function DailyRegisterView({
               {/* Table Column Headers */}
               <div className="print:flex print:justify-between print:items-center print:py-2.5 print:border-b-2 print:border-black print:text-xs print:font-bold print:uppercase print:text-slate-800">
                 <div className="flex items-center gap-4 min-w-0 flex-1">
-                  <span className="w-24 shrink-0 font-mono">Invoice #</span>
+                  <span className="w-28 shrink-0 font-mono">Branch Inv No.</span>
                   <span className="truncate">Customer Name</span>
                 </div>
                 <div className="flex items-center gap-6 shrink-0">
@@ -9539,7 +9562,7 @@ function DailyRegisterView({
                     Drop daily ERP PDF (`.pdf`) or Excel (`.xls`, `.xlsx`) report here or click to browse
                   </span>
                   <span className="text-xs text-slate-500 dark:text-slate-400 block mt-0.5">
-                    Unified import auto-extracts Reference IDs, Amounts &amp; Payment Methods and syncs instantly to Guided Tracking.
+                    Unified import auto-extracts Branch Inv Nos., Amounts &amp; Payment Methods and syncs instantly to Guided Tracking.
                   </span>
                 </div>
               </div>
@@ -9605,7 +9628,7 @@ function DailyRegisterView({
                 <thead className="sticky top-0 z-20 text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-[#111111] shadow-sm">
                   <tr className="border-b border-slate-200 dark:border-[#1F1F1F] divide-x divide-slate-200 dark:divide-[#1F1F1F]">
                     <th className="px-2.5 py-3 text-center w-9">#</th>
-                    <th className="px-3 py-3 text-left min-w-[96px]">1. INVOICE NO.</th>
+                    <th className="px-3 py-3 text-left min-w-[96px]">1. BRANCH INV NO.</th>
                     <th className="px-3 py-3 text-right min-w-[115px]">2. AMT CASH SALE</th>
                     <th className="px-3 py-3 text-right min-w-[125px]">3. CREDIT INV. AMOUNT</th>
                     <th className="px-3 py-3 text-left min-w-[120px]">4. RECEIPT NO.</th>
