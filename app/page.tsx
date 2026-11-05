@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useSession, signIn, signOut } from "next-auth/react";
 import { usePathname, useRouter } from "next/navigation";
 import { POCKET_CUSTOMERS_KEY, pocketTag, usePocketTransactions, type BranchId } from "../lib/pocket-bridge";
@@ -19,6 +20,34 @@ import {
   Menu,
   Coins, ArrowDownLeft, Send, MessageSquare, Bot, Info
 } from "lucide-react";
+
+function ModalPortal({
+  isOpen,
+  children,
+}: {
+  isOpen: boolean;
+  children: React.ReactNode;
+}) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen || typeof document === "undefined") return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [isOpen]);
+
+  if (!isOpen || !mounted || typeof document === "undefined") return null;
+
+  return createPortal(children, document.body);
+}
 
 /* ════════════════════════════════════════════════════════════════════════
    TYPES & CONSTANTS
@@ -1481,12 +1510,13 @@ function CreditSaleModal({
     settlement === "FULL" ? invoice.amount : r2(invoice.amount - Math.min(downVal, invoice.amount));
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
-      onClick={onClose}
-    >
+    <ModalPortal isOpen={true}>
       <div
-        className="w-full max-w-lg bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 space-y-4 max-h-[90vh] overflow-y-auto"
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto"
+        onClick={onClose}
+      >
+        <div
+          className="w-full max-w-lg bg-white dark:bg-[#0A0A0A] shadow-2xl border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 space-y-4 max-h-[90vh] overflow-y-auto my-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-3 border-b border-slate-200 dark:border-[#1F1F1F] pb-3">
@@ -1624,6 +1654,7 @@ function CreditSaleModal({
         </button>
       </div>
     </div>
+  </ModalPortal>
   );
 }
 
@@ -2000,8 +2031,9 @@ function HandoverModalComponent({
   const discrepancyNextDayFloat = Math.max(0, r2(countedPhysicalCash - effectiveTakeHome));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-700 bg-[#0A0A0A]/95 backdrop-blur-xl text-jct-charcoal dark:text-jct-offwhite">
-      <div className="w-full max-w-xl bg-white dark:bg-[#111111] border border-slate-200 dark:border-white/10 rounded-3xl p-6 sm:p-8 shadow-2xl relative overflow-hidden transition-all duration-500">
+    <ModalPortal isOpen={isOpen}>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 sm:p-6 overflow-y-auto text-jct-charcoal dark:text-jct-offwhite">
+        <div className="w-full max-w-xl bg-white dark:bg-[#111111] border border-slate-200 dark:border-white/10 rounded-3xl p-6 sm:p-8 shadow-2xl relative overflow-hidden transition-all duration-500 my-auto">
         
         {/* ── STEP 1: PHYSICAL CASH VERIFICATION ── */}
         {drawerCloseStep === 1 && (
@@ -2483,7 +2515,8 @@ function HandoverModalComponent({
           </div>
         )}
       </div>
-    </div>
+      </div>
+    </ModalPortal>
   );
 }
 
@@ -5240,7 +5273,7 @@ function DailyRegisterView({
           MODE 1: WIDESCREEN HOME HUB (trackingMode === 'hub')
          ════════════════════════════════════════════════════════════════════ */}
       {trackingMode === "hub" && (
-        <div className="relative z-10 w-full animate-in fade-in slide-in-from-bottom-2 duration-400 ease-out max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8 flex flex-col gap-6">
+        <div className="relative z-10 w-full animate-in fade-in duration-300 ease-out max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8 flex flex-col gap-6">
           {justCompletedToast && (
             <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 dark:border-[#1F1F1F] bg-white dark:bg-[#0A0A0A] px-5 py-3.5 text-sm font-semibold text-jct-charcoal dark:text-jct-offwhite shadow-sm print:hidden">
               <div className="flex items-center gap-2.5">
@@ -5906,8 +5939,9 @@ function DailyRegisterView({
 
       {/* Clear / Start Over Confirmation Modal */}
       {showClearConfirm && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm animate-fadeIn print:hidden">
-          <div className="w-full max-w-md bg-white dark:bg-[#0A0A0A] shadow-2xl border border-rose-500/40 rounded-2xl p-6">
+        <ModalPortal isOpen={showClearConfirm}>
+          <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm overflow-y-auto print:hidden">
+            <div className="w-full max-w-md bg-white dark:bg-[#0A0A0A] shadow-2xl border border-rose-500/40 rounded-2xl p-6 my-auto">
             <div className="flex items-start gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-500/15 text-rose-500">
                 <RotateCcw size={20} />
@@ -5943,13 +5977,15 @@ function DailyRegisterView({
               </button>
             </div>
           </div>
-        </div>
+          </div>
+        </ModalPortal>
       )}
 
       {/* Universal Entry Edit Modal (Hub, Step 3, Step 4, Step 5) */}
       {editingEntryModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm animate-fadeIn">
-          <div className="w-full max-w-md bg-white dark:bg-[#0A0A0A] shadow-2xl border border-jct-turquoise/40 dark:border-jct-turquoise/50 hover:border-jct-turquoise hover:shadow-[0_0_20px_rgba(45,226,230,0.15)] rounded-xl p-6 transition-all duration-300">
+        <ModalPortal isOpen={Boolean(editingEntryModal)}>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm overflow-y-auto">
+            <div className="w-full max-w-md bg-white dark:bg-[#0A0A0A] shadow-2xl border border-jct-turquoise/40 dark:border-jct-turquoise/50 hover:border-jct-turquoise hover:shadow-[0_0_20px_rgba(45,226,230,0.15)] rounded-xl p-6 transition-all duration-300 my-auto">
             <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#1F1F1F] pb-3 mb-4">
               <h3 className="font-display text-lg font-extrabold text-jct-charcoal dark:text-jct-offwhite">
                 ✏️ Edit Register Entry
@@ -6037,6 +6073,7 @@ function DailyRegisterView({
             </form>
           </div>
         </div>
+      </ModalPortal>
       )}
 
       {/* Credit Sale Setup Popup Modal (Step 2) */}
@@ -6142,7 +6179,7 @@ function DailyRegisterView({
               STEP 1: IMPORT TODAY'S ERP SALES (CALM & CENTERED)
              ────────────────────────────────────────────────────────────── */}
           {wizardStep === 1 && (
-            <div className="animate-in fade-in slide-in-from-bottom-2 duration-400 ease-out mx-auto my-6 flex w-full max-w-2xl flex-col items-center justify-center bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 sm:p-10 md:p-14 text-center transition-all duration-300">
+            <div className="animate-in fade-in duration-300 ease-out mx-auto my-6 flex w-full max-w-2xl flex-col items-center justify-center bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 sm:p-10 md:p-14 text-center transition-all duration-300">
               <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-xl bg-jct-turquoise/20 border border-jct-turquoise/40 text-jct-charcoal dark:text-jct-turquoise">
                 <UploadCloud size={28} />
               </div>
@@ -6232,7 +6269,7 @@ function DailyRegisterView({
               STEP 2: VERIFY BANK SWIPES (SAB / AL RAJHI), SPLIT TENDERS & CASH SALES
              ────────────────────────────────────────────────────────────── */}
           {wizardStep === 2 && (
-            <div className="animate-in fade-in slide-in-from-bottom-2 duration-400 ease-out flex flex-col gap-5 bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 sm:p-8 transition-all duration-300">
+            <div className="animate-in fade-in duration-300 ease-out flex flex-col gap-5 bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 sm:p-8 transition-all duration-300">
               {/* Header + Optional MDR Toggle + Summary Cards */}
               <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 pb-5 border-b border-slate-200 dark:border-[#1F1F1F]">
                 <div className="space-y-2">
@@ -6961,7 +6998,7 @@ function DailyRegisterView({
               STEP 3: CREDIT & CASH INFLOWS + MANUAL SPLIT PAYMENT ENTRY
              ────────────────────────────────────────────────────────────── */}
           {wizardStep === 3 && (
-            <div className="animate-in fade-in slide-in-from-bottom-2 duration-400 ease-out flex flex-col gap-6 bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 sm:p-8 transition-all duration-300">
+            <div className="animate-in fade-in duration-300 ease-out flex flex-col gap-6 bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 sm:p-8 transition-all duration-300">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-[#1F1F1F] pb-5">
                 <div>
                   <div className="flex items-center gap-1.5">
@@ -7462,7 +7499,7 @@ function DailyRegisterView({
               STEP 4: EXPENSES & SUPPLIER PURCHASES (STRICT 7 CATEGORIES + SUPPLIER SYNC)
              ────────────────────────────────────────────────────────────── */}
           {wizardStep === 4 && (
-            <div className="animate-in fade-in slide-in-from-bottom-2 duration-400 ease-out flex flex-col gap-6 bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-yellow/20 dark:border-jct-yellow/30 hover:border-jct-yellow/80 hover:shadow-[0_0_15px_rgba(255,222,89,0.1)] rounded-xl p-6 sm:p-8 transition-all duration-300">
+            <div className="animate-in fade-in duration-300 ease-out flex flex-col gap-6 bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-yellow/20 dark:border-jct-yellow/30 hover:border-jct-yellow/80 hover:shadow-[0_0_15px_rgba(255,222,89,0.1)] rounded-xl p-6 sm:p-8 transition-all duration-300">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-[#1F1F1F] pb-5">
                 <div>
                   <div className="flex items-center gap-1.5">
@@ -7851,7 +7888,7 @@ function DailyRegisterView({
               STEP 5: FULL-WIDESCREEN EDITABLE AUDIT WORKBENCH WITH [⤢ EXPAND] ON ALL 3 BOXES
              ────────────────────────────────────────────────────────────── */}
           {wizardStep === 5 && (
-            <div className="animate-in fade-in slide-in-from-bottom-2 duration-400 ease-out flex flex-col gap-6 pb-8 print:hidden">
+            <div className="animate-in fade-in duration-300 ease-out flex flex-col gap-6 pb-8 print:hidden">
               {/* ──────────────────────────────────────────────────────────
                   PAGE 1: AUDIT SUMMARY (EXECUTIVE OVERVIEW)
                  ────────────────────────────────────────────────────────── */}
@@ -9161,7 +9198,8 @@ function DailyRegisterView({
 
           {/* Full-Screen Final Datasheet Review Modal */}
           {isDatasheetPreviewOpen && (
-            <div className="fixed inset-0 z-[100] bg-[#0A0A0A]/95 backdrop-blur-xl p-4 md:p-8 flex flex-col h-screen w-screen overflow-hidden animate-in fade-in zoom-in-95 duration-200 print:hidden text-slate-200">
+            <ModalPortal isOpen={isDatasheetPreviewOpen}>
+              <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-xl p-4 md:p-8 flex flex-col h-screen w-screen overflow-hidden print:hidden text-slate-200">
               <div className="flex items-center justify-between gap-3 mb-4 shrink-0">
                 <button
                   type="button"
@@ -9190,9 +9228,10 @@ function DailyRegisterView({
                 />
               </div>
             </div>
+          </ModalPortal>
           )}
-            </div>
-          )}
+        </div>
+      )}
 
           {/* ──────────────────────────────────────────────────────────
               MULTI-BRANCH CONSOLIDATED PRINT ARCHITECTURE (hidden on screen, visible in print)
@@ -9452,7 +9491,7 @@ function DailyRegisterView({
           MODE 3: CLASSIC JUBAIL CORP DIGITAL DATA SHEET (trackingMode === 'datasheet')
          ════════════════════════════════════════════════════════════════════ */}
       {trackingMode === "datasheet" && (
-        <div className="relative z-10 w-full animate-in fade-in slide-in-from-bottom-2 duration-400 ease-out px-4 sm:px-6 py-6 flex flex-col gap-5">
+        <div className="relative z-10 w-full animate-in fade-in duration-300 ease-out px-4 sm:px-6 py-6 flex flex-col gap-5">
           {/* 1. Official Sheet Header Bar */}
           <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6">
             <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
@@ -10202,8 +10241,9 @@ function CreditRadarView({
     <div className="flex flex-col h-full w-full gap-5 p-4 md:p-6 lg:p-8 overflow-hidden">
       {/* Owner Edit Customer Modal */}
       {isOwner && editingCustomer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 text-jct-charcoal dark:text-jct-offwhite">
+        <ModalPortal isOpen={Boolean(editingCustomer)}>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm overflow-y-auto">
+            <div className="w-full max-w-md bg-white dark:bg-[#0A0A0A] shadow-2xl border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 text-jct-charcoal dark:text-jct-offwhite my-auto">
             <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#1F1F1F] pb-3 mb-4">
               <h3 className="font-display text-lg font-extrabold text-jct-charcoal dark:text-jct-offwhite">
                 ✏️ Edit Credit Account (Owner Override)
@@ -10271,6 +10311,7 @@ function CreditRadarView({
             </form>
           </div>
         </div>
+      </ModalPortal>
       )}
 
       {/* Prominent Top Banner: Upcoming Follow-Up Reminders */}
@@ -10868,8 +10909,9 @@ function SupplierHubView({
 
       {/* Owner Edit Bill Modal */}
       {editingBill && isOwner && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-fadeIn">
-          <div className="w-full max-w-md bg-white dark:bg-[#0A0A0A] rounded-xl p-6 border border-jct-yellow/40 dark:border-jct-yellow/50 shadow-2xl transition-all text-jct-charcoal dark:text-jct-offwhite">
+        <ModalPortal isOpen={Boolean(editingBill)}>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm overflow-y-auto">
+            <div className="w-full max-w-md bg-white dark:bg-[#0A0A0A] rounded-xl p-6 border border-jct-yellow/40 dark:border-jct-yellow/50 shadow-2xl transition-all text-jct-charcoal dark:text-jct-offwhite my-auto">
             <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#1F1F1F] pb-4 mb-5">
               <h3 className="font-display text-lg font-extrabold tracking-tight text-jct-charcoal dark:text-white">
                 👑 Edit Supplier Bill / Purchase
@@ -10996,6 +11038,7 @@ function SupplierHubView({
             </form>
           </div>
         </div>
+      </ModalPortal>
       )}
 
       {/* ────────────────────────────────────────────────────────────
@@ -13563,8 +13606,9 @@ function AuditLibraryView({
 
         {/* Modal: Add or Edit Inflow */}
         {inflowModalOpen && isOwner && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-fadeIn">
-            <div className="w-full max-w-lg bg-white dark:bg-[#0A0A0A] rounded-xl p-6 border border-jct-turquoise/40 dark:border-jct-turquoise/50 hover:border-jct-turquoise hover:shadow-[0_0_20px_rgba(45,226,230,0.15)] shadow-2xl transition-all duration-300 text-jct-charcoal dark:text-jct-offwhite">
+          <ModalPortal isOpen={inflowModalOpen}>
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm overflow-y-auto">
+              <div className="w-full max-w-lg bg-white dark:bg-[#0A0A0A] rounded-xl p-6 border border-jct-turquoise/40 dark:border-jct-turquoise/50 hover:border-jct-turquoise hover:shadow-[0_0_20px_rgba(45,226,230,0.15)] shadow-2xl transition-all duration-300 text-jct-charcoal dark:text-jct-offwhite my-auto">
               <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#1F1F1F] pb-4 mb-5">
                 <div className="flex items-center gap-2">
                   <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-jct-turquoise/20 text-jct-charcoal dark:text-jct-turquoise">
@@ -13663,12 +13707,14 @@ function AuditLibraryView({
               </form>
             </div>
           </div>
+        </ModalPortal>
         )}
 
         {/* Modal: Add or Edit Expense / Past Bill */}
         {expenseModalOpen && isOwner && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-fadeIn">
-            <div className="w-full max-w-lg bg-white dark:bg-[#0A0A0A] rounded-xl p-6 border border-jct-yellow/40 dark:border-jct-yellow/50 hover:border-jct-yellow hover:shadow-[0_0_20px_rgba(255,222,89,0.15)] shadow-2xl transition-all duration-300 text-jct-charcoal dark:text-jct-offwhite">
+          <ModalPortal isOpen={expenseModalOpen}>
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm overflow-y-auto">
+              <div className="w-full max-w-lg bg-white dark:bg-[#0A0A0A] rounded-xl p-6 border border-jct-yellow/40 dark:border-jct-yellow/50 hover:border-jct-yellow hover:shadow-[0_0_20px_rgba(255,222,89,0.15)] shadow-2xl transition-all duration-300 text-jct-charcoal dark:text-jct-offwhite my-auto">
               <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#1F1F1F] pb-4 mb-5">
                 <div className="flex items-center gap-2">
                   <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-jct-yellow/20 text-jct-charcoal dark:text-jct-yellow">
@@ -13786,6 +13832,7 @@ function AuditLibraryView({
               </form>
             </div>
           </div>
+        </ModalPortal>
         )}
 
         {/* Print-Only Report Footer */}
@@ -14948,8 +14995,9 @@ function StaffPayrollView({
           MODAL 0: EDIT STAFF MEMBER (OWNER PRIVILEGE)
          ────────────────────────────────────────────────────────────── */}
       {editingStaff && isOwner && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 text-jct-charcoal dark:text-jct-offwhite flex flex-col gap-5">
+        <ModalPortal isOpen={Boolean(editingStaff)}>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm overflow-y-auto">
+            <div className="w-full max-w-md bg-white dark:bg-[#0A0A0A] shadow-2xl border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 text-jct-charcoal dark:text-jct-offwhite flex flex-col gap-5 my-auto">
             <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#1F1F1F] pb-4">
               <div className="flex items-center gap-2.5">
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-jct-yellow text-jct-charcoal">
@@ -15081,14 +15129,16 @@ function StaffPayrollView({
             </form>
           </div>
         </div>
+      </ModalPortal>
       )}
 
       {/* ──────────────────────────────────────────────────────────────
           MODAL 1: ADD NEW STAFF MEMBER
          ────────────────────────────────────────────────────────────── */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 text-jct-charcoal dark:text-jct-offwhite flex flex-col gap-5">
+        <ModalPortal isOpen={showAddModal}>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm overflow-y-auto">
+            <div className="w-full max-w-md bg-white dark:bg-[#0A0A0A] shadow-2xl border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 text-jct-charcoal dark:text-jct-offwhite flex flex-col gap-5 my-auto">
             <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#1F1F1F] pb-4">
               <div className="flex items-center gap-2.5">
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-jct-yellow text-jct-charcoal">
@@ -15213,14 +15263,16 @@ function StaffPayrollView({
             </form>
           </div>
         </div>
+      </ModalPortal>
       )}
 
       {/* ──────────────────────────────────────────────────────────────
           MODAL 2: INDIVIDUAL STAFF MONTHLY LEDGER & DISBURSEMENT
          ────────────────────────────────────────────────────────────── */}
       {selectedStaffForLedger && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-md">
-          <div className="w-full max-w-2xl max-h-[90vh] overflow-hidden bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl flex flex-col text-jct-charcoal dark:text-jct-offwhite">
+        <ModalPortal isOpen={Boolean(selectedStaffForLedger)}>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm overflow-y-auto">
+            <div className="w-full max-w-2xl max-h-[90vh] overflow-hidden bg-white dark:bg-[#0A0A0A] shadow-2xl border border-slate-200 dark:border-[#1F1F1F] rounded-xl flex flex-col text-jct-charcoal dark:text-jct-offwhite my-auto">
             {/* Modal Header */}
             <div className="flex items-start justify-between border-b border-slate-200 dark:border-[#1F1F1F] p-6 bg-slate-50 dark:bg-[#111111]">
               <div className="flex items-center gap-3">
@@ -15709,14 +15761,16 @@ function StaffPayrollView({
             </div>
           </div>
         </div>
+      </ModalPortal>
       )}
 
       {/* ──────────────────────────────────────────────────────────────
           MODAL 3: PAY SALARY MODAL (DUAL-WRITE & 3-TIER PAYMENT SELECTOR)
          ────────────────────────────────────────────────────────────── */}
       {paySalaryStaff && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-fadeIn">
-          <div className="w-full max-w-lg bg-white dark:bg-[#0A0A0A] rounded-2xl p-6 sm:p-7 border border-emerald-500/40 dark:border-emerald-500/50 shadow-2xl transition-all text-jct-charcoal dark:text-jct-offwhite">
+        <ModalPortal isOpen={Boolean(paySalaryStaff)}>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm overflow-y-auto">
+            <div className="w-full max-w-lg bg-white dark:bg-[#0A0A0A] rounded-2xl p-6 sm:p-7 border border-emerald-500/40 dark:border-emerald-500/50 shadow-2xl transition-all text-jct-charcoal dark:text-jct-offwhite my-auto">
             <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#1F1F1F] pb-4 mb-5">
               <div className="flex items-center gap-2.5">
                 <div className="h-9 w-9 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold">
@@ -15888,6 +15942,7 @@ function StaffPayrollView({
             </form>
           </div>
         </div>
+      </ModalPortal>
       )}
     </div>
   );
@@ -16748,7 +16803,7 @@ export default function Page() {
                 <BranchAuditRadar />
               </div>
             )}
-            <div key={safeTab} className="flex-1 flex flex-col min-w-0 animate-in fade-in slide-in-from-bottom-2 duration-400 ease-out">
+            <div key={safeTab} className="flex-1 flex flex-col min-w-0 animate-in fade-in duration-300 ease-out">
             {safeTab === "register" ? (
               <DailyRegisterView
                 trackingMode={trackingMode}
