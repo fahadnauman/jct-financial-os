@@ -8,6 +8,8 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const rawBranch = searchParams.get("branch") || searchParams.get("branchId");
   const branch = rawBranch && rawBranch !== "ALL" ? normalizeBranch(rawBranch) : rawBranch;
+  const limitParam = searchParams.get("limit") || searchParams.get("take");
+  const limit = Math.min(Math.max(1, Number(limitParam) || 500), 2000);
 
   try {
     const rows = await prisma.dailyRegisterLock.findMany({
@@ -15,7 +17,7 @@ export async function GET(req: Request) {
         ...(branch && branch !== "ALL" ? { branch } : {}),
       },
       orderBy: { lockedAt: "desc" },
-      take: 100,
+      take: limit,
     });
 
     return NextResponse.json({ records: rows });

@@ -103,3 +103,82 @@ export const saudiDateString = (input?: Date | string | number): string => {
   if (isNaN(d.getTime())) return "";
   return d.toLocaleDateString("en-GB", { timeZone: SAUDI_TZ });
 };
+
+export interface SaudiMonthGroup {
+  key: string; // "2026-11"
+  label: string; // "November 2026"
+  year: number;
+  month: number;
+}
+
+/**
+ * Resolves any date string or Date into a Saudi Arabia AST month grouping key and label.
+ *
+ * Example:
+ *   getSaudiMonthGroup("2026-11-05") -> { key: "2026-11", label: "November 2026", year: 2026, month: 11 }
+ *   getSaudiMonthGroup("05-November-2026") -> { key: "2026-11", label: "November 2026", year: 2026, month: 11 }
+ */
+export function getSaudiMonthGroup(input: string | Date | number | null | undefined): SaudiMonthGroup {
+  if (!input) {
+    const p = saudiParts(new Date());
+    const m = Number(p.month);
+    const y = Number(p.year);
+    return { key: `${y}-${String(m).padStart(2, "0")}`, label: `${SAUDI_MONTHS[m - 1]} ${y}`, year: y, month: m };
+  }
+
+  if (typeof input === "string") {
+    const trimmed = input.trim();
+    // Pattern: "YYYY-MM-DD" or "YYYY-MM"
+    const isoMatch = trimmed.match(/^(\d{4})-(\d{1,2})(?:-\d{1,2})?/);
+    if (isoMatch) {
+      const y = Number(isoMatch[1]);
+      const m = Number(isoMatch[2]);
+      if (m >= 1 && m <= 12) {
+        return {
+          key: `${y}-${String(m).padStart(2, "0")}`,
+          label: `${SAUDI_MONTHS[m - 1]} ${y}`,
+          year: y,
+          month: m,
+        };
+      }
+    }
+
+    // Pattern: "DD-MonthName-YYYY" e.g. "05-November-2026"
+    const textDateMatch = trimmed.match(/^(\d{1,2})-([A-Za-z]+)-(\d{4})/);
+    if (textDateMatch) {
+      const monthStr = textDateMatch[2].toLowerCase();
+      const y = Number(textDateMatch[3]);
+      const mIndex = SAUDI_MONTHS.findIndex((m) => m.toLowerCase() === monthStr);
+      if (mIndex >= 0) {
+        const m = mIndex + 1;
+        return {
+          key: `${y}-${String(m).padStart(2, "0")}`,
+          label: `${SAUDI_MONTHS[mIndex]} ${y}`,
+          year: y,
+          month: m,
+        };
+      }
+    }
+  }
+
+  // Fallback to partsFormatter with Saudi Timezone
+  const d = input instanceof Date ? input : new Date(input);
+  if (!isNaN(d.getTime())) {
+    const p = saudiParts(d);
+    const m = Number(p.month);
+    const y = Number(p.year);
+    return {
+      key: `${y}-${String(m).padStart(2, "0")}`,
+      label: `${SAUDI_MONTHS[m - 1]} ${y}`,
+      year: y,
+      month: m,
+    };
+  }
+
+  // Ultimate fallback to current Saudi month
+  const p = saudiParts(new Date());
+  const m = Number(p.month);
+  const y = Number(p.year);
+  return { key: `${y}-${String(m).padStart(2, "0")}`, label: `${SAUDI_MONTHS[m - 1]} ${y}`, year: y, month: m };
+}
+

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useSession, signIn, signOut } from "next-auth/react";
 import { usePathname, useRouter } from "next/navigation";
@@ -17,11 +17,13 @@ import {
   saudiDateString,
 } from "../lib/saudi-time";
 import SettingsView from "./settings-view";
+import MonthlyAuditsView from "./monthly-audits-view";
+import { calcSessionPosBreakdown, type PosSessionBreakdown } from "../lib/pos-breakdown";
 import { useActiveSessionSync, type ActiveSessionSyncStatus } from "../lib/active-session-sync";
 import * as Dropdown from "@radix-ui/react-dropdown-menu";
 import * as XLSX from "xlsx";
 import {
-  Activity, Building2, CalendarDays, Check, ChevronDown,
+  Activity, Building2, Calendar, CalendarDays, CreditCard, Check, ChevronDown,
   FileSpreadsheet, Lock, Moon, 
   Package, Sparkles, Store, Sun, TrendingUp, 
   Crown, PaintRoller, SprayCan, Landmark, Repeat,
@@ -65,7 +67,7 @@ function ModalPortal({
    TYPES & CONSTANTS
    ════════════════════════════════════════════════════════════════════════ */
 
-type TabId = "register" | "archive" | "radar" | "suppliers" | "payroll" | "pulse" | "consolidation" | "ai" | "settings";
+type TabId = "register" | "archive" | "radar" | "suppliers" | "payroll" | "pulse" | "consolidation" | "ai" | "settings" | "monthly-audits";
 type Kind = "cash_sale" | "credit_received" | "bank_in" | "jotun" | "hempel" | "sigma" | "other" | "salaries" | "tax" | "misc_expense";
 
 interface Txn {
@@ -340,6 +342,7 @@ function Sidebar({ tab, setTab, allowedTabs }: { tab: TabId; setTab: (t: TabId) 
     { id: "suppliers" as TabId, label: "Suppliers & Payables", icon: Package },
     { id: "payroll" as TabId, label: "Staff & Payroll", icon: Users },
     { id: "pulse" as TabId, label: "Financial Pulse", icon: Activity },
+    { id: "monthly-audits" as TabId, label: "Monthly Audits", icon: Calendar },
     { id: "consolidation" as TabId, label: "Branch Consolidation", icon: Building2 },
     { id: "ai" as TabId, label: "Nauman AI", icon: Sparkles },
     { id: "settings" as TabId, label: "Settings", icon: SettingsIcon },
@@ -2042,6 +2045,7 @@ function HandoverModalComponent({
   calculatedClosingBalance,
   totalCashInSalesAndReceipts,
   totalPreLoggedExpenses,
+  posBreakdown,
   onConfirmLock,
   isSaving,
 }: {
@@ -2050,6 +2054,7 @@ function HandoverModalComponent({
   calculatedClosingBalance: number;
   totalCashInSalesAndReceipts: number;
   totalPreLoggedExpenses: number;
+  posBreakdown?: PosSessionBreakdown;
   onConfirmLock: (
     takeHomeAmount: number,
     nextDayOpening: number,
@@ -2137,6 +2142,57 @@ function HandoverModalComponent({
                 <span className="text-rose-500">Expenses: <strong>-SAR {fmt(totalPreLoggedExpenses)}</strong></span>
               </div>
             </div>
+
+            {/* POS & Bank Settlements Breakdown */}
+            {posBreakdown && (
+              <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-[#161616] p-4 flex flex-col gap-2.5 text-left">
+                <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-2">
+                  <div className="flex items-center gap-2">
+                    <CreditCard size={15} className="text-jct-turquoise" />
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                      POS &amp; Bank Terminals Summary
+                    </span>
+                  </div>
+                  <span className="font-mono text-xs font-black text-jct-charcoal dark:text-jct-turquoise">
+                    Total: SAR {fmt(posBreakdown.totalNonCashAmount)} ({posBreakdown.totalTransactions} slips)
+                  </span>
+                </div>
+
+                {posBreakdown.terminalList.length === 0 ? (
+                  <p className="text-xs text-slate-400 italic py-1 text-center">
+                    No POS card or bank swipe transactions in active session.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 max-h-48 overflow-y-auto">
+                    {posBreakdown.terminalList.map((t) => (
+                      <div
+                        key={t.terminalKey}
+                        className="rounded-xl bg-white dark:bg-[#0D0D0D] border border-slate-200 dark:border-white/10 p-2.5 flex flex-col gap-1.5"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-mono font-black text-xs text-jct-charcoal dark:text-white">
+                            {t.terminalName}
+                          </span>
+                          <span className="font-mono font-bold text-xs text-jct-turquoise">
+                            SAR {fmt(t.totalAmount)}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {t.cardList.map((c) => (
+                            <span
+                              key={c.cardType}
+                              className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400"
+                            >
+                              {c.cardType}: SAR {fmt(c.amount)} ({c.count})
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Action Buttons */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
@@ -9315,6 +9371,7 @@ function DailyRegisterView({
               calculatedClosingBalance={calculatedClosingBalance}
               totalCashInSalesAndReceipts={totalCashInSalesAndReceipts}
               totalPreLoggedExpenses={totalPreLoggedExpenses}
+              posBreakdown={calcSessionPosBreakdown(activeErpList, preLoggedBankInvoices, preLoggedEntries)}
               onConfirmLock={handleConfirmLockWithFloat}
               isSaving={isSavingDrawerLock}
             />
@@ -11602,11 +11659,15 @@ function FinancialPulseView({
   completedDaysLog = [],
   onReopenDraft,
   onOpenAuditLibrary,
+  onOpenMonthlyAudits,
+  activePosBreakdown,
 }: {
   metrics: LiveCrossModuleMetrics;
   completedDaysLog?: CompletedDaySummary[];
   onReopenDraft?: (record: ArchiveRecord) => void;
   onOpenAuditLibrary?: () => void;
+  onOpenMonthlyAudits?: () => void;
+  activePosBreakdown?: PosSessionBreakdown;
 }) {
   const [pulseArchiveRecords, setPulseArchiveRecords] = useState<ArchiveRecord[]>([]);
 
@@ -11679,7 +11740,7 @@ function FinancialPulseView({
 
   return (
     <div className="flex flex-col gap-6 p-4 md:p-6 lg:p-8 h-full overflow-y-auto w-full">
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2">
         <div className="flex flex-col gap-1.5">
           <h2 className="font-display font-extrabold text-2xl text-jct-charcoal dark:text-white tracking-tight flex items-center gap-2">
             <Activity className="text-jct-turquoise" /> Sales &amp; Business Analytics Hub
@@ -11688,9 +11749,21 @@ function FinancialPulseView({
             Live synced with today&apos;s Daily Register, POS Terminal Fees, and Payables.
           </p>
         </div>
-        <span className="text-xs font-bold bg-jct-yellow text-jct-charcoal px-3 py-1.5 rounded-full">
-          ● Live Register Sync Active
-        </span>
+        <div className="flex items-center gap-2.5 flex-wrap">
+          {onOpenMonthlyAudits && (
+            <button
+              type="button"
+              onClick={onOpenMonthlyAudits}
+              className="flex items-center gap-2 bg-jct-turquoise text-jct-charcoal font-black px-4 py-2 rounded-xl shadow-md hover:brightness-95 transition text-xs sm:text-sm shrink-0"
+            >
+              <Calendar size={16} />
+              <span>View Monthly Audits</span>
+            </button>
+          )}
+          <span className="text-xs font-bold bg-jct-yellow text-jct-charcoal px-3 py-1.5 rounded-full">
+            ● Live Register Sync Active
+          </span>
+        </div>
       </div>
 
       {/* Prominent Yellow Alert Widget: Pending Audits */}
@@ -11868,6 +11941,135 @@ function FinancialPulseView({
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Dedicated POS & Bank Breakdown Card */}
+      <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-2xl p-6 flex flex-col gap-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-[#1F1F1F] pb-4">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl bg-jct-turquoise/20 text-jct-turquoise flex items-center justify-center font-black shrink-0">
+              <CreditCard size={20} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-display font-extrabold text-lg text-jct-charcoal dark:text-white">
+                  POS &amp; Bank Breakdown
+                </h3>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-jct-turquoise/20 text-jct-turquoise border border-jct-turquoise/30">
+                  Active Register Session
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Hierarchical aggregation of all non-cash settlements grouped by Bank Terminal &amp; Card Network.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <div className="flex flex-col text-right">
+              <span className="text-[10px] uppercase font-bold text-slate-400">Total Non-Cash Settled</span>
+              <span className="font-mono text-xl font-black text-jct-charcoal dark:text-jct-turquoise">
+                SAR {fmt(activePosBreakdown?.totalNonCashAmount || metrics.todayBankNet)}
+              </span>
+            </div>
+            {onOpenMonthlyAudits && (
+              <button
+                type="button"
+                onClick={onOpenMonthlyAudits}
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-xs font-bold text-slate-600 dark:text-slate-300 transition"
+              >
+                <span>Monthly History →</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Terminals & Cards Grid */}
+        {(!activePosBreakdown || activePosBreakdown.terminalList.length === 0) ? (
+          <div className="rounded-xl border border-dashed border-slate-200 dark:border-white/10 p-8 text-center flex flex-col items-center justify-center gap-2">
+            <CreditCard size={28} className="text-slate-400" />
+            <p className="text-sm font-bold text-slate-600 dark:text-slate-300">
+              No active POS card or bank transactions in current register.
+            </p>
+            <p className="text-xs text-slate-400">
+              Transactions imported from PDF/CSV or added in Daily Register will display terminal splits here.
+            </p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            {/* Overall Card Type Summary Bar */}
+            <div className="flex flex-wrap items-center gap-2 p-3 rounded-xl bg-slate-50 dark:bg-[#121212] border border-slate-200 dark:border-white/5 text-xs">
+              <span className="font-bold text-slate-400 text-[11px] uppercase tracking-wider mr-1">
+                Network Split:
+              </span>
+              {activePosBreakdown.cardList.map((c) => {
+                const pct =
+                  activePosBreakdown.totalNonCashAmount > 0
+                    ? Math.round((c.amount / activePosBreakdown.totalNonCashAmount) * 100)
+                    : 0;
+                return (
+                  <div
+                    key={c.cardType}
+                    className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-white dark:bg-[#1A1A1A] border border-slate-200 dark:border-white/10"
+                  >
+                    <span className="font-bold text-jct-charcoal dark:text-white">{c.cardType}</span>
+                    <span className="font-mono font-black text-jct-turquoise">SAR {fmt(c.amount)}</span>
+                    <span className="text-[10px] text-slate-400">({pct}%, {c.count} slips)</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Individual Terminal Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {activePosBreakdown.terminalList.map((term) => (
+                <div
+                  key={term.terminalKey}
+                  className="rounded-xl bg-slate-50 dark:bg-[#121212] border border-slate-200 dark:border-white/10 p-4 flex flex-col gap-3 shadow-sm hover:border-jct-turquoise/40 transition"
+                >
+                  <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="h-7 w-7 rounded-lg bg-jct-turquoise/20 text-jct-turquoise flex items-center justify-center font-bold text-xs">
+                        {term.terminalKey === "BANK_TRANSFER" ? "WT" : "POS"}
+                      </div>
+                      <span className="font-display font-extrabold text-sm text-jct-charcoal dark:text-white">
+                        {term.terminalName}
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-mono font-bold text-slate-400">
+                      {term.transactionCount} txn{term.transactionCount === 1 ? "" : "s"}
+                    </span>
+                  </div>
+
+                  <div className="font-mono text-2xl font-black text-jct-charcoal dark:text-jct-turquoise">
+                    SAR {fmt(term.totalAmount)}
+                  </div>
+
+                  <div className="flex flex-col gap-1.5 pt-1 border-t border-slate-200 dark:border-white/5">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      Card Breakdown:
+                    </span>
+                    <div className="flex flex-col gap-1">
+                      {term.cardList.map((card) => (
+                        <div
+                          key={card.cardType}
+                          className="flex items-center justify-between text-xs font-mono"
+                        >
+                          <span className="text-slate-600 dark:text-slate-400">
+                            {card.cardType} ({card.count})
+                          </span>
+                          <span className="font-bold text-jct-charcoal dark:text-white">
+                            SAR {fmt(card.amount)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 2. Middle Row: Multi-Type Interactive Charts */}
@@ -16229,7 +16431,7 @@ const USER_PROFILES: UserProfile[] = [
   },
 ];
 
-const OWNER_TABS: TabId[] = ["register", "archive", "radar", "suppliers", "payroll", "pulse", "consolidation", "ai", "settings"];
+const OWNER_TABS: TabId[] = ["register", "archive", "radar", "suppliers", "payroll", "pulse", "consolidation", "ai", "settings", "monthly-audits"];
 // RBAC: STAFF accounts can only access Daily Register (/daily-register)
 const STAFF_TABS: TabId[] = ["register"];
 
@@ -16436,6 +16638,7 @@ export default function Page() {
   const resolveInitialTabFromPath = (path: string | null): TabId => {
     if (!path) return "register";
     if (path.startsWith("/pulse")) return "pulse";
+    if (path.startsWith("/monthly-audits")) return "monthly-audits";
     if (path.startsWith("/suppliers")) return "suppliers";
     if (path.startsWith("/audit-library")) return "archive";
     if (path.startsWith("/nauman-ai")) return "ai";
@@ -17165,10 +17368,18 @@ export default function Page() {
                 <div className="px-4 pt-4 sm:px-6"><BranchAuditRadar /></div>
                 <BranchConsolidationView metrics={liveMetrics} />
               </div>
+            ) : safeTab === "monthly-audits" ? (
+              <MonthlyAuditsView
+                isOwner={Boolean(profile?.isOwner)}
+                staffBranch={profile?.id && profile.id !== "BONGSI" ? profile.id : "JCT_HARDWARE_JOTUN"}
+                onBackToPulse={() => setTab("pulse")}
+              />
             ) : safeTab === "pulse" ? (
               <FinancialPulseView
                 metrics={liveMetrics}
                 completedDaysLog={completedDaysLog}
+                activePosBreakdown={calcSessionPosBreakdown(erpInvoices, preLoggedBankInvoices, preLoggedEntries)}
+                onOpenMonthlyAudits={() => setTab("monthly-audits")}
                 onOpenAuditLibrary={() => setTab("archive")}
                 onReopenDraft={(record) => {
                   setOpeningBalance(record.openingCash || 0);
