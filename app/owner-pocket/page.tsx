@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useSyncExternalStore } from "react";
+import { saudiHHMM, saudiMonthIso } from "../../lib/saudi-time";
 import {
   POCKET_BRANCHES,
   POCKET_CUSTOMERS_KEY,
@@ -80,8 +81,7 @@ const subscribeStorage = (cb: () => void) => {
 };
 
 const fmt = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const hhmm = (iso: string) =>
-  new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+const hhmm = (iso: string) => saudiHHMM(iso);
 
 function Pills<T extends string>({
   options,
@@ -230,7 +230,7 @@ export default function OwnerPocketPage() {
   // PAYROLL PORTAL STATE
   // ────────────────────────────────────────────────────────────────────────
   const [payrollBranch, setPayrollBranch] = useState<BranchId | "ALL">("ALL");
-  const [selectedMonth, setSelectedMonth] = useState<string>(() => new Date().toISOString().slice(0, 7));
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => saudiMonthIso());
   const [allStaff, setAllStaff] = useState<StaffMember[]>([]);
   const [loadingStaff, setLoadingStaff] = useState(false);
   const [staffSearch, setStaffSearch] = useState("");

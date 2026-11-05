@@ -6,6 +6,17 @@ import { useSession, signIn, signOut } from "next-auth/react";
 import { usePathname, useRouter } from "next/navigation";
 import { POCKET_CUSTOMERS_KEY, pocketTag, usePocketTransactions, type BranchId } from "../lib/pocket-bridge";
 import { normalizeBranch } from "../lib/auth-audit";
+import {
+  saudiTodayIso,
+  saudiMonthIso,
+  saudiSessionDate,
+  saudiCalendarDateStr,
+  saudiHHMM,
+  saudiTime12,
+  saudiDateTimeString,
+  saudiDateString,
+} from "../lib/saudi-time";
+import SettingsView from "./settings-view";
 import { useActiveSessionSync, type ActiveSessionSyncStatus } from "../lib/active-session-sync";
 import * as Dropdown from "@radix-ui/react-dropdown-menu";
 import * as XLSX from "xlsx";
@@ -18,7 +29,7 @@ import {
   UploadCloud, Zap, ArrowLeft, ArrowRight, BarChart2, Eye, ArrowRightLeft, Trash2, Maximize2, Minimize2,
   Archive, Edit3, CheckCircle2, RotateCcw, Search, FileText, FolderArchive, Upload,
   Users, UserCheck, DollarSign, X, Banknote, Printer,
-  Menu,
+  Menu, Settings as SettingsIcon, Clock,
   Coins, ArrowDownLeft, Send, MessageSquare, Bot, Info
 } from "lucide-react";
 
@@ -54,7 +65,7 @@ function ModalPortal({
    TYPES & CONSTANTS
    ════════════════════════════════════════════════════════════════════════ */
 
-type TabId = "register" | "archive" | "radar" | "suppliers" | "payroll" | "pulse" | "consolidation" | "ai";
+type TabId = "register" | "archive" | "radar" | "suppliers" | "payroll" | "pulse" | "consolidation" | "ai" | "settings";
 type Kind = "cash_sale" | "credit_received" | "bank_in" | "jotun" | "hempel" | "sigma" | "other" | "salaries" | "tax" | "misc_expense";
 
 interface Txn {
@@ -224,10 +235,7 @@ const INITIAL_SUPPLIER_BILLS: SupplierBillItem[] = [];
 const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 const nf = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmt = (n: number) => nf.format(n);
-const nowHHMM = () => {
-  const d = new Date();
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-};
+const nowHHMM = () => saudiHHMM();
 
 /* ════════════════════════════════════════════════════════════════════════
    COMPONENTS
@@ -245,10 +253,10 @@ function PrintReportHeader({ branch, date }: { branch: string; date: string }) {
 
   useEffect(() => {
     const handleBeforePrint = () => {
-      setTimestamp(new Date().toLocaleString());
+      setTimestamp(saudiDateTimeString());
     };
     const timer = setTimeout(() => {
-      setTimestamp(new Date().toLocaleString());
+      setTimestamp(saudiDateTimeString());
     }, 0);
     window.addEventListener("beforeprint", handleBeforePrint);
     return () => {
@@ -262,7 +270,7 @@ function PrintReportHeader({ branch, date }: { branch: string; date: string }) {
       <h1 className="print:text-4xl print:font-black print:tracking-tighter print:uppercase print:mb-2 print:text-black">
         JCT FINANCIAL OS — DAILY REGISTER REPORT
       </h1>
-      <div className="print:text-lg print:font-bold">Date: {new Date().toLocaleDateString()}</div>
+      <div className="print:text-lg print:font-bold">Date: {saudiDateString()}</div>
       <div className="print:flex print:items-center print:justify-between print:text-lg print:font-semibold print:tracking-tight print:text-slate-600 print:mb-8 print:border-b-2 print:border-black print:pb-4 mt-1">
         <div>
           <span>Branch: </span>
@@ -304,6 +312,26 @@ function ThemeToggle({ dark, onToggle }: { dark: boolean; onToggle: () => void }
   );
 }
 
+/** Live ticking Saudi Arabia (Asia/Riyadh) clock, e.g. "01:45 PM (AST)" */
+function SaudiClock() {
+  const [now, setNow] = useState<Date | null>(null);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setNow(new Date());
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  return (
+    <div
+      className="flex items-center gap-2 bg-slate-50 dark:bg-[#111111] border border-slate-200 dark:border-[#1F1F1F] text-jct-charcoal dark:text-jct-offwhite text-xs font-semibold px-3 py-1.5 rounded-lg font-mono tabular-nums"
+      title="Saudi Arabia Standard Time (Asia/Riyadh)"
+    >
+      <Clock size={14} className="text-jct-charcoal dark:text-jct-turquoise" />
+      <span suppressHydrationWarning>{now ? `${saudiTime12(now, true)} (AST)` : "--:--:-- (AST)"}</span>
+    </div>
+  );
+}
+
 function Sidebar({ tab, setTab, allowedTabs }: { tab: TabId; setTab: (t: TabId) => void; allowedTabs: TabId[] }) {
   const nav = [
     { id: "register" as TabId, label: "Daily Register", icon: Wallet },
@@ -314,6 +342,7 @@ function Sidebar({ tab, setTab, allowedTabs }: { tab: TabId; setTab: (t: TabId) 
     { id: "pulse" as TabId, label: "Financial Pulse", icon: Activity },
     { id: "consolidation" as TabId, label: "Branch Consolidation", icon: Building2 },
     { id: "ai" as TabId, label: "Nauman AI", icon: Sparkles },
+    { id: "settings" as TabId, label: "Settings", icon: SettingsIcon },
   ].filter((n) => allowedTabs.includes(n.id));
   return (
     <aside className="hidden w-64 shrink-0 flex-col overflow-hidden bg-white dark:bg-[#0A0A0A] border-r border-slate-200 dark:border-[#1F1F1F] p-5 text-jct-charcoal dark:text-jct-offwhite lg:flex relative z-40 print:hidden">
@@ -386,6 +415,7 @@ function MobileSidebarDrawer({
     { id: "pulse" as TabId, label: "Financial Pulse", icon: Activity },
     { id: "consolidation" as TabId, label: "Branch Consolidation", icon: Building2 },
     { id: "ai" as TabId, label: "Nauman AI", icon: Sparkles },
+    { id: "settings" as TabId, label: "Settings", icon: SettingsIcon },
   ].filter((n) => allowedTabs.includes(n.id));
 
   if (!isOpen) return null;
@@ -500,6 +530,8 @@ export type InvoicePaymentMode =
   | "Credit Received"
   | "Cash";
 export type PosTerminalBank = "SAB" | "AL_RAJHI" | "SNB" | "VISA_MC";
+export type SplitBankChoice = "SAB" | "AL_RAJHI" | "SNB" | "BANK_TRANSFER";
+export type SplitCardBrand = "mada" | "visa" | "mastercard";
 
 export const STRICT_EXPENSE_CATEGORIES = [
   "Food",
@@ -638,6 +670,12 @@ export interface ErpInvoiceItem {
   splitBankAmount: number;
   splitBankMethod: "BANK_TRANSFER" | "POS_SWIPE";
   splitPosTerminal?: PosTerminalBank;
+  /** Split Step 1: bank / terminal selected for the non-cash portion */
+  splitBankChoice?: SplitBankChoice;
+  /** Split Step 2: card type used on the terminal (Mastercard is billed at the Visa/MC rate) */
+  splitCardBrand?: SplitCardBrand;
+  /** True once a row was switched into Split mode and still needs its mandatory bank selection */
+  splitChoiceRequired?: boolean;
   otherNote?: string;
   creditDownAmount?: number;
   creditDownMethod?: "CASH" | "POS_SWIPE";
@@ -1065,7 +1103,7 @@ export function ClassicDataSheetTable({
       {/* Header with Date at Top Left and Exact Text */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 pb-2 border-b border-slate-200 dark:border-white/10 print:border-b-2 print:border-black text-slate-900 dark:text-white print:text-black">
         <div className="text-left font-bold text-xs font-mono text-slate-500 dark:text-slate-400 print:text-black">
-          Date: {date || new Date().toLocaleDateString()}
+          Date: {date || saudiDateString()}
         </div>
         <div className="text-center font-black tracking-tight text-sm sm:text-base uppercase font-display text-slate-900 dark:text-white print:text-black">
           DAILY DATA SHEET : JUBAIL CORP. TRADING EST.
@@ -1292,6 +1330,20 @@ export const calcAmountPosFeeBreakdown = (
     net,
     isMada: !isVisa,
   };
+};
+
+/** Resolves the Step 1 selection for a split row (legacy/imported rows are derived; fresh rows must choose). */
+export const resolveSplitBankChoice = (inv: ErpInvoiceItem): SplitBankChoice | undefined => {
+  if (inv.splitBankChoice) return inv.splitBankChoice;
+  if (inv.splitChoiceRequired) return undefined;
+  if (inv.isManualEntry && !inv.isConfirmed) return undefined;
+  if (inv.splitBankMethod === "BANK_TRANSFER") return "BANK_TRANSFER";
+  const dev =
+    inv.posTerminalDevice ||
+    inv.terminal ||
+    (inv.splitPosTerminal && inv.splitPosTerminal !== "VISA_MC" ? inv.splitPosTerminal : undefined) ||
+    "SAB";
+  return dev as SplitBankChoice;
 };
 
 export const calcInvoiceCashPortion = (inv: ErpInvoiceItem): number => {
@@ -1674,6 +1726,9 @@ interface DailyRegisterViewProps {
   setErpInvoices: React.Dispatch<React.SetStateAction<ErpInvoiceItem[]>>;
   openingBalance: number;
   setOpeningBalance: React.Dispatch<React.SetStateAction<number>>;
+  /** Owner-configured starting baseline (Settings → Initial Setup) */
+  openingBaselineCash?: number;
+  openingBaselineBank?: number;
   completedDaysLog: CompletedDaySummary[];
   setCompletedDaysLog: React.Dispatch<React.SetStateAction<CompletedDaySummary[]>>;
   onSyncCreditPurchase: (
@@ -1918,15 +1973,7 @@ export const CascadingPaymentSelector: React.FC<CascadingPaymentSelectorProps> =
    MINIMALIST INFO TOOLTIP / POPOVER COMPONENT
    ════════════════════════════════════════════════════════════════════════ */
 
-const SESSION_MONTHS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
-
-export const getTodaySessionDate = (): string => {
-  const d = new Date();
-  return `${String(d.getDate()).padStart(2, "0")}-${SESSION_MONTHS[d.getMonth()]}-${d.getFullYear()}`;
-};
+export const getTodaySessionDate = (): string => saudiSessionDate();
 
 function LiveSyncPill({ status }: { status?: ActiveSessionSyncStatus }) {
   if (!status) return null;
@@ -1939,7 +1986,7 @@ function LiveSyncPill({ status }: { status?: ActiveSessionSyncStatus }) {
       ? { dot: "bg-slate-400 animate-pulse", text: "Connecting…", cls: "border-slate-300 dark:border-[#1F1F1F] text-slate-500 dark:text-slate-400" }
       : { dot: "bg-emerald-500", text: "Live Sync", cls: "border-emerald-500/40 text-emerald-700 dark:text-emerald-400" };
   const syncedTime = status.lastSyncedAt
-    ? new Date(status.lastSyncedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+    ? saudiTime12(status.lastSyncedAt, true)
     : null;
   return (
     <span
@@ -2536,6 +2583,8 @@ function DailyRegisterView({
   setErpInvoices,
   openingBalance,
   setOpeningBalance,
+  openingBaselineCash = 0,
+  openingBaselineBank = 0,
   completedDaysLog,
   setCompletedDaysLog,
   onSyncCreditPurchase,
@@ -2551,9 +2600,7 @@ function DailyRegisterView({
   remoteClearSignal = 0,
 }: DailyRegisterViewProps) {
   const [localSessionDate, setLocalSessionDate] = useState<string>(() => {
-    const d = new Date();
-    const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-    return `${String(d.getDate()).padStart(2, "0")}-${months[d.getMonth()]}-${d.getFullYear()}`;
+    return saudiSessionDate();
   });
   const activeSessionDate = propSessionDate || localSessionDate;
   const setActiveSessionDate = propSetSessionDate || setLocalSessionDate;
@@ -3372,6 +3419,9 @@ function DailyRegisterView({
           splitBankAmount: mode === "SPLIT" ? defaultBank : inv.splitBankAmount,
           splitBankMethod: inv.splitBankMethod || "POS_SWIPE",
           splitPosTerminal: inv.splitPosTerminal || inv.posTerminal || "SAB",
+          splitBankChoice: mode === "SPLIT" && inv.paymentMode !== "SPLIT" ? undefined : inv.splitBankChoice,
+          splitChoiceRequired:
+            mode === "SPLIT" ? (inv.paymentMode !== "SPLIT" ? true : inv.splitChoiceRequired) : false,
           posTerminal: inv.posTerminal || "SAB",
           creditDownAmount: undefined,
           creditDownMethod: undefined,
@@ -3504,6 +3554,76 @@ function DailyRegisterView({
         };
       });
     });
+  };
+
+  // Split Step 1: pick the Bank / Terminal for the non-cash portion
+  const handleSetSplitBankChoice = (invoiceNo: string, choice: SplitBankChoice) => {
+    setErpInvoices((prev) =>
+      prev.map((inv) => {
+        const matches =
+          (inv.internalId && inv.internalId === invoiceNo) ||
+          (inv.id && inv.id === invoiceNo) ||
+          inv.invoiceNo === invoiceNo;
+        if (!matches) return inv;
+        if (choice === "BANK_TRANSFER") {
+          return {
+            ...inv,
+            paymentMode: "SPLIT",
+            isSplit: true,
+            splitBankChoice: choice,
+            splitChoiceRequired: false,
+            splitCardBrand: undefined,
+            splitBankMethod: "BANK_TRANSFER",
+          };
+        }
+        const brand: SplitCardBrand = inv.splitCardBrand ?? "mada";
+        const nextTerm: PosTerminalBank = brand === "mada" ? choice : "VISA_MC";
+        const net: "mada" | "visa" = brand === "mada" ? "mada" : "visa";
+        return {
+          ...inv,
+          paymentMode: "SPLIT",
+          isSplit: true,
+          splitBankChoice: choice,
+          splitChoiceRequired: false,
+          splitCardBrand: brand,
+          splitBankMethod: "POS_SWIPE",
+          splitPosTerminal: nextTerm,
+          posTerminal: nextTerm,
+          posTerminalDevice: choice,
+          terminal: choice,
+          cardNetwork: net,
+          network: net,
+        };
+      })
+    );
+  };
+
+  // Split Step 2: pick the Card Type (only after a bank / terminal was chosen)
+  const handleSetSplitCardType = (invoiceNo: string, brand: SplitCardBrand) => {
+    setErpInvoices((prev) =>
+      prev.map((inv) => {
+        const matches =
+          (inv.internalId && inv.internalId === invoiceNo) ||
+          (inv.id && inv.id === invoiceNo) ||
+          inv.invoiceNo === invoiceNo;
+        if (!matches) return inv;
+        const device = inv.splitBankChoice;
+        if (!device || device === "BANK_TRANSFER") return inv;
+        const nextTerm: PosTerminalBank = brand === "mada" ? device : "VISA_MC";
+        const net: "mada" | "visa" = brand === "mada" ? "mada" : "visa";
+        return {
+          ...inv,
+          splitCardBrand: brand,
+          splitBankMethod: "POS_SWIPE",
+          splitPosTerminal: nextTerm,
+          posTerminal: nextTerm,
+          posTerminalDevice: device,
+          terminal: device,
+          cardNetwork: net,
+          network: net,
+        };
+      })
+    );
   };
 
   const handleSetInvoiceTerminal = (invoiceNo: string, terminal: PosTerminalBank) => {
@@ -3787,7 +3907,7 @@ function DailyRegisterView({
             type: hubExpenseCat === "Salary" ? "SALARY_PAYOUT" : "ADVANCE",
             amount: val,
             branch: branchId,
-            date: new Date().toISOString().slice(0, 10),
+            date: saudiTodayIso(),
             note: entryTitle.trim() || `${hubExpenseCat} logged via Hub Quick Logger`,
             source: hubPaymentMode === "CASH" ? "REGISTER_DRAWER" : "BANK_TRANSFER",
             paymentMode: hubPaymentMode,
@@ -4150,7 +4270,7 @@ function DailyRegisterView({
           supplierInvoiceNum: step4SupplierInvoiceNum.trim() || undefined,
           billPdfUrl: step4BillPdfUrl || undefined,
           note: step4Note.trim() || undefined,
-          date: new Date().toISOString().slice(0, 10),
+          date: saudiTodayIso(),
         }),
       }).catch((e) => console.warn("Background pocket sync failed:", e));
 
@@ -4173,7 +4293,7 @@ function DailyRegisterView({
           type: step4Category === "Salary" ? "SALARY_PAYOUT" : "ADVANCE",
           amount: val,
           branch: branchId,
-          date: new Date().toISOString().slice(0, 10),
+          date: saudiTodayIso(),
           note: step4Note.trim() || `${step4Category} logged in Daily Register drawer`,
           source: effectiveStep4Mode === "CASH" ? "REGISTER_DRAWER" : "BANK_TRANSFER",
           paymentMode: effectiveStep4Mode,
@@ -5003,10 +5123,7 @@ function DailyRegisterView({
 
   // 12:00 AM Automatic Daily Reset: resets active hub day at midnight without manual purge
   useEffect(() => {
-    const getCalendarDateStr = () => {
-      const d = new Date();
-      return `${String(d.getDate()).padStart(2, "0")}-${String(d.getMonth() + 1).padStart(2, "0")}-${d.getFullYear()}`;
-    };
+    const getCalendarDateStr = () => saudiCalendarDateStr();
 
     const checkMidnightReset = () => {
       const todayStr = getCalendarDateStr();
@@ -5022,7 +5139,7 @@ function DailyRegisterView({
         } else if (completedDaysLog.length > 0) {
           setOpeningBalance(completedDaysLog[0].closingBalance);
         } else {
-          setOpeningBalance(0);
+          setOpeningBalance(openingBaselineCash);
         }
       }
       window.localStorage.setItem("jct_daily_hub_active_date", todayStr);
@@ -5031,7 +5148,7 @@ function DailyRegisterView({
     checkMidnightReset();
     const timer = setInterval(checkMidnightReset, 15000);
     return () => clearInterval(timer);
-  }, [completedDaysLog, setErpInvoices, setPreLoggedBankInvoices, setPreLoggedEntries, setWizardStep, setTrackingMode, setOpeningBalance]);
+  }, [completedDaysLog, setErpInvoices, setPreLoggedBankInvoices, setPreLoggedEntries, setWizardStep, setTrackingMode, setOpeningBalance, openingBaselineCash]);
 
   // Classic Digital Data Sheet Derived Column Totals & Live Actions
   const dsCashSaleTotal = r2(sheetRows.reduce((s, r) => s + numCell(r.amtCashSale), 0));
@@ -5410,7 +5527,10 @@ function DailyRegisterView({
                 SAR {fmt(yesterdayClosingBalance)}
               </span>
               <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 block">
-                Yesterday&apos;s closing cash drawer balance
+                {completedDaysLog[0] ? "Yesterday's closing cash drawer balance" : "Opening cash baseline (Settings → Initial Setup)"}
+              </span>
+              <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5 block">
+                Opening Bank Balance: SAR {fmt(openingBaselineBank)}
               </span>
             </div>
 
@@ -5428,6 +5548,9 @@ function DailyRegisterView({
               </span>
               <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 block">
                 Opening balance + today&apos;s inflows - cash expenses
+              </span>
+              <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5 block">
+                Bank balance: SAR {fmt(r2(openingBaselineBank + activeBankSettlementTotal))} (baseline + today&apos;s bank settlements)
               </span>
             </div>
           </div>
@@ -6611,17 +6734,6 @@ function DailyRegisterView({
                             >
                               Credit
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => handleSetInvoiceMode(rowKey, "Credit Received")}
-                              className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
-                                inv.paymentMode === "Credit Received" || (inv.paymentMode as string) === "CREDIT_RECD"
-                                  ? "bg-jct-turquoise text-jct-charcoal font-bold"
-                                  : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-                              }`}
-                            >
-                              Credit Recd
-                            </button>
                           </div>
 
                           {/* Inline Submit Button for Unconfirmed Manual Invoices */}
@@ -6629,8 +6741,13 @@ function DailyRegisterView({
                             <button
                               type="button"
                               onClick={() => handleConfirmManualRow(rowKey)}
-                              className="bg-jct-turquoise/10 text-jct-turquoise hover:bg-jct-turquoise/20 px-3 py-1.5 rounded-md text-xs font-bold transition-colors flex items-center gap-1 shrink-0"
-                              title="Finalize and add manual invoice to list"
+                              disabled={inv.paymentMode === "SPLIT" && !resolveSplitBankChoice(inv)}
+                              className="bg-jct-turquoise/10 text-jct-turquoise hover:bg-jct-turquoise/20 disabled:opacity-40 disabled:cursor-not-allowed px-3 py-1.5 rounded-md text-xs font-bold transition-colors flex items-center gap-1 shrink-0"
+                              title={
+                                inv.paymentMode === "SPLIT" && !resolveSplitBankChoice(inv)
+                                  ? "Select the bank / terminal for the split first"
+                                  : "Finalize and add manual invoice to list"
+                              }
                             >
                               ✅ Submit
                             </button>
@@ -6695,67 +6812,71 @@ function DailyRegisterView({
                               />
                             </div>
 
-                            {/* Card Method / Bank Selector */}
+                            {/* Split Step 1: Bank / Terminal (mandatory) */}
                             <div className="flex items-center gap-1.5">
-                              <span className="font-medium text-slate-500 dark:text-slate-400">Card Method:</span>
+                              <span className="font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">Step 1 · Bank / Terminal:</span>
                               <div className="bg-white dark:bg-[#0A0A0A] p-0.5 rounded-lg flex flex-wrap gap-1.5">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    handleSetInvoiceSplitMethod(inv.invoiceNo, "BANK_TRANSFER")
-                                  }
-                                  className={`rounded-md px-2 py-0.5 text-xs font-semibold transition-colors ${
-                                    inv.splitBankMethod === "BANK_TRANSFER"
-                                      ? "bg-jct-turquoise text-jct-charcoal font-bold"
-                                      : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-                                  }`}
-                                >
-                                  Bank Transfer
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    handleSetInvoiceSplitMethod(inv.invoiceNo, "POS_SWIPE", "SAB")
-                                  }
-                                  className={`rounded-md px-2 py-0.5 text-xs font-semibold transition-colors ${
-                                    inv.splitBankMethod === "POS_SWIPE" &&
-                                    (inv.splitPosTerminal || inv.posTerminal) === "SAB"
-                                      ? "bg-jct-turquoise text-jct-charcoal font-bold"
-                                      : "text-slate-700 font-semibold hover:text-black dark:text-jct-yellow dark:font-normal dark:hover:brightness-110"
-                                  }`}
-                                >
-                                  {trackPosFees ? "mada · SAB (0.80% fee, cap SAR 40)" : "mada · SAB"}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    handleSetInvoiceSplitMethod(inv.invoiceNo, "POS_SWIPE", "AL_RAJHI")
-                                  }
-                                  className={`rounded-md px-2 py-0.5 text-xs font-semibold transition-colors ${
-                                    inv.splitBankMethod === "POS_SWIPE" &&
-                                    (inv.splitPosTerminal || inv.posTerminal) === "AL_RAJHI"
-                                      ? "bg-jct-turquoise text-jct-charcoal font-bold"
-                                      : "text-slate-700 font-semibold hover:text-black dark:text-jct-yellow dark:font-normal dark:hover:brightness-110"
-                                  }`}
-                                >
-                                  {trackPosFees ? "mada · Al Rajhi (0.80% fee, cap SAR 40)" : "mada · Al Rajhi"}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    handleSetInvoiceSplitMethod(inv.invoiceNo, "POS_SWIPE", "VISA_MC")
-                                  }
-                                  className={`rounded-md px-2 py-0.5 text-xs font-semibold transition-colors ${
-                                    inv.splitBankMethod === "POS_SWIPE" &&
-                                    (inv.splitPosTerminal || inv.posTerminal) === "VISA_MC"
-                                      ? "bg-jct-turquoise text-jct-charcoal font-bold"
-                                      : "text-slate-700 font-semibold hover:text-black dark:text-jct-yellow dark:font-normal dark:hover:brightness-110"
-                                  }`}
-                                >
-                                  {trackPosFees ? "Visa / MC (2.20%)" : "Visa / MC"}
-                                </button>
+                                {([
+                                  ["SAB", "SAB"],
+                                  ["AL_RAJHI", "Al Rajhi"],
+                                  ["SNB", "SNB"],
+                                  ["BANK_TRANSFER", "Bank Transfer"],
+                                ] as const).map(([key, label]) => (
+                                  <button
+                                key={key}
+                                type="button"
+                                onClick={() => handleSetSplitBankChoice(inv.invoiceNo, key)}
+                                className={`rounded-md px-2 py-0.5 text-xs font-semibold transition-colors ${
+                                  resolveSplitBankChoice(inv) === key
+                                    ? "bg-jct-turquoise text-jct-charcoal font-bold"
+                                    : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                                }`}
+                              >
+                                {label}
+                              </button>
+                                ))}
                               </div>
                             </div>
+
+                            {/* Split Step 2: Card Type (only after a bank / terminal is selected) */}
+                            {(() => {
+                              const splitChoice = resolveSplitBankChoice(inv);
+                              if (!splitChoice) {
+                                return (
+                                  <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400">
+                                    Select a bank / terminal to continue
+                                  </span>
+                                );
+                              }
+                              if (splitChoice === "BANK_TRANSFER") return null;
+                              const activeBrand: SplitCardBrand =
+                                inv.splitCardBrand ?? (inv.splitPosTerminal === "VISA_MC" ? "visa" : "mada");
+                              return (
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">Step 2 · Card Type:</span>
+                                  <div className="bg-white dark:bg-[#0A0A0A] p-0.5 rounded-lg flex flex-wrap gap-1.5">
+                                    {([
+                                      ["mada", trackPosFees ? "mada (0.80%, cap SAR 40)" : "mada"],
+                                      ["visa", trackPosFees ? "Visa (2.20%)" : "Visa"],
+                                      ["mastercard", trackPosFees ? "Mastercard (2.20%)" : "Mastercard"],
+                                    ] as const).map(([brand, label]) => (
+                                      <button
+                                        key={brand}
+                                        type="button"
+                                        onClick={() => handleSetSplitCardType(inv.invoiceNo, brand)}
+                                        className={`rounded-md px-2 py-0.5 text-xs font-semibold transition-colors ${
+                                          activeBrand === brand
+                                            ? "bg-jct-turquoise text-jct-charcoal font-bold"
+                                            : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                                        }`}
+                                      >
+                                        {label}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            })()}
                           </div>
 
                           {/* Split Row Summary */}
@@ -12875,7 +12996,7 @@ function getBranchBadgeInfo(b: string) {
 function formatLockTime(d: string | Date) {
   const dt = new Date(d);
   if (isNaN(dt.getTime())) return "10:14 PM";
-  return dt.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
+  return saudiTime12(dt);
 }
 
 interface ParsedExpenseItem {
@@ -14261,7 +14382,7 @@ function StaffPayrollView({
 }) {
   const isOwner = Boolean(profile?.isOwner);
   const [branchFilter, setBranchFilter] = useState<string>("ALL");
-  const [selectedMonth, setSelectedMonth] = useState<string>(() => new Date().toISOString().slice(0, 7));
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => saudiMonthIso());
   const [searchQuery, setSearchQuery] = useState("");
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
@@ -14365,7 +14486,7 @@ function StaffPayrollView({
           amount,
           source,
           paymentMode,
-          date: new Date().toISOString().slice(0, 10),
+          date: saudiTodayIso(),
           note: paySalaryNote.trim() || `Salary Payment - ${paySalaryStaff.name}`,
         }),
       });
@@ -14613,7 +14734,7 @@ function StaffPayrollView({
           amount,
           source: disburseSource,
           paymentMode: disbursePaymentMode,
-          date: new Date().toISOString().slice(0, 10),
+          date: saudiTodayIso(),
           note: disburseNote.trim() || `Salary settlement for ${selectedMonth}`,
         }),
       });
@@ -14661,7 +14782,7 @@ function StaffPayrollView({
           amount,
           source: adjSource,
           paymentMode: adjPaymentMode,
-          date: new Date().toISOString().slice(0, 10),
+          date: saudiTodayIso(),
           note: adjNote.trim() || `${adjType} recorded directly by owner`,
         }),
       });
@@ -16108,7 +16229,7 @@ const USER_PROFILES: UserProfile[] = [
   },
 ];
 
-const OWNER_TABS: TabId[] = ["register", "archive", "radar", "suppliers", "payroll", "pulse", "consolidation", "ai"];
+const OWNER_TABS: TabId[] = ["register", "archive", "radar", "suppliers", "payroll", "pulse", "consolidation", "ai", "settings"];
 // RBAC: STAFF accounts can only access Daily Register (/daily-register)
 const STAFF_TABS: TabId[] = ["register"];
 
@@ -16401,38 +16522,11 @@ export default function Page() {
   const [openingBalance, setOpeningBalance] = useState<number>(0);
   const [completedDaysLog, setCompletedDaysLog] = useState<CompletedDaySummary[]>([]);
   const [activeSessionDate, setActiveSessionDate] = useState<string>(() => {
-    const d = new Date();
-    const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-    return `${String(d.getDate()).padStart(2, "0")}-${months[d.getMonth()]}-${d.getFullYear()}`;
+    return saudiSessionDate();
   });
 
-  // Sync opening balance from live database archive locks (defaulting strictly to 0.00 when DB has no locks)
-  useEffect(() => {
-    let ignore = false;
-    fetch("/api/archive?branch=ALL")
-      .then((r) => r.json())
-      .then((data) => {
-        if (ignore) return;
-        const recs = Array.isArray(data.records) ? data.records : [];
-        if (recs.length === 0) {
-          if (typeof window !== "undefined") {
-            window.localStorage.removeItem("jct_next_day_opening_balance");
-          }
-          setOpeningBalance(0);
-        } else {
-          const latest = recs[0];
-          const carryFloat =
-            latest.nextDayOpeningCash !== null && latest.nextDayOpeningCash !== undefined
-              ? Number(latest.nextDayOpeningCash)
-              : Number(latest.closingCash) || 0;
-          setOpeningBalance(carryFloat);
-        }
-      })
-      .catch(() => {});
-    return () => {
-      ignore = true;
-    };
-  }, []);
+  // Owner-configured opening baseline (Settings → Initial Setup), per branch
+  const [openingBaseline, setOpeningBaseline] = useState<{ cash: number; bank: number }>({ cash: 0, bank: 0 });
 
   // Lifted Cross-Module State: Credit Radar Customers & Suppliers/Payables
   const [creditCustomers, setCreditCustomers] = useState<ContractorAccount[]>(INITIAL_CONTRACTORS);
@@ -16702,6 +16796,38 @@ export default function Page() {
 
   // Multi-device live Daily Register session (Prisma ActiveRegisterSession, polled every 4s)
   const syncBranch = activePocketBranch === "ALL" ? "JCT_HARDWARE_JOTUN" : activePocketBranch;
+
+  // Opening balance = latest locked carry-over for this branch, or the Settings baseline when nothing is locked yet
+  const [settingsRefresh, setSettingsRefresh] = useState(0);
+  useEffect(() => {
+    let ignore = false;
+    Promise.all([
+      fetch(`/api/archive?branch=${syncBranch}`).then((r) => r.json()).catch(() => ({ records: [] })),
+      fetch(`/api/settings?branch=${syncBranch}`, { cache: "no-store" }).then((r) => r.json()).catch(() => null),
+    ]).then(([archive, settings]) => {
+      if (ignore) return;
+      const baseCash = Number(settings?.settings?.openingCashBalance) || 0;
+      const baseBank = Number(settings?.settings?.openingBankBalance) || 0;
+      setOpeningBaseline({ cash: baseCash, bank: baseBank });
+      const recs = Array.isArray(archive?.records) ? archive.records : [];
+      if (recs.length === 0) {
+        if (typeof window !== "undefined") {
+          window.localStorage.removeItem("jct_next_day_opening_balance");
+        }
+        setOpeningBalance(baseCash);
+      } else {
+        const latest = recs[0];
+        const carryFloat =
+          latest.nextDayOpeningCash !== null && latest.nextDayOpeningCash !== undefined
+            ? Number(latest.nextDayOpeningCash)
+            : Number(latest.closingCash) || 0;
+        setOpeningBalance(carryFloat);
+      }
+    });
+    return () => {
+      ignore = true;
+    };
+  }, [syncBranch, settingsRefresh]);
   const [remoteClearSignal, setRemoteClearSignal] = useState(0);
   const { syncStatus, clearRemoteSession } = useActiveSessionSync<
     ErpInvoiceItem,
@@ -16746,7 +16872,7 @@ export default function Page() {
     const injected: PreLoggedEntry[] = [];
     fresh.forEach((t) => {
       pocketSyncedRef.current.add(t.id);
-      const time = new Date(t.createdAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+      const time = saudiHHMM(t.createdAt);
       const tag = pocketTag(t.type);
       const entryId = `pk-${t.id}`;
       if (t.type === "EXPENSE") {
@@ -16773,7 +16899,7 @@ export default function Page() {
           paymentMode: (t.paymentMode as UniversalPaymentMode) || "CASH",
         });
       } else {
-        const followUp = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
+        const followUp = saudiTodayIso(Date.now() + 14 * 86400000);
         if (t.paymentSource !== "BANK_TRANSFER") {
           injected.push({
             id: entryId,
@@ -16852,6 +16978,7 @@ export default function Page() {
             <div className="flex items-center gap-2 bg-slate-50 dark:bg-[#111111] border border-slate-200 dark:border-[#1F1F1F] text-jct-charcoal dark:text-jct-offwhite text-xs font-medium px-3 py-1.5 rounded-lg">
               <CalendarDays size={14} className="text-jct-charcoal dark:text-jct-turquoise" /> {activeSessionDate}
             </div>
+            <SaudiClock />
             <div className="h-4 w-px bg-slate-200 dark:bg-[#1F1F1F] hidden sm:block"></div>
             {profile.isOwner ? (
               <Dropdown.Root>
@@ -16920,6 +17047,8 @@ export default function Page() {
                 setErpInvoices={setErpInvoices}
                 openingBalance={openingBalance}
                 setOpeningBalance={setOpeningBalance}
+                openingBaselineCash={openingBaseline.cash}
+                openingBaselineBank={openingBaseline.bank}
                 completedDaysLog={completedDaysLog}
                 setCompletedDaysLog={setCompletedDaysLog}
                 onSyncCreditPurchase={handleSyncCreditPurchase}
@@ -17022,6 +17151,14 @@ export default function Page() {
                 preLoggedEntries={preLoggedEntries}
                 branchId={activePocketBranch === "ALL" ? "JCT_HARDWARE_JOTUN" : activePocketBranch}
                 completedDaysLog={completedDaysLog}
+              />
+            ) : safeTab === "settings" ? (
+              <SettingsView
+                defaultBranch={syncBranch}
+                isOwner={Boolean(profile?.isOwner)}
+                onSaved={(b) => {
+                  if (b === syncBranch) setSettingsRefresh((n) => n + 1);
+                }}
               />
             ) : safeTab === "consolidation" ? (
               <div className="flex flex-1 flex-col overflow-y-auto">

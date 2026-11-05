@@ -6,6 +6,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import { saudiTodayIso } from "./saudi-time";
 
 export type BranchId =
   | "JCT_HARDWARE_JOTUN"
@@ -52,11 +53,8 @@ export const POCKET_POLL_MS = 5000;
 export const pocketTag = (type: PocketType): string =>
   type === "CREDIT_COLLECTION" ? "⚡ Collected by Owner (On-Road)" : "⚡ Logged by Owner (Mobile)";
 
-export const todayIso = (): string => {
-  const d = new Date();
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-};
+/** Today's date (YYYY-MM-DD) in Saudi time (Asia/Riyadh), regardless of device timezone. */
+export const todayIso = (): string => saudiTodayIso();
 
 export async function postPocketTransaction(tx: NewPocketTransaction): Promise<PocketTransaction> {
   const res = await fetch("/api/pocket", {
