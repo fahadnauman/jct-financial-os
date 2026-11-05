@@ -13,7 +13,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 
-type ProfileId = "BONGSI" | "JCT_HQ" | "HEMPEL_JUBAIL" | "JOTUN_DAMMAM" | "SIGMA_JUBAIL";
+type ProfileId = "BONGSI" | "JCT_HQ" | "HARDWARE_HQ" | "HEMPEL_JUBAIL" | "JOTUN_DAMMAM" | "SIGMA_JUBAIL";
 
 interface LoginProfileCard {
   id: ProfileId;
@@ -40,19 +40,29 @@ const LOGIN_PROFILES: LoginProfileCard[] = [
   {
     id: "JCT_HQ",
     emoji: "🏢",
-    name: "JCT Main HQ",
-    label: "Jubail Main HQ",
-    badge: "Hardware & Jotun Store",
+    name: "JCT",
+    label: "Main Outlet",
+    badge: "Paints & Decor",
     username: "jubail",
     isOwner: false,
     icon: Store,
   },
   {
+    id: "HARDWARE_HQ",
+    emoji: "🔧",
+    name: "Hardware HQ",
+    label: "Tools & Equipment",
+    badge: "Hardware Outlet",
+    username: "hardware",
+    isOwner: false,
+    icon: Landmark,
+  },
+  {
     id: "HEMPEL_JUBAIL",
     emoji: "🎨",
-    name: "Hempel Jubail",
-    label: "Hempel Franchise",
-    badge: "Jubail Branch",
+    name: "Hempel",
+    label: "Hempel Branch",
+    badge: "Hempel Paints",
     username: "hempel",
     isOwner: false,
     icon: PaintRoller,
@@ -61,21 +71,11 @@ const LOGIN_PROFILES: LoginProfileCard[] = [
     id: "JOTUN_DAMMAM",
     emoji: "🖌️",
     name: "Jotun Dammam",
-    label: "Jotun Franchise",
-    badge: "Dammam Branch",
+    label: "Dammam Franchise",
+    badge: "Jotun Paints",
     username: "jotun",
     isOwner: false,
     icon: SprayCan,
-  },
-  {
-    id: "SIGMA_JUBAIL",
-    emoji: "🏗️",
-    name: "Sigma Paints",
-    label: "Sigma Paints Franchise",
-    badge: "Jubail Branch",
-    username: "sigma",
-    isOwner: false,
-    icon: Landmark,
   },
 ];
 

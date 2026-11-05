@@ -232,10 +232,12 @@ const nowHHMM = () => {
    COMPONENTS
    ════════════════════════════════════════════════════════════════════════ */
 
+const HARDWARE_CONSOLIDATED_ERP_INVOICES: ErpInvoiceItem[] = [];
+const HARDWARE_CONSOLIDATED_PRELOGGED_ENTRIES: PreLoggedEntry[] = [];
 const HEMPEL_CONSOLIDATED_ERP_INVOICES: ErpInvoiceItem[] = [];
 const HEMPEL_CONSOLIDATED_PRELOGGED_ENTRIES: PreLoggedEntry[] = [];
-const SIGMA_CONSOLIDATED_ERP_INVOICES: ErpInvoiceItem[] = [];
-const SIGMA_CONSOLIDATED_PRELOGGED_ENTRIES: PreLoggedEntry[] = [];
+const JOTUN_CONSOLIDATED_ERP_INVOICES: ErpInvoiceItem[] = [];
+const JOTUN_CONSOLIDATED_PRELOGGED_ENTRIES: PreLoggedEntry[] = [];
 
 function PrintReportHeader({ branch, date }: { branch: string; date: string }) {
   const [timestamp, setTimestamp] = useState("");
@@ -9254,26 +9256,34 @@ function DailyRegisterView({
             const branchesData = [
               {
                 id: "jct_hq",
-                name: "1. Jubail Main HQ · Hardware & Jotun Store",
+                name: "1. JCT · Main Paint Outlet",
                 sheetRows,
                 activeErpList,
                 preLoggedEntries,
                 openingBalance,
               },
               {
+                id: "hardware_hq",
+                name: "2. Hardware HQ · Tools & Equipment",
+                sheetRows: [],
+                activeErpList: HARDWARE_CONSOLIDATED_ERP_INVOICES,
+                preLoggedEntries: HARDWARE_CONSOLIDATED_PRELOGGED_ENTRIES,
+                openingBalance: 0,
+              },
+              {
                 id: "hempel_jubail",
-                name: "2. Hempel - Jubail Franchise Outlet",
+                name: "3. Hempel · Hempel Branch",
                 sheetRows: [],
                 activeErpList: HEMPEL_CONSOLIDATED_ERP_INVOICES,
                 preLoggedEntries: HEMPEL_CONSOLIDATED_PRELOGGED_ENTRIES,
                 openingBalance: 0,
               },
               {
-                id: "sigma_dammam",
-                name: "3. Sigma Paints / Jotun - Dammam Franchise",
+                id: "jotun_dammam",
+                name: "4. Jotun Dammam · Dammam Franchise",
                 sheetRows: [],
-                activeErpList: SIGMA_CONSOLIDATED_ERP_INVOICES,
-                preLoggedEntries: SIGMA_CONSOLIDATED_PRELOGGED_ENTRIES,
+                activeErpList: JOTUN_CONSOLIDATED_ERP_INVOICES,
+                preLoggedEntries: JOTUN_CONSOLIDATED_PRELOGGED_ENTRIES,
                 openingBalance: 0,
               },
             ];
@@ -11872,20 +11882,25 @@ function BranchConsolidationView({ metrics }: { metrics: LiveCrossModuleMetrics 
         .reduce((sum, r) => sum + (Number(r.inflows) || 0) + (Number(r.bankSwipes) || 0), 0)
     );
 
-  const dammamRegisterCash = sumBranchCash("JOTUN_DAMMAM");
-  const sigmaRegisterCash = sumBranchCash("SIGMA_JUBAIL");
-  const jubailTodayCashAndBank = r2(
-    metrics.todayCashSales + metrics.todayBankNet + sumBranchSales("JCT_HQ")
-  );
-  const allBranchesSales = r2(
-    jubailTodayCashAndBank +
-      sumBranchSales("HEMPEL_JUBAIL") +
-      sumBranchSales("JOTUN_DAMMAM") +
-      sumBranchSales("SIGMA_JUBAIL")
-  );
+  // 4 Distinct Branches: JCT, Hardware HQ, Hempel, Jotun Dammam
+  const jctDrawerClosing = metrics.closingDrawerBalance > 0 ? metrics.closingDrawerBalance : sumBranchCash("JCT_HQ");
+  const jctSales = r2(sumBranchSales("JCT_HQ") + metrics.todayCashSales + metrics.todayBankNet);
+  const jctStaffCount = staffMembers.filter((s) => s.branch === "JCT_HQ").length;
 
+  const hardwareRegisterCash = sumBranchCash("HARDWARE_HQ");
+  const hardwareSales = sumBranchSales("HARDWARE_HQ");
+  const hardwareStaffCount = staffMembers.filter((s) => s.branch === "HARDWARE_HQ").length;
+
+  const hempelRegisterCash = sumBranchCash("HEMPEL_JUBAIL");
+  const hempelSales = sumBranchSales("HEMPEL_JUBAIL");
+  const hempelStaffCount = staffMembers.filter((s) => s.branch === "HEMPEL_JUBAIL").length;
+
+  const dammamRegisterCash = sumBranchCash("JOTUN_DAMMAM");
+  const dammamSales = sumBranchSales("JOTUN_DAMMAM");
   const dammamStaffCount = staffMembers.filter((s) => s.branch === "JOTUN_DAMMAM").length;
-  const sigmaStaffCount = staffMembers.filter((s) => s.branch === "SIGMA_JUBAIL").length;
+
+  // All 4 branches combined
+  const allBranchesSales = r2(jctSales + hardwareSales + hempelSales + dammamSales);
 
   return (
     <div className="flex flex-col gap-6 p-4 md:p-6 lg:p-8 h-full overflow-y-auto w-full">
@@ -11895,11 +11910,11 @@ function BranchConsolidationView({ metrics }: { metrics: LiveCrossModuleMetrics 
             <Building2 className="text-jct-turquoise" /> Branch Consolidation
           </h2>
           <p className="text-slate-500 dark:text-slate-400 font-semibold text-sm">
-            All 3 shops combined: live daily cash, POS settlements, and supplier payables.
+            All 4 branches combined: live daily cash, POS settlements, and supplier payables.
           </p>
         </div>
         <span className="text-xs font-bold bg-jct-yellow text-jct-charcoal px-3 py-1.5 rounded-full">
-          ● Live Synced with Jubail Register
+          ● Live Synced with 4 Branches
         </span>
       </div>
 
@@ -11907,7 +11922,7 @@ function BranchConsolidationView({ metrics }: { metrics: LiveCrossModuleMetrics 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 flex flex-col gap-2">
           <div className="text-slate-500 dark:text-slate-400 font-bold text-xs uppercase tracking-wider">
-            TOTAL SALES (ALL 3 SHOPS)
+            TOTAL SALES (ALL 4 BRANCHES)
           </div>
           <div className="text-2xl font-black text-jct-charcoal dark:text-jct-offwhite">
             SAR {fmt(allBranchesSales)}
@@ -11940,25 +11955,25 @@ function BranchConsolidationView({ metrics }: { metrics: LiveCrossModuleMetrics 
         </div>
       </div>
 
-      {/* Branch Breakdown Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-2">
-        {/* Branch 1: Jubail Main Branch */}
+      {/* Branch Breakdown Cards - 4 Distinct Branches */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mt-2">
+        {/* Branch 1: JCT */}
         <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 flex flex-col gap-5 relative overflow-hidden group">
           <div className="flex justify-between items-start mb-2">
             <span className="text-[10px] font-bold uppercase tracking-widest bg-jct-turquoise text-jct-charcoal px-2 py-1 rounded-md">
               MAIN BRANCH
             </span>
             <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 text-xs font-bold">
-              <span className="inline-flex rounded-full h-2 w-2 bg-jct-turquoise"></span>
+              <span className="inline-flex rounded-full h-2 w-2 bg-jct-turquoise animate-pulse"></span>
               Live Session Active
             </div>
           </div>
           <div>
             <h3 className="font-display font-extrabold text-xl text-jct-charcoal dark:text-jct-offwhite">
-              Jubail Main Branch
+              JCT
             </h3>
             <p className="text-slate-500 dark:text-slate-400 text-xs font-semibold mt-1">
-              Main Shop: Jotun + Hempel + Hardware tools
+              Main Paint &amp; Decor Outlet
             </p>
           </div>
 
@@ -11968,7 +11983,7 @@ function BranchConsolidationView({ metrics }: { metrics: LiveCrossModuleMetrics 
                 Today&apos;s Drawer Closing:
               </span>
               <span className="text-sm font-extrabold text-jct-charcoal dark:text-jct-offwhite">
-                SAR {fmt(metrics.closingDrawerBalance)}
+                SAR {fmt(jctDrawerClosing)}
               </span>
             </div>
             <div className="flex justify-between items-center border-b border-slate-200 dark:border-[#1F1F1F] pb-2">
@@ -11979,18 +11994,120 @@ function BranchConsolidationView({ metrics }: { metrics: LiveCrossModuleMetrics 
                 SAR {fmt(metrics.todayBankNet)}
               </span>
             </div>
+            <div className="flex justify-between items-center border-b border-slate-200 dark:border-[#1F1F1F] pb-2">
+              <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">
+                Total Sales Today:
+              </span>
+              <span className="text-sm font-extrabold text-jct-charcoal dark:text-jct-offwhite">
+                SAR {fmt(jctSales)}
+              </span>
+            </div>
             <div className="flex justify-between items-center pb-2">
               <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">
-                POS Fees (SAB / Al Rajhi):
+                Staff Assigned:
               </span>
-              <span className="text-sm font-extrabold text-rose-500">
-                -SAR {fmt(metrics.todayPosFees)}
+              <span className="text-sm font-extrabold text-jct-charcoal dark:text-jct-offwhite">
+                {jctStaffCount} Associate{jctStaffCount === 1 ? "" : "s"}
               </span>
             </div>
           </div>
         </div>
 
-        {/* Branch 2: Dammam Franchise */}
+        {/* Branch 2: Hardware HQ */}
+        <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 flex flex-col gap-5 relative overflow-hidden group">
+          <div className="flex justify-between items-start mb-2">
+            <span className="text-[10px] font-bold uppercase tracking-widest bg-amber-500 text-black px-2 py-1 rounded-md">
+              HARDWARE HQ
+            </span>
+            <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 text-xs font-bold">
+              {hardwareRegisterCash > 0 ? "Synced EOD" : "No records found"}
+            </div>
+          </div>
+          <div>
+            <h3 className="font-display font-extrabold text-xl text-jct-charcoal dark:text-jct-offwhite">
+              Hardware HQ
+            </h3>
+            <p className="text-slate-500 dark:text-slate-400 text-xs font-semibold mt-1">
+              Tools, Machinery &amp; Equipment Outlet
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-3 mt-2">
+            <div className="flex justify-between items-center border-b border-slate-200 dark:border-[#1F1F1F] pb-2">
+              <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">
+                Daily Register Cash:
+              </span>
+              <span className="text-sm font-extrabold text-jct-charcoal dark:text-jct-offwhite">
+                SAR {fmt(hardwareRegisterCash)}
+              </span>
+            </div>
+            <div className="flex justify-between items-center border-b border-slate-200 dark:border-[#1F1F1F] pb-2">
+              <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">
+                Recorded Sales:
+              </span>
+              <span className="text-sm font-extrabold text-jct-charcoal dark:text-jct-offwhite">
+                SAR {fmt(hardwareSales)}
+              </span>
+            </div>
+            <div className="flex justify-between items-center pb-2">
+              <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">
+                Staff Assigned:
+              </span>
+              <span className="text-sm font-extrabold text-jct-charcoal dark:text-jct-offwhite">
+                {hardwareStaffCount} Associate{hardwareStaffCount === 1 ? "" : "s"}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Branch 3: Hempel */}
+        <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 flex flex-col gap-5 relative overflow-hidden group">
+          <div className="flex justify-between items-start mb-2">
+            <span className="text-[10px] font-bold uppercase tracking-widest bg-jct-turquoise text-jct-charcoal px-2 py-1 rounded-md">
+              BRANCH
+            </span>
+            <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 text-xs font-bold">
+              {hempelRegisterCash > 0 ? "Synced EOD" : "No records found"}
+            </div>
+          </div>
+          <div>
+            <h3 className="font-display font-extrabold text-xl text-jct-charcoal dark:text-jct-offwhite">
+              Hempel
+            </h3>
+            <p className="text-slate-500 dark:text-slate-400 text-xs font-semibold mt-1">
+              Hempel Industrial &amp; Protective Paints
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-3 mt-2">
+            <div className="flex justify-between items-center border-b border-slate-200 dark:border-[#1F1F1F] pb-2">
+              <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">
+                Daily Register Cash:
+              </span>
+              <span className="text-sm font-extrabold text-jct-charcoal dark:text-jct-offwhite">
+                SAR {fmt(hempelRegisterCash)}
+              </span>
+            </div>
+            <div className="flex justify-between items-center border-b border-slate-200 dark:border-[#1F1F1F] pb-2">
+              <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">
+                Recorded Sales:
+              </span>
+              <span className="text-sm font-extrabold text-jct-charcoal dark:text-jct-offwhite">
+                SAR {fmt(hempelSales)}
+              </span>
+            </div>
+            <div className="flex justify-between items-center pb-2">
+              <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">
+                Staff Assigned:
+              </span>
+              <span className="text-sm font-extrabold text-jct-charcoal dark:text-jct-offwhite">
+                {hempelStaffCount} Associate{hempelStaffCount === 1 ? "" : "s"}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Branch 4: Jotun Dammam */}
         <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 flex flex-col gap-5 relative overflow-hidden group">
           <div className="flex justify-between items-start mb-2">
             <span className="text-[10px] font-bold uppercase tracking-widest bg-jct-yellow text-jct-charcoal px-2 py-1 rounded-md">
@@ -12002,12 +12119,13 @@ function BranchConsolidationView({ metrics }: { metrics: LiveCrossModuleMetrics 
           </div>
           <div>
             <h3 className="font-display font-extrabold text-xl text-jct-charcoal dark:text-jct-offwhite">
-              Dammam Shop
+              Jotun Dammam
             </h3>
             <p className="text-slate-500 dark:text-slate-400 text-xs font-semibold mt-1">
-              Jotun Exclusive Franchise Outlet
+              Jotun Paints Exclusive Franchise Outlet
             </p>
           </div>
+
           <div className="flex flex-col gap-3 mt-2">
             <div className="flex justify-between items-center border-b border-slate-200 dark:border-[#1F1F1F] pb-2">
               <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">
@@ -12017,50 +12135,20 @@ function BranchConsolidationView({ metrics }: { metrics: LiveCrossModuleMetrics 
                 SAR {fmt(dammamRegisterCash)}
               </span>
             </div>
+            <div className="flex justify-between items-center border-b border-slate-200 dark:border-[#1F1F1F] pb-2">
+              <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">
+                Recorded Sales:
+              </span>
+              <span className="text-sm font-extrabold text-jct-charcoal dark:text-jct-offwhite">
+                SAR {fmt(dammamSales)}
+              </span>
+            </div>
             <div className="flex justify-between items-center pb-2">
               <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">
                 Staff Assigned:
               </span>
               <span className="text-sm font-extrabold text-jct-charcoal dark:text-jct-offwhite">
                 {dammamStaffCount} Associate{dammamStaffCount === 1 ? "" : "s"}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Branch 3: Jubail Sigma Franchise */}
-        <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 flex flex-col gap-5 relative overflow-hidden group">
-          <div className="flex justify-between items-start mb-2">
-            <span className="text-[10px] font-bold uppercase tracking-widest bg-jct-yellow text-jct-charcoal px-2 py-1 rounded-md">
-              FRANCHISE
-            </span>
-            <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 text-xs font-bold">
-              {sigmaRegisterCash > 0 ? "Synced EOD" : "No records found"}
-            </div>
-          </div>
-          <div>
-            <h3 className="font-display font-extrabold text-xl text-jct-charcoal dark:text-jct-offwhite">
-              Jubail Sigma
-            </h3>
-            <p className="text-slate-500 dark:text-slate-400 text-xs font-semibold mt-1">
-              Sigma Paints Franchise Outlet
-            </p>
-          </div>
-          <div className="flex flex-col gap-3 mt-2">
-            <div className="flex justify-between items-center border-b border-slate-200 dark:border-[#1F1F1F] pb-2">
-              <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">
-                Daily Register Cash:
-              </span>
-              <span className="text-sm font-extrabold text-jct-charcoal dark:text-jct-offwhite">
-                SAR {fmt(sigmaRegisterCash)}
-              </span>
-            </div>
-            <div className="flex justify-between items-center pb-2">
-              <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">
-                Staff Assigned:
-              </span>
-              <span className="text-sm font-extrabold text-jct-charcoal dark:text-jct-offwhite">
-                {sigmaStaffCount} Associate{sigmaStaffCount === 1 ? "" : "s"}
               </span>
             </div>
           </div>
@@ -12767,14 +12855,17 @@ interface ArchiveRecord {
 }
 
 function getBranchBadgeInfo(b: string) {
-  if (b === "JCT_HQ" || b.includes("Main") || b.includes("HQ")) {
-    return { name: "JCT Main HQ", color: "bg-jct-yellow text-jct-charcoal font-bold border-jct-yellow" };
+  if (b === "JCT_HQ" || b === "JCT" || b.includes("Main") || b.includes("HQ")) {
+    return { name: "JCT", color: "bg-jct-yellow text-jct-charcoal font-bold border-jct-yellow" };
+  }
+  if (b === "HARDWARE_HQ" || b.toLowerCase().includes("hardware")) {
+    return { name: "Hardware HQ", color: "bg-amber-500 text-black font-bold border-amber-500" };
   }
   if (b === "HEMPEL_JUBAIL" || b.toLowerCase().includes("hempel")) {
-    return { name: "Hempel Jubail", color: "bg-jct-turquoise text-jct-charcoal font-bold border-jct-turquoise" };
+    return { name: "Hempel", color: "bg-jct-turquoise text-jct-charcoal font-bold border-jct-turquoise" };
   }
-  if (b === "JOTUN_DAMMAM" || b.toLowerCase().includes("dammam")) {
-    return { name: "Jotun Dammam", color: "bg-jct-yellow text-jct-charcoal font-bold border-jct-yellow" };
+  if (b === "JOTUN_DAMMAM" || b.toLowerCase().includes("dammam") || b.toLowerCase().includes("jotun")) {
+    return { name: "Jotun Dammam", color: "bg-cyan-500 text-black font-bold border-cyan-500" };
   }
   if (b === "SIGMA_JUBAIL" || b.toLowerCase().includes("sigma")) {
     return { name: "Sigma Jubail", color: "bg-jct-turquoise text-jct-charcoal font-bold border-jct-turquoise" };
@@ -13870,10 +13961,10 @@ function AuditLibraryView({
                 className="bg-transparent font-bold text-jct-charcoal dark:text-jct-offwhite outline-none cursor-pointer"
               >
                 <option value="ALL" className="bg-white dark:bg-[#0A0A0A] text-jct-charcoal dark:text-jct-offwhite">All Branches (Combined)</option>
-                <option value="JCT_HQ" className="bg-white dark:bg-[#0A0A0A] text-jct-charcoal dark:text-jct-offwhite">JCT Main HQ</option>
-                <option value="HEMPEL_JUBAIL" className="bg-white dark:bg-[#0A0A0A] text-jct-charcoal dark:text-jct-offwhite">Hempel Jubail</option>
+                <option value="JCT_HQ" className="bg-white dark:bg-[#0A0A0A] text-jct-charcoal dark:text-jct-offwhite">JCT</option>
+                <option value="HARDWARE_HQ" className="bg-white dark:bg-[#0A0A0A] text-jct-charcoal dark:text-jct-offwhite">Hardware HQ</option>
+                <option value="HEMPEL_JUBAIL" className="bg-white dark:bg-[#0A0A0A] text-jct-charcoal dark:text-jct-offwhite">Hempel</option>
                 <option value="JOTUN_DAMMAM" className="bg-white dark:bg-[#0A0A0A] text-jct-charcoal dark:text-jct-offwhite">Jotun Dammam</option>
-                <option value="SIGMA_JUBAIL" className="bg-white dark:bg-[#0A0A0A] text-jct-charcoal dark:text-jct-offwhite">Sigma Jubail</option>
               </select>
             </div>
           ) : (
@@ -14709,10 +14800,10 @@ function StaffPayrollView({
             className="rounded-md bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise px-3 py-2 text-xs font-bold text-jct-charcoal dark:text-jct-offwhite outline-none"
           >
             <option value="ALL">All Branches (Combined)</option>
-            <option value="JCT_HQ">JCT Main HQ</option>
-            <option value="HEMPEL_JUBAIL">Hempel Jubail</option>
+            <option value="JCT_HQ">JCT</option>
+            <option value="HARDWARE_HQ">Hardware HQ</option>
+            <option value="HEMPEL_JUBAIL">Hempel</option>
             <option value="JOTUN_DAMMAM">Jotun Dammam</option>
-            <option value="SIGMA_JUBAIL">Sigma Jubail</option>
           </select>
 
           {/* Add Staff Button */}
@@ -15038,10 +15129,10 @@ function StaffPayrollView({
                     onChange={(e) => setEditStaffBranch(e.target.value)}
                     className="w-full bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-3 py-2.5 text-xs font-bold outline-none"
                   >
-                    <option value="JCT_HQ">JCT Main HQ</option>
-                    <option value="HEMPEL_JUBAIL">Hempel Jubail</option>
+                    <option value="JCT_HQ">JCT</option>
+                    <option value="HARDWARE_HQ">Hardware HQ</option>
+                    <option value="HEMPEL_JUBAIL">Hempel</option>
                     <option value="JOTUN_DAMMAM">Jotun Dammam</option>
-                    <option value="SIGMA_JUBAIL">Sigma Jubail</option>
                   </select>
                 </div>
 
@@ -15180,10 +15271,10 @@ function StaffPayrollView({
                     onChange={(e) => setNewStaffBranch(e.target.value)}
                     className="w-full bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-3 py-2.5 text-xs font-bold outline-none"
                   >
-                    <option value="JCT_HQ">JCT Main HQ</option>
-                    <option value="HEMPEL_JUBAIL">Hempel Jubail</option>
+                    <option value="JCT_HQ">JCT</option>
+                    <option value="HARDWARE_HQ">Hardware HQ</option>
+                    <option value="HEMPEL_JUBAIL">Hempel</option>
                     <option value="JOTUN_DAMMAM">Jotun Dammam</option>
-                    <option value="SIGMA_JUBAIL">Sigma Jubail</option>
                   </select>
                 </div>
 
@@ -15952,7 +16043,7 @@ function StaffPayrollView({
    PROFILE GATE, ROLE ACCESS & OWNER AUDIT RADAR
    ════════════════════════════════════════════════════════════════════════ */
 
-type ProfileId = "BONGSI" | "JCT_HQ" | "HEMPEL_JUBAIL" | "JOTUN_DAMMAM" | "SIGMA_JUBAIL";
+type ProfileId = "BONGSI" | "JCT_HQ" | "HARDWARE_HQ" | "HEMPEL_JUBAIL" | "JOTUN_DAMMAM" | "SIGMA_JUBAIL";
 
 interface UserProfile {
   id: ProfileId;
@@ -15979,32 +16070,32 @@ const USER_PROFILES: UserProfile[] = [
     icon: Crown,
   },
   {
-    id: "JCT_HQ", emoji: "🏢", name: "JCT Main HQ", label: "Jubail Main HQ",
-    badge: "Hardware & Jotun Store", greeting: "JCT Main HQ", branch: "Jubail - Main Branch", isOwner: false,
+    id: "JCT_HQ", emoji: "🏢", name: "JCT", label: "Main Outlet",
+    badge: "Paints & Decor", greeting: "JCT", branch: "JCT", isOwner: false,
     avatarClass: "bg-gradient-to-br from-[#14281F] to-[#0B1713]",
     hoverRing: "hover:ring-2 hover:ring-[#FFD200] hover:shadow-[0_0_25px_rgba(255,210,0,0.25)]",
     icon: Store,
   },
   {
-    id: "HEMPEL_JUBAIL", emoji: "🎨", name: "Hempel Jubail", label: "Hempel Franchise",
-    badge: "Jubail Branch", greeting: "Hempel Jubail", branch: "Hempel - Jubail", isOwner: false,
+    id: "HARDWARE_HQ", emoji: "🔧", name: "Hardware HQ", label: "Tools & Equipment",
+    badge: "Hardware Outlet", greeting: "Hardware HQ", branch: "Hardware HQ", isOwner: false,
+    avatarClass: "bg-gradient-to-br from-[#2A2414] to-[#17130A]",
+    hoverRing: "hover:ring-2 hover:ring-[#F59E0B] hover:shadow-[0_0_25px_rgba(245,158,11,0.25)]",
+    icon: Landmark,
+  },
+  {
+    id: "HEMPEL_JUBAIL", emoji: "🎨", name: "Hempel", label: "Hempel Branch",
+    badge: "Hempel Paints", greeting: "Hempel", branch: "Hempel", isOwner: false,
     avatarClass: "bg-gradient-to-br from-[#0F3338] to-[#082023]",
     hoverRing: "hover:ring-2 hover:ring-[#00BAC7] hover:shadow-[0_0_25px_rgba(0,186,199,0.3)]",
     icon: PaintRoller,
   },
   {
-    id: "JOTUN_DAMMAM", emoji: "🖌️", name: "Jotun Dammam", label: "Jotun Franchise",
-    badge: "Dammam Branch", greeting: "Jotun Dammam", branch: "Jotun - Dammam", isOwner: false,
+    id: "JOTUN_DAMMAM", emoji: "🖌️", name: "Jotun Dammam", label: "Dammam Franchise",
+    badge: "Jotun Paints", greeting: "Jotun Dammam", branch: "Jotun Dammam", isOwner: false,
     avatarClass: "bg-gradient-to-br from-[#06566A] to-[#032B36]",
     hoverRing: "hover:ring-2 hover:ring-[#00BAC7] hover:shadow-[0_0_25px_rgba(0,186,199,0.3)]",
     icon: SprayCan,
-  },
-  {
-    id: "SIGMA_JUBAIL", emoji: "🏗️", name: "Sigma Paints", label: "Sigma Paints Franchise",
-    badge: "Jubail Branch", greeting: "Sigma Paints Jubail", branch: "Sigma Paints - Jubail", isOwner: false,
-    avatarClass: "bg-gradient-to-br from-[#2A3338] to-[#141A1D]",
-    hoverRing: "hover:ring-2 hover:ring-[#FFD200] hover:shadow-[0_0_25px_rgba(255,210,0,0.25)]",
-    icon: Landmark,
   },
 ];
 
@@ -16014,10 +16105,10 @@ const STAFF_TABS: TabId[] = ["register"];
 
 const OWNER_BRANCH_OPTIONS = [
   "All Branches (Combined)",
-  "Jubail - Main Branch",
-  "Hempel - Jubail",
-  "Jotun - Dammam",
-  "Sigma Paints - Jubail",
+  "JCT",
+  "Hardware HQ",
+  "Hempel",
+  "Jotun Dammam",
 ];
 
 function ProfileGate({ onSelect }: { onSelect: (p: UserProfile) => void }) {
@@ -16029,6 +16120,8 @@ function ProfileGate({ onSelect }: { onSelect: (p: UserProfile) => void }) {
       ? "owner"
       : p.id === "JCT_HQ"
       ? "jubail"
+      : p.id === "HARDWARE_HQ"
+      ? "hardware"
       : p.id === "HEMPEL_JUBAIL"
       ? "hempel"
       : p.id === "JOTUN_DAMMAM"
@@ -16143,10 +16236,10 @@ function BranchAuditRadar() {
   }, []);
 
   const branchDefs = [
-    { key: "JCT_HQ", name: "JCT Main HQ" },
-    { key: "HEMPEL_JUBAIL", name: "Hempel Jubail" },
+    { key: "JCT_HQ", name: "JCT" },
+    { key: "HARDWARE_HQ", name: "Hardware HQ" },
+    { key: "HEMPEL_JUBAIL", name: "Hempel" },
     { key: "JOTUN_DAMMAM", name: "Jotun Dammam" },
-    { key: "SIGMA_JUBAIL", name: "Sigma Paints Jubail" },
   ];
 
   const branches = branchDefs.map((b) => {
@@ -16585,11 +16678,13 @@ export default function Page() {
 
   // JCT Pocket bridge: live Neon feed -> register (Steps 3/4/5) + Credit Radar
   const activePocketBranch: BranchId | "ALL" = profile?.isOwner
-    ? ownerBranch === "Hempel - Jubail"
+    ? ownerBranch === "Hardware HQ"
+      ? "HARDWARE_HQ"
+      : ownerBranch === "Hempel" || ownerBranch === "Hempel - Jubail"
       ? "HEMPEL_JUBAIL"
-      : ownerBranch === "Jotun - Dammam"
+      : ownerBranch === "Jotun Dammam" || ownerBranch === "Jotun - Dammam"
       ? "JOTUN_DAMMAM"
-      : ownerBranch === "Sigma Paints - Jubail"
+      : ownerBranch === "Sigma Paints - Jubail" || ownerBranch === "Sigma Jubail"
       ? "SIGMA_JUBAIL"
       : ownerBranch === "All Branches (Combined)"
       ? "ALL"

@@ -4,7 +4,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 export type UserRole = "OWNER" | "STAFF";
 
 export interface AuthAccount {
-  id: "BONGSI" | "JCT_HQ" | "HEMPEL_JUBAIL" | "JOTUN_DAMMAM" | "SIGMA_JUBAIL";
+  id: "BONGSI" | "JCT_HQ" | "HARDWARE_HQ" | "HEMPEL_JUBAIL" | "JOTUN_DAMMAM" | "SIGMA_JUBAIL";
   username: string;
   aliases: string[];
   passwords: string[];
@@ -28,21 +28,31 @@ export const JCT_AUTH_ACCOUNTS: AuthAccount[] = [
   {
     id: "JCT_HQ",
     username: "jubail",
-    aliases: ["staff", "jubail", "jct_hq", "hq", "main", "staff@jct.sa"],
+    aliases: ["staff", "jubail", "jct_hq", "hq", "main", "jct", "staff@jct.sa"],
     passwords: ["staff2026", "jct2026", "staff123", "1234"],
-    name: "JCT Main HQ Staff",
+    name: "JCT Staff",
     role: "STAFF",
-    branch: "Jubail - Main Branch",
+    branch: "JCT",
     branchCode: "JCT_HQ",
+  },
+  {
+    id: "HARDWARE_HQ",
+    username: "hardware",
+    aliases: ["hardware", "hw", "hardware_hq", "tools", "hardware@jct.sa"],
+    passwords: ["staff2026", "jct2026", "staff123", "1234"],
+    name: "Hardware HQ Staff",
+    role: "STAFF",
+    branch: "Hardware HQ",
+    branchCode: "HARDWARE_HQ",
   },
   {
     id: "HEMPEL_JUBAIL",
     username: "hempel",
     aliases: ["hempel", "hempel_jubail", "hempel@jct.sa"],
     passwords: ["staff2026", "jct2026", "staff123", "1234"],
-    name: "Hempel Jubail Staff",
+    name: "Hempel Staff",
     role: "STAFF",
-    branch: "Hempel - Jubail",
+    branch: "Hempel",
     branchCode: "HEMPEL_JUBAIL",
   },
   {
@@ -52,7 +62,7 @@ export const JCT_AUTH_ACCOUNTS: AuthAccount[] = [
     passwords: ["staff2026", "jct2026", "staff123", "1234"],
     name: "Jotun Dammam Staff",
     role: "STAFF",
-    branch: "Jotun - Dammam",
+    branch: "Jotun Dammam",
     branchCode: "JOTUN_DAMMAM",
   },
   {
@@ -156,7 +166,7 @@ export const authOptions: NextAuthOptions = {
         sUser.id = (token.id as string) || "JCT_HQ";
         sUser.role = (token.role as UserRole) || "STAFF";
         sUser.profileId = (token.profileId as string) || "JCT_HQ";
-        sUser.branch = (token.branch as string) || "Jubail - Main Branch";
+        sUser.branch = (token.branch as string) || "JCT";
       }
       return session;
     },

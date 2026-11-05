@@ -5,6 +5,7 @@
 
 export const VALID_BRANCHES = [
   "JCT_HQ",
+  "HARDWARE_HQ",
   "HEMPEL_JUBAIL",
   "JOTUN_DAMMAM",
   "SIGMA_JUBAIL",
@@ -76,9 +77,10 @@ export function normalizeBranch(
 ): ValidBranch {
   if (typeof branchOrBranchId !== "string") return fallback;
   const trimmed = branchOrBranchId.trim();
-  if (trimmed === "Jubail - Main Branch" || trimmed === "HQ" || trimmed === "JCT Main HQ") return "JCT_HQ";
-  if (trimmed === "Hempel - Jubail" || trimmed === "Hempel Jubail") return "HEMPEL_JUBAIL";
-  if (trimmed === "Jotun - Dammam" || trimmed === "Jotun Dammam") return "JOTUN_DAMMAM";
+  if (trimmed === "Jubail - Main Branch" || trimmed === "HQ" || trimmed === "JCT Main HQ" || trimmed === "JCT") return "JCT_HQ";
+  if (trimmed === "Hardware HQ" || trimmed === "Hardware" || trimmed === "HW") return "HARDWARE_HQ";
+  if (trimmed === "Hempel - Jubail" || trimmed === "Hempel Jubail" || trimmed === "Hempel") return "HEMPEL_JUBAIL";
+  if (trimmed === "Jotun - Dammam" || trimmed === "Jotun Dammam" || trimmed === "Dammam") return "JOTUN_DAMMAM";
   if (trimmed === "Sigma Paints - Jubail" || trimmed === "Sigma Jubail") return "SIGMA_JUBAIL";
   if (VALID_BRANCHES.includes(trimmed as ValidBranch)) return trimmed as ValidBranch;
   return fallback;

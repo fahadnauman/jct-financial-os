@@ -7,15 +7,15 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-export type BranchId = "JCT_HQ" | "HEMPEL_JUBAIL" | "JOTUN_DAMMAM" | "SIGMA_JUBAIL";
+export type BranchId = "JCT_HQ" | "HARDWARE_HQ" | "HEMPEL_JUBAIL" | "JOTUN_DAMMAM" | "SIGMA_JUBAIL";
 export type PocketType = "EXPENSE" | "ADVANCE" | "CREDIT_COLLECTION";
 export type PaymentSource = "DRAWER_CASH" | "OWNER_POCKET" | "BANK_TRANSFER";
 
 export const POCKET_BRANCHES: { id: BranchId; short: string; full: string }[] = [
-  { id: "JCT_HQ", short: "HQ", full: "Jubail Main HQ" },
-  { id: "HEMPEL_JUBAIL", short: "Hempel", full: "Hempel Jubail" },
+  { id: "JCT_HQ", short: "JCT", full: "JCT" },
+  { id: "HARDWARE_HQ", short: "HW", full: "Hardware HQ" },
+  { id: "HEMPEL_JUBAIL", short: "Hempel", full: "Hempel" },
   { id: "JOTUN_DAMMAM", short: "Jotun", full: "Jotun Dammam" },
-  { id: "SIGMA_JUBAIL", short: "Sigma", full: "Sigma Jubail" },
 ];
 
 /** Row shape returned by /api/pocket (mirrors the PocketTransaction model). */
