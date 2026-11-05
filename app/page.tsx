@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { useSession, signIn, signOut } from "next-auth/react";
 import { usePathname, useRouter } from "next/navigation";
 import { POCKET_CUSTOMERS_KEY, pocketTag, usePocketTransactions, type BranchId } from "../lib/pocket-bridge";
+import { normalizeBranch } from "../lib/auth-audit";
 import { useActiveSessionSync, type ActiveSessionSyncStatus } from "../lib/active-session-sync";
 import * as Dropdown from "@radix-ui/react-dropdown-menu";
 import * as XLSX from "xlsx";
@@ -2541,7 +2542,7 @@ function DailyRegisterView({
   onSyncCreditCustomer,
   creditCustomers = [],
   onSwitchTab,
-  branchId = "JCT_HQ",
+  branchId = "JCT_HARDWARE_JOTUN",
   isOwner = false,
   activeSessionDate: propSessionDate,
   setActiveSessionDate: propSetSessionDate,
@@ -4139,7 +4140,7 @@ function DailyRegisterView({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          branch: branchId || "JCT_HQ",
+          branch: branchId || "JCT_HARDWARE_JOTUN",
           type: "EXPENSE",
           amount: val,
           category: step4Category,
@@ -4865,10 +4866,10 @@ function DailyRegisterView({
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              "x-branch-id": branchId || "JCT_HQ",
+              "x-branch-id": branchId || "JCT_HARDWARE_JOTUN",
             },
             body: JSON.stringify({
-              branch: branchId || "JCT_HQ",
+              branch: branchId || "JCT_HARDWARE_JOTUN",
               type: "EXPENSE",
               amount: diff,
               originalAmount: orig,
@@ -4891,11 +4892,11 @@ function DailyRegisterView({
         headers: {
           "Content-Type": "application/json",
           "x-user-is-owner": String(isOwner),
-          "x-branch-id": branchId || "JCT_HQ",
+          "x-branch-id": branchId || "JCT_HARDWARE_JOTUN",
         },
         body: JSON.stringify({
-          branch: branchId || "JCT_HQ",
-          branchId: branchId || "JCT_HQ",
+          branch: branchId || "JCT_HARDWARE_JOTUN",
+          branchId: branchId || "JCT_HARDWARE_JOTUN",
           date: effectiveReportDate,
           closingCash: finalClosingCash,
           openingCash: openingBalance,
@@ -4907,7 +4908,7 @@ function DailyRegisterView({
           posFees: totalPosFees,
           madaFees: totalMadaFees,
           ccFees: totalCcFees,
-          lockedBy: isOwner ? "BONGSI" : (branchId || "JCT_HQ"),
+          lockedBy: isOwner ? "BONGSI" : (branchId || "JCT_HARDWARE_JOTUN"),
           status: auditStatus,
           auditStatus,
           hasDiscrepancy,
@@ -6951,7 +6952,7 @@ function DailyRegisterView({
                     preLoggedEntries={preLoggedEntries}
                     openingBalance={openingBalance}
                     date="12-09-2026"
-                    branchName={branchId === "JCT_HQ" ? "JCT Main HQ (Jubail)" : branchId}
+                    branchName={getBranchBadgeInfo(branchId).name}
                   />
                 </div>
               )}
@@ -7897,7 +7898,7 @@ function DailyRegisterView({
               <div className={printMode === "summary" ? "print:break-after-page" : "print:hidden"}>
                 {/* Print-Only Report Header */}
                 <PrintReportHeader
-                  branch={branchId === "JCT_HQ" ? "JCT Main HQ (Jubail)" : branchId}
+                  branch={getBranchBadgeInfo(branchId).name}
                   date={activeSessionDate}
                 />
 
@@ -9146,7 +9147,7 @@ function DailyRegisterView({
             preLoggedEntries={preLoggedEntries}
             openingBalance={openingBalance}
             date={activeSessionDate}
-            branchName={branchId === "JCT_HQ" ? "JCT Main HQ (Jubail)" : branchId}
+            branchName={getBranchBadgeInfo(branchId).name}
           />
           <PrintReportFooter />
         </div>
@@ -9156,7 +9157,7 @@ function DailyRegisterView({
           <div className="sticky bottom-4 z-20 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 transition-all duration-300 print:hidden">
             <div className="flex items-center gap-2.5 text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400">
               <span className="inline-flex h-2 w-2 rounded-full bg-jct-turquoise" />
-              <span>Ready to lock register for {branchId === "JCT_HQ" ? "Jubail - Main Branch" : branchId} · {activeSessionDate}</span>
+              <span>Ready to lock register for {getBranchBadgeInfo(branchId).name} · {activeSessionDate}</span>
             </div>
 
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-3 w-full sm:w-auto print:hidden">
@@ -9215,7 +9216,7 @@ function DailyRegisterView({
                   <span className="font-bold bg-jct-turquoise text-jct-charcoal px-2.5 py-0.5 rounded">
                     FINAL AUDIT REVIEW
                   </span>
-                  <span className="hidden sm:inline">19-Column Classic Physical Datasheet · {branchId === "JCT_HQ" ? "JCT Main HQ (Jubail)" : branchId}</span>
+                  <span className="hidden sm:inline">19-Column Classic Physical Datasheet · {getBranchBadgeInfo(branchId).name}</span>
                 </div>
               </div>
               <div className="flex-1 overflow-auto w-full">
@@ -9225,7 +9226,7 @@ function DailyRegisterView({
                   preLoggedEntries={preLoggedEntries}
                   openingBalance={openingBalance}
                   date={activeSessionDate}
-                  branchName={branchId === "JCT_HQ" ? "JCT Main HQ (Jubail)" : branchId}
+                  branchName={getBranchBadgeInfo(branchId).name}
                   hideFullscreenToggle={true}
                 />
               </div>
@@ -9255,35 +9256,35 @@ function DailyRegisterView({
 
             const branchesData = [
               {
-                id: "jct_hq",
-                name: "1. JCT · Main Paint Outlet",
+                id: "jct_hardware_jotun",
+                name: "1. JCT Hardware + Jotun · Main Branch",
                 sheetRows,
                 activeErpList,
                 preLoggedEntries,
                 openingBalance,
               },
               {
-                id: "hardware_hq",
-                name: "2. Hardware HQ · Tools & Equipment",
-                sheetRows: [],
-                activeErpList: HARDWARE_CONSOLIDATED_ERP_INVOICES,
-                preLoggedEntries: HARDWARE_CONSOLIDATED_PRELOGGED_ENTRIES,
-                openingBalance: 0,
-              },
-              {
-                id: "hempel_jubail",
-                name: "3. Hempel · Hempel Branch",
+                id: "hempel",
+                name: "2. Hempel · Jubail Branch",
                 sheetRows: [],
                 activeErpList: HEMPEL_CONSOLIDATED_ERP_INVOICES,
                 preLoggedEntries: HEMPEL_CONSOLIDATED_PRELOGGED_ENTRIES,
                 openingBalance: 0,
               },
               {
-                id: "jotun_dammam",
-                name: "4. Jotun Dammam · Dammam Franchise",
+                id: "dammam_jotun",
+                name: "3. Dammam Jotun · Franchise Outlet",
                 sheetRows: [],
                 activeErpList: JOTUN_CONSOLIDATED_ERP_INVOICES,
                 preLoggedEntries: JOTUN_CONSOLIDATED_PRELOGGED_ENTRIES,
+                openingBalance: 0,
+              },
+              {
+                id: "sigma",
+                name: "4. Sigma · Sigma Paints Franchise",
+                sheetRows: [],
+                activeErpList: HARDWARE_CONSOLIDATED_ERP_INVOICES,
+                preLoggedEntries: HARDWARE_CONSOLIDATED_PRELOGGED_ENTRIES,
                 openingBalance: 0,
               },
             ];
@@ -11871,36 +11872,36 @@ function BranchConsolidationView({ metrics }: { metrics: LiveCrossModuleMetrics 
   const sumBranchCash = (branchKey: string) =>
     r2(
       archiveRecords
-        .filter((r) => r.branch === branchKey)
+        .filter((r) => normalizeBranch(r.branch) === branchKey)
         .reduce((sum, r) => sum + (Number(r.closingCash) || 0), 0)
     );
 
   const sumBranchSales = (branchKey: string) =>
     r2(
       archiveRecords
-        .filter((r) => r.branch === branchKey)
+        .filter((r) => normalizeBranch(r.branch) === branchKey)
         .reduce((sum, r) => sum + (Number(r.inflows) || 0) + (Number(r.bankSwipes) || 0), 0)
     );
 
-  // 4 Distinct Branches: JCT, Hardware HQ, Hempel, Jotun Dammam
-  const jctDrawerClosing = metrics.closingDrawerBalance > 0 ? metrics.closingDrawerBalance : sumBranchCash("JCT_HQ");
-  const jctSales = r2(sumBranchSales("JCT_HQ") + metrics.todayCashSales + metrics.todayBankNet);
-  const jctStaffCount = staffMembers.filter((s) => s.branch === "JCT_HQ").length;
+  // 4 Specific Branches: JCT Hardware + Jotun, Hempel, Dammam Jotun, Sigma
+  const jctDrawerClosing = metrics.closingDrawerBalance > 0 ? metrics.closingDrawerBalance : sumBranchCash("JCT_HARDWARE_JOTUN");
+  const jctSales = r2(sumBranchSales("JCT_HARDWARE_JOTUN") + metrics.todayCashSales + metrics.todayBankNet);
+  const jctStaffCount = staffMembers.filter((s) => normalizeBranch(s.branch) === "JCT_HARDWARE_JOTUN").length;
 
-  const hardwareRegisterCash = sumBranchCash("HARDWARE_HQ");
-  const hardwareSales = sumBranchSales("HARDWARE_HQ");
-  const hardwareStaffCount = staffMembers.filter((s) => s.branch === "HARDWARE_HQ").length;
+  const hempelRegisterCash = sumBranchCash("HEMPEL");
+  const hempelSales = sumBranchSales("HEMPEL");
+  const hempelStaffCount = staffMembers.filter((s) => normalizeBranch(s.branch) === "HEMPEL").length;
 
-  const hempelRegisterCash = sumBranchCash("HEMPEL_JUBAIL");
-  const hempelSales = sumBranchSales("HEMPEL_JUBAIL");
-  const hempelStaffCount = staffMembers.filter((s) => s.branch === "HEMPEL_JUBAIL").length;
+  const dammamRegisterCash = sumBranchCash("DAMMAM_JOTUN");
+  const dammamSales = sumBranchSales("DAMMAM_JOTUN");
+  const dammamStaffCount = staffMembers.filter((s) => normalizeBranch(s.branch) === "DAMMAM_JOTUN").length;
 
-  const dammamRegisterCash = sumBranchCash("JOTUN_DAMMAM");
-  const dammamSales = sumBranchSales("JOTUN_DAMMAM");
-  const dammamStaffCount = staffMembers.filter((s) => s.branch === "JOTUN_DAMMAM").length;
+  const sigmaRegisterCash = sumBranchCash("SIGMA");
+  const sigmaSales = sumBranchSales("SIGMA");
+  const sigmaStaffCount = staffMembers.filter((s) => normalizeBranch(s.branch) === "SIGMA").length;
 
   // All 4 branches combined
-  const allBranchesSales = r2(jctSales + hardwareSales + hempelSales + dammamSales);
+  const allBranchesSales = r2(jctSales + hempelSales + dammamSales + sigmaSales);
 
   return (
     <div className="flex flex-col gap-6 p-4 md:p-6 lg:p-8 h-full overflow-y-auto w-full">
@@ -11957,7 +11958,7 @@ function BranchConsolidationView({ metrics }: { metrics: LiveCrossModuleMetrics 
 
       {/* Branch Breakdown Cards - 4 Distinct Branches */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mt-2">
-        {/* Branch 1: JCT */}
+        {/* Card 1: JCT Hardware + Jotun */}
         <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 flex flex-col gap-5 relative overflow-hidden group">
           <div className="flex justify-between items-start mb-2">
             <span className="text-[10px] font-bold uppercase tracking-widest bg-jct-turquoise text-jct-charcoal px-2 py-1 rounded-md">
@@ -11970,10 +11971,10 @@ function BranchConsolidationView({ metrics }: { metrics: LiveCrossModuleMetrics 
           </div>
           <div>
             <h3 className="font-display font-extrabold text-xl text-jct-charcoal dark:text-jct-offwhite">
-              JCT
+              JCT Hardware + Jotun
             </h3>
             <p className="text-slate-500 dark:text-slate-400 text-xs font-semibold mt-1">
-              Main Paint &amp; Decor Outlet
+              Main Shop: Hardware Tools &amp; Jotun Paints
             </p>
           </div>
 
@@ -12013,54 +12014,7 @@ function BranchConsolidationView({ metrics }: { metrics: LiveCrossModuleMetrics 
           </div>
         </div>
 
-        {/* Branch 2: Hardware HQ */}
-        <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 flex flex-col gap-5 relative overflow-hidden group">
-          <div className="flex justify-between items-start mb-2">
-            <span className="text-[10px] font-bold uppercase tracking-widest bg-amber-500 text-black px-2 py-1 rounded-md">
-              HARDWARE HQ
-            </span>
-            <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 text-xs font-bold">
-              {hardwareRegisterCash > 0 ? "Synced EOD" : "No records found"}
-            </div>
-          </div>
-          <div>
-            <h3 className="font-display font-extrabold text-xl text-jct-charcoal dark:text-jct-offwhite">
-              Hardware HQ
-            </h3>
-            <p className="text-slate-500 dark:text-slate-400 text-xs font-semibold mt-1">
-              Tools, Machinery &amp; Equipment Outlet
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-3 mt-2">
-            <div className="flex justify-between items-center border-b border-slate-200 dark:border-[#1F1F1F] pb-2">
-              <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">
-                Daily Register Cash:
-              </span>
-              <span className="text-sm font-extrabold text-jct-charcoal dark:text-jct-offwhite">
-                SAR {fmt(hardwareRegisterCash)}
-              </span>
-            </div>
-            <div className="flex justify-between items-center border-b border-slate-200 dark:border-[#1F1F1F] pb-2">
-              <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">
-                Recorded Sales:
-              </span>
-              <span className="text-sm font-extrabold text-jct-charcoal dark:text-jct-offwhite">
-                SAR {fmt(hardwareSales)}
-              </span>
-            </div>
-            <div className="flex justify-between items-center pb-2">
-              <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">
-                Staff Assigned:
-              </span>
-              <span className="text-sm font-extrabold text-jct-charcoal dark:text-jct-offwhite">
-                {hardwareStaffCount} Associate{hardwareStaffCount === 1 ? "" : "s"}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Branch 3: Hempel */}
+        {/* Card 2: Hempel */}
         <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 flex flex-col gap-5 relative overflow-hidden group">
           <div className="flex justify-between items-start mb-2">
             <span className="text-[10px] font-bold uppercase tracking-widest bg-jct-turquoise text-jct-charcoal px-2 py-1 rounded-md">
@@ -12107,7 +12061,7 @@ function BranchConsolidationView({ metrics }: { metrics: LiveCrossModuleMetrics 
           </div>
         </div>
 
-        {/* Branch 4: Jotun Dammam */}
+        {/* Card 3: Dammam Jotun */}
         <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 flex flex-col gap-5 relative overflow-hidden group">
           <div className="flex justify-between items-start mb-2">
             <span className="text-[10px] font-bold uppercase tracking-widest bg-jct-yellow text-jct-charcoal px-2 py-1 rounded-md">
@@ -12119,7 +12073,7 @@ function BranchConsolidationView({ metrics }: { metrics: LiveCrossModuleMetrics 
           </div>
           <div>
             <h3 className="font-display font-extrabold text-xl text-jct-charcoal dark:text-jct-offwhite">
-              Jotun Dammam
+              Dammam Jotun
             </h3>
             <p className="text-slate-500 dark:text-slate-400 text-xs font-semibold mt-1">
               Jotun Paints Exclusive Franchise Outlet
@@ -12153,6 +12107,53 @@ function BranchConsolidationView({ metrics }: { metrics: LiveCrossModuleMetrics 
             </div>
           </div>
         </div>
+
+        {/* Card 4: Sigma */}
+        <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 flex flex-col gap-5 relative overflow-hidden group">
+          <div className="flex justify-between items-start mb-2">
+            <span className="text-[10px] font-bold uppercase tracking-widest bg-jct-yellow text-jct-charcoal px-2 py-1 rounded-md">
+              FRANCHISE
+            </span>
+            <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 text-xs font-bold">
+              {sigmaRegisterCash > 0 ? "Synced EOD" : "No records found"}
+            </div>
+          </div>
+          <div>
+            <h3 className="font-display font-extrabold text-xl text-jct-charcoal dark:text-jct-offwhite">
+              Sigma
+            </h3>
+            <p className="text-slate-500 dark:text-slate-400 text-xs font-semibold mt-1">
+              Sigma Paints Franchise Outlet
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-3 mt-2">
+            <div className="flex justify-between items-center border-b border-slate-200 dark:border-[#1F1F1F] pb-2">
+              <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">
+                Daily Register Cash:
+              </span>
+              <span className="text-sm font-extrabold text-jct-charcoal dark:text-jct-offwhite">
+                SAR {fmt(sigmaRegisterCash)}
+              </span>
+            </div>
+            <div className="flex justify-between items-center border-b border-slate-200 dark:border-[#1F1F1F] pb-2">
+              <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">
+                Recorded Sales:
+              </span>
+              <span className="text-sm font-extrabold text-jct-charcoal dark:text-jct-offwhite">
+                SAR {fmt(sigmaSales)}
+              </span>
+            </div>
+            <div className="flex justify-between items-center pb-2">
+              <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">
+                Staff Assigned:
+              </span>
+              <span className="text-sm font-extrabold text-jct-charcoal dark:text-jct-offwhite">
+                {sigmaStaffCount} Associate{sigmaStaffCount === 1 ? "" : "s"}
+              </span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -12162,7 +12163,7 @@ function NaumanAiView({
   txns,
   erpInvoices = [],
   preLoggedEntries = [],
-  branchId = "JCT_HQ",
+  branchId = "JCT_HARDWARE_JOTUN",
   completedDaysLog = [],
 }: {
   txns: Txn[];
@@ -12855,20 +12856,18 @@ interface ArchiveRecord {
 }
 
 function getBranchBadgeInfo(b: string) {
-  if (b === "JCT_HQ" || b === "JCT" || b.includes("Main") || b.includes("HQ")) {
-    return { name: "JCT", color: "bg-jct-yellow text-jct-charcoal font-bold border-jct-yellow" };
+  const nb = normalizeBranch(b);
+  if (nb === "JCT_HARDWARE_JOTUN") {
+    return { name: "JCT Hardware + Jotun", color: "bg-jct-yellow text-jct-charcoal font-bold border-jct-yellow" };
   }
-  if (b === "HARDWARE_HQ" || b.toLowerCase().includes("hardware")) {
-    return { name: "Hardware HQ", color: "bg-amber-500 text-black font-bold border-amber-500" };
-  }
-  if (b === "HEMPEL_JUBAIL" || b.toLowerCase().includes("hempel")) {
+  if (nb === "HEMPEL") {
     return { name: "Hempel", color: "bg-jct-turquoise text-jct-charcoal font-bold border-jct-turquoise" };
   }
-  if (b === "JOTUN_DAMMAM" || b.toLowerCase().includes("dammam") || b.toLowerCase().includes("jotun")) {
-    return { name: "Jotun Dammam", color: "bg-cyan-500 text-black font-bold border-cyan-500" };
+  if (nb === "DAMMAM_JOTUN") {
+    return { name: "Dammam Jotun", color: "bg-jct-yellow text-jct-charcoal font-bold border-jct-yellow" };
   }
-  if (b === "SIGMA_JUBAIL" || b.toLowerCase().includes("sigma")) {
-    return { name: "Sigma Jubail", color: "bg-jct-turquoise text-jct-charcoal font-bold border-jct-turquoise" };
+  if (nb === "SIGMA") {
+    return { name: "Sigma", color: "bg-jct-turquoise text-jct-charcoal font-bold border-jct-turquoise" };
   }
   return { name: b, color: "text-jct-charcoal dark:text-jct-offwhite border-slate-200 dark:border-[#1F1F1F] bg-slate-50 dark:bg-[#111111]" };
 }
@@ -12915,7 +12914,7 @@ function AuditLibraryView({
   completedDaysLog?: CompletedDaySummary[];
 }) {
   const isOwner = Boolean(profile?.isOwner);
-  const staffBranchId = profile?.id && profile.id !== "BONGSI" ? profile.id : "JCT_HQ";
+  const staffBranchId = profile?.id && profile.id !== "BONGSI" ? profile.id : "JCT_HARDWARE_JOTUN";
 
   const [records, setRecords] = useState<ArchiveRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -13961,10 +13960,10 @@ function AuditLibraryView({
                 className="bg-transparent font-bold text-jct-charcoal dark:text-jct-offwhite outline-none cursor-pointer"
               >
                 <option value="ALL" className="bg-white dark:bg-[#0A0A0A] text-jct-charcoal dark:text-jct-offwhite">All Branches (Combined)</option>
-                <option value="JCT_HQ" className="bg-white dark:bg-[#0A0A0A] text-jct-charcoal dark:text-jct-offwhite">JCT</option>
-                <option value="HARDWARE_HQ" className="bg-white dark:bg-[#0A0A0A] text-jct-charcoal dark:text-jct-offwhite">Hardware HQ</option>
-                <option value="HEMPEL_JUBAIL" className="bg-white dark:bg-[#0A0A0A] text-jct-charcoal dark:text-jct-offwhite">Hempel</option>
-                <option value="JOTUN_DAMMAM" className="bg-white dark:bg-[#0A0A0A] text-jct-charcoal dark:text-jct-offwhite">Jotun Dammam</option>
+                <option value="JCT_HARDWARE_JOTUN" className="bg-white dark:bg-[#0A0A0A] text-jct-charcoal dark:text-jct-offwhite">JCT Hardware + Jotun</option>
+                <option value="HEMPEL" className="bg-white dark:bg-[#0A0A0A] text-jct-charcoal dark:text-jct-offwhite">Hempel</option>
+                <option value="DAMMAM_JOTUN" className="bg-white dark:bg-[#0A0A0A] text-jct-charcoal dark:text-jct-offwhite">Dammam Jotun</option>
+                <option value="SIGMA" className="bg-white dark:bg-[#0A0A0A] text-jct-charcoal dark:text-jct-offwhite">Sigma</option>
               </select>
             </div>
           ) : (
@@ -14245,7 +14244,7 @@ function AuditLibraryView({
 
 function StaffPayrollView({
   profile,
-  branchId = "JCT_HQ",
+  branchId = "JCT_HARDWARE_JOTUN",
   onSyncSalaryExpense,
 }: {
   profile: UserProfile | null;
@@ -14275,7 +14274,7 @@ function StaffPayrollView({
 
   // Add Staff Form
   const [newStaffName, setNewStaffName] = useState("");
-  const [newStaffBranch, setNewStaffBranch] = useState("JCT_HQ");
+  const [newStaffBranch, setNewStaffBranch] = useState("JCT_HARDWARE_JOTUN");
   const [newStaffRole, setNewStaffRole] = useState("Cashier");
   const [newStaffSalary, setNewStaffSalary] = useState("3500");
   const [newStaffPhone, setNewStaffPhone] = useState("");
@@ -14285,7 +14284,7 @@ function StaffPayrollView({
   // Edit Staff Modal State (Owner CRUD)
   const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null);
   const [editStaffName, setEditStaffName] = useState("");
-  const [editStaffBranch, setEditStaffBranch] = useState("JCT_HQ");
+  const [editStaffBranch, setEditStaffBranch] = useState("JCT_HARDWARE_JOTUN");
   const [editStaffRole, setEditStaffRole] = useState("");
   const [editStaffSalary, setEditStaffSalary] = useState("");
   const [editStaffPhone, setEditStaffPhone] = useState("");
@@ -14800,10 +14799,10 @@ function StaffPayrollView({
             className="rounded-md bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise px-3 py-2 text-xs font-bold text-jct-charcoal dark:text-jct-offwhite outline-none"
           >
             <option value="ALL">All Branches (Combined)</option>
-            <option value="JCT_HQ">JCT</option>
-            <option value="HARDWARE_HQ">Hardware HQ</option>
-            <option value="HEMPEL_JUBAIL">Hempel</option>
-            <option value="JOTUN_DAMMAM">Jotun Dammam</option>
+            <option value="JCT_HARDWARE_JOTUN">JCT Hardware + Jotun</option>
+            <option value="HEMPEL">Hempel</option>
+            <option value="DAMMAM_JOTUN">Dammam Jotun</option>
+            <option value="SIGMA">Sigma</option>
           </select>
 
           {/* Add Staff Button */}
@@ -15129,10 +15128,10 @@ function StaffPayrollView({
                     onChange={(e) => setEditStaffBranch(e.target.value)}
                     className="w-full bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-3 py-2.5 text-xs font-bold outline-none"
                   >
-                    <option value="JCT_HQ">JCT</option>
-                    <option value="HARDWARE_HQ">Hardware HQ</option>
-                    <option value="HEMPEL_JUBAIL">Hempel</option>
-                    <option value="JOTUN_DAMMAM">Jotun Dammam</option>
+                    <option value="JCT_HARDWARE_JOTUN">JCT Hardware + Jotun</option>
+                    <option value="HEMPEL">Hempel</option>
+                    <option value="DAMMAM_JOTUN">Dammam Jotun</option>
+                    <option value="SIGMA">Sigma</option>
                   </select>
                 </div>
 
@@ -15271,10 +15270,10 @@ function StaffPayrollView({
                     onChange={(e) => setNewStaffBranch(e.target.value)}
                     className="w-full bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-3 py-2.5 text-xs font-bold outline-none"
                   >
-                    <option value="JCT_HQ">JCT</option>
-                    <option value="HARDWARE_HQ">Hardware HQ</option>
-                    <option value="HEMPEL_JUBAIL">Hempel</option>
-                    <option value="JOTUN_DAMMAM">Jotun Dammam</option>
+                    <option value="JCT_HARDWARE_JOTUN">JCT Hardware + Jotun</option>
+                    <option value="HEMPEL">Hempel</option>
+                    <option value="DAMMAM_JOTUN">Dammam Jotun</option>
+                    <option value="SIGMA">Sigma</option>
                   </select>
                 </div>
 
@@ -16043,7 +16042,17 @@ function StaffPayrollView({
    PROFILE GATE, ROLE ACCESS & OWNER AUDIT RADAR
    ════════════════════════════════════════════════════════════════════════ */
 
-type ProfileId = "BONGSI" | "JCT_HQ" | "HARDWARE_HQ" | "HEMPEL_JUBAIL" | "JOTUN_DAMMAM" | "SIGMA_JUBAIL";
+type ProfileId =
+  | "BONGSI"
+  | "JCT_HARDWARE_JOTUN"
+  | "HEMPEL"
+  | "DAMMAM_JOTUN"
+  | "SIGMA"
+  | "JCT_HQ"
+  | "HARDWARE_HQ"
+  | "HEMPEL_JUBAIL"
+  | "JOTUN_DAMMAM"
+  | "SIGMA_JUBAIL";
 
 interface UserProfile {
   id: ProfileId;
@@ -16070,32 +16079,32 @@ const USER_PROFILES: UserProfile[] = [
     icon: Crown,
   },
   {
-    id: "JCT_HQ", emoji: "🏢", name: "JCT", label: "Main Outlet",
-    badge: "Paints & Decor", greeting: "JCT", branch: "JCT", isOwner: false,
+    id: "JCT_HARDWARE_JOTUN", emoji: "🏢", name: "JCT Hardware + Jotun", label: "Jubail Main Branch",
+    badge: "Hardware & Jotun Store", greeting: "JCT Hardware + Jotun", branch: "JCT Hardware + Jotun", isOwner: false,
     avatarClass: "bg-gradient-to-br from-[#14281F] to-[#0B1713]",
     hoverRing: "hover:ring-2 hover:ring-[#FFD200] hover:shadow-[0_0_25px_rgba(255,210,0,0.25)]",
     icon: Store,
   },
   {
-    id: "HARDWARE_HQ", emoji: "🔧", name: "Hardware HQ", label: "Tools & Equipment",
-    badge: "Hardware Outlet", greeting: "Hardware HQ", branch: "Hardware HQ", isOwner: false,
-    avatarClass: "bg-gradient-to-br from-[#2A2414] to-[#17130A]",
-    hoverRing: "hover:ring-2 hover:ring-[#F59E0B] hover:shadow-[0_0_25px_rgba(245,158,11,0.25)]",
-    icon: Landmark,
-  },
-  {
-    id: "HEMPEL_JUBAIL", emoji: "🎨", name: "Hempel", label: "Hempel Branch",
+    id: "HEMPEL", emoji: "🎨", name: "Hempel", label: "Hempel Jubail Branch",
     badge: "Hempel Paints", greeting: "Hempel", branch: "Hempel", isOwner: false,
     avatarClass: "bg-gradient-to-br from-[#0F3338] to-[#082023]",
     hoverRing: "hover:ring-2 hover:ring-[#00BAC7] hover:shadow-[0_0_25px_rgba(0,186,199,0.3)]",
     icon: PaintRoller,
   },
   {
-    id: "JOTUN_DAMMAM", emoji: "🖌️", name: "Jotun Dammam", label: "Dammam Franchise",
-    badge: "Jotun Paints", greeting: "Jotun Dammam", branch: "Jotun Dammam", isOwner: false,
+    id: "DAMMAM_JOTUN", emoji: "🖌️", name: "Dammam Jotun", label: "Dammam Franchise",
+    badge: "Jotun Paints", greeting: "Dammam Jotun", branch: "Dammam Jotun", isOwner: false,
     avatarClass: "bg-gradient-to-br from-[#06566A] to-[#032B36]",
     hoverRing: "hover:ring-2 hover:ring-[#00BAC7] hover:shadow-[0_0_25px_rgba(0,186,199,0.3)]",
     icon: SprayCan,
+  },
+  {
+    id: "SIGMA", emoji: "🏗️", name: "Sigma", label: "Sigma Paints Franchise",
+    badge: "Sigma Paints", greeting: "Sigma", branch: "Sigma", isOwner: false,
+    avatarClass: "bg-gradient-to-br from-[#2A3338] to-[#141A1D]",
+    hoverRing: "hover:ring-2 hover:ring-[#FFD200] hover:shadow-[0_0_25px_rgba(255,210,0,0.25)]",
+    icon: Landmark,
   },
 ];
 
@@ -16105,10 +16114,10 @@ const STAFF_TABS: TabId[] = ["register"];
 
 const OWNER_BRANCH_OPTIONS = [
   "All Branches (Combined)",
-  "JCT",
-  "Hardware HQ",
+  "JCT Hardware + Jotun",
   "Hempel",
-  "Jotun Dammam",
+  "Dammam Jotun",
+  "Sigma",
 ];
 
 function ProfileGate({ onSelect }: { onSelect: (p: UserProfile) => void }) {
@@ -16118,14 +16127,12 @@ function ProfileGate({ onSelect }: { onSelect: (p: UserProfile) => void }) {
     setSigningInId(p.id);
     const defaultUser = p.isOwner
       ? "owner"
-      : p.id === "JCT_HQ"
-      ? "jubail"
-      : p.id === "HARDWARE_HQ"
-      ? "hardware"
-      : p.id === "HEMPEL_JUBAIL"
+      : p.id === "JCT_HARDWARE_JOTUN" || p.id === "JCT_HQ"
+      ? "jct"
+      : p.id === "HEMPEL" || p.id === "HEMPEL_JUBAIL"
       ? "hempel"
-      : p.id === "JOTUN_DAMMAM"
-      ? "jotun"
+      : p.id === "DAMMAM_JOTUN" || p.id === "JOTUN_DAMMAM"
+      ? "dammam"
       : "sigma";
     try {
       await signIn("credentials", {
@@ -16236,14 +16243,16 @@ function BranchAuditRadar() {
   }, []);
 
   const branchDefs = [
-    { key: "JCT_HQ", name: "JCT" },
-    { key: "HARDWARE_HQ", name: "Hardware HQ" },
-    { key: "HEMPEL_JUBAIL", name: "Hempel" },
-    { key: "JOTUN_DAMMAM", name: "Jotun Dammam" },
+    { key: "JCT_HARDWARE_JOTUN", name: "JCT Hardware + Jotun" },
+    { key: "HEMPEL", name: "Hempel" },
+    { key: "DAMMAM_JOTUN", name: "Dammam Jotun" },
+    { key: "SIGMA", name: "Sigma" },
   ];
 
   const branches = branchDefs.map((b) => {
-    const latest = radarLocks.find((r) => r.branch === b.key);
+    const latest = radarLocks.find(
+      (r) => normalizeBranch(r.branch) === b.key || r.branch === b.key
+    );
     if (!latest) {
       return {
         name: b.name,
@@ -16324,7 +16333,7 @@ export default function Page() {
     if (sessionUser) {
       const targetId =
         sessionUser.profileId ||
-        (sessionUser.role === "OWNER" ? "BONGSI" : sessionUser.id || "JCT_HQ");
+        (sessionUser.role === "OWNER" ? "BONGSI" : sessionUser.id || "JCT_HARDWARE_JOTUN");
       const matched =
         USER_PROFILES.find((p) => p.id === targetId) ||
         (sessionUser.role === "OWNER" ? USER_PROFILES[0] : USER_PROFILES[1]);
@@ -16678,23 +16687,21 @@ export default function Page() {
 
   // JCT Pocket bridge: live Neon feed -> register (Steps 3/4/5) + Credit Radar
   const activePocketBranch: BranchId | "ALL" = profile?.isOwner
-    ? ownerBranch === "Hardware HQ"
-      ? "HARDWARE_HQ"
-      : ownerBranch === "Hempel" || ownerBranch === "Hempel - Jubail"
-      ? "HEMPEL_JUBAIL"
-      : ownerBranch === "Jotun Dammam" || ownerBranch === "Jotun - Dammam"
-      ? "JOTUN_DAMMAM"
-      : ownerBranch === "Sigma Paints - Jubail" || ownerBranch === "Sigma Jubail"
-      ? "SIGMA_JUBAIL"
+    ? ownerBranch === "Hempel" || ownerBranch === "Hempel - Jubail"
+      ? "HEMPEL"
+      : ownerBranch === "Dammam Jotun" || ownerBranch === "Jotun - Dammam" || ownerBranch === "Jotun Dammam"
+      ? "DAMMAM_JOTUN"
+      : ownerBranch === "Sigma" || ownerBranch === "Sigma Paints - Jubail" || ownerBranch === "Sigma Jubail"
+      ? "SIGMA"
       : ownerBranch === "All Branches (Combined)"
       ? "ALL"
-      : "JCT_HQ"
-    : (profile?.id as BranchId) || "JCT_HQ";
+      : "JCT_HARDWARE_JOTUN"
+    : (profile?.id as BranchId) || "JCT_HARDWARE_JOTUN";
 
   const { transactions: pocketTxns } = usePocketTransactions(activePocketBranch, Boolean(profile));
 
   // Multi-device live Daily Register session (Prisma ActiveRegisterSession, polled every 4s)
-  const syncBranch = activePocketBranch === "ALL" ? "JCT_HQ" : activePocketBranch;
+  const syncBranch = activePocketBranch === "ALL" ? "JCT_HARDWARE_JOTUN" : activePocketBranch;
   const [remoteClearSignal, setRemoteClearSignal] = useState(0);
   const { syncStatus, clearRemoteSession } = useActiveSessionSync<
     ErpInvoiceItem,
@@ -16919,7 +16926,7 @@ export default function Page() {
                 onSyncCreditCustomer={handleSyncCreditCustomer}
                 creditCustomers={creditCustomers}
                 onSwitchTab={setTab}
-                branchId={activePocketBranch === "ALL" ? "JCT_HQ" : activePocketBranch}
+                branchId={activePocketBranch === "ALL" ? "JCT_HARDWARE_JOTUN" : activePocketBranch}
                 isOwner={Boolean(profile?.isOwner)}
                 activeSessionDate={activeSessionDate}
                 setActiveSessionDate={setActiveSessionDate}
@@ -17005,7 +17012,7 @@ export default function Page() {
             ) : safeTab === "payroll" ? (
               <StaffPayrollView
                 profile={profile}
-                branchId={activePocketBranch === "ALL" ? "JCT_HQ" : activePocketBranch}
+                branchId={activePocketBranch === "ALL" ? "JCT_HARDWARE_JOTUN" : activePocketBranch}
                 onSyncSalaryExpense={handleSyncSalaryExpense}
               />
             ) : safeTab === "ai" ? (
@@ -17013,7 +17020,7 @@ export default function Page() {
                 txns={liveAiTxns}
                 erpInvoices={erpInvoices}
                 preLoggedEntries={preLoggedEntries}
-                branchId={activePocketBranch === "ALL" ? "JCT_HQ" : activePocketBranch}
+                branchId={activePocketBranch === "ALL" ? "JCT_HARDWARE_JOTUN" : activePocketBranch}
                 completedDaysLog={completedDaysLog}
               />
             ) : safeTab === "consolidation" ? (

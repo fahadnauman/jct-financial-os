@@ -188,12 +188,12 @@ function BranchPicker({ value, onChange }: { value: BranchId; onChange: (b: Bran
 export default function OwnerPocketPage() {
   const [unlocked, setUnlocked] = useState(false);
   const [activeTab, setActiveTab] = useState<"actions" | "payroll">("actions");
-  const [branch, setBranch] = useState<BranchId>("JCT_HQ");
+  const [branch, setBranch] = useState<BranchId>("JCT_HARDWARE_JOTUN");
   const [action, setAction] = useState<PocketType | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   // Expense form
-  const [eBranch, setEBranch] = useState<BranchId>("JCT_HQ");
+  const [eBranch, setEBranch] = useState<BranchId>("JCT_HARDWARE_JOTUN");
   const [eAmount, setEAmount] = useState("");
   const [eCat, setECat] = useState(EXPENSE_CATEGORIES[0]);
   const [eSource, setESource] = useState<"DRAWER" | "POCKET">("DRAWER");
@@ -201,7 +201,7 @@ export default function OwnerPocketPage() {
   const [eNote, setENote] = useState("");
 
   // Advance form
-  const [aBranch, setABranch] = useState<BranchId>("JCT_HQ");
+  const [aBranch, setABranch] = useState<BranchId>("JCT_HARDWARE_JOTUN");
   const [aName, setAName] = useState("");
   const [aStaffId, setAStaffId] = useState("");
   const [aAmount, setAAmount] = useState("");
@@ -210,7 +210,7 @@ export default function OwnerPocketPage() {
   const [branchStaffList, setBranchStaffList] = useState<StaffMember[]>([]);
 
   // Collection form
-  const [cBranch, setCBranch] = useState<BranchId>("JCT_HQ");
+  const [cBranch, setCBranch] = useState<BranchId>("JCT_HARDWARE_JOTUN");
   const [cName, setCName] = useState("");
   const [cRef, setCRef] = useState("");
   const [cAmount, setCAmount] = useState("");
@@ -265,7 +265,7 @@ export default function OwnerPocketPage() {
 
   // Add Staff Form
   const [newName, setNewName] = useState("");
-  const [newBranch, setNewBranch] = useState<BranchId>("JCT_HQ");
+  const [newBranch, setNewBranch] = useState<BranchId>("JCT_HARDWARE_JOTUN");
   const [newRole, setNewRole] = useState("Cashier");
   const [newSalary, setNewSalary] = useState("");
   const [newPhone, setNewPhone] = useState("");
@@ -761,7 +761,7 @@ export default function OwnerPocketPage() {
   const statusFor = (e: PocketTransaction) => {
     if (e.type === "EXPENSE" && e.paymentSource === "OWNER_POCKET") return "Recorded · Owner pocket";
     if (e.type === "CREDIT_COLLECTION" && e.paymentSource === "BANK_TRANSFER") return "Synced to Credit Radar";
-    if (e.branch !== "JCT_HQ") return "Saved · Branch register";
+    if (e.branch !== "JCT_HARDWARE_JOTUN") return "Saved · Branch register";
     return "Synced to Branch Drawer";
   };
 

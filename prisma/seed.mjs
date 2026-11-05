@@ -7,10 +7,10 @@ const prisma = new PrismaClient({ adapter });
 
 // Production Branches Configuration
 const PRODUCTION_BRANCHES = [
-  "JCT_HQ",
-  "HARDWARE_HQ",
-  "HEMPEL_JUBAIL",
-  "JOTUN_DAMMAM",
+  "JCT_HARDWARE_JOTUN",
+  "HEMPEL",
+  "DAMMAM_JOTUN",
+  "SIGMA",
 ];
 
 async function main() {
@@ -28,39 +28,39 @@ async function main() {
   const productionAccounts = [
     {
       name: "Owner (Nazim & Nadeem)",
-      branch: "JCT_HQ",
+      branch: "JCT_HARDWARE_JOTUN",
       role: "OWNER",
       baseSalary: 0,
       phone: "+966-50-000-0001",
       status: "ACTIVE",
     },
     {
-      name: "JCT Staff",
-      branch: "JCT_HQ",
+      name: "JCT Hardware + Jotun Staff",
+      branch: "JCT_HARDWARE_JOTUN",
       role: "STAFF",
       baseSalary: 0,
       phone: "+966-50-000-0002",
       status: "ACTIVE",
     },
     {
-      name: "Hardware HQ Staff",
-      branch: "HARDWARE_HQ",
+      name: "Hempel Staff",
+      branch: "HEMPEL",
       role: "STAFF",
       baseSalary: 0,
       phone: "+966-50-000-0003",
       status: "ACTIVE",
     },
     {
-      name: "Hempel Staff",
-      branch: "HEMPEL_JUBAIL",
+      name: "Dammam Jotun Staff",
+      branch: "DAMMAM_JOTUN",
       role: "STAFF",
       baseSalary: 0,
       phone: "+966-50-000-0004",
       status: "ACTIVE",
     },
     {
-      name: "Jotun Dammam Staff",
-      branch: "JOTUN_DAMMAM",
+      name: "Sigma Staff",
+      branch: "SIGMA",
       role: "STAFF",
       baseSalary: 0,
       phone: "+966-50-000-0005",

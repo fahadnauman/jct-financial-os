@@ -4,7 +4,17 @@ import CredentialsProvider from "next-auth/providers/credentials";
 export type UserRole = "OWNER" | "STAFF";
 
 export interface AuthAccount {
-  id: "BONGSI" | "JCT_HQ" | "HARDWARE_HQ" | "HEMPEL_JUBAIL" | "JOTUN_DAMMAM" | "SIGMA_JUBAIL";
+  id:
+    | "BONGSI"
+    | "JCT_HARDWARE_JOTUN"
+    | "HEMPEL"
+    | "DAMMAM_JOTUN"
+    | "SIGMA"
+    | "JCT_HQ"
+    | "HARDWARE_HQ"
+    | "HEMPEL_JUBAIL"
+    | "JOTUN_DAMMAM"
+    | "SIGMA_JUBAIL";
   username: string;
   aliases: string[];
   passwords: string[];
@@ -23,57 +33,58 @@ export const JCT_AUTH_ACCOUNTS: AuthAccount[] = [
     name: "BONGSI (Nazim & Nadeem)",
     role: "OWNER",
     branch: "All Branches",
-    branchCode: "JCT_HQ",
+    branchCode: "JCT_HARDWARE_JOTUN",
   },
   {
-    id: "JCT_HQ",
-    username: "jubail",
-    aliases: ["staff", "jubail", "jct_hq", "hq", "main", "jct", "staff@jct.sa"],
+    id: "JCT_HARDWARE_JOTUN",
+    username: "jct",
+    aliases: [
+      "staff",
+      "jct",
+      "jubail",
+      "jct_hq",
+      "hq",
+      "main",
+      "hardware",
+      "hardware_jotun",
+      "jct_hardware_jotun",
+      "staff@jct.sa",
+    ],
     passwords: ["staff2026", "jct2026", "staff123", "1234"],
-    name: "JCT Staff",
+    name: "JCT Hardware + Jotun Staff",
     role: "STAFF",
-    branch: "JCT",
-    branchCode: "JCT_HQ",
+    branch: "JCT Hardware + Jotun",
+    branchCode: "JCT_HARDWARE_JOTUN",
   },
   {
-    id: "HARDWARE_HQ",
-    username: "hardware",
-    aliases: ["hardware", "hw", "hardware_hq", "tools", "hardware@jct.sa"],
-    passwords: ["staff2026", "jct2026", "staff123", "1234"],
-    name: "Hardware HQ Staff",
-    role: "STAFF",
-    branch: "Hardware HQ",
-    branchCode: "HARDWARE_HQ",
-  },
-  {
-    id: "HEMPEL_JUBAIL",
+    id: "HEMPEL",
     username: "hempel",
     aliases: ["hempel", "hempel_jubail", "hempel@jct.sa"],
     passwords: ["staff2026", "jct2026", "staff123", "1234"],
     name: "Hempel Staff",
     role: "STAFF",
     branch: "Hempel",
-    branchCode: "HEMPEL_JUBAIL",
+    branchCode: "HEMPEL",
   },
   {
-    id: "JOTUN_DAMMAM",
-    username: "jotun",
-    aliases: ["jotun", "jotun_dammam", "dammam", "jotun@jct.sa"],
+    id: "DAMMAM_JOTUN",
+    username: "dammam",
+    aliases: ["dammam", "jotun", "jotun_dammam", "dammam_jotun", "jotun@jct.sa"],
     passwords: ["staff2026", "jct2026", "staff123", "1234"],
-    name: "Jotun Dammam Staff",
+    name: "Dammam Jotun Staff",
     role: "STAFF",
-    branch: "Jotun Dammam",
-    branchCode: "JOTUN_DAMMAM",
+    branch: "Dammam Jotun",
+    branchCode: "DAMMAM_JOTUN",
   },
   {
-    id: "SIGMA_JUBAIL",
+    id: "SIGMA",
     username: "sigma",
     aliases: ["sigma", "sigma_jubail", "sigma@jct.sa"],
     passwords: ["staff2026", "jct2026", "staff123", "1234"],
-    name: "Sigma Paints Staff",
+    name: "Sigma Staff",
     role: "STAFF",
-    branch: "Sigma Paints - Jubail",
-    branchCode: "SIGMA_JUBAIL",
+    branch: "Sigma",
+    branchCode: "SIGMA",
   },
 ];
 
@@ -115,7 +126,7 @@ export const authOptions: NextAuthOptions = {
         if (
           rawProfileId &&
           rawProfileId !== "BONGSI" &&
-          (!matchedAccount || matchedAccount.id === "JCT_HQ")
+          (!matchedAccount || matchedAccount.id === "JCT_HARDWARE_JOTUN" || matchedAccount.id === "JCT_HQ")
         ) {
           const byProfile = JCT_AUTH_ACCOUNTS.find((a) => a.id === rawProfileId);
           if (byProfile) matchedAccount = byProfile;
@@ -163,10 +174,10 @@ export const authOptions: NextAuthOptions = {
           profileId?: string;
           branch?: string;
         };
-        sUser.id = (token.id as string) || "JCT_HQ";
+        sUser.id = (token.id as string) || "JCT_HARDWARE_JOTUN";
         sUser.role = (token.role as UserRole) || "STAFF";
-        sUser.profileId = (token.profileId as string) || "JCT_HQ";
-        sUser.branch = (token.branch as string) || "JCT";
+        sUser.profileId = (token.profileId as string) || "JCT_HARDWARE_JOTUN";
+        sUser.branch = (token.branch as string) || "JCT Hardware + Jotun";
       }
       return session;
     },

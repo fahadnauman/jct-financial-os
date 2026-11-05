@@ -9,7 +9,7 @@ generator client {
 // Owner mobile ("JCT Pocket") + desktop register shared ledger
 model PocketTransaction {
   id             String   @id @default(cuid())
-  branch         String   // JCT_HQ | HARDWARE_HQ | HEMPEL_JUBAIL | JOTUN_DAMMAM | SIGMA_JUBAIL
+  branch         String   // JCT_HARDWARE_JOTUN | HEMPEL | DAMMAM_JOTUN | SIGMA
   type           String   // EXPENSE | ADVANCE | CREDIT_COLLECTION
   amount         Float
   originalAmount Float?
@@ -137,7 +137,7 @@ model SupplierBill {
 
 model Purchase {
   id                 String   @id @default(cuid())
-  branch             String   @default("JCT_HQ")
+  branch             String   @default("JCT_HARDWARE_JOTUN")
   supplier           String
   supplierInvoiceNum String?
   billPdfUrl         String?
@@ -151,7 +151,7 @@ model Purchase {
 
 model Expense {
   id                 String   @id @default(cuid())
-  branch             String   @default("JCT_HQ")
+  branch             String   @default("JCT_HARDWARE_JOTUN")
   title              String
   category           String
   supplierName       String?
@@ -167,7 +167,7 @@ model Expense {
 model Staff {
   id           String        @id @default(cuid())
   name         String
-  branch       String        // e.g., "JCT_HQ", "HARDWARE_HQ", "HEMPEL_JUBAIL", "JOTUN_DAMMAM", "SIGMA_JUBAIL"
+  branch       String        // e.g., "JCT_HARDWARE_JOTUN", "HEMPEL", "DAMMAM_JOTUN", "SIGMA"
   role         String?       // "Cashier", "Sales", "Driver", "Warehouse"
   baseSalary   Float         @default(0.0)
   phone        String?
@@ -199,7 +199,7 @@ model PayrollLog {
 // Live multi-device Daily Register session (one active draft per branch)
 model ActiveRegisterSession {
   id         String   @id @default(cuid())
-  branch     String   @unique // JCT_HQ | HARDWARE_HQ | HEMPEL_JUBAIL | JOTUN_DAMMAM | SIGMA_JUBAIL
+  branch     String   @unique // JCT_HARDWARE_JOTUN | HEMPEL | DAMMAM_JOTUN | SIGMA
   status     String   @default("DRAFT") // DRAFT | IN_PROGRESS | CLEARED | COMPLETED
   reportDate String?
   dataJson   String?  // { erpInvoices, preLoggedBankInvoices, preLoggedEntries, reportDate }
