@@ -179,17 +179,19 @@ model Staff {
 }
 
 model PayrollLog {
-  id          String   @id @default(cuid())
-  staffId     String
-  staff       Staff    @relation(fields: [staffId], references: [id], onDelete: Cascade)
-  type        String   // "SALARY_PAYOUT", "ADVANCE", "BONUS", "DEDUCTION"
-  amount      Float
-  date        String   // Format: "YYYY-MM-DD"
-  branch      String
-  note        String?
-  source      String   @default("REGISTER_DRAWER") // or "BANK_TRANSFER", "OWNER_POCKET"
-  paymentMode String?  // e.g., "SAB", "AL_RAJHI", "SNB", "VISA", "MADA", "BANK_TRANSFER", "CASH"
-  createdAt   DateTime @default(now())
+  id              String   @id @default(cuid())
+  staffId         String
+  staff           Staff    @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  type            String   // "SALARY", "SALARY_PAYOUT", "ADVANCE_SALARY", "ADVANCE", "STAFF_LOAN", "BONUS", "DEDUCTION"
+  amount          Float
+  deductionAmount Float?   @default(0)
+  netAmount       Float?
+  date            String   // Format: "YYYY-MM-DD"
+  branch          String
+  note            String?
+  source          String   @default("REGISTER_DRAWER") // or "BANK_TRANSFER", "OWNER_POCKET"
+  paymentMode     String?  // e.g., "SAB", "AL_RAJHI", "SNB", "VISA", "MADA", "BANK_TRANSFER", "CASH"
+  createdAt       DateTime @default(now())
 
   @@index([staffId])
   @@index([branch])

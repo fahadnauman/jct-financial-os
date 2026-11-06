@@ -17,12 +17,18 @@ async function main() {
   console.log("Initializing clean production environment for JCT Financial OS...");
   console.log("Configured Branches:", PRODUCTION_BRANCHES.join(", "));
 
-  // Ensure any stale auto-seeded locks or demo transactions are purged
+  // Ensure any stale auto-seeded locks, demo transactions, or dummy payroll/staff ledgers are purged
   await prisma.dailyRegisterLock.deleteMany({});
   await prisma.pocketTransaction.deleteMany({});
   await prisma.payrollLog.deleteMany({});
   await prisma.creditRadar.deleteMany({});
   await prisma.creditCustomer.deleteMany({});
+  await prisma.expense.deleteMany({});
+  await prisma.purchase.deleteMany({});
+  await prisma.supplierBill.deleteMany({});
+  await prisma.invoice.deleteMany({});
+  await prisma.dailyRegister.deleteMany({});
+  await prisma.activeRegisterSession.deleteMany({});
 
   // 1. Seed Owner Accounts & Branch Staff Accounts ONLY
   const productionAccounts = [

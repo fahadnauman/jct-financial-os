@@ -26,6 +26,9 @@ export const VALID_PAYMENT_MODES = [
   "MADA",
   "BANK_TRANSFER",
   "POS_SWIPE",
+  "CARD",
+  "CREDIT",
+  "CREDIT_PAY_LATER",
 ] as const;
 
 export type ValidPaymentMode = (typeof VALID_PAYMENT_MODES)[number];

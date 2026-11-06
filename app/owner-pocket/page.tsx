@@ -22,7 +22,7 @@ import {
 /** Client-side convenience PIN (NOT real security). Override with NEXT_PUBLIC_OWNER_PIN. */
 const OWNER_PIN = process.env.NEXT_PUBLIC_OWNER_PIN || "1234";
 
-const EXPENSE_CATEGORIES = ["Fuel / Vehicle", "Shop Maintenance", "Food & Refreshments", "Freight", "Misc"];
+const EXPENSE_CATEGORIES = ["Fuel / Vehicle", "Shop Maintenance", "Food & Refreshments", "Freight", "Medical Expenses", "Staff Expenses", "Misc"];
 const ADVANCE_PURPOSES = ["Salary Advance", "Daily Lunch / Travel Allowance", "Shop Runner Float"];
 const FALLBACK_CUSTOMERS: string[] = [];
 
@@ -191,6 +191,12 @@ export default function OwnerPocketPage() {
   const [branch, setBranch] = useState<BranchId>("JCT_HARDWARE_JOTUN");
   const [action, setAction] = useState<PocketType | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+
+  // Purchase form
+  const [pBranch, setPBranch] = useState<BranchId>("JCT_HARDWARE_JOTUN");
+  const [pDescription, setPDescription] = useState("");
+  const [pAmount, setPAmount] = useState("");
+  const [pPaymentMode, setPPaymentMode] = useState<"CASH" | "CARD" | "CREDIT">("CASH");
 
   // Expense form
   const [eBranch, setEBranch] = useState<BranchId>("JCT_HARDWARE_JOTUN");
@@ -362,6 +368,30 @@ export default function OwnerPocketPage() {
       return false;
     } finally {
       setSaving(false);
+    }
+  };
+
+  const savePurchase = async () => {
+    const amount = parseFloat(pAmount);
+    if (!(amount > 0) || !pDescription.trim() || saving) return;
+    const paymentSource = pPaymentMode === "CREDIT" ? "SUPPLIER_CREDIT" : (pPaymentMode === "CARD" ? "BANK_TRANSFER" : "DRAWER_CASH");
+    const ok = await finish(
+      {
+        branch: pBranch,
+        type: "PURCHASE",
+        amount,
+        category: "Purchase",
+        recipientName: null,
+        paymentSource,
+        paymentMode: pPaymentMode,
+        note: pDescription.trim(),
+        date: todayIso(),
+      },
+      `Purchase SAR ${fmt(amount)} (${pDescription.trim()}) saved · ${branchShort(pBranch)}`
+    );
+    if (ok) {
+      setPAmount("");
+      setPDescription("");
     }
   };
 
@@ -892,7 +922,95 @@ export default function OwnerPocketPage() {
                   <span className="block text-xl font-extrabold">💵 Roadside Credit Collection</span>
                   <span className="text-xs font-semibold opacity-70">Collect from a customer or contractor</span>
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setAction("PURCHASE")}
+                  className="w-full rounded-2xl bg-amber-400 p-5 text-left text-black shadow-[0_0_20px_rgba(251,191,36,0.25)] active:scale-[0.98] transition"
+                >
+                  <span className="block text-xl font-extrabold">🛍️ Log Purchase</span>
+                  <span className="text-xs font-semibold opacity-70">Cash, Card, or Credit (Pay Later / Supplier Ledger)</span>
+                </button>
               </div>
+            )}
+
+            {/* Expense form */}
+            {/* Purchase form */}
+            {action === "PURCHASE" && (
+              <section className="space-y-4 rounded-2xl border border-amber-400/40 bg-[#081517] p-4">
+                <h2 className="text-lg font-extrabold text-amber-400">🛍️ Log Purchase</h2>
+                <div>
+                  <span className={labelCls}>Target Branch</span>
+                  <BranchPicker value={pBranch} onChange={setPBranch} />
+                </div>
+                <div>
+                  <label className={labelCls}>Description / Material *</label>
+                  <input
+                    value={pDescription}
+                    onChange={(e) => setPDescription(e.target.value)}
+                    placeholder="e.g. Paint thinner, Brushes, Jotun Primer"
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className={labelCls}>Amount (SAR) *</label>
+                  <input
+                    inputMode="decimal"
+                    value={pAmount}
+                    onChange={(e) => setPAmount(e.target.value.replace(/[^0-9.]/g, ""))}
+                    placeholder="0.00"
+                    className={`${inputCls} text-3xl font-black`}
+                  />
+                </div>
+                <div>
+                  <span className={labelCls}>Mode of Payment *</span>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { value: "CASH", label: "💵 Cash" },
+                      { value: "CARD", label: "💳 Card" },
+                      { value: "CREDIT", label: "⏳ Credit (Pay Later)" },
+                    ].map((pm) => (
+                      <button
+                        key={pm.value}
+                        type="button"
+                        onClick={() => setPPaymentMode(pm.value as "CASH" | "CARD" | "CREDIT")}
+                        className={`rounded-xl border p-2.5 text-center text-xs font-bold transition ${
+                          pPaymentMode === pm.value
+                            ? "border-amber-400 bg-amber-400 text-black shadow-md"
+                            : "border-white/10 bg-[#0F2226] text-slate-300 hover:border-white/30"
+                        }`}
+                      >
+                        {pm.label}
+                      </button>
+                    ))}
+                  </div>
+                  {pPaymentMode === "CREDIT" ? (
+                    <p className="mt-2 text-[11px] text-amber-300/80">
+                      Routes directly to Suppliers &amp; Payables ledger (Pay Later). No drawer cash deducted today.
+                    </p>
+                  ) : (
+                    <p className="mt-2 text-[11px] text-emerald-300/80">
+                      Syncs immediately as an outflow deduction in today's active daily register.
+                    </p>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setAction(null)}
+                    className="rounded-xl border border-white/10 px-4 py-3 text-sm font-bold text-slate-300"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={savePurchase}
+                    disabled={!(parseFloat(pAmount) > 0) || !pDescription.trim() || saving}
+                    className="flex-1 rounded-xl bg-amber-400 py-3 font-extrabold text-black disabled:opacity-40"
+                  >
+                    {saving ? "Saving..." : "Save Purchase"}
+                  </button>
+                </div>
+              </section>
             )}
 
             {/* Expense form */}

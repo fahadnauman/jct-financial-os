@@ -4,7 +4,15 @@ import { checkIsOwner, normalizeBranch, normalizePaymentMode } from "../../../li
 
 export const dynamic = "force-dynamic";
 
-const VALID_TYPES = ["SALARY_PAYOUT", "ADVANCE", "BONUS", "DEDUCTION"];
+const VALID_TYPES = [
+  "SALARY",
+  "SALARY_PAYOUT",
+  "ADVANCE_SALARY",
+  "ADVANCE",
+  "STAFF_LOAN",
+  "BONUS",
+  "DEDUCTION",
+];
 const VALID_SOURCES = ["REGISTER_DRAWER", "BANK_TRANSFER", "OWNER_POCKET"];
 
 export async function GET(req: Request) {
@@ -52,8 +60,15 @@ export async function POST(req: Request) {
   }
 
   const staffId = typeof body.staffId === "string" ? body.staffId.trim() : "";
-  const type = typeof body.type === "string" ? body.type.trim() : "";
+  const rawType = typeof body.type === "string" ? body.type.trim() : "";
+  const type = rawType === "Salary" ? "SALARY" : rawType === "Advance Salary" ? "ADVANCE_SALARY" : rawType === "Staff Loan" ? "STAFF_LOAN" : rawType;
   const amount = Number(body.amount) || 0;
+  const deductionAmount = body.deductionAmount !== undefined && body.deductionAmount !== null
+    ? Math.max(0, Number(body.deductionAmount) || 0)
+    : 0;
+  const netAmount = body.netAmount !== undefined && body.netAmount !== null
+    ? Number(body.netAmount)
+    : Math.max(0, amount - deductionAmount);
   const note = typeof body.note === "string" ? body.note.trim() : null;
   const source = typeof body.source === "string" && VALID_SOURCES.includes(body.source.trim())
     ? body.source.trim()
@@ -74,7 +89,7 @@ export async function POST(req: Request) {
   if (!VALID_TYPES.includes(type)) {
     return NextResponse.json({ error: `type must be one of: ${VALID_TYPES.join(", ")}` }, { status: 400 });
   }
-  if (amount <= 0) {
+  if (amount <= 0 && netAmount <= 0) {
     return NextResponse.json({ error: "Amount must be greater than 0" }, { status: 400 });
   }
 
@@ -89,7 +104,17 @@ export async function POST(req: Request) {
 
     const rawBranch = body.branch || body.branchId || req.headers.get("x-branch-id") || staff.branch;
     const branch = normalizeBranch(rawBranch, normalizeBranch(staff.branch));
-    const effectiveNote = note || (type === "SALARY_PAYOUT" ? `Salary Payment - ${staff.name}` : undefined);
+    const effectiveNote = note || (
+      type === "SALARY" || type === "SALARY_PAYOUT"
+        ? (deductionAmount > 0
+            ? `Salary Payment - ${staff.name} (Gross: SAR ${amount}, Deduction: -SAR ${deductionAmount}, Net: SAR ${netAmount})`
+            : `Salary Payment - ${staff.name}`)
+        : type === "ADVANCE_SALARY" || type === "ADVANCE"
+        ? `Advance Salary - ${staff.name}`
+        : type === "STAFF_LOAN"
+        ? `Staff Loan - ${staff.name}`
+        : undefined
+    );
 
     // Dual-write atomic transaction: Staff & Payroll Ledger + Daily Register Expense
     const [log, pocketTx] = await prisma.$transaction(async (tx) => {
@@ -98,6 +123,8 @@ export async function POST(req: Request) {
           staffId,
           type,
           amount,
+          deductionAmount,
+          netAmount,
           date,
           branch,
           note: effectiveNote,
@@ -110,13 +137,24 @@ export async function POST(req: Request) {
       });
 
       let createdPocket = null;
-      if (type === "SALARY_PAYOUT") {
+      const isSalary = type === "SALARY" || type === "SALARY_PAYOUT";
+      const isAdvance = type === "ADVANCE_SALARY" || type === "ADVANCE";
+      const isLoan = type === "STAFF_LOAN";
+
+      if (isSalary || isAdvance || isLoan) {
+        const payoutAmount = isSalary ? (netAmount > 0 ? netAmount : amount) : amount;
+        const categoryLabel = isSalary
+          ? "Salary"
+          : isAdvance
+          ? "Staff Advance"
+          : "Staff Expenses";
+
         createdPocket = await tx.pocketTransaction.create({
           data: {
             branch,
             type: "EXPENSE",
-            category: "Salary",
-            amount,
+            category: categoryLabel,
+            amount: payoutAmount,
             recipientName: staff.name,
             paymentSource:
               source === "REGISTER_DRAWER"
@@ -125,7 +163,7 @@ export async function POST(req: Request) {
                 ? "OWNER_POCKET"
                 : "BANK_TRANSFER",
             paymentMode,
-            note: effectiveNote || `Salary Payment - ${staff.name}`,
+            note: effectiveNote || `${categoryLabel} - ${staff.name}`,
             date,
           },
         });
@@ -160,6 +198,12 @@ export async function PUT(req: Request) {
   }
   if (body.amount !== undefined) {
     updateData.amount = Math.max(0, Number(body.amount) || 0);
+  }
+  if (body.deductionAmount !== undefined) {
+    updateData.deductionAmount = Math.max(0, Number(body.deductionAmount) || 0);
+  }
+  if (body.netAmount !== undefined) {
+    updateData.netAmount = Math.max(0, Number(body.netAmount) || 0);
   }
   if (body.note !== undefined) {
     updateData.note = typeof body.note === "string" && body.note.trim() ? body.note.trim() : null;

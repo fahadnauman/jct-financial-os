@@ -4,8 +4,8 @@ import { checkIsOwner, normalizeBranch, normalizePaymentMode, VALID_BRANCHES } f
 
 export const dynamic = "force-dynamic";
 
-const TYPES = ["EXPENSE", "ADVANCE", "CREDIT_COLLECTION"];
-const SOURCES = ["DRAWER_CASH", "OWNER_POCKET", "BANK_TRANSFER"];
+const TYPES = ["EXPENSE", "ADVANCE", "CREDIT_COLLECTION", "PURCHASE"];
+const SOURCES = ["DRAWER_CASH", "OWNER_POCKET", "BANK_TRANSFER", "SUPPLIER_CREDIT"];
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -66,7 +66,7 @@ export async function POST(req: Request) {
 
   const paymentMode = normalizePaymentMode(
     body.paymentMode,
-    paymentSource === "BANK_TRANSFER" ? "SAB" : "CASH"
+    paymentSource === "BANK_TRANSFER" ? "SAB" : paymentSource === "SUPPLIER_CREDIT" ? "CREDIT" : "CASH"
   );
 
   const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim().slice(0, 300) : null);

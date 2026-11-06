@@ -207,6 +207,8 @@ export interface PayrollLogItem {
   staffId: string;
   type: string;
   amount: number;
+  deductionAmount?: number | null;
+  netAmount?: number | null;
   date: string;
   branch: string;
   note: string | null;
@@ -544,6 +546,8 @@ export const STRICT_EXPENSE_CATEGORIES = [
   "Credit Purchase",
   "Cash Purchase",
   "Bank Purchase",
+  "Medical Expenses",
+  "Staff Expenses",
   "Personal Reasons",
   "Business Commission",
 ] as const;
@@ -7719,6 +7723,8 @@ function DailyRegisterView({
                         "Credit Purchase": "2000",
                         "Cash Purchase": "640",
                         "Bank Purchase": "1800",
+                        "Medical Expenses": "120",
+                        "Staff Expenses": "300",
                         "Personal Reasons": "200",
                         "Business Commission": "150",
                       };
@@ -14653,6 +14659,7 @@ function StaffPayrollView({
   // Pay Salary Modal State (Interlinked to Daily Register Expenses)
   const [paySalaryStaff, setPaySalaryStaff] = useState<StaffMember | null>(null);
   const [paySalaryAmount, setPaySalaryAmount] = useState<string>("");
+  const [paySalaryDeduction, setPaySalaryDeduction] = useState<string>("0");
   const [paySalaryMode, setPaySalaryMode] = useState<UniversalPaymentMode>("CASH");
   const [paySalaryBank, setPaySalaryBank] = useState<"SAB" | "AL_RAJHI" | "SNB">("SAB");
   const [paySalaryNetwork, setPaySalaryNetwork] = useState<"mada" | "visa">("mada");
@@ -14662,8 +14669,8 @@ function StaffPayrollView({
   const handleOpenPaySalaryModal = (staff: StaffMember) => {
     setPaySalaryStaff(staff);
     const stats = getStaffMonthStats(staff);
-    const defaultAmt = stats.netRemaining > 0 ? stats.netRemaining : staff.baseSalary;
-    setPaySalaryAmount(String(defaultAmt));
+    setPaySalaryAmount(String(staff.baseSalary));
+    setPaySalaryDeduction(stats.advances > 0 ? String(stats.advances) : "0");
     setPaySalaryMode("CASH");
     setPaySalaryBank("SAB");
     setPaySalaryNetwork("mada");
@@ -14673,8 +14680,10 @@ function StaffPayrollView({
   const handleConfirmPaySalary = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!paySalaryStaff) return;
-    const amount = parseFloat(paySalaryAmount);
-    if (Number.isNaN(amount) || amount <= 0) return;
+    const grossAmount = parseFloat(paySalaryAmount);
+    if (Number.isNaN(grossAmount) || grossAmount <= 0) return;
+    const deduction = Math.max(0, parseFloat(paySalaryDeduction) || 0);
+    const netPayout = Math.max(0, grossAmount - deduction);
 
     setIsSubmittingPaySalary(true);
     try {
@@ -14696,21 +14705,25 @@ function StaffPayrollView({
         body: JSON.stringify({
           staffId: paySalaryStaff.id,
           branch: paySalaryStaff.branch || branchId,
-          type: "SALARY_PAYOUT",
-          amount,
+          type: "SALARY",
+          amount: grossAmount,
+          deductionAmount: deduction,
+          netAmount: netPayout,
           source,
           paymentMode,
           date: saudiTodayIso(),
-          note: paySalaryNote.trim() || `Salary Payment - ${paySalaryStaff.name}`,
+          note: paySalaryNote.trim() || (deduction > 0
+            ? `Salary Payment - ${paySalaryStaff.name} (Gross: SAR ${grossAmount}, Ded: -SAR ${deduction}, Net: SAR ${netPayout})`
+            : `Salary Payment - ${paySalaryStaff.name}`),
         }),
       });
 
       if (res.ok) {
-        // Dual-write sync into Daily Register Expenses (React state)
+        // Dual-write sync into Daily Register Expenses (React state) - outflow reflects actual net disbursement
         onSyncSalaryExpense?.({
           staffId: paySalaryStaff.id,
           staffName: paySalaryStaff.name,
-          amount,
+          amount: netPayout,
           paymentMode: paySalaryMode,
           terminal: (paySalaryMode === "BANK_TRANSFER" || paySalaryMode === "CARD") ? paySalaryBank : undefined,
           network: paySalaryMode === "CARD" ? paySalaryNetwork : undefined,
@@ -14793,11 +14806,11 @@ function StaffPayrollView({
     const logs = staff.payrollLogs || [];
     const monthLogs = logs.filter((l) => l.date.startsWith(selectedMonth));
     const advances = monthLogs
-      .filter((l) => l.type === "ADVANCE")
+      .filter((l) => l.type === "ADVANCE" || l.type === "ADVANCE_SALARY" || l.type === "STAFF_LOAN")
       .reduce((sum, l) => sum + l.amount, 0);
     const payouts = monthLogs
-      .filter((l) => l.type === "SALARY_PAYOUT")
-      .reduce((sum, l) => sum + l.amount, 0);
+      .filter((l) => l.type === "SALARY_PAYOUT" || l.type === "SALARY")
+      .reduce((sum, l) => sum + (l.netAmount !== null && l.netAmount !== undefined ? l.netAmount : l.amount), 0);
     const bonuses = monthLogs
       .filter((l) => l.type === "BONUS")
       .reduce((sum, l) => sum + l.amount, 0);
@@ -15832,12 +15845,14 @@ function StaffPayrollView({
                       <label className="block text-[10px] text-slate-500 dark:text-slate-400 mb-1">Type</label>
                       <select
                         value={adjType}
-                        onChange={(e) => setAdjType(e.target.value as "ADVANCE" | "BONUS" | "DEDUCTION")}
+                        onChange={(e) => setAdjType(e.target.value as any)}
                         className="w-full bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-2.5 py-1.5 text-xs font-bold outline-none"
                       >
-                        <option value="ADVANCE">Advance (Deduction)</option>
+                        <option value="SALARY">Salary (Standard Monthly)</option>
+                        <option value="ADVANCE_SALARY">Advance Salary (Travel / Emergency)</option>
+                        <option value="STAFF_LOAN">Staff Loan (Long-term loan)</option>
                         <option value="BONUS">Bonus (Addition)</option>
-                        <option value="DEDUCTION">Deduction (Penalty)</option>
+                        <option value="DEDUCTION">Deduction (Penalty / recovery)</option>
                       </select>
                     </div>
 
@@ -16017,10 +16032,13 @@ function StaffPayrollView({
                         onChange={(e) => setEditLogType(e.target.value)}
                         className="w-full bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-2.5 py-1.5 text-xs font-bold outline-none"
                       >
-                        <option value="ADVANCE">ADVANCE</option>
-                        <option value="SALARY_PAYOUT">SALARY_PAYOUT</option>
-                        <option value="BONUS">BONUS</option>
-                        <option value="DEDUCTION">DEDUCTION</option>
+                        <option value="SALARY">Salary</option>
+                        <option value="ADVANCE_SALARY">Advance Salary</option>
+                        <option value="STAFF_LOAN">Staff Loan</option>
+                        <option value="ADVANCE">Advance</option>
+                        <option value="SALARY_PAYOUT">Salary Payout</option>
+                        <option value="BONUS">Bonus</option>
+                        <option value="DEDUCTION">Deduction</option>
                       </select>
                     </div>
                     <div>
@@ -16081,12 +16099,24 @@ function StaffPayrollView({
                 ) : (
                   <div className="divide-y divide-slate-200 dark:divide-[#1F1F1F]">
                     {ledgerLogs.map((log) => {
-                      const isAdvance = log.type === "ADVANCE";
-                      const isPayout = log.type === "SALARY_PAYOUT";
+                      const isAdvance = log.type === "ADVANCE" || log.type === "ADVANCE_SALARY";
+                      const isLoan = log.type === "STAFF_LOAN";
+                      const isPayout = log.type === "SALARY_PAYOUT" || log.type === "SALARY";
                       const isBonus = log.type === "BONUS";
+
+                      const typeDisplay =
+                        log.type === "ADVANCE_SALARY"
+                          ? "Advance Salary"
+                          : log.type === "STAFF_LOAN"
+                          ? "Staff Loan"
+                          : log.type === "SALARY" || log.type === "SALARY_PAYOUT"
+                          ? "Salary"
+                          : log.type;
 
                       const badgeCls = isAdvance
                         ? "border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400"
+                        : isLoan
+                        ? "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
                         : isPayout
                         ? "bg-jct-turquoise text-jct-charcoal border-jct-turquoise"
                         : isBonus
@@ -16111,8 +16141,13 @@ function StaffPayrollView({
                               {log.date}
                             </span>
                             <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold border ${badgeCls}`}>
-                              {log.type}
+                              {typeDisplay}
                             </span>
+                            {Boolean(log.deductionAmount && log.deductionAmount > 0) && (
+                              <span className="rounded-full bg-rose-500/10 border border-rose-500/30 px-2 py-0.5 text-[9px] text-rose-500 font-bold">
+                                -Ded: SAR {fmt(log.deductionAmount || 0)}
+                              </span>
+                            )}
                             <span className="rounded-full bg-slate-100 dark:bg-[#111111] border border-slate-200 dark:border-[#1F1F1F] px-2.5 py-0.5 text-[10px] text-slate-600 dark:text-slate-300 font-bold">
                               {sourceLabel}
                             </span>
@@ -16248,11 +16283,11 @@ function StaffPayrollView({
             })()}
 
             <form onSubmit={handleConfirmPaySalary} className="space-y-4">
-              {/* Amount */}
+              {/* Gross Salary Amount */}
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-xs font-bold text-slate-600 dark:text-slate-300">
-                    Payment Amount (SAR) *
+                    Gross Salary Amount (SAR) *
                   </label>
                   {(() => {
                     const stats = getStaffMonthStats(paySalaryStaff);
@@ -16287,6 +16322,63 @@ function StaffPayrollView({
                   className="w-full bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-jct-charcoal dark:text-jct-offwhite rounded-md px-3.5 py-2.5 font-mono text-base font-extrabold outline-none"
                 />
               </div>
+
+              {/* Manual Deduction to recover previous Staff Loan or Advance */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-rose-500">
+                    Manual Deduction / Recovery (SAR)
+                  </label>
+                  {(() => {
+                    const stats = getStaffMonthStats(paySalaryStaff);
+                    return stats.advances > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => setPaySalaryDeduction(String(stats.advances))}
+                        className="text-[10px] text-rose-500 font-bold hover:underline"
+                      >
+                        Auto-Recover Advances: -SAR {fmt(stats.advances)}
+                      </button>
+                    ) : null;
+                  })()}
+                </div>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={paySalaryDeduction}
+                  onChange={(e) => setPaySalaryDeduction(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full bg-transparent border border-rose-500/30 dark:border-rose-500/40 focus:border-rose-500 focus:ring-1 focus:ring-rose-500 text-rose-600 dark:text-rose-400 rounded-md px-3.5 py-2.5 font-mono text-base font-extrabold outline-none"
+                />
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
+                  Deducts from gross salary to recover previous Staff Loans or Cash Advances.
+                </p>
+              </div>
+
+              {/* Net Payout Summary Banner */}
+              {(() => {
+                const gross = parseFloat(paySalaryAmount) || 0;
+                const ded = parseFloat(paySalaryDeduction) || 0;
+                const net = Math.max(0, gross - ded);
+                return (
+                  <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider block">
+                        Net Payout to Staff (Outflow)
+                      </span>
+                      <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+                        Gross SAR {fmt(gross)} - Ded SAR {fmt(ded)}
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-lg font-mono font-black text-emerald-600 dark:text-emerald-400">
+                        SAR {fmt(net)}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* 3-Tier Cascading Payment Selector */}
               <div className="space-y-1.5">
@@ -17078,8 +17170,10 @@ export default function Page() {
   };
   const pocketSyncedRef = useRef<Set<string>>(new Set());
   const syncCustomerRef = useRef(handleSyncCreditCustomer);
+  const syncCreditPurchaseRef = useRef(handleSyncCreditPurchase);
   useEffect(() => {
     syncCustomerRef.current = handleSyncCreditCustomer;
+    syncCreditPurchaseRef.current = handleSyncCreditPurchase;
   });
   useEffect(() => {
     const fresh = pocketTxns.filter((t) => !pocketSyncedRef.current.has(t.id));
@@ -17095,13 +17189,46 @@ export default function Page() {
         injected.push({
           id: entryId,
           type: "EXPENSE",
-          expenseCategory: (t.category ?? "").startsWith("Food") ? "Food" : "Personal Reasons",
+          expenseCategory: (t.category ?? "").startsWith("Food") ? "Food" : (t.category ?? "Personal Reasons") as any,
           title: t.category ?? "Owner Expense",
           note: [tag, t.note].filter(Boolean).join(" · "),
           amount: t.amount,
           time,
           paymentMode: (t.paymentMode as UniversalPaymentMode) || "CASH",
         });
+      } else if (t.type === "PURCHASE") {
+        if (t.paymentMode === "CREDIT" || t.paymentSource === "SUPPLIER_CREDIT") {
+          const dueDate = saudiTodayIso(Date.now() + 30 * 86400000);
+          syncCreditPurchaseRef.current(
+            t.note || "Supplier Purchase",
+            t.amount,
+            dueDate,
+            "Credit Purchase",
+            "CREDIT"
+          );
+        } else if (t.paymentMode === "CASH") {
+          injected.push({
+            id: entryId,
+            type: "EXPENSE",
+            expenseCategory: "Cash Purchase",
+            title: t.note ? `Cash Purchase · ${t.note}` : "Cash Purchase",
+            note: [tag, t.note].filter(Boolean).join(" · "),
+            amount: t.amount,
+            time,
+            paymentMode: "CASH",
+          });
+        } else {
+          injected.push({
+            id: entryId,
+            type: "EXPENSE",
+            expenseCategory: "Bank Purchase",
+            title: t.note ? `Card Purchase · ${t.note}` : "Card Purchase",
+            note: [tag, t.note].filter(Boolean).join(" · "),
+            amount: t.amount,
+            time,
+            paymentMode: (t.paymentMode as UniversalPaymentMode) || "SAB",
+          });
+        }
       } else if (t.type === "ADVANCE") {
         injected.push({
           id: entryId,

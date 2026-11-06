@@ -18,8 +18,8 @@ export type BranchId =
   | "HEMPEL_JUBAIL"
   | "JOTUN_DAMMAM"
   | "SIGMA_JUBAIL";
-export type PocketType = "EXPENSE" | "ADVANCE" | "CREDIT_COLLECTION";
-export type PaymentSource = "DRAWER_CASH" | "OWNER_POCKET" | "BANK_TRANSFER";
+export type PocketType = "EXPENSE" | "ADVANCE" | "CREDIT_COLLECTION" | "PURCHASE";
+export type PaymentSource = "DRAWER_CASH" | "OWNER_POCKET" | "BANK_TRANSFER" | "SUPPLIER_CREDIT";
 
 export const POCKET_BRANCHES: { id: BranchId; short: string; full: string }[] = [
   { id: "JCT_HARDWARE_JOTUN", short: "JCT", full: "JCT Hardware + Jotun" },
@@ -51,7 +51,11 @@ export const POCKET_CUSTOMERS_KEY = "jct_credit_customers";
 export const POCKET_POLL_MS = 5000;
 
 export const pocketTag = (type: PocketType): string =>
-  type === "CREDIT_COLLECTION" ? "⚡ Collected by Owner (On-Road)" : "⚡ Logged by Owner (Mobile)";
+  type === "CREDIT_COLLECTION"
+    ? "⚡ Collected by Owner (On-Road)"
+    : type === "PURCHASE"
+    ? "⚡ Logged by Owner (Purchase)"
+    : "⚡ Logged by Owner (Mobile)";
 
 /** Today's date (YYYY-MM-DD) in Saudi time (Asia/Riyadh), regardless of device timezone. */
 export const todayIso = (): string => saudiTodayIso();
