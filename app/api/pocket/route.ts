@@ -86,7 +86,8 @@ export async function POST(req: Request) {
         paymentSource,
         paymentMode,
         supplierInvoiceNum: str(body.supplierInvoiceNum),
-        billPdfUrl: str(body.billPdfUrl),
+        billPdfUrl: str(body.billPdfUrl) || str(body.receiptUrl),
+        receiptUrl: str(body.receiptUrl) || str(body.billPdfUrl),
         note: str(body.note),
         date: String(body.date),
       },
@@ -131,6 +132,7 @@ export async function PUT(req: Request) {
   }
   if (body.supplierInvoiceNum !== undefined) updateData.supplierInvoiceNum = str(body.supplierInvoiceNum);
   if (body.billPdfUrl !== undefined) updateData.billPdfUrl = str(body.billPdfUrl);
+  if (body.receiptUrl !== undefined) updateData.receiptUrl = str(body.receiptUrl);
   if (body.note !== undefined) updateData.note = str(body.note);
   if (typeof body.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.date)) {
     updateData.date = body.date;

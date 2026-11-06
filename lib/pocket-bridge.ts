@@ -40,6 +40,8 @@ export interface PocketTransaction {
   recipientName: string | null;
   paymentSource: PaymentSource;
   paymentMode?: string | null;
+  receiptUrl?: string | null;
+  billPdfUrl?: string | null;
   note: string | null;
   date: string;
   createdAt: string;

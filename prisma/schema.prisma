@@ -22,6 +22,7 @@ model PocketTransaction {
   paymentMode    String?  // e.g., "SAB", "AL_RAJHI", "SNB", "VISA", "MADA", "BANK_TRANSFER", "CASH"
   supplierInvoiceNum String?
   billPdfUrl     String?
+  receiptUrl     String?
   note           String?
   date           String   // YYYY-MM-DD
   createdAt      DateTime @default(now())
@@ -128,6 +129,7 @@ model SupplierBill {
   invoiceNo          String
   supplierInvoiceNum String?
   billPdfUrl         String?
+  receiptUrl         String?
   amount             Float
   dueDate            DateTime
   isPaid             Boolean  @default(false)
@@ -141,6 +143,7 @@ model Purchase {
   supplier           String
   supplierInvoiceNum String?
   billPdfUrl         String?
+  receiptUrl         String?
   amount             Float
   category           String   @default("Credit Purchase")
   dueDate            String?
@@ -157,6 +160,7 @@ model Expense {
   supplierName       String?
   supplierInvoiceNum String?
   billPdfUrl         String?
+  receiptUrl         String?
   amount             Float
   paymentMode        String?
   date               String

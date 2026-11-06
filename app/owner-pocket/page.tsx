@@ -16,13 +16,13 @@ import {
 import {
   Users, Plus, X,
   RotateCcw, CheckCircle2,
-  CalendarDays, Trash2, Search
+  CalendarDays, Trash2, Search, Camera, Upload
 } from "lucide-react";
 
 /** Client-side convenience PIN (NOT real security). Override with NEXT_PUBLIC_OWNER_PIN. */
 const OWNER_PIN = process.env.NEXT_PUBLIC_OWNER_PIN || "1234";
 
-const EXPENSE_CATEGORIES = ["Fuel / Vehicle", "Shop Maintenance", "Food & Refreshments", "Freight", "Medical Expenses", "Staff Expenses", "Misc"];
+const EXPENSE_CATEGORIES = ["Fuel / Vehicle", "Shop Maintenance", "Food & Refreshments", "Freight", "Medical Expenses", "Staff Expenses", "Other Expenses", "Misc"];
 const ADVANCE_PURPOSES = ["Salary Advance", "Daily Lunch / Travel Allowance", "Shop Runner Float"];
 const FALLBACK_CUSTOMERS: string[] = [];
 
@@ -204,7 +204,34 @@ export default function OwnerPocketPage() {
   const [eCat, setECat] = useState(EXPENSE_CATEGORIES[0]);
   const [eSource, setESource] = useState<"DRAWER" | "POCKET">("DRAWER");
   const [ePaymentMode, setEPaymentMode] = useState<UniversalPaymentMode>("CASH");
+  const [eBillType, setEBillType] = useState<"WITHOUT_BILL" | "WITH_BILL">("WITHOUT_BILL");
+  const [eReceiptUrl, setEReceiptUrl] = useState<string | null>(null);
+  const [eReceiptFileName, setEReceiptFileName] = useState<string | null>(null);
+  const [uploadingReceipt, setUploadingReceipt] = useState(false);
   const [eNote, setENote] = useState("");
+
+  const handleReceiptUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingReceipt(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setEReceiptUrl(data.url);
+        setEReceiptFileName(file.name);
+      }
+    } catch (err) {
+      console.error("Receipt upload error:", err);
+    } finally {
+      setUploadingReceipt(false);
+    }
+  };
 
   // Advance form
   const [aBranch, setABranch] = useState<BranchId>("JCT_HARDWARE_JOTUN");
@@ -398,6 +425,11 @@ export default function OwnerPocketPage() {
   const saveExpense = async () => {
     const amount = parseFloat(eAmount);
     if (!(amount > 0) || saving) return;
+    if (eBillType === "WITHOUT_BILL" && !eNote.trim()) {
+      setToast("Basic details / description required when logging without bill");
+      setTimeout(() => setToast(null), 3500);
+      return;
+    }
     const ok = await finish(
       {
         branch: eBranch,
@@ -407,7 +439,9 @@ export default function OwnerPocketPage() {
         recipientName: null,
         paymentSource: eSource === "POCKET" ? "OWNER_POCKET" : "DRAWER_CASH",
         paymentMode: ePaymentMode,
-        note: eNote.trim() || null,
+        receiptUrl: eReceiptUrl,
+        billPdfUrl: eReceiptUrl,
+        note: eNote.trim() || (eBillType === "WITH_BILL" ? "With Attached Receipt" : null),
         date: todayIso(),
       },
       `Expense SAR ${fmt(amount)} saved · ${branchShort(eBranch)}`
@@ -415,6 +449,9 @@ export default function OwnerPocketPage() {
     if (ok) {
       setEAmount("");
       setENote("");
+      setEReceiptUrl(null);
+      setEReceiptFileName(null);
+      setEBillType("WITHOUT_BILL");
     }
   };
 
@@ -1066,15 +1103,106 @@ export default function OwnerPocketPage() {
                     ))}
                   </select>
                 </div>
+                {/* Bill / Receipt Status Toggle */}
                 <div>
-                  <label className={labelCls}>Note</label>
-                  <input value={eNote} onChange={(e) => setENote(e.target.value)} placeholder="Short remark" className={inputCls} />
+                  <span className={labelCls}>Receipt / Bill Status</span>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEBillType("WITHOUT_BILL")}
+                      className={`rounded-xl border p-2.5 text-center text-xs font-bold transition ${
+                        eBillType === "WITHOUT_BILL"
+                          ? "border-[#FFD200] bg-[#FFD200] text-black shadow-md"
+                          : "border-white/10 bg-[#0F2226] text-slate-300 hover:border-white/30"
+                      }`}
+                    >
+                      📝 Without Bill
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEBillType("WITH_BILL")}
+                      className={`rounded-xl border p-2.5 text-center text-xs font-bold transition ${
+                        eBillType === "WITH_BILL"
+                          ? "border-[#FFD200] bg-[#FFD200] text-black shadow-md"
+                          : "border-white/10 bg-[#0F2226] text-slate-300 hover:border-white/30"
+                      }`}
+                    >
+                      📸 With Bill (Snap / Upload)
+                    </button>
+                  </div>
                 </div>
+
+                {eBillType === "WITHOUT_BILL" ? (
+                  <div>
+                    <label className={labelCls}>Basic Details / Description *</label>
+                    <input
+                      required
+                      value={eNote}
+                      onChange={(e) => setENote(e.target.value)}
+                      placeholder="Required: State purpose or description"
+                      className={`${inputCls} border-amber-300/40`}
+                    />
+                    <p className="mt-1 text-[10px] text-amber-300/80">
+                      Description is mandatory when no receipt is attached.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <label className={labelCls}>Snap Photo or Upload Bill (Image/PDF) *</label>
+                    <div className="flex flex-col gap-2">
+                      <label className="flex items-center justify-center gap-2 rounded-xl border border-dashed border-[#FFD200]/60 bg-[#FFD200]/10 p-4 text-center text-sm font-bold text-[#FFD200] cursor-pointer hover:bg-[#FFD200]/20 transition">
+                        <Camera size={18} />
+                        <span>{uploadingReceipt ? "Uploading receipt..." : eReceiptUrl ? "Change Photo / File" : "📷 Take Photo or Upload"}</span>
+                        <input
+                          type="file"
+                          accept="image/*,application/pdf"
+                          capture="environment"
+                          onChange={handleReceiptUpload}
+                          className="hidden"
+                        />
+                      </label>
+                      {eReceiptFileName && (
+                        <div className="flex items-center justify-between rounded-lg bg-white/5 border border-white/10 p-2 text-xs text-slate-200">
+                          <span className="truncate">✓ {eReceiptFileName}</span>
+                          <button
+                            type="button"
+                            onClick={() => { setEReceiptUrl(null); setEReceiptFileName(null); }}
+                            className="text-rose-400 font-bold ml-2 hover:text-rose-300"
+                          >
+                            ✕ Remove
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className={labelCls}>Description / Note (Optional)</label>
+                      <input
+                        value={eNote}
+                        onChange={(e) => setENote(e.target.value)}
+                        placeholder="Optional details / remark"
+                        className={inputCls}
+                      />
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex gap-2">
                   <button type="button" onClick={() => setAction(null)} className="rounded-xl border border-white/10 px-4 py-3 text-sm font-bold text-slate-300">
                     Cancel
                   </button>
-                  <button type="button" onClick={saveExpense} disabled={!(parseFloat(eAmount) > 0)} className="flex-1 rounded-xl bg-[#FFD200] py-3 font-extrabold text-black disabled:opacity-40">
+                  <button
+                    type="button"
+                    onClick={saveExpense}
+                    disabled={
+                      !(parseFloat(eAmount) > 0) ||
+                      (eBillType === "WITHOUT_BILL" && !eNote.trim()) ||
+                      (eBillType === "WITH_BILL" && !eReceiptUrl) ||
+                      uploadingReceipt ||
+                      saving
+                    }
+                    className="flex-1 rounded-xl bg-[#FFD200] py-3 font-extrabold text-black disabled:opacity-40"
+                  >
                     Save Expense
                   </button>
                 </div>

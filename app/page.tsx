@@ -548,7 +548,7 @@ export const STRICT_EXPENSE_CATEGORIES = [
   "Bank Purchase",
   "Medical Expenses",
   "Staff Expenses",
-  "Personal Reasons",
+  "Other Expenses",
   "Business Commission",
 ] as const;
 
@@ -620,6 +620,7 @@ export interface PreLoggedEntry {
   originalDate?: string;
   supplierInvoiceNum?: string;
   billPdfUrl?: string;
+  receiptUrl?: string;
   type: PreLoggedEntryType;
   title: string;
   expenseCategory?: StrictExpenseCategory;
@@ -2763,6 +2764,7 @@ function DailyRegisterView({
   const [step4BillPdfUrl, setStep4BillPdfUrl] = useState<string | null>(null);
   const [step4PdfUploading, setStep4PdfUploading] = useState(false);
   const [step4PdfFileName, setStep4PdfFileName] = useState<string | null>(null);
+  const [step4BillType, setStep4BillType] = useState<"WITHOUT_BILL" | "WITH_BILL">("WITHOUT_BILL");
   const [step4Note, setStep4Note] = useState("");
   const [step4Amount, setStep4Amount] = useState("");
 
@@ -4294,6 +4296,7 @@ function DailyRegisterView({
       dueDate: isCreditPurchase ? step4DueDate : undefined,
       supplierInvoiceNum: step4SupplierInvoiceNum.trim() || undefined,
       billPdfUrl: step4BillPdfUrl || undefined,
+      receiptUrl: step4BillPdfUrl || undefined,
       staffId: isStaffExpense ? step4StaffId : undefined,
       staffName: isStaffExpense ? staffName : undefined,
       paymentMode: effectiveStep4Mode,
@@ -4329,6 +4332,7 @@ function DailyRegisterView({
           paymentMode: effectiveStep4Mode,
           supplierInvoiceNum: step4SupplierInvoiceNum.trim() || undefined,
           billPdfUrl: step4BillPdfUrl || undefined,
+          receiptUrl: step4BillPdfUrl || undefined,
           note: step4Note.trim() || undefined,
           date: saudiTodayIso(),
         }),
@@ -7715,19 +7719,6 @@ function DailyRegisterView({
                           e.expenseCategory === category ||
                           e.title.trim().toLowerCase() === category.toLowerCase()
                       );
-                      const defaultAmts: Record<StrictExpenseCategory, string> = {
-                        Food: "24",
-                        Water: "150",
-                        Salary: "1500",
-                        "Staff Advance": "500",
-                        "Credit Purchase": "2000",
-                        "Cash Purchase": "640",
-                        "Bank Purchase": "1800",
-                        "Medical Expenses": "120",
-                        "Staff Expenses": "300",
-                        "Personal Reasons": "200",
-                        "Business Commission": "150",
-                      };
                       return (
                         <button
                           key={category}
@@ -7740,7 +7731,7 @@ function DailyRegisterView({
                               setStep4PaymentMode("CASH");
                             }
                             setStep4Amount(
-                              existing ? String(existing.amount) : defaultAmts[category]
+                              existing ? String(existing.amount) : ""
                             );
                           }}
                           className={`rounded-lg px-3 py-1.5 text-xs transition-all ${
@@ -7901,13 +7892,95 @@ function DailyRegisterView({
                       </div>
                     )}
 
-                    <input
-                      type="text"
-                      value={step4Note}
-                      onChange={(e) => setStep4Note(e.target.value)}
-                      placeholder={`Optional note for ${step4Category}...`}
-                      className="w-full bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-3.5 py-2.5 text-sm font-medium placeholder:text-slate-400 outline-none"
-                    />
+                    {/* With Bill vs Without Bill Selection */}
+                    <div className="space-y-1.5 pt-1 border-t border-slate-200 dark:border-[#1F1F1F]">
+                      <span className="block text-xs font-medium text-slate-500 dark:text-slate-400">
+                        Bill / Receipt Verification *
+                      </span>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setStep4BillType("WITHOUT_BILL")}
+                          className={`rounded-lg px-3 py-2 text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                            step4BillType === "WITHOUT_BILL"
+                              ? "bg-jct-turquoise text-jct-charcoal shadow-sm"
+                              : "border border-slate-200 dark:border-[#1F1F1F] bg-slate-50 dark:bg-[#111111] text-slate-500 hover:text-jct-charcoal dark:hover:text-white"
+                          }`}
+                        >
+                          <span>📝 Without Bill</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setStep4BillType("WITH_BILL")}
+                          className={`rounded-lg px-3 py-2 text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                            step4BillType === "WITH_BILL"
+                              ? "bg-jct-turquoise text-jct-charcoal shadow-sm"
+                              : "border border-slate-200 dark:border-[#1F1F1F] bg-slate-50 dark:bg-[#111111] text-slate-500 hover:text-jct-charcoal dark:hover:text-white"
+                          }`}
+                        >
+                          <span>🧾 With Bill (Upload)</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {step4BillType === "WITHOUT_BILL" ? (
+                      <div>
+                        <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
+                          Basic Details / Description *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={step4Note}
+                          onChange={(e) => setStep4Note(e.target.value)}
+                          placeholder="Required: State purpose or description..."
+                          className="w-full bg-transparent border border-amber-400/50 dark:border-amber-400/40 focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-3.5 py-2.5 text-sm font-medium placeholder:text-slate-400 outline-none"
+                        />
+                        <p className="text-[10px] text-amber-500 dark:text-amber-400 mt-1">
+                          Basic details are mandatory when logging expenses without a bill.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <label className="block text-xs font-medium text-slate-500 dark:text-slate-400">
+                          Upload Receipt / Bill (Image or PDF) *
+                        </label>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <label className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-lg border border-dashed border-jct-turquoise/60 hover:border-jct-turquoise bg-jct-turquoise/10 text-jct-turquoise text-xs font-bold cursor-pointer transition">
+                            <Upload size={15} />
+                            <span>{step4PdfUploading ? "Uploading..." : step4BillPdfUrl ? "Change Receipt File" : "📎 Choose Image / PDF Receipt"}</span>
+                            <input
+                              type="file"
+                              accept="image/*,application/pdf"
+                              onChange={handleStep4FileUpload}
+                              className="hidden"
+                            />
+                          </label>
+                          {step4PdfFileName && (
+                            <span className="text-xs text-slate-600 dark:text-slate-300 flex items-center gap-1.5 bg-slate-100 dark:bg-[#111111] px-2.5 py-1.5 rounded-md border border-slate-200 dark:border-[#1F1F1F]">
+                              ✓ {step4PdfFileName}
+                              <button
+                                type="button"
+                                onClick={() => { setStep4BillPdfUrl(null); setStep4PdfFileName(null); }}
+                                className="text-rose-500 hover:text-rose-600 font-bold ml-1"
+                                title="Remove attachment"
+                              >
+                                ✕
+                              </button>
+                            </span>
+                          )}
+                        </div>
+                        <div>
+                          <input
+                            type="text"
+                            value={step4Note}
+                            onChange={(e) => setStep4Note(e.target.value)}
+                            placeholder="Optional note / bill description..."
+                            className="w-full bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-3.5 py-2 text-xs font-medium placeholder:text-slate-400 outline-none"
+                          />
+                        </div>
+                      </div>
+                    )}
 
                     <div className="flex gap-3">
                       <input
@@ -14805,9 +14878,21 @@ function StaffPayrollView({
   const getStaffMonthStats = (staff: StaffMember) => {
     const logs = staff.payrollLogs || [];
     const monthLogs = logs.filter((l) => l.date.startsWith(selectedMonth));
+
+    // Advances taken strictly in the current month (Advance Salary / Advance)
     const advances = monthLogs
-      .filter((l) => l.type === "ADVANCE" || l.type === "ADVANCE_SALARY" || l.type === "STAFF_LOAN")
+      .filter((l) => l.type === "ADVANCE" || l.type === "ADVANCE_SALARY")
       .reduce((sum, l) => sum + l.amount, 0);
+
+    // Outstanding Staff Loan Balance (All-time loans minus repayments/deductions)
+    const totalLoansEver = logs
+      .filter((l) => l.type === "STAFF_LOAN")
+      .reduce((sum, l) => sum + l.amount, 0);
+    const loanRepayments = logs
+      .filter((l) => (l.type === "DEDUCTION" && (l.note?.toLowerCase().includes("loan") || l.note?.toLowerCase().includes("recovery"))) || (l.deductionAmount && l.deductionAmount > 0))
+      .reduce((sum, l) => sum + (l.deductionAmount || (l.type === "DEDUCTION" ? l.amount : 0)), 0);
+    const outstandingLoan = Math.max(0, totalLoansEver - loanRepayments);
+
     const payouts = monthLogs
       .filter((l) => l.type === "SALARY_PAYOUT" || l.type === "SALARY")
       .reduce((sum, l) => sum + (l.netAmount !== null && l.netAmount !== undefined ? l.netAmount : l.amount), 0);
@@ -14818,10 +14903,12 @@ function StaffPayrollView({
       .filter((l) => l.type === "DEDUCTION")
       .reduce((sum, l) => sum + l.amount, 0);
 
+    // Net remaining due automatically deducts current month's advances
     const netRemaining = Math.max(0, staff.baseSalary + bonuses - advances - deductions - payouts);
 
     return {
       advances,
+      outstandingLoan,
       payouts,
       bonuses,
       deductions,
@@ -15270,17 +15357,18 @@ function StaffPayrollView({
             </p>
           </div>
         ) : (
-          <div className="w-full overflow-x-auto hide-scrollbar">
-            <table className="w-full min-w-[800px] text-left text-xs whitespace-nowrap">
+          <div className="w-full overflow-x-auto">
+            <table className="w-full min-w-[950px] text-left text-xs whitespace-nowrap">
               <thead className="border-b border-slate-200 dark:border-[#1F1F1F] text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-[#111111] font-bold">
                 <tr>
-                  <th className="py-3.5 px-4">Employee &amp; Role</th>
-                  <th className="py-3.5 px-4">Branch</th>
-                  <th className="py-3.5 px-4 text-right">Base Salary</th>
-                  <th className="py-3.5 px-4 text-right">Advances ({selectedMonth})</th>
-                  <th className="py-3.5 px-4 text-right">Net Remaining Due</th>
-                  <th className="py-3.5 px-4 text-center">Status</th>
-                  <th className="py-3.5 px-4 text-right">Actions</th>
+                  <th className="py-3.5 px-4 min-w-[200px]">Employee &amp; Role</th>
+                  <th className="py-3.5 px-4 min-w-[120px]">Branch</th>
+                  <th className="py-3.5 px-4 text-right min-w-[100px]">Base Salary</th>
+                  <th className="py-3.5 px-4 text-right min-w-[130px]">Advances ({selectedMonth})</th>
+                  <th className="py-3.5 px-4 text-right min-w-[150px]">Outstanding Loan Balance</th>
+                  <th className="py-3.5 px-4 text-right min-w-[130px]">Net Remaining Due</th>
+                  <th className="py-3.5 px-4 text-center min-w-[90px]">Status</th>
+                  <th className="py-3.5 px-4 text-right min-w-[160px]">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 dark:divide-[#1F1F1F]">
@@ -15336,10 +15424,21 @@ function StaffPayrollView({
                       </td>
 
                       {/* Advances Taken This Month */}
-                      <td className="py-3.5 px-4 text-right font-mono">
+                      <td className="py-3.5 px-4 text-right font-mono whitespace-nowrap">
                         {stats.advances > 0 ? (
                           <span className="inline-block rounded-md border border-rose-500/30 bg-rose-500/10 px-2 py-0.5 font-bold text-rose-600 dark:text-rose-400">
                             -SAR {fmt(stats.advances)}
+                          </span>
+                        ) : (
+                          <span className="text-slate-500 dark:text-slate-400">SAR 0.00</span>
+                        )}
+                      </td>
+
+                      {/* Outstanding Loan Balance */}
+                      <td className="py-3.5 px-4 text-right font-mono whitespace-nowrap">
+                        {stats.outstandingLoan > 0 ? (
+                          <span className="inline-block rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 font-bold text-amber-600 dark:text-amber-400">
+                            SAR {fmt(stats.outstandingLoan)}
                           </span>
                         ) : (
                           <span className="text-slate-500 dark:text-slate-400">SAR 0.00</span>
@@ -17189,7 +17288,7 @@ export default function Page() {
         injected.push({
           id: entryId,
           type: "EXPENSE",
-          expenseCategory: (t.category ?? "").startsWith("Food") ? "Food" : (t.category ?? "Personal Reasons") as any,
+          expenseCategory: (t.category ?? "").startsWith("Food") ? "Food" : (t.category ?? "Other Expenses") as any,
           title: t.category ?? "Owner Expense",
           note: [tag, t.note].filter(Boolean).join(" · "),
           amount: t.amount,
