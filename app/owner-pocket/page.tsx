@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { saudiHHMM, saudiMonthIso } from "../../lib/saudi-time";
+import { saudiHHMM, saudiMonthIso, addSaudiDays } from "../../lib/saudi-time";
 import {
   POCKET_BRANCHES,
   POCKET_CUSTOMERS_KEY,
@@ -249,6 +249,23 @@ export default function OwnerPocketPage() {
   const [cAmount, setCAmount] = useState("");
   const [cTender, setCTender] = useState<"CASH_TO_OWNER" | "BANK_TRANSFER">("CASH_TO_OWNER");
   const [cPaymentMode, setCPaymentMode] = useState<UniversalPaymentMode>("CASH");
+
+  // Supplier Advance form
+  const [saBranch, setSaBranch] = useState<BranchId>("JCT_HARDWARE_JOTUN");
+  const [saSupplierName, setSaSupplierName] = useState("");
+  const [saAmount, setSaAmount] = useState("");
+  const [saPaymentMode, setSaPaymentMode] = useState<"CASH" | "CARD" | "BANK_TRANSFER">("CASH");
+  const [saFollowUpDate, setSaFollowUpDate] = useState<string>(() => addSaudiDays(7));
+  const [saNote, setSaNote] = useState("");
+
+  // Customer Advance form
+  const [caBranch, setCaBranch] = useState<BranchId>("JCT_HARDWARE_JOTUN");
+  const [caCustomerName, setCaCustomerName] = useState("");
+  const [caPhoneOrRef, setCaPhoneOrRef] = useState("");
+  const [caAmount, setCaAmount] = useState("");
+  const [caPaymentMode, setCaPaymentMode] = useState<"CASH" | "CARD" | "BANK_TRANSFER">("CASH");
+  const [caFollowUpDate, setCaFollowUpDate] = useState<string>(() => addSaudiDays(7));
+  const [caNote, setCaNote] = useState("");
 
   const [saving, setSaving] = useState(false);
 
@@ -521,6 +538,92 @@ export default function OwnerPocketPage() {
       setCAmount("");
       setCName("");
       setCRef("");
+    }
+  };
+
+  const saveSupplierAdvance = async () => {
+    const amount = parseFloat(saAmount);
+    if (!(amount > 0) || !saSupplierName.trim() || saving) return;
+    const paymentSource = saPaymentMode === "CASH" ? "DRAWER_CASH" : "BANK_TRANSFER";
+    const ok = await finish(
+      {
+        branch: saBranch,
+        type: "SUPPLIER_ADVANCE",
+        amount,
+        category: "Supplier Advance",
+        recipientName: saSupplierName.trim(),
+        paymentSource,
+        paymentMode: saPaymentMode,
+        followUpDate: saFollowUpDate || addSaudiDays(7),
+        followUpStatus: "SCHEDULED",
+        note: saNote.trim() || `Supplier Advance to ${saSupplierName.trim()}`,
+        date: todayIso(),
+      },
+      `Supplier Advance SAR ${fmt(amount)} to ${saSupplierName.trim()} saved`
+    );
+    if (ok) {
+      fetch("/api/advances", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          branch: saBranch,
+          direction: "SUPPLIER_ADVANCE_OUT",
+          partyName: saSupplierName.trim(),
+          totalAdvanceAmount: amount,
+          paymentMode: saPaymentMode,
+          date: todayIso(),
+          followUpDate: saFollowUpDate || addSaudiDays(7),
+          notes: saNote.trim() || `Mobile Pocket Supplier Advance (${saPaymentMode})`,
+        }),
+      }).catch((e) => console.error("Error syncing supplier advance:", e));
+      setSaSupplierName("");
+      setSaAmount("");
+      setSaNote("");
+      setSaFollowUpDate(addSaudiDays(7));
+    }
+  };
+
+  const saveCustomerAdvance = async () => {
+    const amount = parseFloat(caAmount);
+    if (!(amount > 0) || !caCustomerName.trim() || saving) return;
+    const paymentSource = caPaymentMode === "CASH" ? "DRAWER_CASH" : "BANK_TRANSFER";
+    const ok = await finish(
+      {
+        branch: caBranch,
+        type: "CUSTOMER_ADVANCE",
+        amount,
+        category: caPhoneOrRef.trim() || "Customer Advance",
+        recipientName: caCustomerName.trim(),
+        paymentSource,
+        paymentMode: caPaymentMode,
+        followUpDate: caFollowUpDate || addSaudiDays(7),
+        followUpStatus: "SCHEDULED",
+        note: caNote.trim() || `Customer Advance from ${caCustomerName.trim()}`,
+        date: todayIso(),
+      },
+      `Customer Advance SAR ${fmt(amount)} from ${caCustomerName.trim()} saved`
+    );
+    if (ok) {
+      fetch("/api/advances", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          branch: caBranch,
+          direction: "CUSTOMER_ADVANCE_IN",
+          partyName: caCustomerName.trim(),
+          phoneOrRef: caPhoneOrRef.trim() || null,
+          totalAdvanceAmount: amount,
+          paymentMode: caPaymentMode,
+          date: todayIso(),
+          followUpDate: caFollowUpDate || addSaudiDays(7),
+          notes: caNote.trim() || `Mobile Pocket Customer Advance (${caPaymentMode})`,
+        }),
+      }).catch((e) => console.error("Error syncing customer advance:", e));
+      setCaCustomerName("");
+      setCaPhoneOrRef("");
+      setCaAmount("");
+      setCaNote("");
+      setCaFollowUpDate(addSaudiDays(7));
     }
   };
 
@@ -833,7 +936,17 @@ export default function OwnerPocketPage() {
   };
 
   const kindLabel = (k: PocketType) =>
-    k === "EXPENSE" ? "💸 Expense" : k === "ADVANCE" ? "🤝 Advance" : "💵 Collection";
+    k === "EXPENSE"
+      ? "💸 Expense"
+      : k === "ADVANCE"
+      ? "🤝 Staff Advance"
+      : k === "PURCHASE"
+      ? "🛍️ Purchase"
+      : k === "SUPPLIER_ADVANCE"
+      ? "🏭 Supplier Advance"
+      : k === "CUSTOMER_ADVANCE"
+      ? "📥 Customer Advance"
+      : "💵 Collection";
 
   // Filtered staff for mobile list
   const filteredStaff = allStaff.filter((s) => {
@@ -920,6 +1033,9 @@ export default function OwnerPocketPage() {
                     setEBranch(b.id);
                     setABranch(b.id);
                     setCBranch(b.id);
+                    setPBranch(b.id);
+                    setSaBranch(b.id);
+                    setCaBranch(b.id);
                   }}
                   className={`shrink-0 rounded-full border px-3.5 py-1.5 text-xs font-bold ${
                     branch === b.id
@@ -967,7 +1083,258 @@ export default function OwnerPocketPage() {
                   <span className="block text-xl font-extrabold">🛍️ Log Purchase</span>
                   <span className="text-xs font-semibold opacity-70">Cash, Card, or Credit (Pay Later / Supplier Ledger)</span>
                 </button>
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setAction("SUPPLIER_ADVANCE")}
+                    className="w-full rounded-2xl border border-purple-400/40 bg-purple-500/20 p-4 text-left text-purple-200 shadow-[0_0_15px_rgba(168,85,247,0.2)] active:scale-[0.98] transition"
+                  >
+                    <span className="block text-base font-extrabold text-purple-300">🏭 Log Supplier Advance</span>
+                    <span className="text-[11px] font-semibold opacity-80">Pre-pay supplier (Cash / Card / Bank)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAction("CUSTOMER_ADVANCE")}
+                    className="w-full rounded-2xl border border-cyan-400/40 bg-cyan-500/20 p-4 text-left text-cyan-200 shadow-[0_0_15px_rgba(6,182,212,0.2)] active:scale-[0.98] transition"
+                  >
+                    <span className="block text-base font-extrabold text-cyan-300">📥 Log Customer Advance</span>
+                    <span className="text-[11px] font-semibold opacity-80">Receive deposit (Cash / Card / Bank)</span>
+                  </button>
+                </div>
               </div>
+            )}
+
+            {/* Supplier Advance form */}
+            {action === "SUPPLIER_ADVANCE" && (
+              <section className="space-y-4 rounded-2xl border border-purple-400/40 bg-[#081517] p-4">
+                <h2 className="text-lg font-extrabold text-purple-300">🏭 Log Supplier Advance</h2>
+                <div>
+                  <span className={labelCls}>Target Branch</span>
+                  <BranchPicker value={saBranch} onChange={setSaBranch} />
+                </div>
+                <div>
+                  <label className={labelCls}>Supplier / Vendor Name *</label>
+                  <input
+                    value={saSupplierName}
+                    onChange={(e) => setSaSupplierName(e.target.value)}
+                    placeholder="e.g. Jotun Regional Depot, Hempel Factory"
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className={labelCls}>Advance Amount (SAR) *</label>
+                  <input
+                    inputMode="decimal"
+                    value={saAmount}
+                    onChange={(e) => setSaAmount(e.target.value.replace(/[^0-9.]/g, ""))}
+                    placeholder="0.00"
+                    className={`${inputCls} text-3xl font-black`}
+                  />
+                </div>
+                <div>
+                  <span className={labelCls}>Mode of Payment *</span>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { value: "CASH", label: "💵 Cash" },
+                      { value: "CARD", label: "💳 Card" },
+                      { value: "BANK_TRANSFER", label: "🏦 Bank" },
+                    ].map((pm) => (
+                      <button
+                        key={pm.value}
+                        type="button"
+                        onClick={() => setSaPaymentMode(pm.value as "CASH" | "CARD" | "BANK_TRANSFER")}
+                        className={`rounded-xl border p-2.5 text-center text-xs font-bold transition ${
+                          saPaymentMode === pm.value
+                            ? "border-purple-400 bg-purple-400 text-black shadow-md"
+                            : "border-white/10 bg-[#0F2226] text-slate-300"
+                        }`}
+                      >
+                        {pm.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className={labelCls}>Quick Follow-Up / Delivery Date</label>
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {[
+                      { label: "+3 Days", days: 3 },
+                      { label: "+1 Week", days: 7 },
+                      { label: "+2 Weeks", days: 14 },
+                      { label: "+1 Month", days: 30 },
+                    ].map((q) => {
+                      const target = addSaudiDays(q.days);
+                      return (
+                        <button
+                          key={q.label}
+                          type="button"
+                          onClick={() => setSaFollowUpDate(target)}
+                          className={`rounded-lg border px-2.5 py-1 text-[11px] font-bold transition ${
+                            saFollowUpDate === target
+                              ? "border-purple-400 bg-purple-400 text-black"
+                              : "border-white/15 bg-[#0F2226] text-slate-300"
+                          }`}
+                        >
+                          {q.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <input
+                    type="date"
+                    value={saFollowUpDate}
+                    onChange={(e) => setSaFollowUpDate(e.target.value)}
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className={labelCls}>Reference / Order Note</label>
+                  <input
+                    value={saNote}
+                    onChange={(e) => setSaNote(e.target.value)}
+                    placeholder="e.g. Advance for 20 drums white primer"
+                    className={inputCls}
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setAction(null)}
+                    className="rounded-xl border border-white/10 px-4 py-3 text-sm font-bold text-slate-300"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={saveSupplierAdvance}
+                    disabled={!(parseFloat(saAmount) > 0) || !saSupplierName.trim() || saving}
+                    className="flex-1 rounded-xl bg-purple-400 py-3 font-extrabold text-black disabled:opacity-40"
+                  >
+                    {saving ? "Saving..." : "Save Supplier Advance"}
+                  </button>
+                </div>
+              </section>
+            )}
+
+            {/* Customer Advance form */}
+            {action === "CUSTOMER_ADVANCE" && (
+              <section className="space-y-4 rounded-2xl border border-cyan-400/40 bg-[#081517] p-4">
+                <h2 className="text-lg font-extrabold text-cyan-300">📥 Log Customer Advance</h2>
+                <div>
+                  <span className={labelCls}>Target Branch</span>
+                  <BranchPicker value={caBranch} onChange={setCaBranch} />
+                </div>
+                <div>
+                  <label className={labelCls}>Customer / Contractor Name *</label>
+                  <input
+                    value={caCustomerName}
+                    onChange={(e) => setCaCustomerName(e.target.value)}
+                    placeholder="e.g. Al-Fanar Contracting"
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className={labelCls}>Phone / Order Reference (Optional)</label>
+                  <input
+                    value={caPhoneOrRef}
+                    onChange={(e) => setCaPhoneOrRef(e.target.value)}
+                    placeholder="e.g. 050XXXXXXX or Quote #104"
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className={labelCls}>Advance Received (SAR) *</label>
+                  <input
+                    inputMode="decimal"
+                    value={caAmount}
+                    onChange={(e) => setCaAmount(e.target.value.replace(/[^0-9.]/g, ""))}
+                    placeholder="0.00"
+                    className={`${inputCls} text-3xl font-black`}
+                  />
+                </div>
+                <div>
+                  <span className={labelCls}>Mode of Payment *</span>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { value: "CASH", label: "💵 Cash" },
+                      { value: "CARD", label: "💳 Card" },
+                      { value: "BANK_TRANSFER", label: "🏦 Bank" },
+                    ].map((pm) => (
+                      <button
+                        key={pm.value}
+                        type="button"
+                        onClick={() => setCaPaymentMode(pm.value as "CASH" | "CARD" | "BANK_TRANSFER")}
+                        className={`rounded-xl border p-2.5 text-center text-xs font-bold transition ${
+                          caPaymentMode === pm.value
+                            ? "border-cyan-400 bg-cyan-400 text-black shadow-md"
+                            : "border-white/10 bg-[#0F2226] text-slate-300"
+                        }`}
+                      >
+                        {pm.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className={labelCls}>Quick Follow-Up Date</label>
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {[
+                      { label: "+3 Days", days: 3 },
+                      { label: "+1 Week", days: 7 },
+                      { label: "+2 Weeks", days: 14 },
+                      { label: "+1 Month", days: 30 },
+                    ].map((q) => {
+                      const target = addSaudiDays(q.days);
+                      return (
+                        <button
+                          key={q.label}
+                          type="button"
+                          onClick={() => setCaFollowUpDate(target)}
+                          className={`rounded-lg border px-2.5 py-1 text-[11px] font-bold transition ${
+                            caFollowUpDate === target
+                              ? "border-cyan-400 bg-cyan-400 text-black"
+                              : "border-white/15 bg-[#0F2226] text-slate-300"
+                          }`}
+                        >
+                          {q.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <input
+                    type="date"
+                    value={caFollowUpDate}
+                    onChange={(e) => setCaFollowUpDate(e.target.value)}
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className={labelCls}>Note / Special Order Details</label>
+                  <input
+                    value={caNote}
+                    onChange={(e) => setCaNote(e.target.value)}
+                    placeholder="e.g. Advance deposit for custom tinting order"
+                    className={inputCls}
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setAction(null)}
+                    className="rounded-xl border border-white/10 px-4 py-3 text-sm font-bold text-slate-300"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={saveCustomerAdvance}
+                    disabled={!(parseFloat(caAmount) > 0) || !caCustomerName.trim() || saving}
+                    className="flex-1 rounded-xl bg-cyan-400 py-3 font-extrabold text-black disabled:opacity-40"
+                  >
+                    {saving ? "Saving..." : "Save Customer Advance"}
+                  </button>
+                </div>
+              </section>
             )}
 
             {/* Expense form */}

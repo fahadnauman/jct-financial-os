@@ -4,7 +4,14 @@ import { checkIsOwner, normalizeBranch, normalizePaymentMode, VALID_BRANCHES } f
 
 export const dynamic = "force-dynamic";
 
-const TYPES = ["EXPENSE", "ADVANCE", "CREDIT_COLLECTION", "PURCHASE"];
+const TYPES = [
+  "EXPENSE",
+  "ADVANCE",
+  "CREDIT_COLLECTION",
+  "PURCHASE",
+  "SUPPLIER_ADVANCE",
+  "CUSTOMER_ADVANCE",
+];
 const SOURCES = ["DRAWER_CASH", "OWNER_POCKET", "BANK_TRANSFER", "SUPPLIER_CREDIT"];
 
 export async function GET(req: Request) {
@@ -79,6 +86,7 @@ export async function POST(req: Request) {
         amount,
         originalAmount: body.originalAmount !== undefined && body.originalAmount !== null ? Number(body.originalAmount) : null,
         isEdited: Boolean(body.isEdited),
+        isReturned: Boolean(body.isReturned),
         overrideReason: str(body.overrideReason),
         overrideNote: str(body.overrideNote),
         category: str(body.category),
@@ -88,6 +96,8 @@ export async function POST(req: Request) {
         supplierInvoiceNum: str(body.supplierInvoiceNum),
         billPdfUrl: str(body.billPdfUrl) || str(body.receiptUrl),
         receiptUrl: str(body.receiptUrl) || str(body.billPdfUrl),
+        followUpDate: str(body.followUpDate),
+        followUpStatus: str(body.followUpStatus) || "SCHEDULED",
         note: str(body.note),
         date: String(body.date),
       },
@@ -117,6 +127,7 @@ export async function PUT(req: Request) {
   if (body.amount !== undefined) updateData.amount = Math.max(0, Number(body.amount) || 0);
   if (body.originalAmount !== undefined) updateData.originalAmount = body.originalAmount !== null ? Number(body.originalAmount) : null;
   if (body.isEdited !== undefined) updateData.isEdited = Boolean(body.isEdited);
+  if (body.isReturned !== undefined) updateData.isReturned = Boolean(body.isReturned);
   if (body.overrideReason !== undefined) updateData.overrideReason = str(body.overrideReason);
   if (body.overrideNote !== undefined) updateData.overrideNote = str(body.overrideNote);
   if (body.category !== undefined) updateData.category = str(body.category);
@@ -133,6 +144,8 @@ export async function PUT(req: Request) {
   if (body.supplierInvoiceNum !== undefined) updateData.supplierInvoiceNum = str(body.supplierInvoiceNum);
   if (body.billPdfUrl !== undefined) updateData.billPdfUrl = str(body.billPdfUrl);
   if (body.receiptUrl !== undefined) updateData.receiptUrl = str(body.receiptUrl);
+  if (body.followUpDate !== undefined) updateData.followUpDate = str(body.followUpDate);
+  if (body.followUpStatus !== undefined) updateData.followUpStatus = str(body.followUpStatus);
   if (body.note !== undefined) updateData.note = str(body.note);
   if (typeof body.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.date)) {
     updateData.date = body.date;

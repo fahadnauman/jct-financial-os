@@ -14,6 +14,11 @@ model PocketTransaction {
   amount         Float
   originalAmount Float?
   isEdited       Boolean  @default(false)
+  isReturned     Boolean  @default(false)
+  discountAmount Float?   @default(0)
+  roundOffAmount Float?   @default(0)
+  businessCommission Float? @default(0)
+  netPayableAmount Float?
   overrideReason String?  // "BUSINESS_COMMISSION", "BILL_MISTAKE", "CUSTOM"
   overrideNote   String?
   category       String?
@@ -23,6 +28,8 @@ model PocketTransaction {
   supplierInvoiceNum String?
   billPdfUrl     String?
   receiptUrl     String?
+  followUpDate   String?
+  followUpStatus String?  @default("SCHEDULED")
   note           String?
   date           String   // YYYY-MM-DD
   createdAt      DateTime @default(now())
@@ -84,10 +91,17 @@ model Invoice {
   amount         Float
   originalAmount Float?
   isEdited       Boolean  @default(false)
+  isReturned     Boolean  @default(false)
+  discountAmount Float?   @default(0)
+  roundOffAmount Float?   @default(0)
+  businessCommission Float? @default(0)
+  netPayableAmount Float?
   overrideReason String?  // "BUSINESS_COMMISSION", "BILL_MISTAKE", "CUSTOM"
   overrideNote   String?
   paymentMode    String?  // e.g., "SAB", "AL_RAJHI", "SNB", "VISA", "MADA", "BANK_TRANSFER", "CASH"
   posTerminal    String?
+  followUpDate   String?
+  followUpStatus String?  @default("SCHEDULED")
   branch         String?
   date           String?
   createdAt      DateTime @default(now())
@@ -102,6 +116,8 @@ model CreditCustomer {
   totalDue           Float    @default(0)
   outstandingBalance Float?   @default(0)
   linkedInvoiceNum   String?
+  followUpDate       String?
+  followUpStatus     String?  @default("SCHEDULED")
   status             String   @default("CURRENT") // CURRENT, OVERDUE, HIGH_RISK
   updatedAt          DateTime @updatedAt
   createdAt          DateTime @default(now())
@@ -113,6 +129,8 @@ model CreditRadar {
   linkedInvoiceNum   String?
   invoiceNo          String?
   originalDate       String?
+  followUpDate       String?
+  followUpStatus     String?  @default("SCHEDULED")
   amount             Float    @default(0)
   outstandingBalance Float    @default(0)
   status             String   @default("CURRENT")
@@ -131,7 +149,11 @@ model SupplierBill {
   billPdfUrl         String?
   receiptUrl         String?
   amount             Float
+  originalAmount     Float?
+  isReturned         Boolean  @default(false)
   dueDate            DateTime
+  followUpDate       String?
+  followUpStatus     String?  @default("SCHEDULED")
   isPaid             Boolean  @default(false)
   paymentMode        String?  // e.g., "SAB", "AL_RAJHI", "SNB", "VISA", "MADA", "BANK_TRANSFER", "CASH"
   createdAt          DateTime @default(now())
@@ -145,8 +167,12 @@ model Purchase {
   billPdfUrl         String?
   receiptUrl         String?
   amount             Float
+  originalAmount     Float?
+  isReturned         Boolean  @default(false)
   category           String   @default("Credit Purchase")
   dueDate            String?
+  followUpDate       String?
+  followUpStatus     String?  @default("SCHEDULED")
   paymentMode        String?
   date               String
   createdAt          DateTime @default(now())
@@ -162,6 +188,8 @@ model Expense {
   billPdfUrl         String?
   receiptUrl         String?
   amount             Float
+  originalAmount     Float?
+  isReturned         Boolean  @default(false)
   paymentMode        String?
   date               String
   createdAt          DateTime @default(now())
@@ -225,3 +253,43 @@ model BranchSettings {
   updatedAt          DateTime @updatedAt
   createdAt          DateTime @default(now())
 }
+
+// Manual Cash & Bank Capital Deposits / Injections in Settings Module
+model CapitalDeposit {
+  id            String   @id @default(cuid())
+  branch        String   @default("JCT_HARDWARE_JOTUN")
+  targetAccount String   @default("CASH") // "CASH" | "BANK"
+  amount        Float
+  date          String   // YYYY-MM-DD (Saudi AST)
+  notes         String?
+  createdBy     String   @default("OWNER")
+  createdAt     DateTime @default(now())
+
+  @@index([branch, date])
+  @@index([targetAccount])
+}
+
+// Intelligent Customer & Supplier Advance Ledger
+model AdvanceRecord {
+  id                 String   @id @default(cuid())
+  branch             String   @default("JCT_HARDWARE_JOTUN")
+  direction          String   // "CUSTOMER_ADVANCE_IN" | "SUPPLIER_ADVANCE_OUT"
+  partyName          String
+  phoneOrRef         String?
+  branchInvNo        String?
+  totalAdvanceAmount Float
+  utilizedAmount     Float    @default(0)
+  remainingBalance   Float
+  paymentMode        String   @default("CASH") // "CASH" | "BANK" | "CARD" | "SAB" | "AL_RAJHI" | "SNB" | "BANK_TRANSFER"
+  date               String   // YYYY-MM-DD (Saudi AST)
+  followUpDate       String?  // YYYY-MM-DD
+  followUpStatus     String?  @default("SCHEDULED") // "PENDING" | "SCHEDULED" | "COMPLETED"
+  notes              String?
+  status             String   @default("ACTIVE") // "ACTIVE" | "ADJUSTED" | "REFUNDED"
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([branch, direction, status])
+  @@index([partyName])
+}
+

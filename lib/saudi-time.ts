@@ -53,6 +53,25 @@ export const saudiTodayIso = (input?: Date | string | number): string => {
   return `${p.year}-${p.month}-${p.day}`;
 };
 
+/** Add `days` to a Saudi YYYY-MM-DD date string (defaults to Saudi Today) and return YYYY-MM-DD in AST. */
+export const addSaudiDays = (days: number, fromIso?: string): string => {
+  const baseIso = fromIso && /^\d{4}-\d{2}-\d{2}$/.test(fromIso.trim()) ? fromIso.trim() : saudiTodayIso();
+  const [y, m, d] = baseIso.split("-").map((v) => parseInt(v, 10));
+  const utcMs = Date.UTC(y, (m || 1) - 1, (d || 1) + days, 12, 0, 0);
+  return saudiTodayIso(utcMs);
+};
+
+/** Difference in calendar days between `targetIso` (YYYY-MM-DD) and Saudi Today (`target - today`). */
+export const daysDiffFromSaudiToday = (targetIso?: string | null): number | null => {
+  if (!targetIso || !/^\d{4}-\d{2}-\d{2}$/.test(targetIso.trim())) return null;
+  const todayIso = saudiTodayIso();
+  const [ty, tm, td] = targetIso.trim().split("-").map((v) => parseInt(v, 10));
+  const [cy, cm, cd] = todayIso.split("-").map((v) => parseInt(v, 10));
+  const targetMs = Date.UTC(ty, (tm || 1) - 1, td || 1);
+  const currentMs = Date.UTC(cy, (cm || 1) - 1, cd || 1);
+  return Math.round((targetMs - currentMs) / 86400000);
+};
+
 /** YYYY-MM in Saudi time. */
 export const saudiMonthIso = (input?: Date | string | number): string => {
   const p = saudiParts(input);

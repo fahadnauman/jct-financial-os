@@ -60,8 +60,11 @@ export const normalizeCardType = (raw?: string | null): string => {
 
 export interface GenericInvoiceLike {
   invoiceNo?: string;
+  branchInvNo?: string;
   referenceId?: string;
   amount: number;
+  netPayableAmount?: number;
+  isReturned?: boolean;
   paymentMode?: string;
   posTerminal?: string;
   posTerminalDevice?: string;
@@ -92,6 +95,9 @@ export interface GenericPreLoggedEntryLike {
   id: string;
   type: string;
   amount: number;
+  receiptNo?: string;
+  invoiceNumber?: string;
+  isReturned?: boolean;
   paymentMode?: string;
   terminal?: string;
   network?: string;
@@ -158,8 +164,14 @@ export function calcSessionPosBreakdown(
 
   // 1. Process active ERP invoices
   for (const inv of erpInvoices) {
-    if (inv.invoiceNo) processedInvoices.add(inv.invoiceNo.trim());
+    if (inv.isReturned) continue;
+    if (inv.invoiceNo) processedInvoices.add(inv.invoiceNo.trim().replace(/^#/, ""));
+    if (inv.branchInvNo) processedInvoices.add(inv.branchInvNo.trim().replace(/^#/, ""));
 
+    const effectiveInvAmount =
+      inv.netPayableAmount !== undefined && inv.netPayableAmount >= 0
+        ? inv.netPayableAmount
+        : inv.amount;
     const mode = (inv.paymentMode || "").toUpperCase();
 
     if (mode === "POS_SWIPE" || mode === "SWIPE") {
@@ -169,10 +181,10 @@ export function calcSessionPosBreakdown(
       const cardType =
         inv.posTerminal === "VISA_MC" && inv.cardNetwork !== "mada"
           ? "Visa"
-          : normalizeCardType(inv.cardNetwork || inv.network);
-      addRecord(termKey, cardType, inv.amount);
+          : normalizeCardType(inv.splitCardBrand || inv.cardNetwork || inv.network);
+      addRecord(termKey, cardType, effectiveInvAmount);
     } else if (mode === "BANK_TRANSFER" || mode === "BANK") {
-      addRecord("BANK_TRANSFER", "Direct Transfer", inv.amount);
+      addRecord("BANK_TRANSFER", "Direct Transfer", effectiveInvAmount);
     } else if (mode === "SPLIT") {
       const bankPortion = Number(inv.splitBankAmount) || 0;
       if (bankPortion > 0) {
@@ -181,7 +193,9 @@ export function calcSessionPosBreakdown(
         if (isTransfer) {
           addRecord("BANK_TRANSFER", "Direct Transfer", bankPortion);
         } else {
-          const termKey = normalizeTerminalKey(inv.splitBankChoice || inv.splitPosTerminal);
+          const termKey = normalizeTerminalKey(
+            inv.splitBankChoice || inv.posTerminalDevice || inv.terminal || inv.splitPosTerminal
+          );
           const cardType = normalizeCardType(inv.splitCardBrand || inv.cardNetwork || inv.network);
           addRecord(termKey, cardType, bankPortion);
         }
@@ -199,7 +213,8 @@ export function calcSessionPosBreakdown(
 
   // 2. Process any unmatched pre-logged bank invoices
   for (const b of preLoggedBankInvoices) {
-    if (b.invoiceNo && processedInvoices.has(b.invoiceNo.trim())) continue;
+    const cleanNo = (b.invoiceNo || "").trim().replace(/^#/, "");
+    if (cleanNo && processedInvoices.has(cleanNo)) continue;
     const amt = Number(b.amount) || 0;
     if (amt <= 0) continue;
 
@@ -213,9 +228,14 @@ export function calcSessionPosBreakdown(
     }
   }
 
-  // 3. Process any non-cash pre-logged inflow entries (e.g. OTHER_IN, CREDIT_RECD via card)
+  // 3. Process any non-cash pre-logged inflow entries (e.g. OTHER_IN, CREDIT_RECD, CUSTOMER_ADVANCE via card/bank)
   for (const entry of preLoggedEntries) {
-    if (entry.type === "EXPENSE") continue; // Keep expenses separate from settlements
+    if (entry.isReturned) continue;
+    if (entry.type === "EXPENSE" || entry.type === "CREDIT_SALE") continue;
+    const cleanEntryInv = (entry.invoiceNumber || entry.receiptNo || "").trim().replace(/^#/, "");
+    if (entry.type === "SPLIT_SALE" && cleanEntryInv && processedInvoices.has(cleanEntryInv)) {
+      continue;
+    }
     const mode = (entry.paymentMode || "").toUpperCase();
     const amt = Number(entry.amount) || 0;
 
@@ -231,8 +251,16 @@ export function calcSessionPosBreakdown(
       }
     } else if (mode === "BANK_TRANSFER" || mode === "BANK") {
       addRecord("BANK_TRANSFER", "Direct Transfer", amt);
-    } else if (mode === "POS_SWIPE" || mode === "CARD" || mode === "MADA" || mode === "VISA") {
-      const termKey = normalizeTerminalKey(entry.terminal);
+    } else if (
+      mode === "POS_SWIPE" ||
+      mode === "CARD" ||
+      mode === "MADA" ||
+      mode === "VISA" ||
+      mode === "SAB" ||
+      mode === "AL_RAJHI" ||
+      mode === "SNB"
+    ) {
+      const termKey = normalizeTerminalKey(entry.terminal || mode);
       const cardType = normalizeCardType(entry.network || mode);
       addRecord(termKey, cardType, amt);
     }

@@ -18,7 +18,13 @@ export type BranchId =
   | "HEMPEL_JUBAIL"
   | "JOTUN_DAMMAM"
   | "SIGMA_JUBAIL";
-export type PocketType = "EXPENSE" | "ADVANCE" | "CREDIT_COLLECTION" | "PURCHASE";
+export type PocketType =
+  | "EXPENSE"
+  | "ADVANCE"
+  | "CREDIT_COLLECTION"
+  | "PURCHASE"
+  | "SUPPLIER_ADVANCE"
+  | "CUSTOMER_ADVANCE";
 export type PaymentSource = "DRAWER_CASH" | "OWNER_POCKET" | "BANK_TRANSFER" | "SUPPLIER_CREDIT";
 
 export const POCKET_BRANCHES: { id: BranchId; short: string; full: string }[] = [
@@ -34,6 +40,8 @@ export interface PocketTransaction {
   branch: BranchId;
   type: PocketType;
   amount: number;
+  originalAmount?: number | null;
+  isReturned?: boolean;
   /** EXPENSE: category · ADVANCE: purpose · CREDIT_COLLECTION: invoice/reference */
   category: string | null;
   /** ADVANCE: staff name · CREDIT_COLLECTION: customer name */
@@ -42,6 +50,8 @@ export interface PocketTransaction {
   paymentMode?: string | null;
   receiptUrl?: string | null;
   billPdfUrl?: string | null;
+  followUpDate?: string | null;
+  followUpStatus?: string | null;
   note: string | null;
   date: string;
   createdAt: string;
@@ -57,6 +67,10 @@ export const pocketTag = (type: PocketType): string =>
     ? "⚡ Collected by Owner (On-Road)"
     : type === "PURCHASE"
     ? "⚡ Logged by Owner (Purchase)"
+    : type === "SUPPLIER_ADVANCE"
+    ? "⚡ Logged by Owner (Supplier Advance)"
+    : type === "CUSTOMER_ADVANCE"
+    ? "⚡ Logged by Owner (Customer Advance)"
     : "⚡ Logged by Owner (Mobile)";
 
 /** Today's date (YYYY-MM-DD) in Saudi time (Asia/Riyadh), regardless of device timezone. */

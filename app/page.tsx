@@ -15,6 +15,8 @@ import {
   saudiTime12,
   saudiDateTimeString,
   saudiDateString,
+  addSaudiDays,
+  daysDiffFromSaudiToday,
 } from "../lib/saudi-time";
 import SettingsView from "./settings-view";
 import MonthlyAuditsView from "./monthly-audits-view";
@@ -180,12 +182,128 @@ export interface SupplierBillItem {
   supplierName: string;
   amount: number;
   dueDate: string;
+  followUpDate?: string;
+  followUpStatus?: string;
   category: "Credit Purchase" | "Cash Purchase" | "Bank Purchase" | "Return";
   paymentMode?: string;
   createdAt: string;
   source: "Daily Register" | "Supplier Hub";
   supplierInvoiceNum?: string;
   billPdfUrl?: string;
+}
+
+export interface AdvanceRecordItem {
+  id: string;
+  branch: string;
+  direction: "CUSTOMER_ADVANCE_IN" | "SUPPLIER_ADVANCE_OUT";
+  partyName: string;
+  phoneOrRef: string | null;
+  branchInvNo: string | null;
+  totalAdvanceAmount: number;
+  utilizedAmount: number;
+  remainingBalance: number;
+  paymentMode: string;
+  date: string;
+  followUpDate: string | null;
+  followUpStatus: string | null;
+  notes: string;
+  status: "ACTIVE" | "ADJUSTED" | "REFUNDED";
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function FollowUpStatusBadge({
+  followUpDate,
+  compact = false,
+}: {
+  followUpDate?: string | null;
+  compact?: boolean;
+}) {
+  if (!followUpDate || !/^\d{4}-\d{2}-\d{2}$/.test(followUpDate)) return null;
+  const diff = daysDiffFromSaudiToday(followUpDate);
+  if (diff === null) return null;
+  const isDueOrOverdue = diff <= 0;
+  if (isDueOrOverdue) {
+    return (
+      <span
+        className={`inline-flex items-center gap-1 rounded-full border border-rose-500/40 bg-rose-500/15 font-extrabold text-rose-600 dark:text-rose-300 ${
+          compact ? "px-2 py-0.5 text-[10px]" : "px-2.5 py-0.5 text-[11px]"
+        }`}
+      >
+        ⚠️ Follow-Up Due Today / Overdue ({followUpDate})
+      </span>
+    );
+  }
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full border border-jct-turquoise/40 bg-jct-turquoise/15 font-extrabold text-jct-charcoal dark:text-jct-turquoise ${
+        compact ? "px-2 py-0.5 text-[10px]" : "px-2.5 py-0.5 text-[11px]"
+      }`}
+    >
+      📅 Follow-Up: {followUpDate} (in {diff} {diff === 1 ? "day" : "days"})
+    </span>
+  );
+}
+
+export function QuickFollowUpPicker({
+  value,
+  onChange,
+  label = "Quick Follow-Up:",
+  compact = false,
+  showDateInput = true,
+}: {
+  value?: string | null;
+  onChange: (nextDate: string) => void;
+  label?: string;
+  compact?: boolean;
+  showDateInput?: boolean;
+}) {
+  const safeVal = value || "";
+  const presets = [
+    { label: "+3 Days", days: 3 },
+    { label: "+1 Week", days: 7 },
+    { label: "+2 Weeks", days: 14 },
+    { label: "+1 Month", days: 30 },
+  ];
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {label && (
+        <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 mr-0.5">
+          {label}
+        </span>
+      )}
+      {presets.map((p) => {
+        const target = addSaudiDays(p.days);
+        const active = safeVal === target;
+        return (
+          <button
+            key={p.label}
+            type="button"
+            onClick={() => onChange(target)}
+            className={`rounded-md border font-bold transition ${
+              compact ? "px-2 py-0.5 text-[10px]" : "px-2.5 py-1 text-[11px]"
+            } ${
+              active
+                ? "border-jct-turquoise bg-jct-turquoise text-jct-charcoal shadow-sm"
+                : "border-slate-300 dark:border-[#262626] bg-white dark:bg-[#111] text-slate-600 dark:text-slate-300 hover:border-jct-turquoise"
+            }`}
+          >
+            {p.label}
+          </button>
+        );
+      })}
+      {showDateInput && (
+        <input
+          type="date"
+          value={safeVal || saudiTodayIso()}
+          onChange={(e) => onChange(e.target.value)}
+          className={`rounded-md border border-slate-300 dark:border-[#262626] bg-white dark:bg-[#111] font-mono font-bold text-jct-charcoal dark:text-jct-offwhite outline-none focus:border-jct-turquoise ${
+            compact ? "px-2 py-0.5 text-[10px]" : "px-2.5 py-1 text-[11px]"
+          }`}
+        />
+      )}
+    </div>
+  );
 }
 
 export interface StaffMember {
@@ -520,6 +638,7 @@ export type PreLoggedEntryType =
   | "EXPENSE"
   | "CREDIT_RECD"
   | "CREDIT_SALE"
+  | "CUSTOMER_ADVANCE"
   | "SPLIT_SALE"
   | "LOAN_IN"
   | "OTHER_IN";
@@ -543,6 +662,7 @@ export const STRICT_EXPENSE_CATEGORIES = [
   "Water",
   "Salary",
   "Staff Advance",
+  "Supplier Advance",
   "Credit Purchase",
   "Cash Purchase",
   "Bank Purchase",
@@ -615,6 +735,7 @@ export interface PreLoggedBankInvoice {
 
 export interface PreLoggedEntry {
   id: string;
+  sourcePocketId?: string;
   invoiceNumber?: string;
   linkedInvoiceNum?: string;
   originalDate?: string;
@@ -637,6 +758,7 @@ export interface PreLoggedEntry {
   note?: string;
   amount: number;
   originalAmount?: number;
+  isReturned?: boolean;
   isEdited?: boolean;
   overrideReason?: OverrideReason;
   overrideNote?: string;
@@ -663,6 +785,13 @@ export interface ErpInvoiceItem {
   originalAmount?: number;
   originalDate?: string;
   linkedInvoiceNum?: string;
+  isReturned?: boolean;
+  isManual?: boolean;
+  discountAmount?: number;
+  roundOffAmount?: number;
+  businessCommission?: number;
+  netPayableAmount?: number;
+  adjustmentsApplied?: boolean;
   isEdited?: boolean;
   overrideReason?: OverrideReason;
   overrideNote?: string;
@@ -863,22 +992,25 @@ function buildClassicDataSheetRows(
     let toBankAmt: number | null = null;
 
     if (inv) {
-      invoiceNo = inv.invoiceNo;
-      if (inv.paymentMode === "CASH") {
-        amtCashSale = inv.amount;
-      } else if (inv.paymentMode === "CREDIT_SALE") {
-        creditInvAmt = inv.amount;
-      } else if (inv.paymentMode === "SPLIT") {
-        amtCashSale = inv.splitCashAmount || null;
-        const bAmt = inv.splitBankAmount || 0;
-        toBankAmt = bAmt;
-        toBank = `Split ${inv.splitBankMethod === "BANK_TRANSFER" ? "Bank" : "Card"} - SAR ${fmt(bAmt)}`;
-      } else if (inv.paymentMode === "BANK_TRANSFER") {
-        toBankAmt = inv.amount;
-        toBank = `Bank #${inv.invoiceNo} - SAR ${fmt(inv.amount)}`;
-      } else if (inv.paymentMode === "POS_SWIPE") {
-        toBankAmt = inv.amount;
-        toBank = `Card #${inv.invoiceNo} - SAR ${fmt(inv.amount)}`;
+      invoiceNo = inv.branchInvNo || inv.invoiceNo;
+      const effInvAmt = inv.isReturned ? 0 : inv.amount;
+      if (!inv.isReturned) {
+        if (inv.paymentMode === "CASH") {
+          amtCashSale = effInvAmt;
+        } else if (inv.paymentMode === "CREDIT_SALE") {
+          creditInvAmt = effInvAmt;
+        } else if (inv.paymentMode === "SPLIT") {
+          amtCashSale = inv.splitCashAmount || null;
+          const bAmt = inv.splitBankAmount || 0;
+          toBankAmt = bAmt;
+          toBank = `Split ${inv.splitBankMethod === "BANK_TRANSFER" ? "Bank" : "Card"} - SAR ${fmt(bAmt)}`;
+        } else if (inv.paymentMode === "BANK_TRANSFER") {
+          toBankAmt = effInvAmt;
+          toBank = `Bank #${invoiceNo} - SAR ${fmt(effInvAmt)}`;
+        } else if (inv.paymentMode === "POS_SWIPE") {
+          toBankAmt = effInvAmt;
+          toBank = `Card #${invoiceNo} - SAR ${fmt(effInvAmt)}`;
+        }
       }
     } else if (sRow) {
       invoiceNo = sRow.invoiceNo || "";
@@ -900,13 +1032,16 @@ function buildClassicDataSheetRows(
     let fromBank: number | null = null;
 
     if (inf) {
-      if (inf.type === "CREDIT_RECD") {
-        receiptNo = inf.customerName || inf.receiptNo || inf.title || "Credit Recd";
-        creditAmtRecd = inf.amount;
-      } else if (inf.type === "LOAN_IN") {
-        loanIn = inf.amount;
-      } else if (inf.type === "OTHER_IN") {
-        otherAmtRecd = inf.amount;
+      const effInfAmt = inf.isReturned ? 0 : inf.amount;
+      if (!inf.isReturned) {
+        if (inf.type === "CREDIT_RECD") {
+          receiptNo = inf.customerName || inf.receiptNo || inf.title || "Credit Recd";
+          creditAmtRecd = effInfAmt;
+        } else if (inf.type === "LOAN_IN") {
+          loanIn = effInfAmt;
+        } else if (inf.type === "OTHER_IN") {
+          otherAmtRecd = effInfAmt;
+        }
       }
     } else if (sRow) {
       receiptNo = sRow.receiptNo || "";
@@ -943,16 +1078,19 @@ function buildClassicDataSheetRows(
     const loanOut: number | null = sRow && parseNum(sRow.loanOut) > 0 ? parseNum(sRow.loanOut) : null;
     const excessAmt: number | null = sRow && parseNum(sRow.excessAmt) > 0 ? parseNum(sRow.excessAmt) : null;
 
-    if (exp) {
+    if (exp && !exp.isReturned) {
       const cat = exp.expenseCategory || exp.title;
-      if (cat === "Cash Purchase" || exp.title.toLowerCase().includes("cash purchase")) {
-        cashPurchase = exp.amount;
-      } else if (cat === "Credit Purchase" || exp.title.toLowerCase().includes("credit purchase")) {
+      const pm = (exp.paymentMode || "CASH").toUpperCase();
+      const isCreditExp = cat === "Credit Purchase" || pm === "CREDIT" || pm === "PAY_LATER" || exp.title.toLowerCase().includes("credit purchase");
+      const isBankExp = cat === "Bank Purchase" || ["CARD", "POS_SWIPE", "VISA", "MADA", "BANK", "BANK_TRANSFER", "SAB", "AL_RAJHI", "SNB"].includes(pm);
+      if (isCreditExp) {
         creditPurchaseAmt = exp.amount;
         creditPurchase = `${exp.title || "Supplier"} - SAR ${fmt(exp.amount)}`;
-      } else if (cat === "Credit Purchase Payment") {
+      } else if (!isBankExp && (cat === "Cash Purchase" || exp.title.toLowerCase().includes("cash purchase"))) {
+        cashPurchase = exp.amount;
+      } else if (!isBankExp && cat === "Credit Purchase Payment") {
         creditPurchasePayment = exp.amount;
-      } else {
+      } else if (!isBankExp) {
         expenseAmt = exp.amount;
         expense = `${cat} - SAR ${fmt(exp.amount)}`;
       }
@@ -1030,7 +1168,7 @@ export function ClassicDataSheetTable({
   activeErpList = [],
   preLoggedEntries = [],
   openingBalance = 500,
-  date = "12-09-2026",
+  date = saudiCalendarDateStr(),
   branchName = "Jubail Main",
   className = "",
   hideFullscreenToggle = false,
@@ -1355,6 +1493,7 @@ export const resolveSplitBankChoice = (inv: ErpInvoiceItem): SplitBankChoice | u
 };
 
 export const calcInvoiceCashPortion = (inv: ErpInvoiceItem): number => {
+  if (inv.isReturned) return 0;
   if (
     inv.paymentMode === "CASH" ||
     (inv.paymentMode as string) === "Cash" ||
@@ -1369,6 +1508,7 @@ export const calcInvoiceCashPortion = (inv: ErpInvoiceItem): number => {
 };
 
 export const calcInvoiceBankGrossPortion = (inv: ErpInvoiceItem): number => {
+  if (inv.isReturned) return 0;
   if (inv.paymentMode === "BANK_TRANSFER" || inv.paymentMode === "POS_SWIPE") return inv.amount;
   if (inv.paymentMode === "SPLIT") return r2(inv.splitBankAmount || 0);
   if (inv.paymentMode === "CREDIT_SALE" && inv.creditDownMethod === "POS_SWIPE") {
@@ -1378,6 +1518,16 @@ export const calcInvoiceBankGrossPortion = (inv: ErpInvoiceItem): number => {
 };
 
 export const calcInvoiceFeeBreakdown = (inv: ErpInvoiceItem): PosFeeBreakdown => {
+  if (inv.isReturned) {
+    return {
+      gross: 0,
+      mdrBase: 0,
+      vatOnFee: 0,
+      totalFee: 0,
+      net: 0,
+      isMada: false,
+    };
+  }
   const term = (inv.posTerminalDevice || inv.terminal || (inv.posTerminal === "VISA_MC" ? "SAB" : inv.posTerminal) || "SAB") as PosTerminalBank;
   const netw: "mada" | "visa" = inv.cardNetwork || inv.network || (inv.posTerminal === "VISA_MC" ? "visa" : "mada");
 
@@ -1407,6 +1557,9 @@ export const calcInvoiceFeeBreakdown = (inv: ErpInvoiceItem): PosFeeBreakdown =>
 };
 
 export const calcEntryPosFeeBreakdown = (entry: PreLoggedEntry): PosFeeBreakdown => {
+  if (entry.isReturned) {
+    return { gross: 0, mdrBase: 0, vatOnFee: 0, totalFee: 0, net: 0, isMada: false };
+  }
   const isBankTransfer =
     entry.paymentMode === "BANK_TRANSFER" ||
     entry.paymentMode === "Bank Transfer" ||
@@ -1429,6 +1582,176 @@ export const calcEntryPosFeeBreakdown = (entry: PreLoggedEntry): PosFeeBreakdown
   const term = (entry.terminal || "SAB") as PosTerminalBank;
   const netw: "mada" | "visa" = entry.network || (entry.paymentMode === "VISA" ? "visa" : "mada");
   return calcAmountPosFeeBreakdown(entry.amount, term, netw);
+};
+
+export const classifyExpenseOutflow = (
+  e: PreLoggedEntry
+): "CASH" | "BANK" | "CREDIT" | "RETURNED" => {
+  if (e.isReturned) return "RETURNED";
+  const cat = (e.expenseCategory || "").trim();
+  const titleLower = (e.title || "").toLowerCase();
+  const pm = (e.paymentMode || "CASH").toUpperCase().trim();
+  if (
+    cat === "Credit Purchase" ||
+    pm === "CREDIT" ||
+    pm === "PAY_LATER" ||
+    pm === "CREDIT_PURCHASE" ||
+    titleLower.startsWith("credit purchase")
+  ) {
+    return "CREDIT";
+  }
+  if (
+    cat === "Bank Purchase" ||
+    pm === "CARD" ||
+    pm === "POS_SWIPE" ||
+    pm === "VISA" ||
+    pm === "MADA" ||
+    pm === "MASTERCARD" ||
+    pm === "BANK" ||
+    pm === "BANK_TRANSFER" ||
+    pm === "BANK TRANSFER" ||
+    pm === "SAB" ||
+    pm === "AL_RAJHI" ||
+    pm === "SNB"
+  ) {
+    return "BANK";
+  }
+  return "CASH";
+};
+
+export const deduplicatePreLoggedEntries = (entries: PreLoggedEntry[]): PreLoggedEntry[] => {
+  const result: PreLoggedEntry[] = [];
+  const seenIds = new Set<string>();
+  const seenPocketIds = new Set<string>();
+  const seenSignatures = new Map<string, number>();
+
+  const getPocketId = (e: PreLoggedEntry): string | null => {
+    if (e.sourcePocketId) return e.sourcePocketId;
+    if (e.id && e.id.startsWith("pk-")) return e.id.slice(3);
+    return null;
+  };
+
+  const makeSignature = (e: PreLoggedEntry): string => {
+    const amt = r2(e.originalAmount ?? e.amount);
+    const cat = (e.expenseCategory || "").toLowerCase().trim();
+    const staffOrSupOrCust = (
+      e.staffName ||
+      e.supplierName ||
+      e.customerName ||
+      ""
+    )
+      .toLowerCase()
+      .trim();
+    const invNo = (e.invoiceNumber || e.linkedInvoiceNum || e.supplierInvoiceNum || "")
+      .toLowerCase()
+      .trim();
+    // Normalize title to detect identical entries created by local UI + /api/pocket or /api/payroll
+    const normTitle = (e.title || "")
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .trim();
+    return `${e.type}|${amt}|${cat}|${staffOrSupOrCust}|${invNo}|${normTitle}`;
+  };
+
+  // First pass: index non-pk- entries so rich local entries take precedence over generic pk- polled duplicates
+  const sorted = [...entries].sort((a, b) => {
+    const aIsPk = a.id.startsWith("pk-") ? 1 : 0;
+    const bIsPk = b.id.startsWith("pk-") ? 1 : 0;
+    return aIsPk - bIsPk;
+  });
+
+  const keptById = new Map<string, PreLoggedEntry>();
+
+  for (const item of sorted) {
+    if (!item || !item.id) continue;
+    if (seenIds.has(item.id)) continue;
+
+    const pkId = getPocketId(item);
+    if (pkId && seenPocketIds.has(pkId)) {
+      continue;
+    }
+
+    // Check if a pk- entry matches an existing ple- entry for the same expense/salary/supplier purchase
+    const sig = makeSignature(item);
+    const isPkItem = item.id.startsWith("pk-");
+    if (isPkItem) {
+      // Also check looser match for payroll / supplier purchase synced via /api/pocket
+      const matchedExisting = result.find((existing) => {
+        if (existing.id.startsWith("pk-")) return false;
+        if (existing.type !== item.type) return false;
+        const existAmt = r2(existing.originalAmount ?? existing.amount);
+        const itemAmt = r2(item.originalAmount ?? item.amount);
+        if (Math.abs(existAmt - itemAmt) > 0.01) return false;
+        if (pkId && existing.sourcePocketId === pkId) return true;
+        // Same supplier / staff / customer or title overlap
+        const existTarget = (
+          existing.staffName ||
+          existing.supplierName ||
+          existing.customerName ||
+          existing.title ||
+          ""
+        ).toLowerCase();
+        const itemTarget = (
+          item.staffName ||
+          item.supplierName ||
+          item.customerName ||
+          item.title ||
+          ""
+        ).toLowerCase();
+        if (
+          existTarget &&
+          itemTarget &&
+          (existTarget.includes(itemTarget) ||
+            itemTarget.includes(existTarget) ||
+            (existing.expenseCategory &&
+              item.expenseCategory &&
+              existing.expenseCategory === item.expenseCategory &&
+              existTarget.split("—")[0].trim() === itemTarget.split("—")[0].trim()))
+        ) {
+          return true;
+        }
+        return false;
+      });
+
+      if (matchedExisting) {
+        if (pkId && !matchedExisting.sourcePocketId) {
+          matchedExisting.sourcePocketId = pkId;
+        }
+        if (item.isReturned && !matchedExisting.isReturned) {
+          matchedExisting.isReturned = true;
+          matchedExisting.originalAmount = matchedExisting.originalAmount ?? matchedExisting.amount;
+          matchedExisting.amount = 0;
+        }
+        if (pkId) seenPocketIds.add(pkId);
+        seenIds.add(item.id);
+        continue;
+      }
+    }
+
+    if (seenSignatures.has(sig) && isPkItem) {
+      if (pkId) seenPocketIds.add(pkId);
+      seenIds.add(item.id);
+      continue;
+    }
+
+    seenIds.add(item.id);
+    if (pkId) seenPocketIds.add(pkId);
+    seenSignatures.set(sig, result.length);
+    result.push(item);
+    keptById.set(item.id, item);
+  }
+
+  // Preserve original ordering of kept items
+  const keptSet = new Set(result.map((r) => r.id));
+  const finalOrdered: PreLoggedEntry[] = [];
+  const emitted = new Set<string>();
+  for (const orig of entries) {
+    if (orig && keptSet.has(orig.id) && !emitted.has(orig.id)) {
+      emitted.add(orig.id);
+      finalOrdered.push(keptById.get(orig.id) || orig);
+    }
+  }
+  return finalOrdered;
 };
 
 export const calcInvoicePosFee = (inv: ErpInvoiceItem): number => {
@@ -1563,7 +1886,7 @@ function CreditSaleModal({
     invoice.creditDownTerminal || "SAB"
   );
   const [followUpDate, setFollowUpDate] = useState(
-    invoice.creditFollowUpDate || "2026-09-20"
+    invoice.creditFollowUpDate || addSaudiDays(7)
   );
 
   const downVal = Math.max(0, parseFloat(downAmount) || 0);
@@ -1678,10 +2001,18 @@ function CreditSaleModal({
           </div>
         )}
 
-        <div className="space-y-1.5">
-          <label className="block text-xs font-bold text-slate-500 dark:text-slate-400">
-            Follow-up Reminder Date (Credit Radar)
-          </label>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400">
+              Follow-up Reminder Date (Credit Radar)
+            </label>
+            <FollowUpStatusBadge followUpDate={followUpDate} compact />
+          </div>
+          <QuickFollowUpPicker
+            value={followUpDate}
+            onChange={(d) => setFollowUpDate(d)}
+            showDateInput={false}
+          />
           <input
             type="date"
             value={followUpDate}
@@ -1743,7 +2074,7 @@ interface DailyRegisterViewProps {
     supplierName: string,
     amount: number,
     dueDate: string,
-    category: "Credit Purchase" | "Cash Purchase" | "Bank Purchase" | "Return",
+    category: "Credit Purchase" | "Cash Purchase" | "Bank Purchase" | "Supplier Advance" | "Return",
     paymentMode?: UniversalPaymentMode | string,
     supplierInvoiceNum?: string,
     billPdfUrl?: string
@@ -1753,9 +2084,11 @@ interface DailyRegisterViewProps {
     amount: number,
     followUpDate: string,
     receiptNo?: string,
-    mode?: "CREDIT_RECD" | "CREDIT_SALE"
+    mode?: "CREDIT_RECD" | "CREDIT_SALE" | "CUSTOMER_ADVANCE"
   ) => void;
   creditCustomers?: ContractorAccount[];
+  advances?: AdvanceRecordItem[];
+  onRefreshAdvances?: () => void;
   onSwitchTab: (tab: TabId) => void;
   branchId?: string;
   isOwner?: boolean;
@@ -2651,6 +2984,8 @@ function DailyRegisterView({
   onSyncCreditPurchase,
   onSyncCreditCustomer,
   creditCustomers = [],
+  advances = [],
+  onRefreshAdvances,
   onSwitchTab,
   branchId = "JCT_HARDWARE_JOTUN",
   isOwner = false,
@@ -2713,10 +3048,10 @@ function DailyRegisterView({
   const [entryTitle, setEntryTitle] = useState("");
   const [entryAmount, setEntryAmount] = useState("");
   const [hubSupplierName, setHubSupplierName] = useState("Jotun");
-  const [hubDueDate, setHubDueDate] = useState("2026-09-25");
+  const [hubDueDate, setHubDueDate] = useState(() => addSaudiDays(14));
   const [hubCustomerName, setHubCustomerName] = useState("");
   const [hubReceiptNo, setHubReceiptNo] = useState("");
-  const [hubFollowUpDate, setHubFollowUpDate] = useState("2026-09-20");
+  const [hubFollowUpDate, setHubFollowUpDate] = useState(() => addSaudiDays(7));
   const [hubSplitCashInput, setHubSplitCashInput] = useState("1000");
   const [hubSplitCardInput, setHubSplitCardInput] = useState("1000");
   const [hubSplitMethod, setHubSplitMethod] = useState<"POS_SWIPE" | "BANK_TRANSFER">("POS_SWIPE");
@@ -2734,14 +3069,14 @@ function DailyRegisterView({
 
   // Step 3 (Credit & Cash Inflows & Split Payments) 2-Panel State
   const [step3Kind, setStep3Kind] = useState<
-    "CREDIT_RECD" | "CREDIT_SALE" | "SPLIT_SALE" | "LOAN_IN" | "OTHER_IN"
+    "CREDIT_RECD" | "CREDIT_SALE" | "CUSTOMER_ADVANCE" | "SPLIT_SALE" | "LOAN_IN" | "OTHER_IN"
   >("CREDIT_RECD");
   const [step3PaymentMode, setStep3PaymentMode] = useState<UniversalPaymentMode>("CASH");
   const [step3Terminal, setStep3Terminal] = useState<"SAB" | "AL_RAJHI" | "SNB">("SAB");
   const [step3Network, setStep3Network] = useState<"mada" | "visa">("mada");
   const [step3SplitEnabled, setStep3SplitEnabled] = useState(false);
   const [step3Title, setStep3Title] = useState("");
-  const step3FollowUpDate = "2026-09-20";
+  const [step3FollowUpDate, setStep3FollowUpDate] = useState(() => addSaudiDays(7));
   const [step3OriginalDate, setStep3OriginalDate] = useState("");
   const [step3ReceiptNo, setStep3ReceiptNo] = useState("");
   const [step3Amount, setStep3Amount] = useState("");
@@ -2753,13 +3088,13 @@ function DailyRegisterView({
   const [step3SplitTerminal, setStep3SplitTerminal] = useState<"SAB" | "AL_RAJHI" | "SNB">("SAB");
   const [step3SplitNetwork, setStep3SplitNetwork] = useState<"mada" | "visa">("mada");
 
-  // Step 4 (Expenses & Purchases — Strict 7 Categories) State
+  // Step 4 (Expenses & Purchases — Strict Categories) State
   const [step4Category, setStep4Category] = useState<StrictExpenseCategory>("Food");
   const [step4PaymentMode, setStep4PaymentMode] = useState<UniversalPaymentMode>("CASH");
   const [step4Terminal, setStep4Terminal] = useState<"SAB" | "AL_RAJHI" | "SNB">("SAB");
   const [step4Network, setStep4Network] = useState<"mada" | "visa">("mada");
   const [step4SupplierName, setStep4SupplierName] = useState("Jotun");
-  const [step4DueDate, setStep4DueDate] = useState("2026-09-25");
+  const [step4DueDate, setStep4DueDate] = useState(() => addSaudiDays(14));
   const [step4SupplierInvoiceNum, setStep4SupplierInvoiceNum] = useState("");
   const [step4BillPdfUrl, setStep4BillPdfUrl] = useState<string | null>(null);
   const [step4PdfUploading, setStep4PdfUploading] = useState(false);
@@ -2824,7 +3159,7 @@ function DailyRegisterView({
   const [missingInflowNetwork, setMissingInflowNetwork] = useState<"mada" | "visa">("mada");
   const [missingExpenseCat, setMissingExpenseCat] = useState<StrictExpenseCategory>("Food");
   const [missingExpenseSupplier, setMissingExpenseSupplier] = useState("");
-  const [missingExpenseDueDate, setMissingExpenseDueDate] = useState("2026-09-25");
+  const [missingExpenseDueDate, setMissingExpenseDueDate] = useState(() => addSaudiDays(14));
   const [missingExpenseAmt, setMissingExpenseAmt] = useState("");
   const [missingExpenseMode, setMissingExpenseMode] = useState<UniversalPaymentMode>("CASH");
   const [missingExpenseTerminal, setMissingExpenseTerminal] = useState<"SAB" | "AL_RAJHI" | "SNB">("SAB");
@@ -2990,6 +3325,9 @@ function DailyRegisterView({
       const existingIdx = prev.findIndex(
         (item) =>
           item.id === newEntry.id ||
+          (item.sourcePocketId &&
+            newEntry.sourcePocketId &&
+            item.sourcePocketId === newEntry.sourcePocketId) ||
           (item.type === newEntry.type && item.title.trim().toLowerCase() === normalizedTitle)
       );
       if (existingIdx !== -1) {
@@ -2997,15 +3335,27 @@ function DailyRegisterView({
         const existing = updated[existingIdx];
         updated[existingIdx] = {
           ...existing,
-          amount: newEntry.amount,
-          originalAmount: existing.originalAmount ?? existing.amount,
+          sourcePocketId: newEntry.sourcePocketId || existing.sourcePocketId,
+          amount: newEntry.isReturned ? 0 : newEntry.amount,
+          originalAmount: existing.originalAmount ?? newEntry.originalAmount ?? existing.amount,
+          isReturned: newEntry.isReturned ?? existing.isReturned,
           expenseCategory: newEntry.expenseCategory || existing.expenseCategory,
           supplierName: newEntry.supplierName || existing.supplierName,
           dueDate: newEntry.dueDate || existing.dueDate,
+          supplierInvoiceNum: newEntry.supplierInvoiceNum || existing.supplierInvoiceNum,
+          billPdfUrl: newEntry.billPdfUrl || existing.billPdfUrl,
+          receiptUrl: newEntry.receiptUrl || existing.receiptUrl,
           customerName: newEntry.customerName || existing.customerName,
           followUpDate: newEntry.followUpDate || existing.followUpDate,
           receiptNo: newEntry.receiptNo || existing.receiptNo,
+          invoiceNumber: newEntry.invoiceNumber || existing.invoiceNumber,
+          linkedInvoiceNum: newEntry.linkedInvoiceNum || existing.linkedInvoiceNum,
+          originalDate: newEntry.originalDate || existing.originalDate,
+          staffId: newEntry.staffId || existing.staffId,
+          staffName: newEntry.staffName || existing.staffName,
           paymentMode: newEntry.paymentMode || existing.paymentMode || "CASH",
+          terminal: newEntry.terminal ?? existing.terminal,
+          network: newEntry.network ?? existing.network,
           note: newEntry.note || existing.note,
           isSplit: newEntry.isSplit ?? existing.isSplit,
           splitCashAmount: newEntry.splitCashAmount ?? existing.splitCashAmount,
@@ -3014,18 +3364,42 @@ function DailyRegisterView({
           splitPosTerminal: newEntry.splitPosTerminal ?? existing.splitPosTerminal,
           time: newEntry.time,
         };
-        return updated;
+        return deduplicatePreLoggedEntries(updated);
       }
-      return [newEntry, ...prev];
+      return deduplicatePreLoggedEntries([newEntry, ...prev]);
     });
   };
 
-  // Auto-Lookup helper for ERP invoices (searches loaded erpInvoices or JUBAIL_ERP_18_SEED)
+  // Auto-Lookup helper for ERP invoices (searches loaded erpInvoices across branchInvNo, invoiceNo, seqInvoiceNo, referenceId)
   const findErpInvoiceMatch = (rawInput: string): ErpInvoiceItem | undefined => {
-    const cleaned = cleanErpInvNo(rawInput);
+    const cleaned = cleanErpInvNo(rawInput).toLowerCase();
     if (!cleaned) return undefined;
     const pool = erpInvoices;
-    return pool.find((inv) => inv.invoiceNo === cleaned);
+    // 1. Exact case-insensitive match on branchInvNo, invoiceNo, seqInvoiceNo, or referenceId
+    const exact = pool.find((inv) => {
+      const bNo = cleanErpInvNo(inv.branchInvNo || "").toLowerCase();
+      const iNo = cleanErpInvNo(inv.invoiceNo || "").toLowerCase();
+      const sNo = cleanErpInvNo(inv.seqInvoiceNo || "").toLowerCase();
+      const rNo = cleanErpInvNo(inv.referenceId || "").toLowerCase();
+      return bNo === cleaned || iNo === cleaned || sNo === cleaned || rNo === cleaned;
+    });
+    if (exact) return exact;
+    // 2. Partial / substring match (e.g. "033431" matching "W#JB033431" or "w#jb033431")
+    if (cleaned.length >= 2) {
+      return pool.find((inv) => {
+        const bNo = cleanErpInvNo(inv.branchInvNo || "").toLowerCase();
+        const iNo = cleanErpInvNo(inv.invoiceNo || "").toLowerCase();
+        const sNo = cleanErpInvNo(inv.seqInvoiceNo || "").toLowerCase();
+        const rNo = cleanErpInvNo(inv.referenceId || "").toLowerCase();
+        return (
+          (bNo && bNo.includes(cleaned)) ||
+          (iNo && iNo.includes(cleaned)) ||
+          (sNo && sNo.includes(cleaned)) ||
+          (rNo && rNo.includes(cleaned))
+        );
+      });
+    }
+    return undefined;
   };
 
   const matchedStep3Invoice = findErpInvoiceMatch(step3ReceiptNo);
@@ -3033,29 +3407,57 @@ function DailyRegisterView({
 
   const handleInvoiceLookup = (rawVal: string) => {
     setStep3ReceiptNo(rawVal);
-    const clean = rawVal.trim().replace(/^#/i, "").toLowerCase();
+    const clean = cleanErpInvNo(rawVal).toLowerCase();
     if (!clean) {
       setStep3OriginalDate("");
       return;
     }
 
-    // 1. Search in CreditRadar dataset (creditCustomers)
+    // 1. First search live active session erpInvoices (today's uploaded PDF / Editable CSV Grid, e.g. W#JB033431)
+    const erpMatch = findErpInvoiceMatch(rawVal);
+    if (erpMatch) {
+      setStep3Title(erpMatch.customerName || erpMatch.customer || "");
+      setStep3Amount(String(erpMatch.amount));
+      setStep3OriginalDate(erpMatch.originalDate || activeSessionDate || saudiTodayIso());
+      return;
+    }
+
+    // 2. Search current active session preLoggedEntries (Credit Sales / Receipts logged in this session)
+    const sessionCreditMatch = preLoggedEntries.find((e) => {
+      if (e.type !== "CREDIT_SALE" && e.type !== "CREDIT_RECD") return false;
+      const rNo = cleanErpInvNo(e.receiptNo || "").toLowerCase();
+      const iNo = cleanErpInvNo(e.invoiceNumber || "").toLowerCase();
+      const lNo = cleanErpInvNo(e.linkedInvoiceNum || "").toLowerCase();
+      return (
+        (rNo && (rNo === clean || (clean.length >= 2 && rNo.includes(clean)))) ||
+        (iNo && (iNo === clean || (clean.length >= 2 && iNo.includes(clean)))) ||
+        (lNo && (lNo === clean || (clean.length >= 2 && lNo.includes(clean))))
+      );
+    });
+    if (sessionCreditMatch) {
+      setStep3Title(sessionCreditMatch.customerName || sessionCreditMatch.title || "");
+      setStep3Amount(String(sessionCreditMatch.amount));
+      setStep3OriginalDate(sessionCreditMatch.originalDate || activeSessionDate || saudiTodayIso());
+      return;
+    }
+
+    // 3. Search historical database CreditRadar dataset (creditCustomers)
     const list = creditCustomers || [];
     let matchedCustomer: ContractorAccount | undefined;
     let matchedDate: string | undefined;
     let matchedAmount: number | undefined;
 
     for (const c of list) {
-      const latestClean = c.latestInvoiceNo ? c.latestInvoiceNo.replace(/^#/i, "").toLowerCase() : "";
-      if (latestClean && (latestClean === clean || latestClean.includes(clean))) {
+      const latestClean = c.latestInvoiceNo ? cleanErpInvNo(c.latestInvoiceNo).toLowerCase() : "";
+      if (latestClean && (latestClean === clean || (clean.length >= 2 && latestClean.includes(clean)))) {
         matchedCustomer = c;
-        matchedDate = c.dueDate || c.followUpDate || "2026-09-12";
+        matchedDate = c.dueDate || c.followUpDate || activeSessionDate || saudiTodayIso();
         matchedAmount = c.latestInvoiceAmount || c.outstanding;
         break;
       }
       const foundHist = c.history?.find((h) => {
-        const hClean = h.id ? h.id.replace(/^#/i, "").toLowerCase() : "";
-        return hClean === clean || hClean.includes(clean);
+        const hClean = h.id ? cleanErpInvNo(h.id).toLowerCase() : "";
+        return hClean && (hClean === clean || (clean.length >= 2 && hClean.includes(clean)));
       });
       if (foundHist) {
         matchedCustomer = c;
@@ -3065,23 +3467,12 @@ function DailyRegisterView({
       }
     }
 
-    // 2. Fallback search in today's ERP invoices
-    if (!matchedCustomer) {
-      const erpMatch = findErpInvoiceMatch(rawVal);
-      if (erpMatch) {
-        setStep3Title(erpMatch.customer);
-        setStep3Amount(String(erpMatch.amount));
-        setStep3OriginalDate("2026-09-12");
-        return;
-      }
-    }
-
     if (matchedCustomer) {
       setStep3Title(matchedCustomer.name);
       if (matchedDate) {
         setStep3OriginalDate(matchedDate);
       }
-      if (matchedAmount && (!step3Amount || parseFloat(step3Amount) === 0)) {
+      if (matchedAmount) {
         setStep3Amount(String(matchedAmount));
       }
     }
@@ -3091,8 +3482,9 @@ function DailyRegisterView({
     setStep3ReceiptNo(rawVal);
     const match = findErpInvoiceMatch(rawVal);
     if (match) {
-      setStep3Title(match.customer);
+      setStep3Title(match.customerName || match.customer || "");
       setStep3Amount(String(match.amount));
+      setStep3OriginalDate(match.originalDate || activeSessionDate || saudiTodayIso());
       const cashHalf = match.isSplit ? match.splitCashAmount : r2(match.amount / 2);
       const cardHalf = match.isSplit ? match.splitBankAmount : r2(match.amount - cashHalf);
       setStep3SplitCash(String(cashHalf));
@@ -3109,8 +3501,9 @@ function DailyRegisterView({
     setHubReceiptNo(rawVal);
     const match = findErpInvoiceMatch(rawVal);
     if (match) {
-      setHubCustomerName(match.customer);
-      setEntryTitle(match.customer);
+      const cName = match.customerName || match.customer || "";
+      setHubCustomerName(cName);
+      setEntryTitle(cName);
       setEntryAmount(String(match.amount));
       const cashHalf = match.isSplit ? match.splitCashAmount : r2(match.amount / 2);
       const cardHalf = match.isSplit ? match.splitBankAmount : r2(match.amount - cashHalf);
@@ -3269,25 +3662,34 @@ function DailyRegisterView({
       }
     });
 
-    return rawList.map((inv) => {
-      const cleanNo = cleanErpInvNo(inv.invoiceNo);
+    return rawList.map((inv, idx) => {
+      const stableInternalId =
+        inv.internalId || inv.id || `erp-row-${idx}-${inv.branchInvNo || inv.invoiceNo || idx}`;
+      const normalizedInv: ErpInvoiceItem = {
+        ...inv,
+        internalId: stableInternalId,
+        id: inv.id || stableInternalId,
+        branchInvNo: inv.branchInvNo || inv.invoiceNo,
+        customerName: inv.customerName ?? inv.customer,
+      };
+      const cleanNo = cleanErpInvNo(normalizedInv.branchInvNo || normalizedInv.invoiceNo);
       const matchedInfo = bankMap.get(cleanNo);
       const isCreditSale = creditSaleInvSet.has(cleanNo);
       const splitEntry = splitSaleMap.get(cleanNo);
 
       if (!matchedInfo && !isCreditSale && !splitEntry) {
-        return inv;
+        return normalizedInv;
       }
 
-      const isSplitRow = Boolean(splitEntry) || Boolean(inv.isSplit);
-      const halfGross = r2(inv.amount / 2);
-      const resolvedCash = splitEntry?.splitCashAmount ?? inv.splitCashAmount ?? halfGross;
+      const isSplitRow = Boolean(splitEntry) || Boolean(normalizedInv.isSplit);
+      const halfGross = r2(normalizedInv.amount / 2);
+      const resolvedCash = splitEntry?.splitCashAmount ?? normalizedInv.splitCashAmount ?? halfGross;
       const resolvedBank =
-        splitEntry?.splitBankAmount ?? inv.splitBankAmount ?? r2(inv.amount - resolvedCash);
+        splitEntry?.splitBankAmount ?? normalizedInv.splitBankAmount ?? r2(normalizedInv.amount - resolvedCash);
       const resolvedSplitMethod =
-        splitEntry?.splitBankMethod ?? inv.splitBankMethod ?? "POS_SWIPE";
+        splitEntry?.splitBankMethod ?? normalizedInv.splitBankMethod ?? "POS_SWIPE";
       const resolvedSplitTerm =
-        splitEntry?.splitPosTerminal ?? inv.splitPosTerminal ?? inv.posTerminal ?? "SAB";
+        splitEntry?.splitPosTerminal ?? normalizedInv.splitPosTerminal ?? normalizedInv.posTerminal ?? "SAB";
 
       const resolvedMode: InvoicePaymentMode = isCreditSale
         ? "CREDIT_SALE"
@@ -3295,10 +3697,10 @@ function DailyRegisterView({
         ? "SPLIT"
         : matchedInfo
         ? matchedInfo.paymentMode
-        : inv.paymentMode;
+        : normalizedInv.paymentMode;
 
       return {
-        ...inv,
+        ...normalizedInv,
         paymentMode: resolvedMode,
         posTerminal: matchedInfo?.posTerminal || resolvedSplitTerm,
         isSplit: resolvedMode === "SPLIT",
@@ -3507,7 +3909,12 @@ function DailyRegisterView({
     }
   ) => {
     const base = erpInvoices;
-    const target = base.find((i) => i.invoiceNo === invoiceNo);
+    const target = base.find(
+      (i) =>
+        (i.internalId && i.internalId === invoiceNo) ||
+        (i.id && i.id === invoiceNo) ||
+        i.invoiceNo === invoiceNo
+    );
     if (!target) return;
 
     const down =
@@ -3516,9 +3923,12 @@ function DailyRegisterView({
         : 0;
     const creditBalance = r2(target.amount - down);
     const hasDown = down > 0;
+    const displayInvNo = target.branchInvNo || target.invoiceNo;
 
     setErpInvoices(
       base.map((inv) =>
+        (inv.internalId && inv.internalId === invoiceNo) ||
+        (inv.id && inv.id === invoiceNo) ||
         inv.invoiceNo === invoiceNo
           ? {
               ...inv,
@@ -3537,21 +3947,28 @@ function DailyRegisterView({
       )
     );
 
-    const receiptNo = `#${invoiceNo}`;
+    const receiptNo = displayInvNo.startsWith("#") ? displayInvNo : `#${displayInvNo}`;
     upsertEntry({
-      id: `ple-credit_sale-${invoiceNo}`,
+      id: `ple-credit_sale-${displayInvNo}`,
       type: "CREDIT_SALE",
-      customerName: target.customer,
+      customerName: target.customer || target.customerName || "Contractor",
       followUpDate: cfg.followUpDate,
       receiptNo,
-      title: target.customer,
+      invoiceNumber: displayInvNo,
+      title: target.customer || target.customerName || "Contractor",
       amount: creditBalance,
       time: nowHHMM(),
     });
 
-    onSyncCreditCustomer(target.customer, creditBalance, cfg.followUpDate, receiptNo, "CREDIT_SALE");
+    onSyncCreditCustomer(
+      target.customer || target.customerName || "Contractor",
+      creditBalance,
+      cfg.followUpDate,
+      receiptNo,
+      "CREDIT_SALE"
+    );
     setSyncBannerMsg({
-      text: `${target.customer} (Inv ${receiptNo}) · Credit SAR ${fmt(creditBalance)}${
+      text: `${target.customer || target.customerName || "Contractor"} (Inv ${receiptNo}) · Credit SAR ${fmt(creditBalance)}${
         hasDown
           ? ` · Down payment SAR ${fmt(down)} via ${
               cfg.downMethod === "CASH" ? "Cash" : POS_TERMINAL_META[cfg.terminal].badgeTag
@@ -3764,7 +4181,11 @@ function DailyRegisterView({
     setErpInvoices((prev) => {
       const base = prev;
       return base.map((inv) =>
-        inv.invoiceNo === invoiceNo ? { ...inv, otherNote: note } : inv
+        (inv.internalId && inv.internalId === invoiceNo) ||
+        (inv.id && inv.id === invoiceNo) ||
+        inv.invoiceNo === invoiceNo
+          ? { ...inv, otherNote: note }
+          : inv
       );
     });
   };
@@ -3911,10 +4332,12 @@ function DailyRegisterView({
 
     if (entryType === "EXPENSE") {
       const isCreditPurchase = hubExpenseCat === "Credit Purchase";
+      const isSupplierAdvance = hubExpenseCat === "Supplier Advance";
       const isPurchase =
         hubExpenseCat === "Credit Purchase" ||
         hubExpenseCat === "Cash Purchase" ||
-        hubExpenseCat === "Bank Purchase";
+        hubExpenseCat === "Bank Purchase" ||
+        isSupplierAdvance;
       const isStaffExpense = hubExpenseCat === "Staff Advance" || hubExpenseCat === "Salary";
       const selectedStaff = staffList.find((s) => s.id === step4StaffId);
       const staffName = selectedStaff?.name || "";
@@ -3927,34 +4350,61 @@ function DailyRegisterView({
         ? `${hubExpenseCat} — ${entryTitle.trim()}`
         : hubExpenseCat;
 
+      const hubEntryId = isPurchase
+        ? `ple-${hubExpenseCat.toLowerCase().replace(/\s+/g, "-")}-${supplierClean.toLowerCase().replace(/\s+/g, "-")}-${Date.now().toString().slice(-4)}`
+        : isStaffExpense && step4StaffId
+        ? `ple-${hubExpenseCat.toLowerCase().replace(/\s+/g, "-")}-${step4StaffId}-${val}`
+        : `ple-${displayTitle.toLowerCase().replace(/\s+/g, "-")}`;
+
+      const effectiveHubMode = isCreditPurchase
+        ? "CREDIT"
+        : hubExpenseCat === "Bank Purchase" && hubPaymentMode === "CASH"
+        ? "SAB"
+        : hubPaymentMode;
+
       upsertEntry({
-        id: isPurchase
-          ? `ple-${hubExpenseCat.toLowerCase().replace(/\s+/g, "-")}-${supplierClean.toLowerCase().replace(/\s+/g, "-")}`
-          : isStaffExpense && step4StaffId
-          ? `ple-${hubExpenseCat.toLowerCase().replace(/\s+/g, "-")}-${step4StaffId}-${val}`
-          : `ple-${displayTitle.toLowerCase().replace(/\s+/g, "-")}`,
+        id: hubEntryId,
         type: "EXPENSE",
         expenseCategory: hubExpenseCat,
         supplierName: isPurchase ? supplierClean : undefined,
-        dueDate: isCreditPurchase ? hubDueDate : undefined,
+        dueDate: isCreditPurchase || isSupplierAdvance ? hubDueDate : undefined,
+        followUpDate: isCreditPurchase || isSupplierAdvance ? hubDueDate : undefined,
         staffId: isStaffExpense ? step4StaffId : undefined,
         staffName: isStaffExpense ? staffName : undefined,
-        paymentMode: hubExpenseCat === "Bank Purchase" && hubPaymentMode === "CASH" ? "SAB" : hubPaymentMode,
+        paymentMode: effectiveHubMode,
         title: displayTitle,
         amount: val,
         time: nowHHMM(),
       });
 
+      if (isSupplierAdvance) {
+        fetch("/api/advances", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            branch: branchId || "JCT_HARDWARE_JOTUN",
+            direction: "SUPPLIER_ADVANCE_OUT",
+            partyName: supplierClean,
+            totalAdvanceAmount: val,
+            paymentMode: effectiveHubMode,
+            notes: entryTitle.trim() || "Supplier Advance logged via Hub",
+            followUpDate: hubDueDate || addSaudiDays(7),
+          }),
+        })
+          .then(() => onRefreshAdvances?.())
+          .catch((e) => console.warn("Failed to create Supplier Advance record:", e));
+      }
+
       if (isPurchase) {
         onSyncCreditPurchase(
           supplierClean,
           val,
-          hubDueDate || "2026-09-25",
+          hubDueDate || addSaudiDays(14),
           hubExpenseCat,
-          hubExpenseCat === "Bank Purchase" && hubPaymentMode === "CASH" ? "SAB" : hubPaymentMode
+          effectiveHubMode
         );
         setSyncBannerMsg({
-          text: `${hubExpenseCat} (${supplierClean} · SAR ${fmt(val)}${isCreditPurchase ? ` · Due ${hubDueDate}` : ""}) synced live to Suppliers & Payables`,
+          text: `${hubExpenseCat} (${supplierClean} · SAR ${fmt(val)}${isCreditPurchase || isSupplierAdvance ? ` · Follow-Up ${hubDueDate}` : ""}) synced live to Suppliers & Payables`,
           targetTab: "suppliers",
           targetLabel: "Open Suppliers & Payables →",
         });
@@ -3974,7 +4424,21 @@ function DailyRegisterView({
             source: hubPaymentMode === "CASH" ? "REGISTER_DRAWER" : "BANK_TRANSFER",
             paymentMode: hubPaymentMode,
           }),
-        }).catch((err) => console.error("Error creating PayrollLog from hub:", err));
+        })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((data) => {
+            const pkId = data?.pocketTx?.id;
+            if (pkId) {
+              setPreLoggedEntries((prev) =>
+                deduplicatePreLoggedEntries(
+                  prev.map((item) =>
+                    item.id === hubEntryId ? { ...item, sourcePocketId: pkId } : item
+                  )
+                )
+              );
+            }
+          })
+          .catch((err) => console.error("Error creating PayrollLog from hub:", err));
 
         setSyncBannerMsg({
           text: `${hubExpenseCat}: ${staffName} (SAR ${fmt(val)}) linked directly to Monthly Payroll Ledger`,
@@ -3988,8 +4452,11 @@ function DailyRegisterView({
       return;
     }
 
-    // Inflows (CREDIT_RECD, CREDIT_SALE, LOAN_IN, OTHER_IN)
-    const isCreditCustomer = entryType === "CREDIT_RECD" || entryType === "CREDIT_SALE";
+    // Inflows (CREDIT_RECD, CREDIT_SALE, CUSTOMER_ADVANCE, LOAN_IN, OTHER_IN)
+    const isCreditCustomer =
+      entryType === "CREDIT_RECD" ||
+      entryType === "CREDIT_SALE" ||
+      entryType === "CUSTOMER_ADVANCE";
     const custName = (
       isCreditCustomer
         ? hubCustomerName || matchedHubInvoice?.customer || ""
@@ -4016,6 +4483,25 @@ function DailyRegisterView({
       time: nowHHMM(),
     });
 
+    if (entryType === "CUSTOMER_ADVANCE") {
+      fetch("/api/advances", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          branch: branchId || "JCT_HARDWARE_JOTUN",
+          direction: "CUSTOMER_ADVANCE_IN",
+          partyName: custName,
+          branchInvNo: formattedInv || null,
+          totalAdvanceAmount: val,
+          paymentMode: hubPaymentMode,
+          notes: `Customer Advance logged via Hub${formattedInv ? ` (${formattedInv})` : ""}`,
+          followUpDate: hubFollowUpDate || addSaudiDays(7),
+        }),
+      })
+        .then(() => onRefreshAdvances?.())
+        .catch((e) => console.warn("Failed to create Customer Advance record:", e));
+    }
+
     // Reclassify matched ERP invoice as a Credit Sale (No Double Cash Counting)
     if (entryType === "CREDIT_SALE" && cleanInv) {
       setErpInvoices((prev) => {
@@ -4039,7 +4525,7 @@ function DailyRegisterView({
       onSyncCreditCustomer(
         custName,
         val,
-        hubFollowUpDate || "2026-09-20",
+        hubFollowUpDate || addSaudiDays(7),
         formattedInv,
         entryType
       );
@@ -4190,7 +4676,10 @@ function DailyRegisterView({
     const cleanCustomer = (step3Title.trim() || matchedStep3Invoice?.customer || "").trim();
     if (!cleanCustomer || Number.isNaN(val) || val <= 0) return;
 
-    const isCredit = step3Kind === "CREDIT_RECD" || step3Kind === "CREDIT_SALE";
+    const isCredit =
+      step3Kind === "CREDIT_RECD" ||
+      step3Kind === "CREDIT_SALE" ||
+      step3Kind === "CUSTOMER_ADVANCE";
     const cleanInv = cleanErpInvNo(step3ReceiptNo);
     const formattedReceiptNo = cleanInv
       ? `#${cleanInv}`
@@ -4207,13 +4696,32 @@ function DailyRegisterView({
       invoiceNumber: cleanInv || undefined,
       linkedInvoiceNum: step3Kind === "CREDIT_RECD" ? (step3ReceiptNo.trim() || cleanInv) : undefined,
       originalDate: step3Kind === "CREDIT_RECD" ? step3OriginalDate : undefined,
-      paymentMode: step3Kind === "CREDIT_RECD" ? "Credit Received" : step3PaymentMode,
+      paymentMode: step3PaymentMode,
       terminal: (step3PaymentMode === "CARD" || step3PaymentMode === "BANK_TRANSFER") ? step3Terminal : undefined,
       network: step3PaymentMode === "CARD" ? step3Network : undefined,
       title: cleanCustomer,
       amount: val,
       time: nowHHMM(),
     });
+
+    if (step3Kind === "CUSTOMER_ADVANCE") {
+      fetch("/api/advances", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          branch: branchId || "JCT_HARDWARE_JOTUN",
+          direction: "CUSTOMER_ADVANCE_IN",
+          partyName: cleanCustomer,
+          branchInvNo: formattedReceiptNo || null,
+          totalAdvanceAmount: val,
+          paymentMode: step3PaymentMode,
+          notes: `Customer Advance logged in Step 3${formattedReceiptNo ? ` (${formattedReceiptNo})` : ""}`,
+          followUpDate: step3FollowUpDate || addSaudiDays(7),
+        }),
+      })
+        .then(() => onRefreshAdvances?.())
+        .catch((e) => console.warn("Failed to create Customer Advance record:", e));
+    }
 
     // If a matched ERP invoice is saved as a Credit Sale, reclassify it in erpInvoices as CREDIT_SALE so it is not double-counted in Cash Drawer Sales
     if (step3Kind === "CREDIT_SALE" && cleanInv) {
@@ -4238,7 +4746,7 @@ function DailyRegisterView({
       onSyncCreditCustomer(
         cleanCustomer,
         val,
-        step3Kind === "CREDIT_RECD" ? (step3OriginalDate || "2026-09-12") : (step3FollowUpDate || "2026-09-20"),
+        step3Kind === "CREDIT_RECD" ? (step3OriginalDate || saudiTodayIso()) : (step3FollowUpDate || addSaudiDays(7)),
         formattedReceiptNo,
         step3Kind
       );
@@ -4260,10 +4768,12 @@ function DailyRegisterView({
     if (Number.isNaN(val) || val <= 0) return;
 
     const isCreditPurchase = step4Category === "Credit Purchase";
+    const isSupplierAdvance = step4Category === "Supplier Advance";
     const isSupplierPurchase =
       step4Category === "Credit Purchase" ||
       step4Category === "Cash Purchase" ||
-      step4Category === "Bank Purchase";
+      step4Category === "Bank Purchase" ||
+      isSupplierAdvance;
     const isStaffExpense = step4Category === "Staff Advance" || step4Category === "Salary";
     const selectedStaff = staffList.find((s) => s.id === step4StaffId);
     const staffName = selectedStaff?.name || "";
@@ -4277,23 +4787,27 @@ function DailyRegisterView({
       ? `${step4Category} (${step4Note.trim()})`
       : step4Category;
 
-    const effectiveStep4Mode =
-      step4Category === "Bank Purchase" && (step4PaymentMode === "CASH" || step4PaymentMode === "SAB")
-        ? "BANK_TRANSFER"
-        : step4PaymentMode;
+    const effectiveStep4Mode = isCreditPurchase
+      ? "CREDIT"
+      : step4Category === "Bank Purchase" && (step4PaymentMode === "CASH" || step4PaymentMode === "SAB")
+      ? "BANK_TRANSFER"
+      : step4PaymentMode;
 
     const isStep4Card = effectiveStep4Mode === "CARD";
     const isStep4Bank = effectiveStep4Mode === "BANK_TRANSFER";
+    const step4EntryId = isSupplierPurchase
+      ? `ple-${step4Category.toLowerCase().replace(/\s+/g, "-")}-${cleanSupplier.toLowerCase().replace(/\s+/g, "-")}${step4SupplierInvoiceNum.trim() ? `-${step4SupplierInvoiceNum.trim().toLowerCase()}` : `-${Date.now().toString().slice(-4)}`}`
+      : isStaffExpense && step4StaffId
+      ? `ple-${step4Category.toLowerCase().replace(/\s+/g, "-")}-${step4StaffId}-${val}`
+      : `ple-${displayTitle.toLowerCase().replace(/\s+/g, "-")}`;
+
     upsertEntry({
-      id: isSupplierPurchase
-        ? `ple-${step4Category.toLowerCase().replace(/\s+/g, "-")}-${cleanSupplier.toLowerCase().replace(/\s+/g, "-")}`
-        : isStaffExpense && step4StaffId
-        ? `ple-${step4Category.toLowerCase().replace(/\s+/g, "-")}-${step4StaffId}-${val}`
-        : `ple-${step4Category.toLowerCase().replace(/\s+/g, "-")}`,
+      id: step4EntryId,
       type: "EXPENSE",
       expenseCategory: step4Category,
       supplierName: isSupplierPurchase ? cleanSupplier : undefined,
-      dueDate: isCreditPurchase ? step4DueDate : undefined,
+      dueDate: isCreditPurchase || isSupplierAdvance ? step4DueDate : undefined,
+      followUpDate: isCreditPurchase || isSupplierAdvance ? step4DueDate : undefined,
       supplierInvoiceNum: step4SupplierInvoiceNum.trim() || undefined,
       billPdfUrl: step4BillPdfUrl || undefined,
       receiptUrl: step4BillPdfUrl || undefined,
@@ -4308,17 +4822,36 @@ function DailyRegisterView({
       time: nowHHMM(),
     });
 
+    if (isSupplierAdvance) {
+      fetch("/api/advances", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          branch: branchId || "JCT_HARDWARE_JOTUN",
+          direction: "SUPPLIER_ADVANCE_OUT",
+          partyName: cleanSupplier,
+          branchInvNo: step4SupplierInvoiceNum.trim() || null,
+          totalAdvanceAmount: val,
+          paymentMode: effectiveStep4Mode,
+          notes: step4Note.trim() || "Supplier Advance logged in Step 4",
+          followUpDate: step4DueDate || addSaudiDays(7),
+        }),
+      })
+        .then(() => onRefreshAdvances?.())
+        .catch((e) => console.warn("Failed to create Supplier Advance record:", e));
+    }
+
     if (isSupplierPurchase) {
       onSyncCreditPurchase(
         cleanSupplier,
         val,
-        step4DueDate || "2026-09-25",
+        step4DueDate || addSaudiDays(14),
         step4Category,
         effectiveStep4Mode,
         step4SupplierInvoiceNum.trim() || undefined,
         step4BillPdfUrl || undefined
       );
-      // Persist to Neon PostgreSQL /api/pocket
+      // Persist to Neon PostgreSQL /api/pocket and attach sourcePocketId so 5s poll never duplicates
       fetch("/api/pocket", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -4328,7 +4861,12 @@ function DailyRegisterView({
           amount: val,
           category: step4Category,
           recipientName: cleanSupplier,
-          paymentSource: effectiveStep4Mode === "CASH" ? "DRAWER_CASH" : "BANK_TRANSFER",
+          paymentSource:
+            isCreditPurchase
+              ? "CREDIT"
+              : effectiveStep4Mode === "CASH"
+              ? "DRAWER_CASH"
+              : "BANK_TRANSFER",
           paymentMode: effectiveStep4Mode,
           supplierInvoiceNum: step4SupplierInvoiceNum.trim() || undefined,
           billPdfUrl: step4BillPdfUrl || undefined,
@@ -4336,7 +4874,21 @@ function DailyRegisterView({
           note: step4Note.trim() || undefined,
           date: saudiTodayIso(),
         }),
-      }).catch((e) => console.warn("Background pocket sync failed:", e));
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          const pkId = data?.transaction?.id;
+          if (pkId) {
+            setPreLoggedEntries((prev) =>
+              deduplicatePreLoggedEntries(
+                prev.map((item) =>
+                  item.id === step4EntryId ? { ...item, sourcePocketId: pkId } : item
+                )
+              )
+            );
+          }
+        })
+        .catch((e) => console.warn("Background pocket sync failed:", e));
 
       setSyncBannerMsg({
         text: `${step4Category}: ${cleanSupplier}${step4SupplierInvoiceNum ? ` (#${step4SupplierInvoiceNum.trim()})` : ""} (SAR ${fmt(val)}${isCreditPurchase ? ` · Due: ${step4DueDate}` : ""}) synced live to Suppliers & Payables`,
@@ -4362,7 +4914,21 @@ function DailyRegisterView({
           source: effectiveStep4Mode === "CASH" ? "REGISTER_DRAWER" : "BANK_TRANSFER",
           paymentMode: effectiveStep4Mode,
         }),
-      }).catch((err) => console.error("Error creating PayrollLog:", err));
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          const pkId = data?.pocketTx?.id;
+          if (pkId) {
+            setPreLoggedEntries((prev) =>
+              deduplicatePreLoggedEntries(
+                prev.map((item) =>
+                  item.id === step4EntryId ? { ...item, sourcePocketId: pkId } : item
+                )
+              )
+            );
+          }
+        })
+        .catch((err) => console.error("Error creating PayrollLog:", err));
 
       setSyncBannerMsg({
         text: `${step4Category}: ${staffName} (SAR ${fmt(val)}) recorded & linked directly to Monthly Payroll Ledger`,
@@ -4489,62 +5055,25 @@ function DailyRegisterView({
   };
 
   const handleUpdateInvoiceId = (identifier: string, nextId: string) => {
-    setErpInvoices((prev) => {
-      const base = prev;
-      return base.map((inv) => {
+    setErpInvoices((prev) =>
+      prev.map((inv) => {
         const matches =
           (inv.internalId && inv.internalId === identifier) ||
           (inv.id && inv.id === identifier) ||
           inv.invoiceNo === identifier;
         if (!matches) return inv;
 
-        const clean = nextId.trim().replace(/^#/i, "").toLowerCase();
-        let autoCust = inv.customer;
-        let autoDate = inv.originalDate;
-        let autoAmt = inv.amount;
-        let autoMode = inv.paymentMode;
-        let linkedNum = inv.linkedInvoiceNum;
-
-        if (clean && inv.isManualEntry) {
-          const list = creditCustomers || [];
-          for (const c of list) {
-            const latestClean = c.latestInvoiceNo ? c.latestInvoiceNo.replace(/^#/i, "").toLowerCase() : "";
-            if (latestClean && (latestClean === clean || latestClean.includes(clean))) {
-              if (!autoCust) autoCust = c.name;
-              autoDate = c.dueDate || c.followUpDate || "2026-09-12";
-              if (!autoAmt || autoAmt === 0) autoAmt = c.latestInvoiceAmount || c.outstanding;
-              autoMode = "Credit Received";
-              linkedNum = c.latestInvoiceNo || nextId;
-              break;
-            }
-            const foundHist = c.history?.find((h) => {
-              const hClean = h.id ? h.id.replace(/^#/i, "").toLowerCase() : "";
-              return hClean === clean || hClean.includes(clean);
-            });
-            if (foundHist) {
-              if (!autoCust) autoCust = c.name;
-              autoDate = foundHist.date;
-              if (!autoAmt || autoAmt === 0) autoAmt = foundHist.amount;
-              autoMode = "Credit Received";
-              linkedNum = foundHist.id || nextId;
-              break;
-            }
-          }
-        }
-
+        // Keep internalId and id stable so React row key never changes while typing!
+        const stableKey = inv.internalId || inv.id || identifier;
         return {
           ...inv,
-          id: nextId,
+          internalId: stableKey,
+          id: inv.id || stableKey,
+          branchInvNo: nextId,
           invoiceNo: nextId,
-          customer: autoCust,
-          customerName: autoCust,
-          amount: autoAmt,
-          originalDate: autoDate,
-          linkedInvoiceNum: linkedNum,
-          paymentMode: autoMode,
         };
-      });
-    });
+      })
+    );
   };
 
   const handleConfirmManualRow = (identifier: string) => {
@@ -4557,8 +5086,10 @@ function DailyRegisterView({
           inv.invoiceNo === identifier;
         if (!matches) return inv;
 
-        const typedNo = (inv.invoiceNo && inv.invoiceNo.trim()) || (inv.id && inv.id.trim());
-        const finalNo = typedNo || `MANUAL-${Math.floor(1000 + Math.random() * 9000)}`;
+        const typedNo =
+          (inv.branchInvNo && inv.branchInvNo.trim()) ||
+          (inv.invoiceNo && inv.invoiceNo.trim());
+        const finalNo = typedNo || `W#JB${Math.floor(10000 + Math.random() * 90000)}`;
         const isCreditReceived =
           inv.paymentMode === "Credit Received" ||
           (inv.paymentMode as string) === "CREDIT_RECD" ||
@@ -4567,22 +5098,22 @@ function DailyRegisterView({
         if (isCreditReceived && inv.amount > 0) {
           const linkedInv = inv.linkedInvoiceNum || finalNo;
           onSyncCreditCustomer(
-            inv.customer || "Contractor",
+            inv.customer || inv.customerName || "Contractor",
             inv.amount,
-            inv.originalDate || "2026-09-12",
+            inv.originalDate || activeSessionDate || saudiTodayIso(),
             linkedInv,
             "CREDIT_RECD"
           );
           upsertEntry({
             id: `ple-credit_recd-${linkedInv}`,
             type: "CREDIT_RECD",
-            customerName: inv.customer || "Contractor",
+            customerName: inv.customer || inv.customerName || "Contractor",
             receiptNo: linkedInv,
             invoiceNumber: linkedInv,
             paymentMode: "Credit Received",
             linkedInvoiceNum: linkedInv,
             originalDate: inv.originalDate,
-            title: inv.customer || "Contractor",
+            title: inv.customer || inv.customerName || "Contractor",
             amount: inv.amount,
             time: nowHHMM(),
           });
@@ -4590,7 +5121,7 @@ function DailyRegisterView({
 
         return {
           ...inv,
-          id: finalNo,
+          branchInvNo: finalNo,
           invoiceNo: finalNo,
           linkedInvoiceNum: isCreditReceived ? (inv.linkedInvoiceNum || finalNo) : undefined,
           paymentMode: isCreditReceived ? "Credit Received" : inv.paymentMode,
@@ -4628,14 +5159,16 @@ function DailyRegisterView({
           inv.invoiceNo === identifier ||
           (inv.id && inv.id === identifier);
         if (!matches) return inv;
-        const orig = inv.originalAmount ?? (inv.isManualEntry ? undefined : inv.amount);
-        const isEdited = !inv.isManualEntry && orig !== undefined && val !== orig;
+        const isManualRow = Boolean(inv.isManual || inv.isManualEntry);
+        const orig = isManualRow ? val : (inv.originalAmount ?? inv.amount);
+        const isEdited = !isManualRow && orig !== undefined && val !== orig;
         const cashShare = inv.isSplit ? r2(val / 2) : inv.splitCashAmount;
         const bankShare = inv.isSplit ? r2(val - cashShare) : inv.splitBankAmount;
         return {
           ...inv,
           originalAmount: orig,
           amount: val,
+          netPayableAmount: val,
           isEdited,
           overrideReason: isEdited ? (inv.overrideReason || "BUSINESS_COMMISSION") : undefined,
           overrideNote: isEdited ? inv.overrideNote : undefined,
@@ -4648,6 +5181,275 @@ function DailyRegisterView({
         };
       });
     });
+  };
+
+  // ── Round-Off Discount, Business Commission & Submit Adjustment Controls ──
+  const [openAdjRowId, setOpenAdjRowId] = useState<string | null>(null);
+  const [adjInputs, setAdjInputs] = useState<
+    Record<string, { discount: string; roundOff: string; commission: string }>
+  >({});
+
+  const getRowAdjInput = (inv: ErpInvoiceItem, rowKey: string) => {
+    const cur = adjInputs[rowKey];
+    if (cur) return cur;
+    return {
+      discount: inv.discountAmount ? String(inv.discountAmount) : "",
+      roundOff: inv.roundOffAmount ? String(inv.roundOffAmount) : "",
+      commission: inv.businessCommission ? String(inv.businessCommission) : "",
+    };
+  };
+
+  const updateRowAdjInput = (
+    inv: ErpInvoiceItem,
+    rowKey: string,
+    field: "discount" | "roundOff" | "commission",
+    val: string
+  ) => {
+    setAdjInputs((prev) => {
+      const base = prev[rowKey] || {
+        discount: inv.discountAmount ? String(inv.discountAmount) : "",
+        roundOff: inv.roundOffAmount ? String(inv.roundOffAmount) : "",
+        commission: inv.businessCommission ? String(inv.businessCommission) : "",
+      };
+      return {
+        ...prev,
+        [rowKey]: {
+          ...base,
+          [field]: val,
+        },
+      };
+    });
+  };
+
+  // "Round Off" button: extracts exact decimal fraction (e.g. 347.50 -> 0.50, 347.10 -> 0.10) and rounds invoice down to integer (347.00)
+  const handleRoundOffInvoice = (identifier: string) => {
+    setErpInvoices((prev) => {
+      const updated = prev.map((inv) => {
+        const rowKey = inv.internalId || inv.id || inv.invoiceNo;
+        const matches =
+          rowKey === identifier ||
+          (inv.internalId && inv.internalId === identifier) ||
+          (inv.id && inv.id === identifier) ||
+          inv.invoiceNo === identifier;
+        if (!matches) return inv;
+
+        const orig = inv.originalAmount && inv.originalAmount > 0 ? inv.originalAmount : inv.amount;
+        const disc = r2(inv.discountAmount || 0);
+        const comm = r2(inv.businessCommission || 0);
+        const baseBeforeRound = Math.max(0, r2(orig - disc - comm));
+        const currentAmt = inv.amount;
+        const decimalPart = r2(currentAmt - Math.floor(currentAmt));
+
+        let nextRoundOff = r2(inv.roundOffAmount || 0);
+        let nextNet = currentAmt;
+
+        if (decimalPart > 0.0001) {
+          // Strip decimal portion and add to roundOffAmount
+          nextRoundOff = r2((inv.roundOffAmount || 0) + decimalPart);
+          nextNet = Math.floor(currentAmt);
+        } else if ((inv.roundOffAmount || 0) > 0) {
+          // Toggle off if already rounded to integer
+          nextRoundOff = 0;
+          nextNet = baseBeforeRound;
+        } else {
+          // Check if baseBeforeRound had a decimal
+          const baseDec = r2(baseBeforeRound - Math.floor(baseBeforeRound));
+          if (baseDec > 0.0001) {
+            nextRoundOff = baseDec;
+            nextNet = Math.floor(baseBeforeRound);
+          }
+        }
+
+        setAdjInputs((prevAdj) => ({
+          ...prevAdj,
+          [rowKey]: {
+            discount: disc > 0 ? String(disc) : "",
+            roundOff: nextRoundOff > 0 ? String(nextRoundOff) : "",
+            commission: comm > 0 ? String(comm) : "",
+          },
+        }));
+
+        const cashShare = inv.isSplit ? r2(nextNet / 2) : inv.splitCashAmount;
+        const bankShare = inv.isSplit ? r2(nextNet - cashShare) : inv.splitBankAmount;
+
+        return {
+          ...inv,
+          originalAmount: orig,
+          discountAmount: disc,
+          roundOffAmount: nextRoundOff,
+          businessCommission: comm,
+          netPayableAmount: nextNet,
+          amount: nextNet,
+          adjustmentsApplied: disc > 0 || nextRoundOff > 0 || comm > 0,
+          isEdited: nextNet !== orig,
+          overrideReason: comm > 0 ? "BUSINESS_COMMISSION" : (inv.overrideReason || "CUSTOM"),
+          splitCashAmount: cashShare,
+          splitBankAmount: bankShare,
+          creditBalance:
+            inv.paymentMode === "CREDIT_SALE"
+              ? Math.max(0, r2(nextNet - (inv.creditDownAmount || 0)))
+              : inv.creditBalance,
+        };
+      });
+      return updated;
+    });
+  };
+
+  // Explicit "Submit" button for Discount, Round-Off, and Business Commission
+  const handleSubmitInvoiceAdjustments = (
+    identifier: string,
+    discountRaw?: string,
+    roundOffRaw?: string,
+    commissionRaw?: string
+  ) => {
+    setErpInvoices((prev) => {
+      const updated = prev.map((inv) => {
+        const rowKey = inv.internalId || inv.id || inv.invoiceNo;
+        const matches =
+          rowKey === identifier ||
+          (inv.internalId && inv.internalId === identifier) ||
+          (inv.id && inv.id === identifier) ||
+          inv.invoiceNo === identifier;
+        if (!matches) return inv;
+
+        const orig = inv.originalAmount && inv.originalAmount > 0 ? inv.originalAmount : inv.amount;
+        const curInputs = adjInputs[rowKey];
+        const disc = Math.max(
+          0,
+          r2(
+            parseFloat(
+              discountRaw !== undefined
+                ? discountRaw
+                : curInputs?.discount !== undefined
+                ? curInputs.discount
+                : String(inv.discountAmount || 0)
+            ) || 0
+          )
+        );
+        const roff = Math.max(
+          0,
+          r2(
+            parseFloat(
+              roundOffRaw !== undefined
+                ? roundOffRaw
+                : curInputs?.roundOff !== undefined
+                ? curInputs.roundOff
+                : String(inv.roundOffAmount || 0)
+            ) || 0
+          )
+        );
+        const comm = Math.max(
+          0,
+          r2(
+            parseFloat(
+              commissionRaw !== undefined
+                ? commissionRaw
+                : curInputs?.commission !== undefined
+                ? curInputs.commission
+                : String(inv.businessCommission || 0)
+            ) || 0
+          )
+        );
+
+        const net = Math.max(0, r2(orig - disc - roff - comm));
+        const cashShare = inv.isSplit ? r2(net / 2) : inv.splitCashAmount;
+        const bankShare = inv.isSplit ? r2(net - cashShare) : inv.splitBankAmount;
+
+        return {
+          ...inv,
+          originalAmount: orig,
+          discountAmount: disc,
+          roundOffAmount: roff,
+          businessCommission: comm,
+          netPayableAmount: net,
+          amount: net,
+          adjustmentsApplied: disc > 0 || roff > 0 || comm > 0,
+          isEdited: net !== orig,
+          overrideReason: comm > 0 ? "BUSINESS_COMMISSION" : (inv.overrideReason || "CUSTOM"),
+          splitCashAmount: cashShare,
+          splitBankAmount: bankShare,
+          creditBalance:
+            inv.paymentMode === "CREDIT_SALE"
+              ? Math.max(0, r2(net - (inv.creditDownAmount || 0)))
+              : inv.creditBalance,
+        };
+      });
+      syncCommissionExpenses(updated);
+      return updated;
+    });
+  };
+
+  // ── "Return Bill" Feature in Bank/POS Match (Invoices) & Expenses ──
+  const handleToggleReturnErpInvoice = (identifier: string) => {
+    setErpInvoices((prev) => {
+      const updated = prev.map((inv) => {
+        const rowKey = inv.internalId || inv.id || inv.invoiceNo;
+        const matches =
+          rowKey === identifier ||
+          (inv.internalId && inv.internalId === identifier) ||
+          (inv.id && inv.id === identifier) ||
+          inv.invoiceNo === identifier;
+        if (!matches) return inv;
+
+        const nextReturned = !inv.isReturned;
+        if (nextReturned) {
+          const savedOrig =
+            inv.originalAmount && inv.originalAmount > 0 ? inv.originalAmount : inv.amount;
+          return {
+            ...inv,
+            isReturned: true,
+            originalAmount: savedOrig,
+            amount: 0,
+          };
+        } else {
+          const restoredBase =
+            inv.netPayableAmount !== undefined && inv.netPayableAmount > 0
+              ? inv.netPayableAmount
+              : inv.originalAmount ?? 0;
+          return {
+            ...inv,
+            isReturned: false,
+            amount: restoredBase,
+          };
+        }
+      });
+      syncCommissionExpenses(updated);
+      return updated;
+    });
+  };
+
+  const handleToggleReturnEntry = (entryId: string) => {
+    setPreLoggedEntries((prev) =>
+      prev.map((item) => {
+        if (item.id !== entryId) return item;
+        const nextReturned = !item.isReturned;
+        const savedOrig =
+          item.originalAmount && item.originalAmount > 0 ? item.originalAmount : item.amount;
+        const nextAmt = nextReturned ? 0 : savedOrig;
+
+        const pocketId = item.id.startsWith("pk-")
+          ? item.id.slice(3)
+          : item.sourcePocketId || null;
+        if (pocketId) {
+          fetch("/api/pocket", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              id: pocketId,
+              isReturned: nextReturned,
+              amount: nextAmt,
+            }),
+          }).catch((err) => console.error("Failed to sync returned state to pocket:", err));
+        }
+
+        return {
+          ...item,
+          isReturned: nextReturned,
+          originalAmount: savedOrig,
+          amount: nextAmt,
+        };
+      })
+    );
   };
 
   const handleEditErpInvoiceOverrideReason = (
@@ -4680,44 +5482,56 @@ function DailyRegisterView({
   };
 
   const syncCommissionExpenses = (targetInvoices?: ErpInvoiceItem[]) => {
-    const invoices =
-      targetInvoices || (erpInvoices);
+    const invoices = targetInvoices || erpInvoices;
     setPreLoggedEntries((prev) => {
       let updated = [...prev];
       for (const inv of invoices) {
-        const expId = `comm-exp-${inv.invoiceNo}`;
+        const displayInvNo = inv.branchInvNo || inv.invoiceNo;
+        const expId = `comm-exp-${inv.internalId || inv.invoiceNo}`;
+        const legacyExpId = `comm-exp-${inv.invoiceNo}`;
         const orig = inv.originalAmount ?? inv.amount;
-        const diff = r2(orig - inv.amount);
+        const explicitComm = inv.businessCommission || 0;
+        const diff =
+          explicitComm > 0
+            ? r2(explicitComm)
+            : inv.overrideReason === "BUSINESS_COMMISSION"
+            ? r2(Math.max(0, orig - inv.amount - (inv.discountAmount || 0) - (inv.roundOffAmount || 0)))
+            : 0;
 
-        if (inv.overrideReason === "BUSINESS_COMMISSION" && diff > 0) {
-          const existingIdx = updated.findIndex((e) => e.id === expId);
+        if (!inv.isReturned && diff > 0) {
+          const existingIdx = updated.findIndex(
+            (e) => e.id === expId || e.id === legacyExpId
+          );
           const commExpense: PreLoggedEntry = {
             id: expId,
             type: "EXPENSE",
-            title: `Business Commission (Inv #${inv.invoiceNo})`,
+            title: `Business Commission (Inv #${displayInvNo})`,
             expenseCategory: "Business Commission",
             amount: diff,
             originalAmount: diff,
             isEdited: false,
             paymentMode: "CASH",
-            note: "Auto-synced from CSV invoice edit",
+            note: "Auto-synced from invoice commission adjustment",
             time: nowHHMM(),
           };
 
           if (existingIdx !== -1) {
             updated[existingIdx] = {
               ...updated[existingIdx],
+              id: expId,
+              title: `Business Commission (Inv #${displayInvNo})`,
               amount: diff,
-              note: "Auto-synced from CSV invoice edit",
+              originalAmount: diff,
+              note: "Auto-synced from invoice commission adjustment",
             };
           } else {
             updated.push(commExpense);
           }
         } else {
-          updated = updated.filter((e) => e.id !== expId);
+          updated = updated.filter((e) => e.id !== expId && e.id !== legacyExpId);
         }
       }
-      return updated;
+      return deduplicatePreLoggedEntries(updated);
     });
   };
 
@@ -4741,12 +5555,14 @@ function DailyRegisterView({
         : `manual-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
     const newRow: ErpInvoiceItem = {
       internalId,
-      id: "",
-      invoiceNo: "",
+      id: internalId,
+      branchInvNo: "W#JB",
+      invoiceNo: "W#JB",
       customerName: "",
       customer: "",
       amount: 0,
-      paymentMode: "Cash",
+      paymentMode: "CASH",
+      isManual: true,
       isManualEntry: true,
       isConfirmed: false,
       posTerminal: "SAB",
@@ -4759,39 +5575,38 @@ function DailyRegisterView({
       autoMatched: false,
       time: nowHHMM(),
     };
-    setErpInvoices((prev) => {
-      const base = prev;
-      return [...base, newRow];
-    });
+    setErpInvoices((prev) => [newRow, ...prev]);
   };
 
   const handleAddManualErpInvoice = () => {
-    setErpInvoices((prev) => {
-      const base = prev;
-      const maxNo = base.reduce(
-        (m, i) => Math.max(m, parseInt(i.invoiceNo, 10) || 30079),
-        30079
-      );
-      const nextNo = String(maxNo + 1);
-      const newRow: ErpInvoiceItem = {
-        invoiceNo: nextNo,
-        customer: "New Walk-in / Manual Invoice",
-        amount: 500,
-        originalAmount: 500,
-        isEdited: false,
-        paymentMode: "CASH",
-        posTerminal: "SAB",
-        bankPaymentMode: "CASH",
-        isSplit: false,
-        splitCashAmount: 250,
-        splitBankAmount: 250,
-        splitBankMethod: "POS_SWIPE",
-        splitPosTerminal: "SAB",
-        autoMatched: false,
-        time: nowHHMM(),
-      };
-      return [...base, newRow];
-    });
+    const internalId =
+      typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `manual-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    const newRow: ErpInvoiceItem = {
+      internalId,
+      id: internalId,
+      branchInvNo: "W#JB",
+      invoiceNo: "W#JB",
+      customer: "",
+      customerName: "",
+      amount: 0,
+      isManual: true,
+      isManualEntry: true,
+      isConfirmed: false,
+      isEdited: false,
+      paymentMode: "CASH",
+      posTerminal: "SAB",
+      bankPaymentMode: "CASH",
+      isSplit: false,
+      splitCashAmount: 0,
+      splitBankAmount: 0,
+      splitBankMethod: "POS_SWIPE",
+      splitPosTerminal: "SAB",
+      autoMatched: false,
+      time: nowHHMM(),
+    };
+    setErpInvoices((prev) => [newRow, ...prev]);
   };
 
   const handleAddMissingInflow = (e: React.FormEvent) => {
@@ -4808,7 +5623,7 @@ function DailyRegisterView({
       receiptNo: cleanInvNo ? `#${cleanInvNo}` : undefined,
       type: "CREDIT_RECD",
       customerName: missingInflowTitle.trim(),
-      followUpDate: "2026-09-20",
+      followUpDate: addSaudiDays(7),
       paymentMode: missingInflowMode,
       terminal: (isMissingCard || isMissingBank) ? missingInflowTerminal : undefined,
       network: isMissingCard ? missingInflowNetwork : undefined,
@@ -4816,7 +5631,7 @@ function DailyRegisterView({
       amount: val,
       time: nowHHMM(),
     });
-    onSyncCreditCustomer(missingInflowTitle.trim(), val, "2026-09-20", cleanInvNo ? `#${cleanInvNo}` : undefined, "CREDIT_RECD");
+    onSyncCreditCustomer(missingInflowTitle.trim(), val, addSaudiDays(7), cleanInvNo ? `#${cleanInvNo}` : undefined, "CREDIT_RECD");
     setMissingInflowTitle("");
     setMissingInflowInvNo("");
     setMissingInflowAmt("");
@@ -4827,10 +5642,12 @@ function DailyRegisterView({
     const val = parseFloat(missingExpenseAmt);
     if (Number.isNaN(val) || val <= 0) return;
     const isCreditPurchase = missingExpenseCat === "Credit Purchase";
+    const isSupplierAdvance = missingExpenseCat === "Supplier Advance";
     const isPurchase =
       missingExpenseCat === "Credit Purchase" ||
       missingExpenseCat === "Cash Purchase" ||
-      missingExpenseCat === "Bank Purchase";
+      missingExpenseCat === "Bank Purchase" ||
+      isSupplierAdvance;
     const supplier = missingExpenseSupplier.trim() || "Jotun";
     const title = isPurchase
       ? `${missingExpenseCat} — ${supplier}`
@@ -4845,7 +5662,8 @@ function DailyRegisterView({
       type: "EXPENSE",
       expenseCategory: missingExpenseCat,
       supplierName: isPurchase ? supplier : undefined,
-      dueDate: isCreditPurchase ? missingExpenseDueDate : undefined,
+      dueDate: isCreditPurchase || isSupplierAdvance ? missingExpenseDueDate : undefined,
+      followUpDate: isCreditPurchase || isSupplierAdvance ? missingExpenseDueDate : undefined,
       paymentMode: missingExpenseMode,
       terminal: (isMissingExpCard || isMissingExpBank) ? missingExpenseTerminal : undefined,
       network: isMissingExpCard ? missingExpenseNetwork : undefined,
@@ -4855,7 +5673,7 @@ function DailyRegisterView({
     });
 
     if (isPurchase) {
-      onSyncCreditPurchase(supplier, val, missingExpenseDueDate || "2026-09-25", missingExpenseCat, missingExpenseMode);
+      onSyncCreditPurchase(supplier, val, missingExpenseDueDate || addSaudiDays(14), missingExpenseCat, missingExpenseMode);
     }
     setMissingExpenseSupplier("");
     setMissingExpenseAmt("");
@@ -4916,6 +5734,7 @@ function DailyRegisterView({
 
   const bankTransferTotal = r2(
     printBankTransferInvoices.reduce((sum, inv) => {
+      if (inv.isReturned) return sum;
       const amt =
         inv.paymentMode === "SPLIT"
           ? inv.splitBankAmount || 0
@@ -4933,9 +5752,11 @@ function DailyRegisterView({
   const cashSalesTotal = r2(
     activeErpList.reduce((sum, inv) => sum + calcInvoiceCashPortion(inv), 0)
   );
-  const bankSwipeGrossTotal = r2(
-    activeErpList.reduce((sum, inv) => sum + calcInvoiceBankGrossPortion(inv), 0)
+  const sessionPosBreakdown = useMemo(
+    () => calcSessionPosBreakdown(activeErpList, preLoggedBankInvoices, preLoggedEntries),
+    [activeErpList, preLoggedBankInvoices, preLoggedEntries]
   );
+  const bankSwipeGrossTotal = r2(sessionPosBreakdown.totalNonCashAmount);
   const totalMadaFees = r2(
     activeErpList.reduce((sum, inv) => {
       const fb = calcInvoiceFeeBreakdown(inv);
@@ -4961,13 +5782,47 @@ function DailyRegisterView({
   );
   const expenseEntries = preLoggedEntries.filter((e) => e.type === "EXPENSE");
 
-  const totalCreditInvAmount = r2(creditSaleEntries.reduce((a, b) => a + b.amount, 0));
-  const totalPreLoggedInflows = r2(cashInflowEntries.reduce((a, b) => a + b.amount, 0));
-  const totalPreLoggedExpenses = r2(expenseEntries.reduce((a, b) => a + b.amount, 0));
+  // Strict Accounting Separation: Cash Outflows vs Bank/Card Outflows vs Credit/Pay Later
+  const cashExpenseEntries = expenseEntries.filter(
+    (e) => classifyExpenseOutflow(e) === "CASH"
+  );
+  const bankExpenseEntries = expenseEntries.filter(
+    (e) => classifyExpenseOutflow(e) === "BANK"
+  );
+  const creditPurchaseEntries = expenseEntries.filter(
+    (e) => classifyExpenseOutflow(e) === "CREDIT"
+  );
+
+  const totalCashOutflows = r2(
+    cashExpenseEntries.reduce((a, b) => a + (b.isReturned ? 0 : b.amount), 0)
+  );
+  const totalBankOutflows = r2(
+    bankExpenseEntries.reduce((a, b) => a + (b.isReturned ? 0 : b.amount), 0)
+  );
+  const totalCreditOutflows = r2(
+    creditPurchaseEntries.reduce((a, b) => a + (b.isReturned ? 0 : b.amount), 0)
+  );
+
+  const totalCreditInvAmount = r2(
+    creditSaleEntries.reduce((a, b) => a + (b.isReturned ? 0 : b.amount), 0)
+  );
+  // Only count cash inflows (not returned, not Bank Transfer / Card if marked as non-cash, wait: Credit Recd / Loan In / Other In paid in CASH)
+  const totalPreLoggedInflows = r2(
+    cashInflowEntries.reduce((a, b) => {
+      if (b.isReturned) return a;
+      const pm = (b.paymentMode || "CASH").toUpperCase();
+      if (pm === "CARD" || pm === "POS_SWIPE" || pm === "BANK_TRANSFER" || pm === "BANK") {
+        return a;
+      }
+      return a + b.amount;
+    }, 0)
+  );
+  // ONLY Cash Outflows deduct from the physical Cash Drawer
+  const totalPreLoggedExpenses = totalCashOutflows;
 
   const totalCashInSalesAndReceipts = r2(cashSalesTotal + totalPreLoggedInflows);
   const totalMoneyInDrawer = r2(openingBalance + totalCashInSalesAndReceipts);
-  const totalMoneyOutDrawer = r2(totalPreLoggedExpenses);
+  const totalMoneyOutDrawer = r2(totalCashOutflows);
   const calculatedClosingBalance = r2(totalMoneyInDrawer - totalMoneyOutDrawer);
 
   // Intelligent Drawer Closing: Lock or Save Pending Audit Draft with Discrepancy & Float Sync
@@ -5339,7 +6194,7 @@ function DailyRegisterView({
         onSyncCreditPurchase(
           row.creditPurchaseSupplier.trim(),
           cpAmt,
-          "2026-09-25",
+          addSaudiDays(14),
           "Credit Purchase"
         );
       }
@@ -5350,7 +6205,7 @@ function DailyRegisterView({
         onSyncCreditCustomer(
           matched?.customer || `Inv #${row.invoiceNo.trim()} Customer`,
           crInv,
-          "2026-09-20",
+          addSaudiDays(7),
           `#${row.invoiceNo.trim()}`,
           "CREDIT_SALE"
         );
@@ -5361,7 +6216,7 @@ function DailyRegisterView({
         onSyncCreditCustomer(
           row.receiptNo.trim(),
           crRecd,
-          "2026-09-20",
+          addSaudiDays(7),
           `#${row.invoiceNo.trim() || "RCP"}`,
           "CREDIT_RECD"
         );
@@ -5402,6 +6257,11 @@ function DailyRegisterView({
     CREDIT_SALE: {
       label: "Credit Sale",
       badgeClass: "bg-jct-yellow text-jct-charcoal font-bold border-jct-yellow",
+      isOutflow: false,
+    },
+    CUSTOMER_ADVANCE: {
+      label: "📥 Customer Advance",
+      badgeClass: "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-bold border-emerald-500/40",
       isOutflow: false,
     },
     SPLIT_SALE: {
@@ -5807,6 +6667,7 @@ function DailyRegisterView({
                       <option value="SPLIT_SALE" className="bg-white dark:bg-[#0A0A0A]">⚡ Split Payment (Cash + Card)</option>
                       <option value="CREDIT_RECD" className="bg-white dark:bg-[#0A0A0A]">Credit Sale Amt Recd</option>
                       <option value="CREDIT_SALE" className="bg-white dark:bg-[#0A0A0A]">Credit Sale (New Customer Credit)</option>
+                      <option value="CUSTOMER_ADVANCE" className="bg-white dark:bg-[#0A0A0A]">📥 Customer Advance (Pre-Paid Deposit)</option>
                       <option value="LOAN_IN" className="bg-white dark:bg-[#0A0A0A]">Loan In</option>
                       <option value="OTHER_IN" className="bg-white dark:bg-[#0A0A0A]">Other Amt Recd</option>
                     </select>
@@ -5827,7 +6688,8 @@ function DailyRegisterView({
 
                         {(hubExpenseCat === "Credit Purchase" ||
                           hubExpenseCat === "Cash Purchase" ||
-                          hubExpenseCat === "Bank Purchase") && (
+                          hubExpenseCat === "Bank Purchase" ||
+                          hubExpenseCat === "Supplier Advance") && (
                           <input
                             type="text"
                             list="hub-suppliers-list"
@@ -5843,15 +6705,17 @@ function DailyRegisterView({
                           <option value="Sigma" />
                         </datalist>
 
-                        {hubExpenseCat === "Credit Purchase" && (
-                          <div className="flex items-center gap-1.5 rounded-md border border-slate-300 dark:border-[#1F1F1F] bg-transparent px-2.5 py-1.5">
-                            <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap">Due:</span>
-                            <input
-                              type="date"
+                        {(hubExpenseCat === "Credit Purchase" || hubExpenseCat === "Supplier Advance") && (
+                          <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-slate-300 dark:border-[#1F1F1F] bg-transparent px-2.5 py-1.5">
+                            <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                              {hubExpenseCat === "Supplier Advance" ? "Follow-Up:" : "Due:"}
+                            </span>
+                            <QuickFollowUpPicker
                               value={hubDueDate}
-                              onChange={(e) => setHubDueDate(e.target.value)}
-                              className="bg-transparent text-xs font-semibold text-jct-charcoal dark:text-jct-offwhite outline-none"
+                              onChange={(d) => setHubDueDate(d)}
+                              compact
                             />
+                            <FollowUpStatusBadge followUpDate={hubDueDate} compact />
                           </div>
                         )}
 
@@ -5895,7 +6759,7 @@ function DailyRegisterView({
                           className="flex-1 min-w-[150px] bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md text-sm px-3 py-2 placeholder:text-slate-400 outline-none transition"
                         />
                       </>
-                    ) : entryType === "CREDIT_RECD" || entryType === "CREDIT_SALE" ? (
+                    ) : entryType === "CREDIT_RECD" || entryType === "CREDIT_SALE" || entryType === "CUSTOMER_ADVANCE" ? (
                       <>
                         <input
                           type="text"
@@ -5905,7 +6769,7 @@ function DailyRegisterView({
                           placeholder={
                             entryType === "CREDIT_SALE"
                               ? "Invoice # (e.g. 30064)"
-                              : "Receipt # (opt)"
+                              : "Receipt / Inv # (opt)"
                           }
                           className="w-36 bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md font-mono text-sm font-bold px-3 py-2 placeholder:font-sans placeholder:text-slate-400 outline-none transition"
                         />
@@ -5916,16 +6780,16 @@ function DailyRegisterView({
                           placeholder="Customer Name (auto-fills)"
                           className="flex-1 min-w-[150px] bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md text-sm px-3 py-2 placeholder:text-slate-400 outline-none transition"
                         />
-                        <div className="flex items-center gap-1.5 rounded-md border border-slate-300 dark:border-[#1F1F1F] bg-transparent px-2.5 py-1.5">
+                        <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-slate-300 dark:border-[#1F1F1F] bg-transparent px-2.5 py-1.5">
                           <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap">
                             Follow-up:
                           </span>
-                          <input
-                            type="date"
+                          <QuickFollowUpPicker
                             value={hubFollowUpDate}
-                            onChange={(e) => setHubFollowUpDate(e.target.value)}
-                            className="bg-transparent text-xs font-semibold text-jct-charcoal dark:text-jct-offwhite outline-none"
+                            onChange={(d) => setHubFollowUpDate(d)}
+                            compact
                           />
+                          <FollowUpStatusBadge followUpDate={hubFollowUpDate} compact />
                         </div>
                       </>
                     ) : (
@@ -6269,27 +7133,36 @@ function DailyRegisterView({
       {/* Credit Sale Setup Popup Modal (Step 2) */}
       {creditModalInvNo &&
         (() => {
-          const modalInv = activeErpList.find((i) => i.invoiceNo === creditModalInvNo);
+          const modalInv = activeErpList.find(
+            (i) =>
+              (i.internalId && i.internalId === creditModalInvNo) ||
+              (i.id && i.id === creditModalInvNo) ||
+              i.invoiceNo === creditModalInvNo
+          );
           if (!modalInv) return null;
+          const modalKey = modalInv.internalId || modalInv.id || modalInv.invoiceNo;
           return (
             <CreditSaleModal
-              key={modalInv.invoiceNo}
+              key={modalKey}
               invoice={modalInv}
               onClose={() => setCreditModalInvNo(null)}
-              onSave={(cfg) => handleSaveCreditSale(modalInv.invoiceNo, cfg)}
+              onSave={(cfg) => handleSaveCreditSale(modalKey, cfg)}
             />
           );
         })()}
 
-      {/* Shared Datalist of Today's 18 ERP Invoices (30062 to 30079) for Instant Auto-Lookup */}
+      {/* Shared Datalist of Active Session ERP Invoices for Instant Auto-Lookup */}
       <datalist id="erp-invoices-datalist">
-        {activeErpList.map((inv) => (
-          <option
-            key={inv.invoiceNo}
-            value={inv.invoiceNo}
-            label={`#${inv.invoiceNo} — ${inv.customer} (SAR ${fmt(inv.amount)})`}
-          />
-        ))}
+        {activeErpList.map((inv, idx) => {
+          const invCode = inv.branchInvNo || inv.invoiceNo;
+          return (
+            <option
+              key={inv.internalId || inv.id || `${invCode}-${idx}`}
+              value={invCode}
+              label={`${invCode} — ${inv.customerName || inv.customer} (SAR ${fmt(inv.amount)})`}
+            />
+          );
+        })}
       </datalist>
 
       {/* ════════════════════════════════════════════════════════════════════
@@ -6597,25 +7470,36 @@ function DailyRegisterView({
                   );
 
                   const isJustConfirmed = recentlyConfirmedId === rowKey;
-                  const isUnconfirmedManual = (inv.isManualEntry || (inv.id && inv.id.startsWith("MANUAL-"))) && !inv.isConfirmed;
+                  const isManualRow = Boolean(
+                    inv.isManual || inv.isManualEntry || (inv.id && inv.id.startsWith("MANUAL-"))
+                  );
+                  const isUnconfirmedManual = isManualRow && !inv.isConfirmed;
+                  const rowAdj = getRowAdjInput(inv, rowKey);
+                  const hasAdjustments =
+                    Boolean(inv.adjustmentsApplied) ||
+                    (inv.discountAmount || 0) > 0 ||
+                    (inv.roundOffAmount || 0) > 0 ||
+                    (inv.businessCommission || 0) > 0;
+                  const isAdjOpen = openAdjRowId === rowKey || hasAdjustments;
 
                   return (
                     <div
                       key={rowKey}
                       className={`border-b pt-2 pb-6 mb-4 last:border-b-0 last:pb-0 transition-all duration-500 rounded-xl px-2 -mx-2 ${
-                        isJustConfirmed
+                        inv.isReturned
+                          ? "border-rose-500/40 bg-rose-500/5 opacity-80"
+                          : isJustConfirmed
                           ? "border-emerald-500/80 bg-emerald-500/10 shadow-[0_0_15px_rgba(16,185,129,0.15)] ring-1 ring-emerald-500/30"
                           : "border-slate-200 dark:border-[#1F1F1F] hover:bg-slate-50/50 dark:hover:bg-[#0A0A0A]/50"
                       }`}
                     >
                       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
                         <div className="flex flex-wrap items-center gap-2.5 min-w-0 flex-1">
-                          {isUnconfirmedManual ? (
-                            <div className="flex items-center gap-0.5 shrink-0">
-                              <span className="font-mono text-xs font-semibold text-jct-turquoise">#</span>
+                          {isManualRow ? (
+                            <div className="flex items-center gap-0.5 shrink-0 min-w-[118px]">
                               <input
                                 type="text"
-                                value={inv.id !== undefined ? inv.id : inv.invoiceNo}
+                                value={inv.branchInvNo ?? inv.invoiceNo ?? ""}
                                 onChange={(e) => handleUpdateInvoiceId(rowKey, e.target.value)}
                                 onKeyDown={(e) => {
                                   if (e.key === "Enter") {
@@ -6623,16 +7507,27 @@ function DailyRegisterView({
                                     handleConfirmManualRow(rowKey);
                                   }
                                 }}
-                                placeholder="Branch Inv #"
-                                className="w-28 bg-transparent border-b border-white/20 text-slate-200 text-xs font-mono font-medium focus:outline-none focus:border-jct-turquoise transition-colors px-1 py-0.5"
+                                placeholder="W#JB..."
+                                className="w-28 bg-slate-100/80 dark:bg-[#141414] border border-jct-turquoise/40 focus:border-jct-turquoise rounded-md text-jct-turquoise text-xs font-mono font-bold focus:outline-none px-2 py-1 transition-colors"
                               />
                             </div>
                           ) : (
-                            <div className="flex items-center gap-1.5 shrink-0 min-w-[110px]" title={inv.seqInvoiceNo ? `Branch Inv No: ${inv.invoiceNo} (Seq: #${inv.seqInvoiceNo})` : `Branch Inv No: ${inv.invoiceNo}`}>
-                              <span className="font-mono text-xs font-semibold text-jct-turquoise">
-                                {inv.invoiceNo?.startsWith("W#") || inv.invoiceNo?.startsWith("#") ? inv.invoiceNo : `#${inv.invoiceNo}`}
-                              </span>
-                              {inv.seqInvoiceNo && inv.seqInvoiceNo !== inv.invoiceNo && (
+                            <div
+                              className="flex items-center gap-1.5 shrink-0 min-w-[110px]"
+                              title={
+                                inv.seqInvoiceNo
+                                  ? `Branch Inv No: ${inv.branchInvNo || inv.invoiceNo} (Seq: #${inv.seqInvoiceNo})`
+                                  : `Branch Inv No: ${inv.branchInvNo || inv.invoiceNo}`
+                              }
+                            >
+                              <input
+                                type="text"
+                                value={inv.branchInvNo ?? inv.invoiceNo ?? ""}
+                                onChange={(e) => handleUpdateInvoiceId(rowKey, e.target.value)}
+                                placeholder="W#JB..."
+                                className="w-28 bg-transparent border-b border-transparent hover:border-slate-300 dark:hover:border-white/20 focus:border-jct-turquoise text-jct-turquoise text-xs font-mono font-semibold focus:outline-none px-1 py-0.5 transition-colors"
+                              />
+                              {inv.seqInvoiceNo && inv.seqInvoiceNo !== (inv.branchInvNo || inv.invoiceNo) && (
                                 <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 hidden sm:inline">
                                   (#{inv.seqInvoiceNo})
                                 </span>
@@ -6642,19 +7537,28 @@ function DailyRegisterView({
                           {/* Editable Customer / Description Input */}
                           <input
                             type="text"
-                            value={inv.customer || inv.customerName || ""}
+                            value={inv.customerName ?? inv.customer ?? ""}
                             onChange={(e) =>
                               handleEditErpInvoiceCustomer(rowKey, e.target.value)
                             }
-                            placeholder="Customer / Description..."
-                            className="min-w-[180px] flex-1 max-w-sm text-sm font-medium bg-transparent border-transparent text-jct-charcoal dark:text-white placeholder-slate-400 focus:outline-none focus:ring-0 focus:border-b-2 focus:border-jct-turquoise transition-all rounded-none px-2 py-1"
+                            placeholder="Enter Customer / Description..."
+                            className={`min-w-[180px] flex-1 max-w-sm text-sm font-medium bg-transparent border-b text-jct-charcoal dark:text-white placeholder-slate-400 focus:outline-none focus:ring-0 focus:border-b-2 focus:border-jct-turquoise transition-all rounded-none px-2 py-1 ${
+                              isManualRow && !(inv.customerName || inv.customer)
+                                ? "border-jct-turquoise/50"
+                                : "border-transparent"
+                            } ${inv.isReturned ? "line-through opacity-60" : ""}`}
                           />
+                          {inv.isReturned && (
+                            <span className="rounded-full bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/40 px-3 py-1 text-[10px] font-extrabold shrink-0">
+                              ↩ RETURNED BILL (Orig: SAR {fmt(inv.originalAmount ?? 0)})
+                            </span>
+                          )}
                           <span
                             className={`rounded-full border px-3 py-1 text-[10px] font-bold shrink-0 ${pmBadge.badgeClass}`}
                           >
                             {pmBadge.badge}
                           </span>
-                          {inv.isManualEntry && (
+                          {isManualRow && (
                             <span className="rounded-full bg-jct-turquoise/20 text-jct-charcoal dark:text-jct-turquoise border border-jct-turquoise/40 px-2.5 py-0.5 text-[10px] font-bold shrink-0">
                               Manual
                             </span>
@@ -6681,64 +7585,131 @@ function DailyRegisterView({
                           )}
                         </div>
 
-                        <div className="flex flex-wrap items-center justify-between lg:justify-end gap-3 shrink-0">
-                          {/* Editable Invoice Amount Input */}
+                        <div className="flex flex-wrap items-center justify-between lg:justify-end gap-2.5 shrink-0">
+                          {/* Editable Invoice Amount Input + Round-Off & Adjustment Controls */}
                           <div className="flex flex-wrap items-center gap-2">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-xs font-medium text-slate-500 dark:text-slate-400">SAR</span>
-                              <input
-                                type="number"
-                                step="0.01"
-                                value={inv.amount === 0 ? "" : inv.amount}
-                                placeholder="0.00"
-                                onChange={(e) =>
-                                  handleEditErpInvoiceAmount(rowKey, e.target.value)
-                                }
-                                className={`w-24 font-mono text-sm font-semibold text-right bg-transparent border-b text-jct-charcoal dark:text-white placeholder-slate-400 focus:outline-none focus:ring-0 px-1.5 py-0.5 transition-colors ${
-                                  inv.originalAmount !== undefined && inv.amount !== inv.originalAmount
-                                    ? "border-amber-500 text-amber-600 dark:text-amber-400 font-bold"
-                                    : "border-transparent focus:border-b-2 focus:border-jct-turquoise"
-                                }`}
-                              />
-                            </div>
-
-                            {/* Dynamic Mandatory Reason Dropdown on Amount Change */}
-                            {inv.originalAmount !== undefined && inv.amount !== inv.originalAmount && (
-                              <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs">
-                                <span className="text-[10px] font-mono font-bold text-amber-600 dark:text-amber-400 whitespace-nowrap">
-                                  Orig: SAR {fmt(inv.originalAmount)}
+                            {inv.isReturned ? (
+                              <div className="flex items-center gap-2 font-mono text-xs">
+                                <span className="line-through text-slate-400">
+                                  SAR {fmt(inv.originalAmount ?? 0)}
                                 </span>
-                                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 whitespace-nowrap">
-                                  Reason *:
+                                <span className="font-bold text-rose-600 dark:text-rose-400">
+                                  SAR 0.00
                                 </span>
-                                <select
-                                  value={inv.overrideReason || "BUSINESS_COMMISSION"}
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">SAR</span>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={inv.amount === 0 && isManualRow ? "" : inv.amount}
+                                  placeholder="0.00"
                                   onChange={(e) =>
-                                    handleEditErpInvoiceOverrideReason(
-                                      rowKey,
-                                      e.target.value as OverrideReason
-                                    )
+                                    handleEditErpInvoiceAmount(rowKey, e.target.value)
                                   }
-                                  className="rounded bg-white dark:bg-black px-2 py-0.5 text-xs font-bold text-amber-600 dark:text-amber-400 border border-amber-500/40 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                                  title="Mandatory reason for changing ERP invoice amount"
-                                >
-                                  <option value="BUSINESS_COMMISSION">Business Commission</option>
-                                  <option value="BILL_MISTAKE">Bill Mistake</option>
-                                  <option value="CUSTOM">Custom Note</option>
-                                </select>
-                                {inv.overrideReason === "CUSTOM" && (
-                                  <input
-                                    type="text"
-                                    placeholder="Enter note..."
-                                    value={inv.overrideNote || ""}
-                                    onChange={(e) =>
-                                      handleEditErpInvoiceOverrideNote(rowKey, e.target.value)
-                                    }
-                                    className="w-28 rounded bg-white dark:bg-black px-2 py-0.5 text-xs text-jct-charcoal dark:text-white border border-amber-500/40 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                                  />
-                                )}
+                                  className={`w-24 font-mono text-sm font-semibold text-right bg-transparent border-b text-jct-charcoal dark:text-white placeholder-slate-400 focus:outline-none focus:ring-0 px-1.5 py-0.5 transition-colors ${
+                                    inv.originalAmount !== undefined && inv.amount !== inv.originalAmount
+                                      ? "border-amber-500 text-amber-600 dark:text-amber-400 font-bold"
+                                      : isManualRow && inv.amount === 0
+                                      ? "border-jct-turquoise/50 focus:border-b-2 focus:border-jct-turquoise"
+                                      : "border-transparent focus:border-b-2 focus:border-jct-turquoise"
+                                  }`}
+                                />
                               </div>
                             )}
+
+                            {/* "Round Off" Button & "Adjust / Comm" Toggle Button */}
+                            {!inv.isReturned && (
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleRoundOffInvoice(rowKey)}
+                                  className={`rounded-md px-2 py-1 text-[11px] font-bold transition-colors whitespace-nowrap ${
+                                    (inv.roundOffAmount || 0) > 0
+                                      ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/40"
+                                      : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-jct-turquoise/20 hover:text-jct-turquoise border border-slate-200 dark:border-slate-700"
+                                  }`}
+                                  title="Strip decimal fraction (e.g. 347.50 -> 347.00) and apply as Round-Off Discount"
+                                >
+                                  {(inv.roundOffAmount || 0) > 0
+                                    ? `✂️ Rounded (-${fmt(inv.roundOffAmount || 0)})`
+                                    : "✂️ Round Off"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setOpenAdjRowId(openAdjRowId === rowKey ? null : rowKey)
+                                  }
+                                  className={`rounded-md px-2 py-1 text-[11px] font-bold transition-colors whitespace-nowrap ${
+                                    isAdjOpen
+                                      ? "bg-jct-yellow text-jct-charcoal"
+                                      : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700"
+                                  }`}
+                                  title="Open Discount, Round-Off & Business Commission adjustment panel"
+                                >
+                                  ⚙️ Disc / Comm
+                                </button>
+                              </div>
+                            )}
+
+                            {/* Green Confirmation Badge when Adjustments are Applied */}
+                            {!inv.isReturned && hasAdjustments && (
+                              <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/40 bg-emerald-500/15 px-2.5 py-0.5 font-mono text-[10px] font-bold text-emerald-700 dark:text-emerald-300 whitespace-nowrap">
+                                ✓ Applied · Orig: {fmt(inv.originalAmount ?? inv.amount)}
+                                {(inv.roundOffAmount || 0) > 0
+                                  ? ` | Round-off: -${fmt(inv.roundOffAmount || 0)}`
+                                  : ""}
+                                {(inv.discountAmount || 0) > 0
+                                  ? ` | Disc: -${fmt(inv.discountAmount || 0)}`
+                                  : ""}
+                                {(inv.businessCommission || 0) > 0
+                                  ? ` | Comm: -${fmt(inv.businessCommission || 0)}`
+                                  : ""}{" "}
+                                | Net: {fmt(inv.amount)}
+                              </span>
+                            )}
+
+                            {/* Dynamic Mandatory Reason Dropdown on Direct Amount Change */}
+                            {!inv.isReturned &&
+                              !hasAdjustments &&
+                              inv.originalAmount !== undefined &&
+                              inv.amount !== inv.originalAmount && (
+                                <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs">
+                                  <span className="text-[10px] font-mono font-bold text-amber-600 dark:text-amber-400 whitespace-nowrap">
+                                    Orig: SAR {fmt(inv.originalAmount)}
+                                  </span>
+                                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 whitespace-nowrap">
+                                    Reason *:
+                                  </span>
+                                  <select
+                                    value={inv.overrideReason || "BUSINESS_COMMISSION"}
+                                    onChange={(e) =>
+                                      handleEditErpInvoiceOverrideReason(
+                                        rowKey,
+                                        e.target.value as OverrideReason
+                                      )
+                                    }
+                                    className="rounded bg-white dark:bg-black px-2 py-0.5 text-xs font-bold text-amber-600 dark:text-amber-400 border border-amber-500/40 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                                    title="Mandatory reason for changing ERP invoice amount"
+                                  >
+                                    <option value="BUSINESS_COMMISSION">Business Commission</option>
+                                    <option value="BILL_MISTAKE">Bill Mistake</option>
+                                    <option value="CUSTOM">Custom Note</option>
+                                  </select>
+                                  {inv.overrideReason === "CUSTOM" && (
+                                    <input
+                                      type="text"
+                                      placeholder="Enter note..."
+                                      value={inv.overrideNote || ""}
+                                      onChange={(e) =>
+                                        handleEditErpInvoiceOverrideNote(rowKey, e.target.value)
+                                      }
+                                      className="w-28 rounded bg-white dark:bg-black px-2 py-0.5 text-xs text-jct-charcoal dark:text-white border border-amber-500/40 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                                    />
+                                  )}
+                                </div>
+                              )}
                           </div>
 
                           {/* Segmented Payment Type Selector */}
@@ -6789,7 +7760,7 @@ function DailyRegisterView({
                             </button>
                             <button
                               type="button"
-                              onClick={() => setCreditModalInvNo(inv.invoiceNo)}
+                              onClick={() => setCreditModalInvNo(rowKey)}
                               className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
                                 inv.paymentMode === "CREDIT_SALE"
                                   ? "bg-jct-turquoise text-jct-charcoal font-bold"
@@ -6806,16 +7777,34 @@ function DailyRegisterView({
                               type="button"
                               onClick={() => handleConfirmManualRow(rowKey)}
                               disabled={inv.paymentMode === "SPLIT" && !resolveSplitBankChoice(inv)}
-                              className="bg-jct-turquoise/10 text-jct-turquoise hover:bg-jct-turquoise/20 disabled:opacity-40 disabled:cursor-not-allowed px-3 py-1.5 rounded-md text-xs font-bold transition-colors flex items-center gap-1 shrink-0"
+                              className="bg-jct-turquoise text-jct-charcoal hover:brightness-95 disabled:opacity-40 disabled:cursor-not-allowed px-3 py-1.5 rounded-md text-xs font-bold transition-colors flex items-center gap-1 shrink-0 shadow-sm"
                               title={
                                 inv.paymentMode === "SPLIT" && !resolveSplitBankChoice(inv)
                                   ? "Select the bank / terminal for the split first"
-                                  : "Finalize and add manual invoice to list"
+                                  : "Finalize and save manual invoice row"
                               }
                             >
-                              ✅ Submit
+                              ✅ Save Row
                             </button>
                           )}
+
+                          {/* "Return Bill" / "Undo Return" Button */}
+                          <button
+                            type="button"
+                            onClick={() => handleToggleReturnErpInvoice(rowKey)}
+                            className={`rounded-md px-2.5 py-1.5 text-xs font-bold transition-colors flex items-center gap-1 shrink-0 ${
+                              inv.isReturned
+                                ? "bg-amber-500/20 text-amber-600 dark:text-amber-300 border border-amber-500/40 hover:bg-amber-500/30"
+                                : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/30 hover:bg-rose-500/20"
+                            }`}
+                            title={
+                              inv.isReturned
+                                ? "Restore returned bill to original amount"
+                                : "Mark bill as Returned (sets effective total to SAR 0.00 while preserving audit record)"
+                            }
+                          >
+                            {inv.isReturned ? "↺ Undo Return" : "↩ Return Bill"}
+                          </button>
 
                           {/* Subtle Trash Icon Delete Button (Owner Only) */}
                           {isOwner && (
@@ -6824,13 +7813,86 @@ function DailyRegisterView({
                               onClick={() => handleRemoveErpInvoice(rowKey)}
                               className="text-slate-400 hover:text-rose-500 p-1.5 rounded-lg hover:bg-rose-500/10 transition-colors"
                               title="Delete invoice row"
-                              aria-label={`Delete invoice ${inv.invoiceNo || "manual"}`}
+                              aria-label={`Delete invoice ${inv.branchInvNo || inv.invoiceNo || "manual"}`}
                             >
                               <Trash2 size={14} />
                             </button>
                           )}
                         </div>
                       </div>
+
+                      {/* Adjustment Sub-Row: Discount, Round-Off, Business Commission + Explicit Submit Button */}
+                      {!inv.isReturned && isAdjOpen && (
+                        <div className="bg-slate-50 dark:bg-[#111111] border border-jct-turquoise/30 rounded-lg mt-2 p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+                          <div className="flex flex-wrap items-center gap-3">
+                            <span className="font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-[10px]">
+                              Orig: SAR {fmt(inv.originalAmount ?? inv.amount)}
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                                Discount (SAR):
+                              </label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                placeholder="0.00"
+                                value={rowAdj.discount}
+                                onChange={(e) =>
+                                  updateRowAdjInput(inv, rowKey, "discount", e.target.value)
+                                }
+                                className="w-20 rounded bg-white dark:bg-black border border-slate-300 dark:border-[#222222] focus:border-jct-turquoise px-2 py-1 font-mono text-xs font-bold text-jct-charcoal dark:text-white outline-none"
+                              />
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                                Round Off (SAR):
+                              </label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                placeholder="0.00"
+                                value={rowAdj.roundOff}
+                                onChange={(e) =>
+                                  updateRowAdjInput(inv, rowKey, "roundOff", e.target.value)
+                                }
+                                className="w-20 rounded bg-white dark:bg-black border border-slate-300 dark:border-[#222222] focus:border-jct-turquoise px-2 py-1 font-mono text-xs font-bold text-jct-charcoal dark:text-white outline-none"
+                              />
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                                Business Commission (SAR):
+                              </label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                placeholder="0.00"
+                                value={rowAdj.commission}
+                                onChange={(e) =>
+                                  updateRowAdjInput(inv, rowKey, "commission", e.target.value)
+                                }
+                                className="w-20 rounded bg-white dark:bg-black border border-slate-300 dark:border-[#222222] focus:border-jct-turquoise px-2 py-1 font-mono text-xs font-bold text-jct-charcoal dark:text-white outline-none"
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleSubmitInvoiceAdjustments(
+                                  rowKey,
+                                  rowAdj.discount,
+                                  rowAdj.roundOff,
+                                  rowAdj.commission
+                                )
+                              }
+                              className="rounded-md bg-jct-turquoise text-jct-charcoal font-extrabold hover:brightness-95 px-3.5 py-1.5 text-xs shadow-sm transition"
+                            >
+                              ✓ Submit
+                            </button>
+                          </div>
+                          <div className="font-mono text-xs font-bold text-emerald-600 dark:text-jct-turquoise">
+                            Net Payable: SAR {fmt(inv.amount)}
+                          </div>
+                        </div>
+                      )}
 
                       {/* Progressive Disclosure Sub-Row: Split/Partial Allocation & Card Method */}
                       {isSplitMode && (
@@ -6847,7 +7909,7 @@ function DailyRegisterView({
                                 value={inv.splitCashAmount}
                                 onChange={(e) =>
                                   handleSetInvoiceSplitAmounts(
-                                    inv.invoiceNo,
+                                    rowKey,
                                     "cash",
                                     e.target.value
                                   )
@@ -6867,7 +7929,7 @@ function DailyRegisterView({
                                 value={inv.splitBankAmount}
                                 onChange={(e) =>
                                   handleSetInvoiceSplitAmounts(
-                                    inv.invoiceNo,
+                                    rowKey,
                                     "bank",
                                     e.target.value
                                   )
@@ -6889,7 +7951,7 @@ function DailyRegisterView({
                                   <button
                                 key={key}
                                 type="button"
-                                onClick={() => handleSetSplitBankChoice(inv.invoiceNo, key)}
+                                onClick={() => handleSetSplitBankChoice(rowKey, key)}
                                 className={`rounded-md px-2 py-0.5 text-xs font-semibold transition-colors ${
                                   resolveSplitBankChoice(inv) === key
                                     ? "bg-jct-turquoise text-jct-charcoal font-bold"
@@ -6927,7 +7989,7 @@ function DailyRegisterView({
                                       <button
                                         key={brand}
                                         type="button"
-                                        onClick={() => handleSetSplitCardType(inv.invoiceNo, brand)}
+                                        onClick={() => handleSetSplitCardType(rowKey, brand)}
                                         className={`rounded-md px-2 py-0.5 text-xs font-semibold transition-colors ${
                                           activeBrand === brand
                                             ? "bg-jct-turquoise text-jct-charcoal font-bold"
@@ -6981,7 +8043,7 @@ function DailyRegisterView({
                                     <button
                                       key={term}
                                       type="button"
-                                      onClick={() => handleSelectInvoicePosTerminal(inv.invoiceNo, term)}
+                                      onClick={() => handleSelectInvoicePosTerminal(rowKey, term)}
                                       className={`rounded-md px-2.5 py-1 text-xs font-bold transition-colors ${
                                         isSelected
                                           ? "bg-jct-turquoise text-jct-charcoal shadow-sm"
@@ -7005,7 +8067,7 @@ function DailyRegisterView({
                                     <button
                                       key={net}
                                       type="button"
-                                      onClick={() => handleSelectInvoiceCardNetwork(inv.invoiceNo, net)}
+                                      onClick={() => handleSelectInvoiceCardNetwork(rowKey, net)}
                                       className={`rounded-md px-2.5 py-1 text-xs font-bold transition-colors ${
                                         isSelected
                                           ? "bg-jct-turquoise text-jct-charcoal shadow-sm"
@@ -7074,7 +8136,7 @@ function DailyRegisterView({
                           </div>
                           <button
                             type="button"
-                            onClick={() => setCreditModalInvNo(inv.invoiceNo)}
+                            onClick={() => setCreditModalInvNo(rowKey)}
                             className="bg-jct-yellow text-black font-bold hover:brightness-95 transition-all rounded-md px-2.5 py-0.5 text-xs"
                           >
                             Edit
@@ -7119,7 +8181,7 @@ function DailyRegisterView({
                           <input
                             type="text"
                             value={inv.otherNote || ""}
-                            onChange={(e) => handleSetInvoiceOtherNote(inv.invoiceNo, e.target.value)}
+                            onChange={(e) => handleSetInvoiceOtherNote(rowKey, e.target.value)}
                             placeholder="Add note / cause for this amount..."
                             className="flex-1 bg-transparent border-transparent text-jct-charcoal dark:text-white placeholder-slate-400 focus:outline-none focus:ring-0 focus:border-b-2 focus:border-jct-turquoise transition-all rounded-none px-2 py-0.5 text-xs font-medium"
                           />
@@ -7136,7 +8198,7 @@ function DailyRegisterView({
                     activeErpList={activeErpList}
                     preLoggedEntries={preLoggedEntries}
                     openingBalance={openingBalance}
-                    date="12-09-2026"
+                    date={activeSessionDate || saudiCalendarDateStr()}
                     branchName={getBranchBadgeInfo(branchId).name}
                   />
                 </div>
@@ -7264,6 +8326,7 @@ function DailyRegisterView({
                             e.target.value as
                               | "CREDIT_RECD"
                               | "CREDIT_SALE"
+                              | "CUSTOMER_ADVANCE"
                               | "SPLIT_SALE"
                               | "LOAN_IN"
                               | "OTHER_IN"
@@ -7272,6 +8335,8 @@ function DailyRegisterView({
                         className="w-full bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-3.5 py-2.5 text-sm font-medium outline-none"
                       >
                         <option value="CREDIT_RECD" className="bg-white dark:bg-[#0A0A0A]">Credit Sale Amt Recd</option>
+                        <option value="CUSTOMER_ADVANCE" className="bg-white dark:bg-[#0A0A0A]">📥 Customer Advance (Pre-Paid Deposit)</option>
+                        <option value="CREDIT_SALE" className="bg-white dark:bg-[#0A0A0A]">Credit Sale (New Customer Credit)</option>
                         <option value="LOAN_IN" className="bg-white dark:bg-[#0A0A0A]">Loan In</option>
                         <option value="OTHER_IN" className="bg-white dark:bg-[#0A0A0A]">Other Amt Recd</option>
                       </select>
@@ -7281,66 +8346,115 @@ function DailyRegisterView({
                     {step3SplitEnabled ? (
                       <div className="space-y-2">
                         <label className="block text-xs font-medium text-slate-500 dark:text-slate-400">
-                          ERP Invoice Number
+                          Branch Invoice Number
                         </label>
                         <input
                           type="text"
                           list="erp-invoices-datalist"
                           value={step3ReceiptNo}
                           onChange={(e) => handleStep3InvoiceInput(e.target.value)}
-                          placeholder="Enter or select invoice # (e.g. 30064)..."
+                          placeholder="Search Branch Inv # (e.g. W#JB033431, 033431)..."
                           className="w-full bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-3.5 py-2.5 font-mono text-sm font-semibold placeholder:font-sans placeholder:text-slate-400 outline-none"
                         />
 
-                        {/* Clean Horizontal Row of Quick-Select Chips */}
-                        <div className="flex flex-wrap gap-1.5 pt-0.5">
-                          {["30064", "30067", "30070", "30072", "30075", "30077"].map((invNo) => {
-                            const isSelected = cleanErpInvNo(step3ReceiptNo) === invNo;
-                            return (
-                              <button
-                                key={invNo}
-                                type="button"
-                                onClick={() => handleStep3InvoiceInput(invNo)}
-                                className={`rounded-md px-2.5 py-1 font-mono text-xs transition-all ${
-                                  isSelected
-                                    ? "bg-jct-turquoise text-jct-charcoal font-bold shadow-sm"
-                                    : "border border-slate-200 dark:border-[#1F1F1F] bg-slate-50 dark:bg-[#111111] text-jct-charcoal dark:text-jct-offwhite font-medium hover:brightness-95"
-                                }`}
-                              >
-                                #{invNo}
-                              </button>
-                            );
-                          })}
-                        </div>
+                        {/* Clean Horizontal Row of Live Session Quick-Select Chips */}
+                        {activeErpList.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 pt-0.5">
+                            {activeErpList.slice(0, 8).map((inv, idx) => {
+                              const invCode = inv.branchInvNo || inv.invoiceNo;
+                              const isSelected =
+                                cleanErpInvNo(step3ReceiptNo).toLowerCase() ===
+                                cleanErpInvNo(invCode).toLowerCase();
+                              return (
+                                <button
+                                  key={inv.internalId || inv.id || `${invCode}-${idx}`}
+                                  type="button"
+                                  onClick={() => handleStep3InvoiceInput(invCode)}
+                                  className={`rounded-md px-2.5 py-1 font-mono text-xs transition-all ${
+                                    isSelected
+                                      ? "bg-jct-turquoise text-jct-charcoal font-bold shadow-sm"
+                                      : "border border-slate-200 dark:border-[#1F1F1F] bg-slate-50 dark:bg-[#111111] text-jct-charcoal dark:text-jct-offwhite font-medium hover:brightness-95"
+                                  }`}
+                                >
+                                  {invCode.startsWith("W#") || invCode.startsWith("#") ? invCode : `#${invCode}`}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
 
                         {/* Single-Line Clean Match Confirmation Pill */}
                         {matchedStep3Invoice && (
                           <div className="rounded-lg bg-jct-yellow text-jct-charcoal font-bold px-3.5 py-2 text-xs truncate">
-                            Matched:{" "}
-                            <span>{matchedStep3Invoice.customer}</span> · SAR{" "}
+                            ✓ Matched Live Session Invoice:{" "}
+                            <span>{matchedStep3Invoice.branchInvNo || matchedStep3Invoice.invoiceNo}</span> ·{" "}
+                            <span>{matchedStep3Invoice.customerName || matchedStep3Invoice.customer}</span> · SAR{" "}
                             {fmt(matchedStep3Invoice.amount)}
                           </div>
                         )}
                       </div>
                     ) : (
-                      <div className="space-y-1.5">
+                      <div className="space-y-2">
                         <label className="block text-xs font-medium text-slate-500 dark:text-slate-400">
-                          {step3Kind === "CREDIT_RECD" ? "Invoice Number (Smart Lookup)" : "Receipt / Reference Number (Optional)"}
+                          {step3Kind === "CREDIT_RECD"
+                            ? "Branch Invoice Number (Live Session & Historical Lookup)"
+                            : "Receipt / Reference Number (Optional)"}
                         </label>
                         <input
                           type="text"
+                          list="erp-invoices-datalist"
                           value={step3ReceiptNo}
-                          onChange={(e) => step3Kind === "CREDIT_RECD" ? handleInvoiceLookup(e.target.value) : handleStep3InvoiceInput(e.target.value)}
-                          placeholder={step3Kind === "CREDIT_RECD" ? "Search Invoice # (e.g. 30051, INV-891)..." : "Receipt # (e.g. RCP-1042)..."}
+                          onChange={(e) =>
+                            step3Kind === "CREDIT_RECD"
+                              ? handleInvoiceLookup(e.target.value)
+                              : handleStep3InvoiceInput(e.target.value)
+                          }
+                          placeholder={
+                            step3Kind === "CREDIT_RECD"
+                              ? "Search Branch Inv # (e.g. W#JB033431, 033431)..."
+                              : "Receipt # (e.g. W#JB033431, RCP-1042)..."
+                          }
                           className="w-full bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-3.5 py-2.5 font-mono text-sm font-medium placeholder:font-sans placeholder:text-slate-400 outline-none"
                         />
+                        {step3Kind === "CREDIT_RECD" && activeErpList.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 pt-0.5">
+                            {activeErpList.slice(0, 6).map((inv, idx) => {
+                              const invCode = inv.branchInvNo || inv.invoiceNo;
+                              const isSelected =
+                                cleanErpInvNo(step3ReceiptNo).toLowerCase() ===
+                                cleanErpInvNo(invCode).toLowerCase();
+                              return (
+                                <button
+                                  key={inv.internalId || inv.id || `recd-${invCode}-${idx}`}
+                                  type="button"
+                                  onClick={() => handleInvoiceLookup(invCode)}
+                                  className={`rounded-md px-2 py-0.5 font-mono text-[11px] transition-all ${
+                                    isSelected
+                                      ? "bg-jct-turquoise text-jct-charcoal font-bold shadow-sm"
+                                      : "border border-slate-200 dark:border-[#1F1F1F] bg-slate-50 dark:bg-[#111111] text-jct-charcoal dark:text-jct-offwhite font-medium hover:brightness-95"
+                                  }`}
+                                >
+                                  {invCode.startsWith("W#") || invCode.startsWith("#") ? invCode : `#${invCode}`}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                        {matchedStep3Invoice && (
+                          <div className="rounded-lg bg-jct-yellow text-jct-charcoal font-bold px-3.5 py-2 text-xs truncate">
+                            ✓ Matched Live Session:{" "}
+                            <span>{matchedStep3Invoice.branchInvNo || matchedStep3Invoice.invoiceNo}</span> ·{" "}
+                            <span>{matchedStep3Invoice.customerName || matchedStep3Invoice.customer}</span> · SAR{" "}
+                            {fmt(matchedStep3Invoice.amount)}
+                          </div>
+                        )}
                       </div>
                     )}
 
                     {/* 3. Customer / Contractor Name */}
                     <div className="space-y-1.5">
                       <label className="block text-xs font-medium text-slate-500 dark:text-slate-400">
-                        {step3Kind === "CREDIT_RECD" || step3SplitEnabled
+                        {step3Kind === "CREDIT_RECD" || step3Kind === "CREDIT_SALE" || step3Kind === "CUSTOMER_ADVANCE" || step3SplitEnabled
                           ? "Customer / Contractor Name"
                           : "Source or Note"}
                       </label>
@@ -7349,13 +8463,29 @@ function DailyRegisterView({
                         value={step3Title}
                         onChange={(e) => setStep3Title(e.target.value)}
                         placeholder={
-                          step3Kind === "CREDIT_RECD" || step3SplitEnabled
+                          step3Kind === "CREDIT_RECD" || step3Kind === "CREDIT_SALE" || step3Kind === "CUSTOMER_ADVANCE" || step3SplitEnabled
                             ? "Customer Name (auto-populates from ERP)"
                             : "Source or Note"
                         }
                         className="w-full bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-3.5 py-2.5 text-sm font-medium placeholder:text-slate-400 outline-none"
                       />
                     </div>
+
+                    {/* Follow-up Date Quick Buttons for Credit Sale & Customer Advance */}
+                    {(step3Kind === "CREDIT_SALE" || step3Kind === "CUSTOMER_ADVANCE") && !step3SplitEnabled && (
+                      <div className="space-y-1.5 rounded-lg border border-slate-200 dark:border-[#1F1F1F] bg-slate-50 dark:bg-[#111111] p-3">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                            Follow-Up Reminder Date:
+                          </span>
+                          <FollowUpStatusBadge followUpDate={step3FollowUpDate} compact />
+                        </div>
+                        <QuickFollowUpPicker
+                          value={step3FollowUpDate}
+                          onChange={(d) => setStep3FollowUpDate(d)}
+                        />
+                      </div>
+                    )}
 
                     {/* 4. Smart Original Date Indicator (Auto-Filled from Credit Radar) */}
                     {step3Kind === "CREDIT_RECD" && step3OriginalDate && (
@@ -7595,10 +8725,21 @@ function DailyRegisterView({
                                   </span>
                                 )}
                                 {item.followUpDate && (
-                                  <span className="rounded-md bg-jct-turquoise/25 border border-jct-turquoise/40 px-2 py-0.5 text-[10px] font-bold text-jct-charcoal dark:text-jct-offwhite">
-                                    Reminder: {item.followUpDate}
-                                    {item.receiptNo ? ` · Inv ${item.receiptNo}` : ""}
-                                  </span>
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    <FollowUpStatusBadge followUpDate={item.followUpDate} compact />
+                                    <QuickFollowUpPicker
+                                      value={item.followUpDate}
+                                      onChange={(nextDate) => {
+                                        setPreLoggedEntries((prev) =>
+                                          prev.map((it) =>
+                                            it.id === item.id ? { ...it, followUpDate: nextDate } : it
+                                          )
+                                        );
+                                      }}
+                                      showDateInput={false}
+                                      compact
+                                    />
+                                  </div>
                                 )}
                               </div>
                               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
@@ -7688,19 +8829,49 @@ function DailyRegisterView({
              ────────────────────────────────────────────────────────────── */}
           {wizardStep === 4 && (
             <div className="animate-in fade-in duration-300 ease-out flex flex-col gap-6 bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-yellow/20 dark:border-jct-yellow/30 hover:border-jct-yellow/80 hover:shadow-[0_0_15px_rgba(255,222,89,0.1)] rounded-xl p-6 sm:p-8 transition-all duration-300">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-[#1F1F1F] pb-5">
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <h2 className="font-display text-xl sm:text-2xl font-extrabold tracking-tight text-jct-charcoal dark:text-white uppercase">
-                      EXPENSES &amp; PURCHASES
-                    </h2>
-                    <InfoTooltip text="Select from official categories. Credit Purchases automatically sync directly into Suppliers & Payables." />
+              <div className="flex flex-col gap-4 border-b border-slate-200 dark:border-[#1F1F1F] pb-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <h2 className="font-display text-xl sm:text-2xl font-extrabold tracking-tight text-jct-charcoal dark:text-white uppercase">
+                        EXPENSES &amp; PURCHASES
+                      </h2>
+                      <InfoTooltip text="Select from official categories. Credit Purchases automatically sync directly into Suppliers & Payables and never deduct from today's physical Cash Drawer." />
+                    </div>
+                  </div>
+                  <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-yellow/20 dark:border-jct-yellow/30 hover:border-jct-yellow/80 hover:shadow-[0_0_15px_rgba(255,222,89,0.1)] rounded-xl px-4 py-2.5 shrink-0 transition-all duration-300">
+                    <span className="font-display text-base font-bold text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap">
+                      Total Cash Outflows (Drawer): SAR {fmt(totalPreLoggedExpenses)}
+                    </span>
                   </div>
                 </div>
-                <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-yellow/20 dark:border-jct-yellow/30 hover:border-jct-yellow/80 hover:shadow-[0_0_15px_rgba(255,222,89,0.1)] rounded-xl px-4 py-2.5 shrink-0 transition-all duration-300">
-                  <span className="font-display text-base font-bold text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap">
-                    Total Outflows: SAR {fmt(totalPreLoggedExpenses)}
-                  </span>
+
+                {/* Strict Accounting Separation Verification Sub-Totals */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-2.5 flex items-center justify-between">
+                    <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300">
+                      Cash Outflows (Deducted from Drawer):
+                    </span>
+                    <span className="font-mono text-sm font-black text-emerald-700 dark:text-emerald-300 whitespace-nowrap">
+                      SAR {fmt(totalCashOutflows)}
+                    </span>
+                  </div>
+                  <div className="rounded-lg border border-jct-turquoise/30 bg-jct-turquoise/10 px-3.5 py-2.5 flex items-center justify-between">
+                    <span className="text-xs font-bold text-jct-charcoal dark:text-jct-turquoise">
+                      Bank / Card Outflows:
+                    </span>
+                    <span className="font-mono text-sm font-black text-jct-charcoal dark:text-jct-turquoise whitespace-nowrap">
+                      SAR {fmt(totalBankOutflows)}
+                    </span>
+                  </div>
+                  <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3.5 py-2.5 flex items-center justify-between">
+                    <span className="text-xs font-bold text-amber-700 dark:text-amber-300">
+                      Credit / Pay Later (Routed to Payables - Not Deducted Today):
+                    </span>
+                    <span className="font-mono text-sm font-black text-amber-700 dark:text-amber-300 whitespace-nowrap">
+                      SAR {fmt(totalCreditOutflows)}
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -7775,10 +8946,11 @@ function DailyRegisterView({
                       )}
                     </div>
 
-                    {/* Show Supplier Name when Credit Purchase, Cash Purchase, or Bank Purchase is selected */}
+                    {/* Show Supplier Name when Credit Purchase, Cash Purchase, Bank Purchase, or Supplier Advance is selected */}
                     {(step4Category === "Credit Purchase" ||
                       step4Category === "Cash Purchase" ||
-                      step4Category === "Bank Purchase") && (
+                      step4Category === "Bank Purchase" ||
+                      step4Category === "Supplier Advance") && (
                       <div className="space-y-2.5 bg-slate-50 dark:bg-[#111111] border border-slate-200 dark:border-[#1F1F1F] text-jct-charcoal dark:text-jct-offwhite text-sm p-3 rounded-lg">
                         <div>
                           <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
@@ -7799,16 +8971,17 @@ function DailyRegisterView({
                           </datalist>
                         </div>
 
-                        {step4Category === "Credit Purchase" && (
-                          <div className="flex items-center justify-between gap-3 pt-1">
-                            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                              Payment Due Date:
-                            </span>
-                            <input
-                              type="date"
+                        {(step4Category === "Credit Purchase" || step4Category === "Supplier Advance") && (
+                          <div className="space-y-1.5 pt-1">
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                                {step4Category === "Supplier Advance" ? "Follow-Up Date:" : "Payment Due / Follow-Up Date:"}
+                              </span>
+                              <FollowUpStatusBadge followUpDate={step4DueDate} compact />
+                            </div>
+                            <QuickFollowUpPicker
                               value={step4DueDate}
-                              onChange={(e) => setStep4DueDate(e.target.value)}
-                              className="bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-3 py-1.5 text-xs font-medium outline-none"
+                              onChange={(d) => setStep4DueDate(d)}
                             />
                           </div>
                         )}
@@ -8018,8 +9191,14 @@ function DailyRegisterView({
                       {expenseEntries.map((item) => {
                         const isEditing = editingRowId === item.id;
                         const pmBadge = formatPaymentModeBadge(item.paymentMode);
+                        const outflowKind = classifyExpenseOutflow(item);
                         return (
-                          <div key={item.id} className="flex items-center justify-between gap-3 py-3">
+                          <div
+                            key={item.id}
+                            className={`flex items-center justify-between gap-3 py-3 ${
+                              item.isReturned ? "opacity-75 bg-rose-500/5 px-2 rounded-lg" : ""
+                            }`}
+                          >
                             <div className="min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span className="rounded-full bg-jct-yellow text-jct-charcoal font-bold px-3 py-1 text-[10px]">
@@ -8030,6 +9209,23 @@ function DailyRegisterView({
                                 >
                                   {pmBadge.badge}
                                 </span>
+                                {item.isReturned ? (
+                                  <span className="rounded-full bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/40 px-3 py-1 text-[10px] font-extrabold shrink-0">
+                                    ↩ RETURNED BILL (Orig: SAR {fmt(item.originalAmount ?? 0)})
+                                  </span>
+                                ) : outflowKind === "CREDIT" ? (
+                                  <span className="rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/40 px-2.5 py-0.5 text-[10px] font-bold shrink-0">
+                                    Pay Later · Not Deducted Today
+                                  </span>
+                                ) : outflowKind === "BANK" ? (
+                                  <span className="rounded-full bg-jct-turquoise/20 text-jct-charcoal dark:text-jct-turquoise border border-jct-turquoise/40 px-2.5 py-0.5 text-[10px] font-bold shrink-0">
+                                    Bank / Card Outflow (Non-Cash)
+                                  </span>
+                                ) : (
+                                  <span className="rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/40 px-2.5 py-0.5 text-[10px] font-bold shrink-0">
+                                    Deducted from Drawer
+                                  </span>
+                                )}
                                 {(item.paymentMode === "CARD" || item.terminal || item.network) && (
                                   <span className="rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-500/40 px-2.5 py-0.5 text-[10px] font-bold shrink-0">
                                     {item.network === "visa" ? "Visa" : "mada"} · {item.terminal || "SAB"}
@@ -8039,11 +9235,31 @@ function DailyRegisterView({
                                     })()}
                                   </span>
                                 )}
-                                <p className="text-sm font-semibold text-jct-charcoal dark:text-jct-offwhite truncate">{item.title}</p>
+                                <p
+                                  className={`text-sm font-semibold text-jct-charcoal dark:text-jct-offwhite truncate ${
+                                    item.isReturned ? "line-through opacity-60" : ""
+                                  }`}
+                                >
+                                  {item.title}
+                                </p>
                                 {item.dueDate && (
-                                  <span className="rounded-full bg-jct-turquoise/25 border border-jct-turquoise/40 px-3 py-1 text-[10px] font-bold text-jct-charcoal dark:text-jct-offwhite">
-                                    Due: {item.dueDate}
-                                  </span>
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    <FollowUpStatusBadge followUpDate={item.dueDate} compact />
+                                    <QuickFollowUpPicker
+                                      value={item.dueDate}
+                                      onChange={(nextDate) => {
+                                        setPreLoggedEntries((prev) =>
+                                          prev.map((it) =>
+                                            it.id === item.id
+                                              ? { ...it, dueDate: nextDate, followUpDate: nextDate }
+                                              : it
+                                          )
+                                        );
+                                      }}
+                                      showDateInput={false}
+                                      compact
+                                    />
+                                  </div>
                                 )}
                                 {item.supplierInvoiceNum && (
                                   <span className="rounded-full bg-slate-200 dark:bg-white/10 px-2.5 py-0.5 text-[10px] font-mono font-bold text-jct-turquoise">
@@ -8089,18 +9305,47 @@ function DailyRegisterView({
                                 </>
                               ) : (
                                 <>
-                                  <span className="font-display text-sm font-bold text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap">
-                                    -SAR {fmt(item.amount)}
-                                  </span>
+                                  {item.isReturned ? (
+                                    <div className="flex items-center gap-1.5 font-mono text-xs">
+                                      <span className="line-through text-slate-400">
+                                        -SAR {fmt(item.originalAmount ?? 0)}
+                                      </span>
+                                      <span className="font-bold text-rose-600 dark:text-rose-400">
+                                        SAR 0.00
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <span className="font-display text-sm font-bold text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap">
+                                      -SAR {fmt(item.amount)}
+                                    </span>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleReturnEntry(item.id)}
+                                    className={`rounded-md px-2.5 py-1 text-xs font-bold transition-colors whitespace-nowrap ${
+                                      item.isReturned
+                                        ? "bg-amber-500/20 text-amber-600 dark:text-amber-300 border border-amber-500/40 hover:bg-amber-500/30"
+                                        : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/30 hover:bg-rose-500/20"
+                                    }`}
+                                    title={
+                                      item.isReturned
+                                        ? "Restore returned bill to original amount"
+                                        : "Mark bill as Returned (sets effective total to SAR 0.00 while preserving audit record)"
+                                    }
+                                  >
+                                    {item.isReturned ? "↺ Undo Return" : "↩ Return Bill"}
+                                  </button>
                                   {isOwner && (
                                     <>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleOpenEditEntryModal(item)}
-                                        className="bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 transition-all rounded-md px-2.5 py-1 text-xs"
-                                      >
-                                        ✏️ Edit
-                                      </button>
+                                      {!item.isReturned && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleOpenEditEntryModal(item)}
+                                          className="bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 transition-all rounded-md px-2.5 py-1 text-xs"
+                                        >
+                                          ✏️ Edit
+                                        </button>
+                                      )}
                                       <button
                                         type="button"
                                         onClick={() => handleRemoveEntry(item.id)}
@@ -8286,15 +9531,18 @@ function DailyRegisterView({
                   <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 flex flex-col justify-between gap-3 transition-all duration-300 print:shadow-none print:border print:border-black print:rounded-none print:bg-white print:text-black">
                     <div>
                       <span className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider print:text-black print:text-xs print:font-bold print:uppercase">
-                        Cash Outflows (Shop Expenses)
+                        Cash Outflows (Deducted from Drawer)
                       </span>
                       <span className="mt-2 block font-mono text-2xl font-black text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap print:text-black print:text-2xl print:font-bold">
                         SAR {fmt(totalMoneyOutDrawer)}
                       </span>
                     </div>
-                    <span className="block text-xs text-slate-500 dark:text-slate-400 border-t border-slate-200 dark:border-[#1F1F1F] pt-2 print:text-black print:border-black">
-                      {expenseEntries.length} Recorded shop expenses
-                    </span>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 border-t border-slate-200 dark:border-[#1F1F1F] pt-2 print:text-black print:border-black flex flex-col gap-0.5">
+                      <span>{cashExpenseEntries.length} Cash Outflows (Drawer)</span>
+                      <span className="text-[10px]">
+                        Bank/Card: SAR {fmt(totalBankOutflows)} · Credit/Pay Later: SAR {fmt(totalCreditOutflows)}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
@@ -8403,23 +9651,35 @@ function DailyRegisterView({
                           : `erp-${inv.invoiceNo}`;
                         const isEditing = editingRowId === rowKey;
                         const netExclVat = cashAmt / 1.15;
+                        const rowLookupId = inv.internalId || inv.id || inv.invoiceNo;
                         return (
                           <div
-                            key={`cash-${inv.invoiceNo}`}
+                            key={inv.internalId || inv.id || `cash-${inv.invoiceNo}`}
                             className={`flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-4 py-2.5 transition print:flex print:flex-row print:justify-between print:py-2 print:border-b print:border-slate-200 print:text-sm print:text-black print:bg-white print:break-inside-avoid ${
-                              isSplitRow
+                              inv.isReturned
+                                ? "bg-rose-500/10 opacity-75"
+                                : isSplitRow
                                 ? "bg-jct-yellow/15 hover:bg-jct-yellow/25"
                                 : "hover:bg-slate-100/70 dark:hover:bg-[#111111]"
                             }`}
                           >
                             <div className="flex flex-wrap items-center gap-2.5 min-w-0 flex-1">
-                              <span className="font-mono text-xs font-extrabold text-slate-500 dark:text-slate-400 w-16 shrink-0 print:text-black print:font-bold print:w-20">
-                                #{inv.invoiceNo}
+                              <span className="font-mono text-xs font-extrabold text-slate-500 dark:text-slate-400 w-20 shrink-0 print:text-black print:font-bold print:w-20">
+                                {inv.branchInvNo || `#${inv.invoiceNo}`}
                               </span>
-                              <span className="text-xs font-semibold text-jct-charcoal dark:text-jct-offwhite truncate print:text-black print:text-sm">
+                              <span className={`text-xs font-semibold truncate print:text-black print:text-sm ${
+                                inv.isReturned
+                                  ? "line-through text-rose-500 dark:text-rose-400"
+                                  : "text-jct-charcoal dark:text-jct-offwhite"
+                              }`}>
                                 {inv.customer}
                               </span>
-                              {isSplitRow && (
+                              {inv.isReturned && (
+                                <span className="rounded-full bg-rose-600 text-white font-black px-2 py-0.5 text-[10px] shrink-0">
+                                  ↩ RETURNED BILL (Orig: SAR {fmt(inv.originalAmount ?? inv.amount)})
+                                </span>
+                              )}
+                              {isSplitRow && !inv.isReturned && (
                                 <span className="rounded bg-jct-yellow text-jct-charcoal font-bold px-2 py-0.5 text-[10px] shrink-0 print:border print:border-black print:bg-white print:text-black">
                                   Split (Cash Share: SAR {fmt(cashAmt)})
                                 </span>
@@ -8429,14 +9689,14 @@ function DailyRegisterView({
                                   Other Recd{inv.otherNote ? `: ${inv.otherNote}` : ""}
                                 </span>
                               )}
-                              {inv.originalAmount !== undefined && (
+                              {inv.originalAmount !== undefined && !inv.isReturned && (
                                 <span className="rounded bg-jct-yellow text-jct-charcoal font-bold px-1.5 py-0.5 text-[10px] shrink-0 print:hidden">
                                   Orig: SAR {fmt(inv.originalAmount)}
                                 </span>
                               )}
                             </div>
 
-                            {expandedAuditBox === "MONEY_IN" && (
+                            {expandedAuditBox === "MONEY_IN" && !inv.isReturned && (
                               <div className="flex items-center gap-2 print:hidden">
                                 <input
                                   type="text"
@@ -8459,10 +9719,12 @@ function DailyRegisterView({
                               </div>
                             )}
 
-                            <div className="flex items-center justify-end gap-3 shrink-0">
-                              <span className="text-[11px] text-slate-500 dark:text-slate-400 whitespace-nowrap print:hidden">
-                                Excl. 15% VAT: SAR {fmt(netExclVat)}
-                              </span>
+                            <div className="flex items-center justify-end gap-2 shrink-0">
+                              {!inv.isReturned && (
+                                <span className="text-[11px] text-slate-500 dark:text-slate-400 whitespace-nowrap print:hidden">
+                                  Excl. 15% VAT: SAR {fmt(netExclVat)}
+                                </span>
+                              )}
 
                               {isEditing ? (
                                 <div className="flex items-center gap-1.5 print:hidden">
@@ -8484,18 +9746,43 @@ function DailyRegisterView({
                                 </div>
                               ) : (
                                 <>
-                                  <span className="font-display text-xs font-extrabold text-jct-charcoal dark:text-jct-offwhite w-24 text-right whitespace-nowrap print:text-black print:text-sm print:font-bold">
-                                    +SAR {fmt(cashAmt)}
-                                  </span>
+                                  {inv.isReturned ? (
+                                    <div className="flex flex-col items-end">
+                                      <span className="font-mono text-[10px] line-through text-slate-400">
+                                        +SAR {fmt(inv.originalAmount ?? inv.amount)}
+                                      </span>
+                                      <span className="font-display text-xs font-extrabold text-rose-500 whitespace-nowrap">
+                                        SAR 0.00
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <span className="font-display text-xs font-extrabold text-jct-charcoal dark:text-jct-offwhite w-24 text-right whitespace-nowrap print:text-black print:text-sm print:font-bold">
+                                      +SAR {fmt(cashAmt)}
+                                    </span>
+                                  )}
+                                  {!inv.isReturned && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingRowId(rowKey);
+                                        setEditingRowVal(String(cashAmt));
+                                      }}
+                                      className="rounded bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-2 py-0.5 text-[10px] print:hidden"
+                                    >
+                                      ✏️ Edit
+                                    </button>
+                                  )}
                                   <button
                                     type="button"
-                                    onClick={() => {
-                                      setEditingRowId(rowKey);
-                                      setEditingRowVal(String(cashAmt));
-                                    }}
-                                    className="rounded bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-2 py-0.5 text-[10px] print:hidden"
+                                    onClick={() => handleToggleReturnErpInvoice(rowLookupId)}
+                                    className={`rounded border px-2 py-0.5 text-[10px] font-bold transition print:hidden ${
+                                      inv.isReturned
+                                        ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/25"
+                                        : "border-amber-500/40 bg-amber-500/15 text-amber-700 dark:text-amber-300 hover:bg-amber-500/25"
+                                    }`}
+                                    title={inv.isReturned ? "Undo Return Bill" : "Mark Bill as Returned (SAR 0.00)"}
                                   >
-                                    ✏️ Edit
+                                    {inv.isReturned ? "↺ Undo Return" : "↩ Return Bill"}
                                   </button>
                                   <button
                                     type="button"
@@ -8519,7 +9806,11 @@ function DailyRegisterView({
                         return (
                           <div
                             key={entry.id}
-                            className="flex items-center justify-between gap-2 px-4 py-2.5 hover:bg-slate-100/70 dark:hover:bg-[#111111] transition print:flex print:justify-between print:py-2 print:border-b print:border-slate-200 print:text-sm print:text-black print:bg-white print:break-inside-avoid"
+                            className={`flex items-center justify-between gap-2 px-4 py-2.5 transition print:flex print:justify-between print:py-2 print:border-b print:border-slate-200 print:text-sm print:text-black print:bg-white print:break-inside-avoid ${
+                              entry.isReturned
+                                ? "bg-rose-500/10 opacity-75"
+                                : "hover:bg-slate-100/70 dark:hover:bg-[#111111]"
+                            }`}
                           >
                             <div className="flex flex-wrap items-center gap-2 min-w-0 flex-1">
                               <span className="font-mono text-xs font-extrabold text-slate-500 dark:text-slate-400 w-16 shrink-0 print:text-black print:font-bold print:w-20">
@@ -8540,15 +9831,24 @@ function DailyRegisterView({
                                   {entry.network === "visa" ? "Visa" : "mada"} · {entry.terminal || "SAB"}
                                 </span>
                               )}
-                              <span className="text-xs font-bold text-jct-charcoal dark:text-jct-offwhite truncate print:text-black print:text-sm">
+                              <span className={`text-xs font-bold truncate print:text-black print:text-sm ${
+                                entry.isReturned
+                                  ? "line-through text-rose-500 dark:text-rose-400"
+                                  : "text-jct-charcoal dark:text-jct-offwhite"
+                              }`}>
                                 {entry.title}
                               </span>
+                              {entry.isReturned && (
+                                <span className="rounded-full bg-rose-600 text-white font-black px-2 py-0.5 text-[10px] shrink-0">
+                                  ↩ RETURNED BILL (Orig: SAR {fmt(entry.originalAmount ?? entry.amount)})
+                                </span>
+                              )}
                               {entry.followUpDate && (
                                 <span className="rounded-full bg-jct-turquoise/25 border border-jct-turquoise/40 px-2.5 py-0.5 text-[10px] font-bold text-jct-charcoal dark:text-jct-offwhite shrink-0 print:border-black print:text-black">
                                   Follow-up: {entry.followUpDate}
                                 </span>
                               )}
-                              {entry.originalAmount !== undefined && (
+                              {entry.originalAmount !== undefined && !entry.isReturned && (
                                 <span className="rounded bg-jct-yellow text-jct-charcoal font-bold px-1.5 py-0.5 text-[10px] shrink-0 print:hidden">
                                   Orig: SAR {fmt(entry.originalAmount)}
                                 </span>
@@ -8576,17 +9876,42 @@ function DailyRegisterView({
                                 </div>
                               ) : (
                                 <>
-                                  <span className="font-display text-xs font-extrabold text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap print:text-black print:text-sm print:font-bold">
-                                    +SAR {fmt(entry.amount)}
-                                  </span>
+                                  {entry.isReturned ? (
+                                    <div className="flex flex-col items-end">
+                                      <span className="font-mono text-[10px] line-through text-slate-400">
+                                        +SAR {fmt(entry.originalAmount ?? entry.amount)}
+                                      </span>
+                                      <span className="font-display text-xs font-extrabold text-rose-500 whitespace-nowrap">
+                                        SAR 0.00
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <span className="font-display text-xs font-extrabold text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap print:text-black print:text-sm print:font-bold">
+                                      +SAR {fmt(entry.amount)}
+                                    </span>
+                                  )}
                                   {isOwner && (
                                     <>
+                                      {!entry.isReturned && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleOpenEditEntryModal(entry)}
+                                          className="rounded bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-2 py-0.5 text-[10px] print:hidden"
+                                        >
+                                          ✏️ Edit
+                                        </button>
+                                      )}
                                       <button
                                         type="button"
-                                        onClick={() => handleOpenEditEntryModal(entry)}
-                                        className="rounded bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-2 py-0.5 text-[10px] print:hidden"
+                                        onClick={() => handleToggleReturnEntry(entry.id)}
+                                        className={`rounded border px-2 py-0.5 text-[10px] font-bold transition print:hidden ${
+                                          entry.isReturned
+                                            ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/25"
+                                            : "border-amber-500/40 bg-amber-500/15 text-amber-700 dark:text-amber-300 hover:bg-amber-500/25"
+                                        }`}
+                                        title={entry.isReturned ? "Undo Return Bill" : "Mark Bill as Returned (SAR 0.00)"}
                                       >
-                                        ✏️ Edit
+                                        {entry.isReturned ? "↺ Undo Return" : "↩ Return Bill"}
                                       </button>
                                       <button
                                         type="button"
@@ -8664,14 +9989,14 @@ function DailyRegisterView({
                           <div className="w-full">
                             <div className="flex items-center gap-1.5">
                               <h3 className="font-display text-lg font-extrabold text-jct-charcoal dark:text-jct-offwhite uppercase print:text-xl print:font-extrabold print:tracking-tight print:mt-10 print:mb-4 print:border-b print:border-slate-300 print:pb-2 print:text-black">
-                                CASH OUTFLOWS
+                                CASH OUTFLOWS &amp; PURCHASES
                               </h3>
-                              <InfoTooltip text="7 official categories · Credit Purchases sync to Suppliers & Payables." />
+                              <InfoTooltip text="7 official categories · Only CASH expenses deduct from Drawer. Bank & Credit Purchases tracked separately." />
                             </div>
                           </div>
                           <div className="flex items-center gap-3 shrink-0 print:hidden">
                             <span className="font-display text-base font-extrabold text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap">
-                              -SAR {fmt(totalMoneyOutDrawer)}
+                              Drawer: -SAR {fmt(totalMoneyOutDrawer)}
                             </span>
                             <button
                               type="button"
@@ -8697,15 +10022,48 @@ function DailyRegisterView({
                       </div>
                     </div>
 
+                    {/* Outflow Sub-Total Verification Strip */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 print:hidden">
+                      <div className="rounded-lg border border-jct-turquoise/30 bg-jct-turquoise/10 px-3 py-2">
+                        <span className="text-[10px] font-bold uppercase text-slate-600 dark:text-slate-300 block">
+                          Cash Outflows (Deducted from Drawer)
+                        </span>
+                        <span className="font-mono text-xs font-black text-jct-charcoal dark:text-jct-offwhite">
+                          SAR {fmt(totalCashOutflows)}
+                        </span>
+                      </div>
+                      <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+                        <span className="text-[10px] font-bold uppercase text-amber-800 dark:text-amber-300 block">
+                          Bank / Card Outflows
+                        </span>
+                        <span className="font-mono text-xs font-black text-amber-700 dark:text-amber-300">
+                          SAR {fmt(totalBankOutflows)}
+                        </span>
+                      </div>
+                      <div className="rounded-lg border border-purple-500/30 bg-purple-500/10 px-3 py-2">
+                        <span className="text-[10px] font-bold uppercase text-purple-800 dark:text-purple-300 block">
+                          Credit / Pay Later (Routed to Payables)
+                        </span>
+                        <span className="font-mono text-xs font-black text-purple-700 dark:text-purple-300">
+                          SAR {fmt(totalCreditOutflows)}
+                        </span>
+                      </div>
+                    </div>
+
                     <div className="w-full overflow-x-auto hide-scrollbar">
                       <div className="min-w-[520px] divide-y divide-slate-200 dark:divide-[#1F1F1F] rounded-xl border border-slate-200 dark:border-[#1F1F1F] bg-slate-50/50 dark:bg-black overflow-hidden print:border print:border-slate-300 print:rounded-none print:bg-white print:divide-slate-200">
                       {expenseEntries.map((entry) => {
                         const isEditing = editingRowId === entry.id;
                         const pmBadge = formatPaymentModeBadge(entry.paymentMode);
+                        const bucket = classifyExpenseOutflow(entry);
                         return (
                           <div
                             key={entry.id}
-                            className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 hover:bg-slate-100/70 dark:hover:bg-[#111111] transition print:flex print:justify-between print:py-2 print:border-b print:border-slate-200 print:text-sm print:text-black print:bg-white print:break-inside-avoid"
+                            className={`flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 transition print:flex print:justify-between print:py-2 print:border-b print:border-slate-200 print:text-sm print:text-black print:bg-white print:break-inside-avoid ${
+                              entry.isReturned
+                                ? "bg-rose-500/10 opacity-75"
+                                : "hover:bg-slate-100/70 dark:hover:bg-[#111111]"
+                            }`}
                           >
                             <div className="flex flex-wrap items-center gap-2 min-w-0 flex-1">
                               <span className="rounded-full bg-jct-yellow text-jct-charcoal font-bold px-2.5 py-0.5 text-[10px] shrink-0 print:border print:border-black print:bg-white print:text-black print:w-24 print:rounded-none print:text-center print:font-bold">
@@ -8716,6 +10074,16 @@ function DailyRegisterView({
                               >
                                 {pmBadge.badge}
                               </span>
+                              {bucket === "CREDIT" && !entry.isReturned && (
+                                <span className="rounded-full bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-500/40 px-2 py-0.5 text-[10px] font-bold shrink-0 print:hidden">
+                                  Pay Later · Not Deducted Today
+                                </span>
+                              )}
+                              {bucket === "BANK" && !entry.isReturned && (
+                                <span className="rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/40 px-2 py-0.5 text-[10px] font-bold shrink-0 print:hidden">
+                                  Bank/Card · Not Deducted from Cash Drawer
+                                </span>
+                              )}
                               {(entry.paymentMode === "CARD" || entry.terminal || entry.network) && (
                                 <span className="rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-500/40 px-2 py-0.5 text-[10px] font-bold shrink-0">
                                   {entry.network === "visa" ? "Visa" : "mada"} · {entry.terminal || "SAB"}
@@ -8725,22 +10093,31 @@ function DailyRegisterView({
                                   })()}
                                 </span>
                               )}
-                              <span className="text-xs font-bold text-jct-charcoal dark:text-jct-offwhite truncate print:text-black print:text-sm">
+                              <span className={`text-xs font-bold truncate print:text-black print:text-sm ${
+                                entry.isReturned
+                                  ? "line-through text-rose-500 dark:text-rose-400"
+                                  : "text-jct-charcoal dark:text-jct-offwhite"
+                              }`}>
                                 {entry.title}
                               </span>
+                              {entry.isReturned && (
+                                <span className="rounded-full bg-rose-600 text-white font-black px-2 py-0.5 text-[10px] shrink-0">
+                                  ↩ RETURNED BILL (Orig: SAR {fmt(entry.originalAmount ?? entry.amount)})
+                                </span>
+                              )}
                               {entry.dueDate && (
                                 <span className="rounded-full bg-jct-turquoise/25 border border-jct-turquoise/40 px-2.5 py-0.5 text-[10px] font-bold text-jct-charcoal dark:text-jct-offwhite shrink-0 print:border-black print:text-black">
                                   Due: {entry.dueDate}
                                 </span>
                               )}
-                              {entry.originalAmount !== undefined && (
+                              {entry.originalAmount !== undefined && !entry.isReturned && (
                                 <span className="rounded-full bg-jct-yellow text-jct-charcoal font-bold px-2.5 py-0.5 text-[10px] shrink-0 print:hidden">
                                   Orig: SAR {fmt(entry.originalAmount)}
                                 </span>
                               )}
                             </div>
 
-                            {expandedAuditBox === "EXPENSES" && (
+                            {expandedAuditBox === "EXPENSES" && !entry.isReturned && (
                               <div className="flex items-center gap-2 print:hidden">
                                 <select
                                   value={entry.expenseCategory || "Food"}
@@ -8762,16 +10139,16 @@ function DailyRegisterView({
                                     </option>
                                   ))}
                                 </select>
-                                {entry.expenseCategory === "Credit Purchase" && (
+                                {(entry.expenseCategory === "Credit Purchase" || entry.expenseCategory === "Supplier Advance") && (
                                   <input
                                     type="date"
-                                    value={entry.dueDate || "2026-09-25"}
+                                    value={entry.dueDate || saudiTodayIso()}
                                     onChange={(e) => {
                                       const newDate = e.target.value;
                                       setPreLoggedEntries((prev) =>
                                         prev.map((it) =>
                                           it.id === entry.id
-                                            ? { ...it, dueDate: newDate }
+                                            ? { ...it, dueDate: newDate, followUpDate: newDate }
                                             : it
                                         )
                                       );
@@ -8803,17 +10180,42 @@ function DailyRegisterView({
                                 </div>
                               ) : (
                                 <>
-                                  <span className="font-display text-xs font-extrabold text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap print:text-black print:text-sm print:font-bold">
-                                    -SAR {fmt(entry.amount)}
-                                  </span>
+                                  {entry.isReturned ? (
+                                    <div className="flex flex-col items-end">
+                                      <span className="font-mono text-[10px] line-through text-slate-400">
+                                        -SAR {fmt(entry.originalAmount ?? entry.amount)}
+                                      </span>
+                                      <span className="font-display text-xs font-extrabold text-rose-500 whitespace-nowrap">
+                                        SAR 0.00
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <span className="font-display text-xs font-extrabold text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap print:text-black print:text-sm print:font-bold">
+                                      {bucket === "CASH" ? "-SAR " : "SAR "}{fmt(entry.amount)}
+                                    </span>
+                                  )}
                                   {isOwner && (
                                     <>
+                                      {!entry.isReturned && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleOpenEditEntryModal(entry)}
+                                          className="rounded bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-2 py-0.5 text-[10px] print:hidden"
+                                        >
+                                          ✏️ Edit
+                                        </button>
+                                      )}
                                       <button
                                         type="button"
-                                        onClick={() => handleOpenEditEntryModal(entry)}
-                                        className="rounded bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-2 py-0.5 text-[10px] print:hidden"
+                                        onClick={() => handleToggleReturnEntry(entry.id)}
+                                        className={`rounded border px-2 py-0.5 text-[10px] font-bold transition print:hidden ${
+                                          entry.isReturned
+                                            ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/25"
+                                            : "border-amber-500/40 bg-amber-500/15 text-amber-700 dark:text-amber-300 hover:bg-amber-500/25"
+                                        }`}
+                                        title={entry.isReturned ? "Undo Return Bill" : "Mark Bill as Returned (SAR 0.00)"}
                                       >
-                                        ✏️ Edit
+                                        {entry.isReturned ? "↺ Undo Return" : "↩ Return Bill"}
                                       </button>
                                       <button
                                         type="button"
@@ -8974,20 +10376,35 @@ function DailyRegisterView({
                           );
                         // Interactive switcher only displays when actively editing or when box is expanded
                         const showInteractiveSwitcher = isEditing || expandedAuditBox === "BANK_POS";
+                        const rowLookupId = inv.internalId || inv.id || inv.invoiceNo;
 
                         return (
                           <div
-                            key={`bank-${inv.invoiceNo}`}
-                            className="flex flex-col gap-2.5 px-4 py-3 hover:bg-slate-100/70 dark:hover:bg-[#111111] transition border-b border-slate-200/60 dark:border-[#1F1F1F]/60 last:border-b-0 print:flex print:flex-row print:justify-between print:py-2 print:border-b print:border-slate-200 print:text-sm print:text-black print:bg-white print:break-inside-avoid"
+                            key={inv.internalId || inv.id || `bank-${inv.invoiceNo}`}
+                            className={`flex flex-col gap-2.5 px-4 py-3 transition border-b border-slate-200/60 dark:border-[#1F1F1F]/60 last:border-b-0 print:flex print:flex-row print:justify-between print:py-2 print:border-b print:border-slate-200 print:text-sm print:text-black print:bg-white print:break-inside-avoid ${
+                              inv.isReturned
+                                ? "bg-rose-500/10 opacity-75"
+                                : "hover:bg-slate-100/70 dark:hover:bg-[#111111]"
+                            }`}
                           >
                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 print:flex print:flex-row print:justify-between print:items-center print:w-full">
                               <div className="flex flex-wrap items-center gap-2.5 min-w-0 flex-1">
-                                <span className="font-mono text-xs font-extrabold text-slate-500 dark:text-slate-400 w-14 shrink-0 print:text-black print:font-bold print:w-20">
-                                  #{inv.invoiceNo}
+                                <span className="font-mono text-xs font-extrabold text-slate-500 dark:text-slate-400 w-20 shrink-0 print:text-black print:font-bold print:w-20">
+                                  {inv.branchInvNo || `#${inv.invoiceNo}`}
                                 </span>
-                                <span className="text-xs font-semibold text-jct-charcoal dark:text-jct-offwhite truncate max-w-[200px] sm:max-w-[260px] print:text-black print:text-sm">
+                                <span className={`text-xs font-semibold truncate max-w-[200px] sm:max-w-[260px] print:text-black print:text-sm ${
+                                  inv.isReturned
+                                    ? "line-through text-rose-500 dark:text-rose-400"
+                                    : "text-jct-charcoal dark:text-jct-offwhite"
+                                }`}>
                                   {inv.customer}
                                 </span>
+
+                                {inv.isReturned && (
+                                  <span className="rounded-full bg-rose-600 text-white font-black px-2 py-0.5 text-[10px] shrink-0">
+                                    ↩ RETURNED BILL (Orig: SAR {fmt(inv.originalAmount ?? inv.amount)})
+                                  </span>
+                                )}
 
                                 {/* Card Type Tag: Display clean chosen badge in review mode; hide on screen when interactive bar is shown */}
                                 <span
@@ -9006,12 +10423,21 @@ function DailyRegisterView({
                                   ]
                                 </span>
 
-                                {isSplitRow && (
+                                {isSplitRow && !inv.isReturned && (
                                   <span className="rounded bg-jct-turquoise/25 border border-jct-turquoise/40 px-2 py-0.5 text-[10px] font-extrabold text-jct-charcoal dark:text-jct-offwhite shrink-0 print:border-black print:text-black">
                                     Split Card Share: SAR {fmt(bankGross)}
                                   </span>
                                 )}
-                                {inv.originalAmount !== undefined && (
+                                {inv.adjustmentsApplied && !inv.isReturned && (
+                                  <span className="rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-700 dark:text-emerald-300 font-bold px-2 py-0.5 text-[10px] shrink-0 print:hidden">
+                                    ✓ Applied (Orig: {fmt(inv.originalAmount ?? inv.amount)}
+                                    {(inv.roundOffAmount || 0) > 0 ? ` | Round-off: -${fmt(inv.roundOffAmount || 0)}` : ""}
+                                    {(inv.discountAmount || 0) > 0 ? ` | Disc: -${fmt(inv.discountAmount || 0)}` : ""}
+                                    {(inv.businessCommission || 0) > 0 ? ` | Comm: -${fmt(inv.businessCommission || 0)}` : ""}
+                                    {` | Net: ${fmt(inv.netPayableAmount ?? inv.amount)}`})
+                                  </span>
+                                )}
+                                {inv.originalAmount !== undefined && !inv.isReturned && !inv.adjustmentsApplied && (
                                   <span className="rounded bg-jct-yellow text-jct-charcoal font-bold px-1.5 py-0.5 text-[10px] shrink-0 print:hidden">
                                     Orig: SAR {fmt(inv.originalAmount)}
                                   </span>
@@ -9019,8 +10445,8 @@ function DailyRegisterView({
                               </div>
 
                               {/* Action Area: Interactive Terminal Switcher & Amount / Edit Controls */}
-                              <div className="flex flex-wrap items-center justify-between md:justify-end gap-3 shrink-0 print:hidden">
-                                {showInteractiveSwitcher && (
+                              <div className="flex flex-wrap items-center justify-between md:justify-end gap-2 shrink-0 print:hidden">
+                                {showInteractiveSwitcher && !inv.isReturned && (
                                   <div className="inline-flex flex-wrap rounded-lg bg-white dark:bg-[#0A0A0A] p-0.5 border border-slate-200 dark:border-[#1F1F1F] gap-0.5 shadow-sm">
                                     {(["SAB", "AL_RAJHI", "SNB", "VISA_MC"] as PosTerminalBank[]).map(
                                       (term) => (
@@ -9097,24 +10523,59 @@ function DailyRegisterView({
                                     </button>
                                   </div>
                                 ) : (
-                                  <div className="flex items-center gap-2.5">
+                                  <div className="flex items-center gap-2">
                                     <div className="text-right">
-                                      <span className="block font-display text-xs font-extrabold text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap">
-                                        SAR{" "}
-                                        {fmt(
-                                          bankSettlementMode === "NET" ? fb.net : bankGross
-                                        )}
-                                      </span>
+                                      {inv.isReturned ? (
+                                        <div className="flex flex-col items-end">
+                                          <span className="font-mono text-[10px] line-through text-slate-400">
+                                            SAR {fmt(inv.originalAmount ?? inv.amount)}
+                                          </span>
+                                          <span className="font-display text-xs font-extrabold text-rose-500 whitespace-nowrap">
+                                            SAR 0.00
+                                          </span>
+                                        </div>
+                                      ) : (
+                                        <span className="block font-display text-xs font-extrabold text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap">
+                                          SAR{" "}
+                                          {fmt(
+                                            bankSettlementMode === "NET" ? fb.net : bankGross
+                                          )}
+                                        </span>
+                                      )}
                                     </div>
+                                    {!inv.isReturned && (
+                                      <>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRoundOffInvoice(rowLookupId)}
+                                          className="rounded border border-jct-turquoise/50 bg-jct-turquoise/15 text-jct-charcoal dark:text-jct-turquoise hover:bg-jct-turquoise hover:text-jct-charcoal font-bold px-2 py-0.5 text-[10px] transition"
+                                          title="Auto Round-Off decimal fraction (e.g., .50 or .10 -> .00)"
+                                        >
+                                          ✂️ Round Off
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setEditingRowId(rowKey);
+                                            setEditingRowVal(String(bankGross));
+                                          }}
+                                          className="rounded bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-2.5 py-0.5 text-[10px] shadow-sm transition"
+                                        >
+                                          ✏️ Edit
+                                        </button>
+                                      </>
+                                    )}
                                     <button
                                       type="button"
-                                      onClick={() => {
-                                        setEditingRowId(rowKey);
-                                        setEditingRowVal(String(bankGross));
-                                      }}
-                                      className="rounded bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-2.5 py-1 text-[10px] shadow-sm transition"
+                                      onClick={() => handleToggleReturnErpInvoice(rowLookupId)}
+                                      className={`rounded border px-2 py-0.5 text-[10px] font-bold transition ${
+                                        inv.isReturned
+                                          ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/25"
+                                          : "border-amber-500/40 bg-amber-500/15 text-amber-700 dark:text-amber-300 hover:bg-amber-500/25"
+                                      }`}
+                                      title={inv.isReturned ? "Undo Return Bill" : "Mark Bill as Returned (SAR 0.00)"}
                                     >
-                                      ✏️ Edit
+                                      {inv.isReturned ? "↺ Undo Return" : "↩ Return Bill"}
                                     </button>
                                     <button
                                       type="button"
@@ -9136,7 +10597,7 @@ function DailyRegisterView({
                             </div>
 
                             {/* Detailed SAMA & ZATCA Fee Breakdown when Audit Details are Expanded */}
-                            {showExpandedFeeBreakdown && (
+                            {showExpandedFeeBreakdown && !inv.isReturned && (
                               <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 dark:border-[#1F1F1F] bg-slate-50 dark:bg-[#111111] px-3 py-1.5 font-mono text-[11px] text-slate-600 dark:text-slate-300 print:hidden">
                                 <span className="text-slate-500 dark:text-slate-400">
                                   {isBankTransferRow
@@ -10450,6 +11911,8 @@ function CreditRadarView({
   isOwner = false,
   onUpdateCustomer,
   onDeleteCustomer,
+  advances = [],
+  onRefreshAdvances,
 }: {
   customers: ContractorAccount[];
   onIssueCredit: (
@@ -10457,21 +11920,73 @@ function CreditRadarView({
     amount: number,
     followUpDate: string,
     receiptNo?: string,
-    mode?: "CREDIT_RECD" | "CREDIT_SALE"
+    mode?: "CREDIT_RECD" | "CREDIT_SALE" | "CUSTOMER_ADVANCE"
   ) => void;
   isOwner?: boolean;
   onUpdateCustomer?: (updated: ContractorAccount) => void;
   onDeleteCustomer?: (id: string) => void;
+  advances?: AdvanceRecordItem[];
+  onRefreshAdvances?: () => void;
 }) {
   const [activeId, setActiveId] = useState(customers[0]?.id || "c1");
   const [contractorInput, setContractorInput] = useState("");
   const [amountInput, setAmountInput] = useState("");
   const [receiptInput, setReceiptInput] = useState("");
-  const [dueDateInput, setDueDateInput] = useState("2026-09-25");
+  const [dueDateInput, setDueDateInput] = useState(() => addSaudiDays(7));
   const [editingCustomer, setEditingCustomer] = useState<ContractorAccount | null>(null);
   const [editCustName, setEditCustName] = useState("");
   const [editCustAmount, setEditCustAmount] = useState("");
   const [editCustDate, setEditCustDate] = useState("");
+  const [adjustingAdvId, setAdjustingAdvId] = useState<string | null>(null);
+  const [adjustAmountInput, setAdjustAmountInput] = useState("");
+  const [adjustTargetCustomer, setAdjustTargetCustomer] = useState("");
+
+  const customerAdvances = advances.filter(
+    (a) => a.direction === "CUSTOMER_ADVANCE_IN" && a.remainingBalance > 0
+  );
+
+  const handleDeductCustomerAdvance = async (adv: AdvanceRecordItem, deductVal: number, targetCustomerName?: string) => {
+    const cleanDeduct = Math.min(deductVal, adv.remainingBalance);
+    if (cleanDeduct <= 0) return;
+    try {
+      await fetch("/api/advances", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: adv.id,
+          deductAmount: cleanDeduct,
+          notes: `Applied SAR ${fmt(cleanDeduct)} against ${targetCustomerName || adv.partyName}`,
+        }),
+      });
+      if (targetCustomerName || adv.partyName) {
+        onIssueCredit(
+          targetCustomerName || adv.partyName,
+          cleanDeduct,
+          adv.followUpDate || saudiTodayIso(),
+          adv.branchInvNo || "#ADV-ADJ",
+          "CREDIT_RECD"
+        );
+      }
+      setAdjustingAdvId(null);
+      setAdjustAmountInput("");
+      onRefreshAdvances?.();
+    } catch (e) {
+      console.error("Failed to deduct customer advance:", e);
+    }
+  };
+
+  const handleUpdateAdvanceFollowUp = async (advId: string, nextDate: string) => {
+    try {
+      await fetch("/api/advances", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: advId, followUpDate: nextDate }),
+      });
+      onRefreshAdvances?.();
+    } catch (e) {
+      console.error("Failed to update advance followUpDate:", e);
+    }
+  };
 
   const active = customers.find((c) => c.id === activeId) || customers[0];
   const reminderAccounts = customers.filter(
@@ -10508,7 +12023,7 @@ function CreditRadarView({
     onIssueCredit(
       contractorInput.trim(),
       val,
-      dueDateInput || "2026-09-25",
+      dueDateInput || addSaudiDays(7),
       receiptInput.trim() || `#${Math.floor(30080 + Math.random() * 19)}`,
       "CREDIT_SALE"
     );
@@ -10686,11 +12201,9 @@ function CreditRadarView({
                 placeholder="Invoice # (e.g. #30064)"
                 className="flex-1 min-w-[120px] px-4 py-2.5 bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md font-medium text-sm outline-none"
               />
-              <input
-                type="date"
+              <QuickFollowUpPicker
                 value={dueDateInput}
-                onChange={(e) => setDueDateInput(e.target.value)}
-                className="flex-1 min-w-[140px] px-4 py-2.5 bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md font-medium text-sm outline-none"
+                onChange={(d) => setDueDateInput(d)}
               />
               <button
                 type="submit"
@@ -10700,6 +12213,100 @@ function CreditRadarView({
               </button>
             </div>
           </form>
+
+          {/* Customer Advances Held (Pre-Paid Deposits) */}
+          {customerAdvances.length > 0 && (
+            <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-emerald-500/40 rounded-xl p-5 shrink-0 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="rounded-lg bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 px-2.5 py-1 text-xs font-extrabold">
+                    📥 Customer Advances Held ({customerAdvances.length})
+                  </span>
+                  <span className="text-xs text-slate-500 dark:text-slate-400 font-semibold">
+                    Pre-paid deposits ready to deduct against future invoices
+                  </span>
+                </div>
+                <span className="font-mono text-xs font-black text-emerald-600 dark:text-emerald-400">
+                  Total Held: SAR {fmt(customerAdvances.reduce((s, a) => s + a.remainingBalance, 0))}
+                </span>
+              </div>
+              <div className="divide-y divide-slate-200 dark:divide-[#1F1F1F]">
+                {customerAdvances.map((adv) => (
+                  <div key={adv.id} className="py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-bold text-jct-charcoal dark:text-white text-sm">
+                        {adv.partyName}
+                      </span>
+                      {adv.branchInvNo && (
+                        <span className="font-mono text-[11px] font-bold text-jct-turquoise">
+                          {adv.branchInvNo}
+                        </span>
+                      )}
+                      <span className="rounded-full bg-slate-100 dark:bg-[#111111] border border-slate-200 dark:border-[#1F1F1F] px-2 py-0.5 text-[10px] font-bold">
+                        {adv.paymentMode}
+                      </span>
+                      <FollowUpStatusBadge followUpDate={adv.followUpDate} compact />
+                      <QuickFollowUpPicker
+                        value={adv.followUpDate}
+                        onChange={(nextD) => handleUpdateAdvanceFollowUp(adv.id, nextD)}
+                        showDateInput={false}
+                        compact
+                      />
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-mono font-extrabold text-emerald-600 dark:text-emerald-400">
+                        Remaining: SAR {fmt(adv.remainingBalance)} / {fmt(adv.totalAdvanceAmount)}
+                      </span>
+                      {adjustingAdvId === adv.id ? (
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={adjustAmountInput}
+                            onChange={(e) => setAdjustAmountInput(e.target.value)}
+                            placeholder="Deduct SAR"
+                            className="w-24 rounded-md border border-slate-300 dark:border-[#1F1F1F] bg-transparent px-2 py-1 font-mono text-xs font-bold outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleDeductCustomerAdvance(
+                                adv,
+                                parseFloat(adjustAmountInput) || adv.remainingBalance,
+                                adjustTargetCustomer || adv.partyName
+                              )
+                            }
+                            className="rounded-md bg-jct-turquoise text-jct-charcoal font-bold px-2.5 py-1 text-[11px]"
+                          >
+                            Apply
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setAdjustingAdvId(null)}
+                            className="text-slate-400 hover:text-white px-1"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAdjustingAdvId(adv.id);
+                            setAdjustAmountInput(String(adv.remainingBalance));
+                            setAdjustTargetCustomer(adv.partyName);
+                          }}
+                          className="rounded-lg bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-2.5 py-1 text-[11px] transition"
+                        >
+                          ⚡ Apply / Deduct Advance
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Pending Collections List */}
           <div className="flex-1 overflow-y-auto space-y-3 pr-2">
@@ -10745,10 +12352,22 @@ function CreditRadarView({
                           </span>
                         )}
                       </div>
-                      <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                      <div className="mt-1.5 flex flex-wrap items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                        <FollowUpStatusBadge followUpDate={remDate} />
                         <span className="inline-flex items-center gap-1 rounded-md bg-jct-yellow text-jct-charcoal font-bold px-2.5 py-0.5 text-[11px]">
-                          🔔 Reminder: {remDate} · Inv {invBadge}
+                          Inv {invBadge}
                         </span>
+                        <QuickFollowUpPicker
+                          value={remDate}
+                          onChange={(nextDate) => {
+                            onUpdateCustomer?.({
+                              ...c,
+                              dueDate: nextDate,
+                              followUpDate: nextDate,
+                            });
+                          }}
+                          compact
+                        />
                       </div>
                     </div>
                   </div>
@@ -10966,6 +12585,8 @@ function SupplierHubView({
   isOwner = false,
   onUpdateBill,
   onDeleteBill,
+  advances = [],
+  onRefreshAdvances,
 }: {
   supplierBrands: SupplierPayableBrand[];
   supplierBills: SupplierBillItem[];
@@ -10973,18 +12594,71 @@ function SupplierHubView({
     supplierName: string,
     amount: number,
     dueDate: string,
-    category: "Credit Purchase" | "Cash Purchase" | "Bank Purchase" | "Return",
-    paymentMode?: UniversalPaymentMode,
+    category: "Credit Purchase" | "Cash Purchase" | "Bank Purchase" | "Supplier Advance" | "Return",
+    paymentMode?: UniversalPaymentMode | string,
     supplierInvoiceNum?: string,
     billPdfUrl?: string
   ) => void;
   isOwner?: boolean;
   onUpdateBill?: (updated: SupplierBillItem) => void;
   onDeleteBill?: (id: string) => void;
+  advances?: AdvanceRecordItem[];
+  onRefreshAdvances?: () => void;
 }) {
   const [supplierHubTab, setSupplierHubTab] = useState<"vault" | "payables">("vault");
   const [unlocked, setUnlocked] = useState(false);
   const [pin, setPin] = useState("");
+  const [adjustingAdvId, setAdjustingAdvId] = useState<string | null>(null);
+  const [adjustAmountInput, setAdjustAmountInput] = useState("");
+  const [adjustInvoiceInput, setAdjustInvoiceInput] = useState("");
+
+  const supplierAdvances = advances.filter(
+    (a) => a.direction === "SUPPLIER_ADVANCE_OUT" && a.remainingBalance > 0
+  );
+
+  const handleAdjustSupplierAdvance = async (adv: AdvanceRecordItem, deductVal: number, invRef?: string) => {
+    const cleanDeduct = Math.min(deductVal, adv.remainingBalance);
+    if (cleanDeduct <= 0) return;
+    try {
+      await fetch("/api/advances", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: adv.id,
+          deductAmount: cleanDeduct,
+          notes: `Adjusted SAR ${fmt(cleanDeduct)} against purchase${invRef ? ` #${invRef}` : ""}`,
+        }),
+      });
+      // Deduct from supplier pending credit bills without deducting cash from drawer a second time
+      onLogSupplierPurchase(
+        adv.partyName,
+        cleanDeduct,
+        saudiTodayIso(),
+        "Return",
+        adv.paymentMode,
+        invRef || "ADV-OFFSET"
+      );
+      setAdjustingAdvId(null);
+      setAdjustAmountInput("");
+      setAdjustInvoiceInput("");
+      onRefreshAdvances?.();
+    } catch (e) {
+      console.error("Failed to adjust supplier advance:", e);
+    }
+  };
+
+  const handleUpdateSupplierAdvFollowUp = async (advId: string, nextDate: string) => {
+    try {
+      await fetch("/api/advances", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: advId, followUpDate: nextDate }),
+      });
+      onRefreshAdvances?.();
+    } catch (e) {
+      console.error("Failed to update supplier advance followUpDate:", e);
+    }
+  };
 
   const handlePin = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
@@ -11006,9 +12680,9 @@ function SupplierHubView({
 
   const [supplierSearch, setSupplierSearch] = useState("");
   const [logAmount, setLogAmount] = useState("");
-  const [logType, setLogType] = useState<"Credit Purchase" | "Cash Purchase" | "Bank Purchase" | "Return">("Credit Purchase");
+  const [logType, setLogType] = useState<"Credit Purchase" | "Cash Purchase" | "Bank Purchase" | "Supplier Advance" | "Return">("Credit Purchase");
   const [logPaymentMode] = useState<UniversalPaymentMode>("SAB");
-  const [logDate, setLogDate] = useState("2026-09-25");
+  const [logDate, setLogDate] = useState(() => addSaudiDays(14));
   const [logInvoiceNum, setLogInvoiceNum] = useState("");
   const [logBillPdfUrl, setLogBillPdfUrl] = useState<string | null>(null);
   const [logPdfUploading, setLogPdfUploading] = useState(false);
@@ -11135,7 +12809,7 @@ function SupplierHubView({
     onLogSupplierPurchase(
       supplierSearch.trim(),
       val,
-      logDate || "2026-09-25",
+      logDate || addSaudiDays(14),
       logType,
       logPaymentMode,
       logInvoiceNum.trim() || undefined,
@@ -11369,7 +13043,7 @@ function SupplierHubView({
                     return (
                       <tr key={bill.id} className="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
                         <td className="px-4 py-3.5 font-mono text-slate-600 dark:text-slate-400">
-                          {bill.createdAt || "12-09-2026"}
+                          {bill.createdAt || saudiCalendarDateStr()}
                         </td>
                         <td className="px-4 py-3.5 font-bold text-jct-charcoal dark:text-white">
                           <div className="flex items-center gap-2">
@@ -11528,20 +13202,19 @@ function SupplierHubView({
               <select
                 value={logType}
                 onChange={(e) =>
-                  setLogType(e.target.value as "Credit Purchase" | "Cash Purchase" | "Bank Purchase" | "Return")
+                  setLogType(e.target.value as "Credit Purchase" | "Cash Purchase" | "Bank Purchase" | "Supplier Advance" | "Return")
                 }
                 className="flex-1 min-w-[150px] px-4 py-2.5 bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md outline-none font-bold text-sm"
               >
                 <option value="Credit Purchase" className="bg-white dark:bg-[#0A0A0A]">Credit Purchase</option>
+                <option value="Supplier Advance" className="bg-white dark:bg-[#0A0A0A]">🏭 Supplier Advance</option>
                 <option value="Cash Purchase" className="bg-white dark:bg-[#0A0A0A]">Cash Purchase</option>
                 <option value="Bank Purchase" className="bg-white dark:bg-[#0A0A0A]">Bank Purchase</option>
                 <option value="Return" className="bg-white dark:bg-[#0A0A0A]">Return / Refund</option>
               </select>
-              <input
-                type="date"
+              <QuickFollowUpPicker
                 value={logDate}
-                onChange={(e) => setLogDate(e.target.value)}
-                className="flex-1 min-w-[140px] px-4 py-2.5 bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md font-medium text-sm outline-none"
+                onChange={(d) => setLogDate(d)}
               />
               <label className="flex items-center gap-1.5 px-3 py-2.5 rounded-lg border border-dashed border-jct-turquoise/40 hover:border-jct-turquoise bg-jct-turquoise/5 text-jct-turquoise text-xs font-bold cursor-pointer transition">
                 <Upload size={14} />
@@ -11565,6 +13238,106 @@ function SupplierHubView({
               </button>
             </div>
           </form>
+
+          {/* Supplier Advances Given (Pre-Paid to Vendors) */}
+          {supplierAdvances.length > 0 && (
+            <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-purple-500/40 rounded-xl p-6 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="rounded-lg bg-purple-500/20 text-purple-600 dark:text-purple-400 px-2.5 py-1 text-xs font-extrabold">
+                    🏭 Supplier Advances Given ({supplierAdvances.length})
+                  </span>
+                  <span className="text-xs text-slate-500 dark:text-slate-400 font-semibold">
+                    Pre-paid vendor balances — adjust against incoming bills without deducting drawer cash twice
+                  </span>
+                </div>
+                <span className="font-mono text-xs font-black text-purple-600 dark:text-purple-400">
+                  Total Unadjusted: SAR {fmt(supplierAdvances.reduce((s, a) => s + a.remainingBalance, 0))}
+                </span>
+              </div>
+              <div className="divide-y divide-slate-200 dark:divide-[#1F1F1F]">
+                {supplierAdvances.map((adv) => (
+                  <div key={adv.id} className="py-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-extrabold text-jct-charcoal dark:text-white text-sm">
+                        {adv.partyName}
+                      </span>
+                      {adv.branchInvNo && (
+                        <span className="font-mono text-[11px] font-bold text-jct-turquoise">
+                          #{adv.branchInvNo}
+                        </span>
+                      )}
+                      <span className="rounded-full bg-slate-100 dark:bg-[#111111] border border-slate-200 dark:border-[#1F1F1F] px-2.5 py-0.5 text-[10px] font-bold">
+                        {adv.paymentMode}
+                      </span>
+                      <FollowUpStatusBadge followUpDate={adv.followUpDate} compact />
+                      <QuickFollowUpPicker
+                        value={adv.followUpDate}
+                        onChange={(nextD) => handleUpdateSupplierAdvFollowUp(adv.id, nextD)}
+                        showDateInput={false}
+                        compact
+                      />
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-mono font-extrabold text-purple-600 dark:text-purple-400">
+                        Remaining: SAR {fmt(adv.remainingBalance)} / {fmt(adv.totalAdvanceAmount)}
+                      </span>
+                      {adjustingAdvId === adv.id ? (
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <input
+                            type="text"
+                            value={adjustInvoiceInput}
+                            onChange={(e) => setAdjustInvoiceInput(e.target.value)}
+                            placeholder="Bill Inv #"
+                            className="w-24 rounded-md border border-slate-300 dark:border-[#1F1F1F] bg-transparent px-2 py-1 font-mono text-xs font-bold outline-none"
+                          />
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={adjustAmountInput}
+                            onChange={(e) => setAdjustAmountInput(e.target.value)}
+                            placeholder="Deduct SAR"
+                            className="w-24 rounded-md border border-slate-300 dark:border-[#1F1F1F] bg-transparent px-2 py-1 font-mono text-xs font-bold outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleAdjustSupplierAdvance(
+                                adv,
+                                parseFloat(adjustAmountInput) || adv.remainingBalance,
+                                adjustInvoiceInput.trim() || undefined
+                              )
+                            }
+                            className="rounded-md bg-jct-turquoise text-jct-charcoal font-bold px-2.5 py-1 text-[11px]"
+                          >
+                            Confirm Offset
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setAdjustingAdvId(null)}
+                            className="text-slate-400 hover:text-white px-1"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAdjustingAdvId(adv.id);
+                            setAdjustAmountInput(String(adv.remainingBalance));
+                          }}
+                          className="rounded-lg bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-3 py-1 text-[11px] transition"
+                        >
+                          ⚡ Adjust Against Purchase / Bill
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Active Supplier Credit Purchases & Payment Due Dates Table */}
           <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6">
@@ -11618,10 +13391,18 @@ function SupplierHubView({
                         </a>
                       )}
                     </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                        Due Date: {bill.dueDate}
-                      </span>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <FollowUpStatusBadge followUpDate={bill.dueDate} compact />
+                      <QuickFollowUpPicker
+                        value={bill.dueDate}
+                        onChange={(nextDate) => {
+                          onUpdateBill?.({
+                            ...bill,
+                            dueDate: nextDate,
+                          });
+                        }}
+                        compact
+                      />
                       <span className="font-display font-extrabold text-jct-charcoal dark:text-jct-offwhite">
                         SAR {fmt(bill.amount)}
                       </span>
@@ -12259,6 +14040,9 @@ function FinancialPulseView({
 function BranchConsolidationView({ metrics }: { metrics: LiveCrossModuleMetrics }) {
   const [archiveRecords, setArchiveRecords] = useState<ArchiveRecord[]>([]);
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
+  const [activeSessions, setActiveSessions] = useState<
+    { branch: string; erpInvoices?: ErpInvoiceItem[]; preLoggedBankInvoices?: PreLoggedBankInvoice[]; preLoggedEntries?: PreLoggedEntry[] }[]
+  >([]);
 
   useEffect(() => {
     let ignore = false;
@@ -12278,10 +14062,29 @@ function BranchConsolidationView({ metrics }: { metrics: LiveCrossModuleMetrics 
         }
       })
       .catch(() => {});
+    fetch("/api/active-session?branch=ALL")
+      .then((r) => r.json())
+      .then((data) => {
+        if (!ignore && Array.isArray(data.sessions)) {
+          setActiveSessions(data.sessions);
+        }
+      })
+      .catch(() => {});
     return () => {
       ignore = true;
     };
   }, []);
+
+  const calcActiveBranchTotals = (branchKey: string) => {
+    const sess = activeSessions.find((s) => normalizeBranch(s.branch) === branchKey);
+    if (!sess) return { cashSales: 0, bankSales: 0 };
+    const invs = Array.isArray(sess.erpInvoices) ? sess.erpInvoices : [];
+    const preBank = Array.isArray(sess.preLoggedBankInvoices) ? sess.preLoggedBankInvoices : [];
+    const preEntries = Array.isArray(sess.preLoggedEntries) ? sess.preLoggedEntries : [];
+    const cashSales = r2(invs.reduce((sum, inv) => sum + calcInvoiceCashPortion(inv), 0));
+    const bankSales = r2(calcSessionPosBreakdown(invs, preBank, preEntries).totalNonCashAmount);
+    return { cashSales, bankSales };
+  };
 
   const sumBranchCash = (branchKey: string) =>
     r2(
@@ -12302,16 +14105,19 @@ function BranchConsolidationView({ metrics }: { metrics: LiveCrossModuleMetrics 
   const jctSales = r2(sumBranchSales("JCT_HARDWARE_JOTUN") + metrics.todayCashSales + metrics.todayBankNet);
   const jctStaffCount = staffMembers.filter((s) => normalizeBranch(s.branch) === "JCT_HARDWARE_JOTUN").length;
 
-  const hempelRegisterCash = sumBranchCash("HEMPEL");
-  const hempelSales = sumBranchSales("HEMPEL");
+  const hempelLive = calcActiveBranchTotals("HEMPEL");
+  const hempelRegisterCash = r2(sumBranchCash("HEMPEL") + hempelLive.cashSales);
+  const hempelSales = r2(sumBranchSales("HEMPEL") + hempelLive.cashSales + hempelLive.bankSales);
   const hempelStaffCount = staffMembers.filter((s) => normalizeBranch(s.branch) === "HEMPEL").length;
 
-  const dammamRegisterCash = sumBranchCash("DAMMAM_JOTUN");
-  const dammamSales = sumBranchSales("DAMMAM_JOTUN");
+  const dammamLive = calcActiveBranchTotals("DAMMAM_JOTUN");
+  const dammamRegisterCash = r2(sumBranchCash("DAMMAM_JOTUN") + dammamLive.cashSales);
+  const dammamSales = r2(sumBranchSales("DAMMAM_JOTUN") + dammamLive.cashSales + dammamLive.bankSales);
   const dammamStaffCount = staffMembers.filter((s) => normalizeBranch(s.branch) === "DAMMAM_JOTUN").length;
 
-  const sigmaRegisterCash = sumBranchCash("SIGMA");
-  const sigmaSales = sumBranchSales("SIGMA");
+  const sigmaLive = calcActiveBranchTotals("SIGMA");
+  const sigmaRegisterCash = r2(sumBranchCash("SIGMA") + sigmaLive.cashSales);
+  const sigmaSales = r2(sumBranchSales("SIGMA") + sigmaLive.cashSales + sigmaLive.bankSales);
   const sigmaStaffCount = staffMembers.filter((s) => normalizeBranch(s.branch) === "SIGMA").length;
 
   // All 4 branches combined
@@ -14671,6 +16477,7 @@ function StaffPayrollView({
     terminal?: "SAB" | "AL_RAJHI" | "SNB";
     network?: "mada" | "visa";
     note?: string;
+    pocketTxId?: string;
   }) => void;
 }) {
   const isOwner = Boolean(profile?.isOwner);
@@ -14792,6 +16599,7 @@ function StaffPayrollView({
       });
 
       if (res.ok) {
+        const data = await res.json().catch(() => null);
         // Dual-write sync into Daily Register Expenses (React state) - outflow reflects actual net disbursement
         onSyncSalaryExpense?.({
           staffId: paySalaryStaff.id,
@@ -14801,6 +16609,7 @@ function StaffPayrollView({
           terminal: (paySalaryMode === "BANK_TRANSFER" || paySalaryMode === "CARD") ? paySalaryBank : undefined,
           network: paySalaryMode === "CARD" ? paySalaryNetwork : undefined,
           note: paySalaryNote.trim() || `Salary Payment - ${paySalaryStaff.name}`,
+          pocketTxId: data?.pocketTx?.id,
         });
 
         await loadStaff();
@@ -15054,6 +16863,7 @@ function StaffPayrollView({
       });
 
       if (res.ok) {
+        const data = await res.json().catch(() => null);
         // Dual-write sync into Daily Register Expenses
         onSyncSalaryExpense?.({
           staffId: selectedStaffForLedger.id,
@@ -15061,6 +16871,7 @@ function StaffPayrollView({
           amount,
           paymentMode: disbursePaymentMode,
           note: disburseNote.trim() || `Salary Payment - ${selectedStaffForLedger.name}`,
+          pocketTxId: data?.pocketTx?.id,
         });
         setDisburseAmount("");
         setDisburseNote("");
@@ -16950,7 +18761,7 @@ export default function Page() {
     supplierName: string,
     amount: number,
     dueDate: string,
-    category: "Credit Purchase" | "Cash Purchase" | "Bank Purchase" | "Return",
+    category: "Credit Purchase" | "Cash Purchase" | "Bank Purchase" | "Supplier Advance" | "Return",
     paymentMode?: UniversalPaymentMode | string,
     supplierInvoiceNum?: string,
     billPdfUrl?: string
@@ -16960,10 +18771,10 @@ export default function Page() {
       id: `sb-${Date.now()}`,
       supplierName: cleanName,
       amount,
-      dueDate: dueDate || "2026-09-25",
-      category,
+      dueDate: dueDate || addSaudiDays(14),
+      category: category === "Supplier Advance" ? "Cash Purchase" : category,
       paymentMode: paymentMode || (category === "Bank Purchase" ? "SAB" : "CASH"),
-      createdAt: "12-09-2026",
+      createdAt: saudiCalendarDateStr(),
       source: "Daily Register",
       supplierInvoiceNum: supplierInvoiceNum || undefined,
       billPdfUrl: billPdfUrl || undefined,
@@ -16988,7 +18799,7 @@ export default function Page() {
               ? Math.max(0, r2(target.pendingBills - amount))
               : target.pendingBills,
           amountPaid:
-            category === "Cash Purchase" || category === "Bank Purchase"
+            category === "Cash Purchase" || category === "Bank Purchase" || category === "Supplier Advance"
               ? r2(target.amountPaid + amount)
               : target.amountPaid,
         };
@@ -16999,7 +18810,7 @@ export default function Page() {
         {
           id: Date.now(),
           brand: cleanName,
-          amountPaid: category === "Cash Purchase" || category === "Bank Purchase" ? amount : 0,
+          amountPaid: category === "Cash Purchase" || category === "Bank Purchase" || category === "Supplier Advance" ? amount : 0,
           pendingBills: category === "Credit Purchase" ? amount : 0,
           color: "purple",
         },
@@ -17032,10 +18843,15 @@ export default function Page() {
     terminal?: "SAB" | "AL_RAJHI" | "SNB";
     network?: "mada" | "visa";
     note?: string;
+    pocketTxId?: string;
   }) => {
     const cleanName = exp.staffName.trim() || "Staff";
+    if (exp.pocketTxId) {
+      pocketSyncedRef.current.add(exp.pocketTxId);
+    }
     const newSalaryEntry: PreLoggedEntry = {
-      id: `ple-salary-${exp.staffId}-${Date.now()}`,
+      id: exp.pocketTxId ? `pk-${exp.pocketTxId}` : `ple-salary-${exp.staffId}-${Date.now()}`,
+      sourcePocketId: exp.pocketTxId,
       type: "EXPENSE",
       expenseCategory: "Salary",
       staffId: exp.staffId,
@@ -17048,16 +18864,16 @@ export default function Page() {
       note: exp.note || `Salary Payment - ${cleanName}`,
       time: nowHHMM(),
     };
-    setPreLoggedEntries((prev) => [newSalaryEntry, ...prev]);
+    setPreLoggedEntries((prev) => deduplicatePreLoggedEntries([newSalaryEntry, ...prev]));
   };
 
-  // Cross-Module Sync 2: Credit Sale / Credit Sale Amt Recd -> Credit Radar
+  // Cross-Module Sync 2: Credit Sale / Credit Sale Amt Recd / Customer Advance -> Credit Radar
   const handleSyncCreditCustomer = (
     customerName: string,
     amount: number,
     followUpDate: string,
     receiptNo?: string,
-    mode: "CREDIT_RECD" | "CREDIT_SALE" = "CREDIT_RECD"
+    mode: "CREDIT_RECD" | "CREDIT_SALE" | "CUSTOMER_ADVANCE" = "CREDIT_RECD"
   ) => {
     const cleanCust = customerName.trim();
     if (!cleanCust) return;
@@ -17080,9 +18896,11 @@ export default function Page() {
           formattedInvNo ||
           (mode === "CREDIT_SALE"
             ? `CR-SALE-${Date.now().toString().slice(-3)}`
+            : mode === "CUSTOMER_ADVANCE"
+            ? `ADV-${Date.now().toString().slice(-3)}`
             : `RCP-${Date.now().toString().slice(-3)}`),
         amount,
-        date: `2026-09-12 (🔔 Reminder: ${followUpDate} · Inv ${formattedInvNo})`,
+        date: `${saudiTodayIso()} (🔔 Reminder: ${followUpDate} · Inv ${formattedInvNo})`,
         status: "paid_on_time",
       };
 
@@ -17102,7 +18920,9 @@ export default function Page() {
           latestInvoiceAmount: amount,
           status: "due_soon",
           clearedInvoices:
-            mode === "CREDIT_RECD" ? existing.clearedInvoices + 1 : existing.clearedInvoices,
+            mode === "CREDIT_RECD" || mode === "CUSTOMER_ADVANCE"
+              ? existing.clearedInvoices + 1
+              : existing.clearedInvoices,
           history: [historyItem, ...existing.history],
           syncedFromRegister: true,
         };
@@ -17113,15 +18933,15 @@ export default function Page() {
       const newContractor: ContractorAccount = {
         id: `c-${Date.now().toString().slice(-4)}`,
         name: cleanCust,
-        outstanding: amount,
-        dueDate: followUpDate || "2026-09-20",
-        followUpDate: followUpDate || "2026-09-20",
+        outstanding: mode === "CUSTOMER_ADVANCE" ? 0 : amount,
+        dueDate: followUpDate || addSaudiDays(7),
+        followUpDate: followUpDate || addSaudiDays(7),
         latestInvoiceNo: formattedInvNo,
         latestInvoiceAmount: amount,
         status: "due_soon",
         riskLevel: "Low",
         avgPaymentTime: "Synced Today",
-        clearedInvoices: mode === "CREDIT_RECD" ? 1 : 0,
+        clearedInvoices: mode === "CREDIT_RECD" || mode === "CUSTOMER_ADVANCE" ? 1 : 0,
         history: [historyItem],
         syncedFromRegister: true,
       };
@@ -17135,9 +18955,11 @@ export default function Page() {
   const todayCashSales = r2(
     activeErpForMetrics.reduce((sum, inv) => sum + calcInvoiceCashPortion(inv), 0)
   );
-  const todayBankGross = r2(
-    activeErpForMetrics.reduce((sum, inv) => sum + calcInvoiceBankGrossPortion(inv), 0)
+  const activeSessionPosBreakdown = useMemo(
+    () => calcSessionPosBreakdown(activeErpForMetrics, preLoggedBankInvoices, preLoggedEntries),
+    [activeErpForMetrics, preLoggedBankInvoices, preLoggedEntries]
   );
+  const todayBankGross = r2(activeSessionPosBreakdown.totalNonCashAmount);
   const todayPosFees = r2(
     activeErpForMetrics.reduce((sum, inv) => sum + calcInvoicePosFee(inv), 0)
   );
@@ -17146,11 +18968,14 @@ export default function Page() {
 
   const todayInflows = r2(
     preLoggedEntries
-      .filter((e) => e.type !== "EXPENSE" && e.type !== "CREDIT_SALE" && e.type !== "SPLIT_SALE")
+      .filter((e) => !e.isReturned && e.type !== "EXPENSE" && e.type !== "CREDIT_SALE" && e.type !== "SPLIT_SALE" && (!e.paymentMode || e.paymentMode === "CASH"))
       .reduce((a, b) => a + b.amount, 0)
   );
+  // Strict Accounting Separation: Only CASH outflows deduct from Physical Cash Drawer
   const todayExpenses = r2(
-    preLoggedEntries.filter((e) => e.type === "EXPENSE").reduce((a, b) => a + b.amount, 0)
+    preLoggedEntries
+      .filter((e) => !e.isReturned && e.type === "EXPENSE" && classifyExpenseOutflow(e) === "CASH")
+      .reduce((a, b) => a + b.amount, 0)
   );
   const closingDrawerBalance = r2(
     openingBalance + todayCashSales + todayInflows - todayExpenses
@@ -17203,8 +19028,26 @@ export default function Page() {
   // Multi-device live Daily Register session (Prisma ActiveRegisterSession, polled every 4s)
   const syncBranch = activePocketBranch === "ALL" ? "JCT_HARDWARE_JOTUN" : activePocketBranch;
 
-  // Opening balance = latest locked carry-over for this branch, or the Settings baseline when nothing is locked yet
-  const [settingsRefresh, setSettingsRefresh] = useState(0);
+  // Owner-configured opening baseline + manual capital deposits (Settings → Initial Setup), per branch
+  const [ settingsRefresh, setSettingsRefresh] = useState(0);
+  const [branchAdvances, setBranchAdvances] = useState<AdvanceRecordItem[]>([]);
+  const [advancesRefresh, setAdvancesRefresh] = useState(0);
+
+  useEffect(() => {
+    let ignore = false;
+    fetch(`/api/advances?branch=${syncBranch}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((data) => {
+        if (!ignore && Array.isArray(data?.advances)) {
+          setBranchAdvances(data.advances);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      ignore = true;
+    };
+  }, [syncBranch, advancesRefresh]);
+
   useEffect(() => {
     let ignore = false;
     Promise.all([
@@ -17212,8 +19055,12 @@ export default function Page() {
       fetch(`/api/settings?branch=${syncBranch}`, { cache: "no-store" }).then((r) => r.json()).catch(() => null),
     ]).then(([archive, settings]) => {
       if (ignore) return;
-      const baseCash = Number(settings?.settings?.openingCashBalance) || 0;
-      const baseBank = Number(settings?.settings?.openingBankBalance) || 0;
+      const rawCash = Number(settings?.settings?.openingCashBalance) || 0;
+      const rawBank = Number(settings?.settings?.openingBankBalance) || 0;
+      const manualCash = Number(settings?.settings?.manualCashDeposits) || 0;
+      const manualBank = Number(settings?.settings?.manualBankDeposits) || 0;
+      const baseCash = r2(rawCash + manualCash);
+      const baseBank = r2(rawBank + manualBank);
       setOpeningBaseline({ cash: baseCash, bank: baseBank });
       const recs = Array.isArray(archive?.records) ? archive.records : [];
       if (recs.length === 0) {
@@ -17227,7 +19074,7 @@ export default function Page() {
           latest.nextDayOpeningCash !== null && latest.nextDayOpeningCash !== undefined
             ? Number(latest.nextDayOpeningCash)
             : Number(latest.closingCash) || 0;
-        setOpeningBalance(carryFloat);
+        setOpeningBalance(r2(carryFloat + manualCash));
       }
     });
     return () => {
@@ -17251,7 +19098,7 @@ export default function Page() {
     onRemoteSnapshot: (snap, meta) => {
       setErpInvoices(snap.erpInvoices);
       setPreLoggedBankInvoices(snap.preLoggedBankInvoices);
-      setPreLoggedEntries(snap.preLoggedEntries);
+      setPreLoggedEntries(deduplicatePreLoggedEntries(snap.preLoggedEntries));
       setActiveSessionDate(snap.reportDate || getTodaySessionDate());
       if (meta.isEmpty) {
         setRemoteClearSignal((n) => n + 1);
@@ -17283,47 +19130,61 @@ export default function Page() {
       const time = saudiHHMM(t.createdAt);
       const tag = pocketTag(t.type);
       const entryId = `pk-${t.id}`;
+      const isRet = Boolean(t.isReturned);
+      const effAmount = isRet ? 0 : t.amount;
+      const origAmt = isRet ? (t.originalAmount ?? t.amount) : (t.originalAmount ?? undefined);
       if (t.type === "EXPENSE") {
         if (t.paymentSource === "OWNER_POCKET") return; // owner's own money: not a drawer outflow
         injected.push({
           id: entryId,
+          sourcePocketId: t.id,
           type: "EXPENSE",
           expenseCategory: (t.category ?? "").startsWith("Food") ? "Food" : (t.category ?? "Other Expenses") as any,
           title: t.category ?? "Owner Expense",
           note: [tag, t.note].filter(Boolean).join(" · "),
-          amount: t.amount,
+          amount: effAmount,
+          originalAmount: origAmt,
+          isReturned: isRet,
           time,
           paymentMode: (t.paymentMode as UniversalPaymentMode) || "CASH",
         });
       } else if (t.type === "PURCHASE") {
         if (t.paymentMode === "CREDIT" || t.paymentSource === "SUPPLIER_CREDIT") {
           const dueDate = saudiTodayIso(Date.now() + 30 * 86400000);
-          syncCreditPurchaseRef.current(
-            t.note || "Supplier Purchase",
-            t.amount,
-            dueDate,
-            "Credit Purchase",
-            "CREDIT"
-          );
+          if (!isRet) {
+            syncCreditPurchaseRef.current(
+              t.note || "Supplier Purchase",
+              t.amount,
+              dueDate,
+              "Credit Purchase",
+              "CREDIT"
+            );
+          }
         } else if (t.paymentMode === "CASH") {
           injected.push({
             id: entryId,
+            sourcePocketId: t.id,
             type: "EXPENSE",
             expenseCategory: "Cash Purchase",
             title: t.note ? `Cash Purchase · ${t.note}` : "Cash Purchase",
             note: [tag, t.note].filter(Boolean).join(" · "),
-            amount: t.amount,
+            amount: effAmount,
+            originalAmount: origAmt,
+            isReturned: isRet,
             time,
             paymentMode: "CASH",
           });
         } else {
           injected.push({
             id: entryId,
+            sourcePocketId: t.id,
             type: "EXPENSE",
             expenseCategory: "Bank Purchase",
             title: t.note ? `Card Purchase · ${t.note}` : "Card Purchase",
             note: [tag, t.note].filter(Boolean).join(" · "),
-            amount: t.amount,
+            amount: effAmount,
+            originalAmount: origAmt,
+            isReturned: isRet,
             time,
             paymentMode: (t.paymentMode as UniversalPaymentMode) || "SAB",
           });
@@ -17331,37 +19192,92 @@ export default function Page() {
       } else if (t.type === "ADVANCE") {
         injected.push({
           id: entryId,
+          sourcePocketId: t.id,
           type: "EXPENSE",
           expenseCategory: "Salary",
           title: `Staff Advance · ${t.recipientName ?? "Staff"} (${t.category ?? "Advance"})`,
           note: `${tag} · Staff Payables / Advances`,
-          amount: t.amount,
+          amount: effAmount,
+          originalAmount: origAmt,
+          isReturned: isRet,
           time,
           paymentMode: (t.paymentMode as UniversalPaymentMode) || "CASH",
         });
+      } else if (t.type === "SUPPLIER_ADVANCE") {
+        const dueDate = addSaudiDays(7);
+        injected.push({
+          id: entryId,
+          sourcePocketId: t.id,
+          type: "EXPENSE",
+          expenseCategory: "Supplier Advance",
+          supplierName: t.recipientName ?? "Supplier",
+          dueDate,
+          followUpDate: dueDate,
+          title: `Supplier Advance — ${t.recipientName ?? "Supplier"}`,
+          note: [tag, t.note].filter(Boolean).join(" · "),
+          amount: effAmount,
+          originalAmount: origAmt,
+          isReturned: isRet,
+          time,
+          paymentMode: (t.paymentMode as UniversalPaymentMode) || "CASH",
+        });
+        if (!isRet) {
+          syncCreditPurchaseRef.current(
+            t.recipientName || "Supplier",
+            t.amount,
+            dueDate,
+            "Supplier Advance",
+            (t.paymentMode as UniversalPaymentMode) || "CASH"
+          );
+          setAdvancesRefresh((n) => n + 1);
+        }
+      } else if (t.type === "CUSTOMER_ADVANCE") {
+        const followUp = addSaudiDays(7);
+        injected.push({
+          id: entryId,
+          sourcePocketId: t.id,
+          type: "CUSTOMER_ADVANCE",
+          title: `Customer Advance · ${t.recipientName ?? "Customer"}`,
+          customerName: t.recipientName ?? undefined,
+          receiptNo: t.category ?? undefined,
+          followUpDate: followUp,
+          note: [tag, t.note].filter(Boolean).join(" · "),
+          amount: effAmount,
+          originalAmount: origAmt,
+          isReturned: isRet,
+          time,
+          paymentMode: (t.paymentMode as UniversalPaymentMode) || "CASH",
+        });
+        if (t.recipientName && !isRet) {
+          syncCustomerRef.current(t.recipientName, t.amount, followUp, t.category ?? undefined, "CUSTOMER_ADVANCE");
+          setAdvancesRefresh((n) => n + 1);
+        }
       } else {
-        const followUp = saudiTodayIso(Date.now() + 14 * 86400000);
+        const followUp = addSaudiDays(14);
         if (t.paymentSource !== "BANK_TRANSFER") {
           injected.push({
             id: entryId,
+            sourcePocketId: t.id,
             type: "CREDIT_RECD",
             title: `Credit Sale Amt Recd · ${t.recipientName ?? "Customer"}`,
             customerName: t.recipientName ?? undefined,
             receiptNo: t.category ?? undefined,
             followUpDate: followUp,
             note: [tag, t.note].filter(Boolean).join(" · "),
-            amount: t.amount,
+            amount: effAmount,
+            originalAmount: origAmt,
+            isReturned: isRet,
             time,
             paymentMode: (t.paymentMode as UniversalPaymentMode) || "CASH",
           });
         }
-        if (t.recipientName) {
+        if (t.recipientName && !isRet) {
           syncCustomerRef.current(t.recipientName, t.amount, followUp, t.category ?? undefined, "CREDIT_RECD");
         }
       }
     });
     if (injected.length) {
-      setPreLoggedEntries((prev) => [...prev, ...injected.filter((i) => !prev.some((p) => p.id === i.id))]);
+      setPreLoggedEntries((prev) => deduplicatePreLoggedEntries([...prev, ...injected]));
     }
   }, [pocketTxns]);
 
@@ -17495,6 +19411,8 @@ export default function Page() {
                 onSyncCreditPurchase={handleSyncCreditPurchase}
                 onSyncCreditCustomer={handleSyncCreditCustomer}
                 creditCustomers={creditCustomers}
+                advances={branchAdvances}
+                onRefreshAdvances={() => setAdvancesRefresh((n) => n + 1)}
                 onSwitchTab={setTab}
                 branchId={activePocketBranch === "ALL" ? "JCT_HARDWARE_JOTUN" : activePocketBranch}
                 isOwner={Boolean(profile?.isOwner)}
@@ -17569,6 +19487,8 @@ export default function Page() {
                 isOwner={Boolean(profile?.isOwner)}
                 onUpdateCustomer={handleUpdateCreditCustomer}
                 onDeleteCustomer={handleDeleteCreditCustomer}
+                advances={branchAdvances}
+                onRefreshAdvances={() => setAdvancesRefresh((n) => n + 1)}
               />
             ) : safeTab === "suppliers" ? (
               <SupplierHubView
@@ -17578,6 +19498,8 @@ export default function Page() {
                 isOwner={Boolean(profile?.isOwner)}
                 onUpdateBill={handleUpdateSupplierBill}
                 onDeleteBill={handleDeleteSupplierBill}
+                advances={branchAdvances}
+                onRefreshAdvances={() => setAdvancesRefresh((n) => n + 1)}
               />
             ) : safeTab === "payroll" ? (
               <StaffPayrollView

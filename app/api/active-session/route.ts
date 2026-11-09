@@ -28,13 +28,21 @@ const serialize = (row: {
     : null;
 
 /**
- * GET /api/active-session?branch=JCT_HQ
+ * GET /api/active-session?branch=JCT_HARDWARE_JOTUN (or ?branch=ALL)
  * Returns the live shared Daily Register session for the branch (polled by every device).
  */
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
-  const branch = normalizeBranch(searchParams.get("branch") || req.headers.get("x-branch-id"));
+  const rawBranch = searchParams.get("branch") || req.headers.get("x-branch-id");
   try {
+    if (rawBranch === "ALL") {
+      const rows = await prisma.activeRegisterSession.findMany();
+      return NextResponse.json(
+        { sessions: rows.map((r) => serialize(r)).filter(Boolean) },
+        { headers: { "Cache-Control": "no-store" } }
+      );
+    }
+    const branch = normalizeBranch(rawBranch);
     const row = await prisma.activeRegisterSession.findUnique({ where: { branch } });
     return NextResponse.json(
       { session: serialize(row) },
@@ -42,7 +50,7 @@ export async function GET(req: Request) {
     );
   } catch (err) {
     console.error("GET /api/active-session error:", err);
-    return NextResponse.json({ session: null, error: "Failed to load active session" }, { status: 500 });
+    return NextResponse.json({ session: null, sessions: [], error: "Failed to load active session" }, { status: 500 });
   }
 }
 
@@ -80,7 +88,7 @@ export async function PUT(req: Request) {
 }
 
 /**
- * DELETE /api/active-session?branch=JCT_HQ&clientId=...
+ * DELETE /api/active-session?branch=JCT_HARDWARE_JOTUN&clientId=...
  * "Clear / Start Over": wipes the shared draft for every device (status CLEARED, empty data).
  */
 export async function DELETE(req: Request) {
