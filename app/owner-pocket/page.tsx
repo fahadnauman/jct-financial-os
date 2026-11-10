@@ -197,6 +197,13 @@ export default function OwnerPocketPage() {
   const [pDescription, setPDescription] = useState("");
   const [pAmount, setPAmount] = useState("");
   const [pPaymentMode, setPPaymentMode] = useState<"CASH" | "CARD" | "CREDIT">("CASH");
+  const [pBillType, setPBillType] = useState<"WITHOUT_BILL" | "WITH_BILL">("WITHOUT_BILL");
+  const [pReceiptUrl, setPReceiptUrl] = useState<string | null>(null);
+  const [pReceiptFileName, setPReceiptFileName] = useState<string | null>(null);
+  const [uploadingPurchaseReceipt, setUploadingPurchaseReceipt] = useState(false);
+
+  // Preview Bill Modal state
+  const [previewBillUrl, setPreviewBillUrl] = useState<string | null>(null);
 
   // Expense form
   const [eBranch, setEBranch] = useState<BranchId>("JCT_HARDWARE_JOTUN");
@@ -209,6 +216,14 @@ export default function OwnerPocketPage() {
   const [eReceiptFileName, setEReceiptFileName] = useState<string | null>(null);
   const [uploadingReceipt, setUploadingReceipt] = useState(false);
   const [eNote, setENote] = useState("");
+
+  const readFileAsDataUrl = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => reject(new Error("File read failed"));
+      reader.readAsDataURL(file);
+    });
 
   const handleReceiptUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -225,11 +240,56 @@ export default function OwnerPocketPage() {
         const data = await res.json();
         setEReceiptUrl(data.url);
         setEReceiptFileName(file.name);
+      } else {
+        const dataUrl = await readFileAsDataUrl(file);
+        setEReceiptUrl(dataUrl);
+        setEReceiptFileName(file.name);
       }
     } catch (err) {
-      console.error("Receipt upload error:", err);
+      console.error("Receipt upload error, falling back to data URL:", err);
+      try {
+        const dataUrl = await readFileAsDataUrl(file);
+        setEReceiptUrl(dataUrl);
+        setEReceiptFileName(file.name);
+      } catch {
+        /* ignore */
+      }
     } finally {
       setUploadingReceipt(false);
+    }
+  };
+
+  const handlePurchaseReceiptUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingPurchaseReceipt(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPReceiptUrl(data.url);
+        setPReceiptFileName(file.name);
+      } else {
+        const dataUrl = await readFileAsDataUrl(file);
+        setPReceiptUrl(dataUrl);
+        setPReceiptFileName(file.name);
+      }
+    } catch (err) {
+      console.error("Purchase receipt upload error, falling back to data URL:", err);
+      try {
+        const dataUrl = await readFileAsDataUrl(file);
+        setPReceiptUrl(dataUrl);
+        setPReceiptFileName(file.name);
+      } catch {
+        /* ignore */
+      }
+    } finally {
+      setUploadingPurchaseReceipt(false);
     }
   };
 
@@ -418,6 +478,11 @@ export default function OwnerPocketPage() {
   const savePurchase = async () => {
     const amount = parseFloat(pAmount);
     if (!(amount > 0) || !pDescription.trim() || saving) return;
+    if (pBillType === "WITH_BILL" && !pReceiptUrl) {
+      setToast("Please snap a photo or upload a bill when 'With Bill' is selected");
+      setTimeout(() => setToast(null), 3500);
+      return;
+    }
     const paymentSource = pPaymentMode === "CREDIT" ? "SUPPLIER_CREDIT" : (pPaymentMode === "CARD" ? "BANK_TRANSFER" : "DRAWER_CASH");
     const ok = await finish(
       {
@@ -428,6 +493,10 @@ export default function OwnerPocketPage() {
         recipientName: null,
         paymentSource,
         paymentMode: pPaymentMode,
+        hasBill: pBillType === "WITH_BILL" && Boolean(pReceiptUrl),
+        billFileName: pReceiptFileName,
+        receiptUrl: pReceiptUrl,
+        billPdfUrl: pReceiptUrl,
         note: pDescription.trim(),
         date: todayIso(),
       },
@@ -436,6 +505,9 @@ export default function OwnerPocketPage() {
     if (ok) {
       setPAmount("");
       setPDescription("");
+      setPReceiptUrl(null);
+      setPReceiptFileName(null);
+      setPBillType("WITHOUT_BILL");
     }
   };
 
@@ -456,6 +528,8 @@ export default function OwnerPocketPage() {
         recipientName: null,
         paymentSource: eSource === "POCKET" ? "OWNER_POCKET" : "DRAWER_CASH",
         paymentMode: ePaymentMode,
+        hasBill: eBillType === "WITH_BILL" && Boolean(eReceiptUrl),
+        billFileName: eReceiptFileName,
         receiptUrl: eReceiptUrl,
         billPdfUrl: eReceiptUrl,
         note: eNote.trim() || (eBillType === "WITH_BILL" ? "With Attached Receipt" : null),
@@ -1397,6 +1471,71 @@ export default function OwnerPocketPage() {
                     </p>
                   )}
                 </div>
+                {/* Bill / Receipt Status Toggle for Purchase */}
+                <div>
+                  <span className={labelCls}>Receipt / Bill Status</span>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPBillType("WITHOUT_BILL")}
+                      className={`rounded-xl border p-2.5 text-center text-xs font-bold transition ${
+                        pBillType === "WITHOUT_BILL"
+                          ? "border-amber-400 bg-amber-400 text-black shadow-md"
+                          : "border-white/10 bg-[#0F2226] text-slate-300 hover:border-white/30"
+                      }`}
+                    >
+                      📝 Without Bill
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPBillType("WITH_BILL")}
+                      className={`rounded-xl border p-2.5 text-center text-xs font-bold transition ${
+                        pBillType === "WITH_BILL"
+                          ? "border-amber-400 bg-amber-400 text-black shadow-md"
+                          : "border-white/10 bg-[#0F2226] text-slate-300 hover:border-white/30"
+                      }`}
+                    >
+                      📄 With Bill
+                    </button>
+                  </div>
+                </div>
+                {pBillType === "WITH_BILL" && (
+                  <div className="space-y-2">
+                    <label className={labelCls}>Snap Photo or Upload Purchase Bill (Image/PDF) *</label>
+                    <label className="flex items-center justify-center gap-2 rounded-xl border border-dashed border-amber-400/60 bg-amber-400/10 p-4 text-center text-sm font-bold text-amber-300 cursor-pointer hover:bg-amber-400/20 transition">
+                      <Camera size={18} />
+                      <span>
+                        {uploadingPurchaseReceipt
+                          ? "Uploading bill..."
+                          : pReceiptUrl
+                          ? "Change Photo / File"
+                          : "📷 Take Photo or Upload Bill"}
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/*,application/pdf"
+                        capture="environment"
+                        onChange={handlePurchaseReceiptUpload}
+                        className="hidden"
+                      />
+                    </label>
+                    {pReceiptFileName && (
+                      <div className="flex items-center justify-between rounded-lg bg-white/5 border border-white/10 p-2 text-xs text-slate-200">
+                        <span className="truncate">✓ {pReceiptFileName}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPReceiptUrl(null);
+                            setPReceiptFileName(null);
+                          }}
+                          className="text-rose-400 font-bold ml-2 hover:text-rose-300"
+                        >
+                          ✕ Remove
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div className="flex gap-2">
                   <button
                     type="button"
@@ -1408,7 +1547,13 @@ export default function OwnerPocketPage() {
                   <button
                     type="button"
                     onClick={savePurchase}
-                    disabled={!(parseFloat(pAmount) > 0) || !pDescription.trim() || saving}
+                    disabled={
+                      !(parseFloat(pAmount) > 0) ||
+                      !pDescription.trim() ||
+                      (pBillType === "WITH_BILL" && !pReceiptUrl) ||
+                      uploadingPurchaseReceipt ||
+                      saving
+                    }
                     className="flex-1 rounded-xl bg-amber-400 py-3 font-extrabold text-black disabled:opacity-40"
                   >
                     {saving ? "Saving..." : "Save Purchase"}
@@ -1494,7 +1639,7 @@ export default function OwnerPocketPage() {
                           : "border-white/10 bg-[#0F2226] text-slate-300 hover:border-white/30"
                       }`}
                     >
-                      📸 With Bill (Snap / Upload)
+                      📄 With Bill
                     </button>
                   </div>
                 </div>
@@ -1838,6 +1983,15 @@ export default function OwnerPocketPage() {
                           <span className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2 py-0.5 text-emerald-300">
                             {statusFor(e)}
                           </span>
+                          {(e.receiptUrl || e.billPdfUrl) && (
+                            <button
+                              type="button"
+                              onClick={() => setPreviewBillUrl(e.receiptUrl || e.billPdfUrl || null)}
+                              className="rounded-full border border-[#00BAC7]/40 bg-[#00BAC7]/15 px-2.5 py-0.5 text-[10px] font-extrabold text-[#22D3EE] hover:bg-[#00BAC7]/25"
+                            >
+                              📎 View Bill
+                            </button>
+                          )}
                         </div>
                         <div className="flex items-center gap-1">
                           <button
@@ -2551,6 +2705,52 @@ export default function OwnerPocketPage() {
               >
                 Close
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bill / Receipt Preview Modal */}
+      {previewBillUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm"
+          onClick={() => setPreviewBillUrl(null)}
+        >
+          <div
+            className="w-full max-w-lg rounded-2xl border border-[#00BAC7]/40 bg-[#071517] p-4 shadow-2xl space-y-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-white/10 pb-2">
+              <span className="text-sm font-extrabold text-[#22D3EE]">📎 Attached Receipt / Bill</span>
+              <div className="flex items-center gap-2">
+                <a
+                  href={previewBillUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-lg border border-[#00BAC7]/40 bg-[#00BAC7]/15 px-2.5 py-1 text-xs font-bold text-[#22D3EE]"
+                >
+                  ↗ Open Full
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setPreviewBillUrl(null)}
+                  className="rounded-lg border border-white/15 px-2.5 py-1 text-xs font-bold text-slate-300"
+                >
+                  ✕ Close
+                </button>
+              </div>
+            </div>
+            <div className="max-h-[70vh] overflow-auto rounded-xl border border-white/10 bg-black/50 p-2 flex items-center justify-center">
+              {previewBillUrl.toLowerCase().endsWith(".pdf") || previewBillUrl.startsWith("data:application/pdf") ? (
+                <iframe src={previewBillUrl} className="h-[60vh] w-full rounded-lg" title="Attached Bill PDF" />
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={previewBillUrl}
+                  alt="Attached Receipt"
+                  className="max-h-[65vh] w-auto rounded-lg object-contain"
+                />
+              )}
             </div>
           </div>
         </div>

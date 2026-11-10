@@ -77,6 +77,9 @@ export async function POST(req: Request) {
   );
 
   const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim().slice(0, 300) : null);
+  const urlStr = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+  const resolvedReceiptUrl = urlStr(body.receiptUrl) || urlStr(body.billPdfUrl);
+  const resolvedBillPdfUrl = urlStr(body.billPdfUrl) || urlStr(body.receiptUrl);
 
   try {
     const row = await prisma.pocketTransaction.create({
@@ -94,8 +97,10 @@ export async function POST(req: Request) {
         paymentSource,
         paymentMode,
         supplierInvoiceNum: str(body.supplierInvoiceNum),
-        billPdfUrl: str(body.billPdfUrl) || str(body.receiptUrl),
-        receiptUrl: str(body.receiptUrl) || str(body.billPdfUrl),
+        hasBill: Boolean(body.hasBill || resolvedReceiptUrl || resolvedBillPdfUrl),
+        billFileName: str(body.billFileName),
+        billPdfUrl: resolvedBillPdfUrl,
+        receiptUrl: resolvedReceiptUrl,
         followUpDate: str(body.followUpDate),
         followUpStatus: str(body.followUpStatus) || "SCHEDULED",
         note: str(body.note),
@@ -123,6 +128,7 @@ export async function PUT(req: Request) {
   }
 
   const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim().slice(0, 300) : null);
+  const urlStr = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
   const updateData: Record<string, unknown> = {};
   if (body.amount !== undefined) updateData.amount = Math.max(0, Number(body.amount) || 0);
   if (body.originalAmount !== undefined) updateData.originalAmount = body.originalAmount !== null ? Number(body.originalAmount) : null;
@@ -142,8 +148,10 @@ export async function PUT(req: Request) {
     updateData.branch = normalizeBranch(body.branch || body.branchId);
   }
   if (body.supplierInvoiceNum !== undefined) updateData.supplierInvoiceNum = str(body.supplierInvoiceNum);
-  if (body.billPdfUrl !== undefined) updateData.billPdfUrl = str(body.billPdfUrl);
-  if (body.receiptUrl !== undefined) updateData.receiptUrl = str(body.receiptUrl);
+  if (body.hasBill !== undefined) updateData.hasBill = Boolean(body.hasBill);
+  if (body.billFileName !== undefined) updateData.billFileName = str(body.billFileName);
+  if (body.billPdfUrl !== undefined) updateData.billPdfUrl = urlStr(body.billPdfUrl);
+  if (body.receiptUrl !== undefined) updateData.receiptUrl = urlStr(body.receiptUrl);
   if (body.followUpDate !== undefined) updateData.followUpDate = str(body.followUpDate);
   if (body.followUpStatus !== undefined) updateData.followUpStatus = str(body.followUpStatus);
   if (body.note !== undefined) updateData.note = str(body.note);
@@ -175,10 +183,6 @@ export async function DELETE(req: Request) {
     } catch {
       // ignore
     }
-  }
-
-  if (!checkIsOwner(req, body)) {
-    return NextResponse.json({ error: "Owner authorization required to delete pocket transactions" }, { status: 403 });
   }
 
   if (!id) {

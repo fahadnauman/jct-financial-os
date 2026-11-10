@@ -26,6 +26,8 @@ model PocketTransaction {
   paymentSource  String   // DRAWER_CASH | OWNER_POCKET | BANK_TRANSFER
   paymentMode    String?  // e.g., "SAB", "AL_RAJHI", "SNB", "VISA", "MADA", "BANK_TRANSFER", "CASH"
   supplierInvoiceNum String?
+  hasBill        Boolean  @default(false)
+  billFileName   String?
   billPdfUrl     String?
   receiptUrl     String?
   followUpDate   String?
@@ -164,6 +166,8 @@ model Purchase {
   branch             String   @default("JCT_HARDWARE_JOTUN")
   supplier           String
   supplierInvoiceNum String?
+  hasBill            Boolean  @default(false)
+  billFileName       String?
   billPdfUrl         String?
   receiptUrl         String?
   amount             Float
@@ -185,6 +189,8 @@ model Expense {
   category           String
   supplierName       String?
   supplierInvoiceNum String?
+  hasBill            Boolean  @default(false)
+  billFileName       String?
   billPdfUrl         String?
   receiptUrl         String?
   amount             Float

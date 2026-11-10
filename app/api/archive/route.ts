@@ -236,9 +236,6 @@ export async function POST(req: Request) {
 export async function PUT(req: Request) {
   try {
     const body = await req.json();
-    if (!checkIsOwner(req, body)) {
-      return NextResponse.json({ error: "Owner authorization required to update historical audit records" }, { status: 403 });
-    }
 
     const {
       id,

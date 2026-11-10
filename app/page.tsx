@@ -740,6 +740,8 @@ export interface PreLoggedEntry {
   linkedInvoiceNum?: string;
   originalDate?: string;
   supplierInvoiceNum?: string;
+  hasBill?: boolean;
+  billFileName?: string;
   billPdfUrl?: string;
   receiptUrl?: string;
   type: PreLoggedEntryType;
@@ -3049,7 +3051,47 @@ function DailyRegisterView({
   const [entryAmount, setEntryAmount] = useState("");
   const [hubSupplierName, setHubSupplierName] = useState("Jotun");
   const [hubDueDate, setHubDueDate] = useState(() => addSaudiDays(14));
+  const [hubBillType, setHubBillType] = useState<"WITHOUT_BILL" | "WITH_BILL">("WITHOUT_BILL");
+  const [hubBillPdfUrl, setHubBillPdfUrl] = useState<string | null>(null);
+  const [hubBillFileName, setHubBillFileName] = useState<string | null>(null);
+  const [hubBillUploading, setHubBillUploading] = useState(false);
+  const [previewBillUrl, setPreviewBillUrl] = useState<string | null>(null);
   const [hubCustomerName, setHubCustomerName] = useState("");
+
+  const handleHubFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setHubBillUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setHubBillPdfUrl(data.url);
+        setHubBillFileName(file.name);
+      } else {
+        const reader = new FileReader();
+        reader.onload = () => {
+          setHubBillPdfUrl(reader.result as string);
+          setHubBillFileName(file.name);
+        };
+        reader.readAsDataURL(file);
+      }
+    } catch {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setHubBillPdfUrl(reader.result as string);
+        setHubBillFileName(file.name);
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      setHubBillUploading(false);
+    }
+  };
   const [hubReceiptNo, setHubReceiptNo] = useState("");
   const [hubFollowUpDate, setHubFollowUpDate] = useState(() => addSaudiDays(7));
   const [hubSplitCashInput, setHubSplitCashInput] = useState("1000");
@@ -3343,6 +3385,8 @@ function DailyRegisterView({
           supplierName: newEntry.supplierName || existing.supplierName,
           dueDate: newEntry.dueDate || existing.dueDate,
           supplierInvoiceNum: newEntry.supplierInvoiceNum || existing.supplierInvoiceNum,
+          hasBill: newEntry.hasBill ?? existing.hasBill,
+          billFileName: newEntry.billFileName || existing.billFileName,
           billPdfUrl: newEntry.billPdfUrl || existing.billPdfUrl,
           receiptUrl: newEntry.receiptUrl || existing.receiptUrl,
           customerName: newEntry.customerName || existing.customerName,
@@ -4369,6 +4413,10 @@ function DailyRegisterView({
         supplierName: isPurchase ? supplierClean : undefined,
         dueDate: isCreditPurchase || isSupplierAdvance ? hubDueDate : undefined,
         followUpDate: isCreditPurchase || isSupplierAdvance ? hubDueDate : undefined,
+        hasBill: hubBillType === "WITH_BILL" && Boolean(hubBillPdfUrl),
+        billFileName: hubBillFileName || undefined,
+        billPdfUrl: hubBillPdfUrl || undefined,
+        receiptUrl: hubBillPdfUrl || undefined,
         staffId: isStaffExpense ? step4StaffId : undefined,
         staffName: isStaffExpense ? staffName : undefined,
         paymentMode: effectiveHubMode,
@@ -4401,7 +4449,9 @@ function DailyRegisterView({
           val,
           hubDueDate || addSaudiDays(14),
           hubExpenseCat,
-          effectiveHubMode
+          effectiveHubMode,
+          undefined,
+          hubBillPdfUrl || undefined
         );
         setSyncBannerMsg({
           text: `${hubExpenseCat} (${supplierClean} · SAR ${fmt(val)}${isCreditPurchase || isSupplierAdvance ? ` · Follow-Up ${hubDueDate}` : ""}) synced live to Suppliers & Payables`,
@@ -4449,6 +4499,9 @@ function DailyRegisterView({
 
       setEntryTitle("");
       setEntryAmount("");
+      setHubBillPdfUrl(null);
+      setHubBillFileName(null);
+      setHubBillType("WITHOUT_BILL");
       return;
     }
 
@@ -4766,6 +4819,10 @@ function DailyRegisterView({
     e.preventDefault();
     const val = parseFloat(step4Amount);
     if (Number.isNaN(val) || val <= 0) return;
+    if (step4BillType === "WITH_BILL" && !step4BillPdfUrl) {
+      alert("Please upload a receipt photo or PDF when 'With Bill' is selected.");
+      return;
+    }
 
     const isCreditPurchase = step4Category === "Credit Purchase";
     const isSupplierAdvance = step4Category === "Supplier Advance";
@@ -4809,6 +4866,8 @@ function DailyRegisterView({
       dueDate: isCreditPurchase || isSupplierAdvance ? step4DueDate : undefined,
       followUpDate: isCreditPurchase || isSupplierAdvance ? step4DueDate : undefined,
       supplierInvoiceNum: step4SupplierInvoiceNum.trim() || undefined,
+      hasBill: step4BillType === "WITH_BILL" && Boolean(step4BillPdfUrl),
+      billFileName: step4PdfFileName || undefined,
       billPdfUrl: step4BillPdfUrl || undefined,
       receiptUrl: step4BillPdfUrl || undefined,
       staffId: isStaffExpense ? step4StaffId : undefined,
@@ -4869,6 +4928,8 @@ function DailyRegisterView({
               : "BANK_TRANSFER",
           paymentMode: effectiveStep4Mode,
           supplierInvoiceNum: step4SupplierInvoiceNum.trim() || undefined,
+          hasBill: step4BillType === "WITH_BILL" && Boolean(step4BillPdfUrl),
+          billFileName: step4PdfFileName || undefined,
           billPdfUrl: step4BillPdfUrl || undefined,
           receiptUrl: step4BillPdfUrl || undefined,
           note: step4Note.trim() || undefined,
@@ -4939,6 +5000,9 @@ function DailyRegisterView({
 
     setStep4Amount("");
     setStep4Note("");
+    setStep4BillPdfUrl(null);
+    setStep4PdfFileName(null);
+    setStep4BillType("WITHOUT_BILL");
   };
 
   const handleSaveInlineEdit = (rowKey: string) => {
@@ -6368,33 +6432,31 @@ function DailyRegisterView({
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
-              {/* Discreet POS Fee Toggle - Staff RBAC: Only visible to Owner */}
-              {isOwner && (
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={trackPosFees}
-                  onClick={() => setTrackPosFees((prev) => !prev)}
-                  className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-bold transition whitespace-nowrap shadow-sm ${
-                    trackPosFees
-                      ? "border-jct-turquoise bg-jct-turquoise text-jct-charcoal"
-                      : "border-slate-200 dark:border-[#1F1F1F] bg-white dark:bg-[#0A0A0A] text-slate-500 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-jct-offwhite"
+              {/* POS Fee Toggle */}
+              <button
+                type="button"
+                role="switch"
+                aria-checked={trackPosFees}
+                onClick={() => setTrackPosFees((prev) => !prev)}
+                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-bold transition whitespace-nowrap shadow-sm ${
+                  trackPosFees
+                    ? "border-jct-turquoise bg-jct-turquoise text-jct-charcoal"
+                    : "border-slate-200 dark:border-[#1F1F1F] bg-white dark:bg-[#0A0A0A] text-slate-500 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-jct-offwhite"
+                }`}
+              >
+                <span>POS Fees (MDR)</span>
+                <span
+                  className={`inline-flex h-3.5 w-6 items-center rounded-full p-0.5 transition-colors ${
+                    trackPosFees ? "bg-jct-charcoal" : "bg-slate-300 dark:bg-slate-600"
                   }`}
                 >
-                  <span>POS Fees (MDR)</span>
                   <span
-                    className={`inline-flex h-3.5 w-6 items-center rounded-full p-0.5 transition-colors ${
-                      trackPosFees ? "bg-jct-charcoal" : "bg-slate-300 dark:bg-slate-600"
+                    className={`h-2.5 w-2.5 rounded-full bg-white transition-transform ${
+                      trackPosFees ? "translate-x-2.5" : "translate-x-0"
                     }`}
-                  >
-                    <span
-                      className={`h-2.5 w-2.5 rounded-full bg-white transition-transform ${
-                        trackPosFees ? "translate-x-2.5" : "translate-x-0"
-                      }`}
-                    />
-                  </span>
-                </button>
-              )}
+                  />
+                </span>
+              </button>
 
               <LiveSyncPill status={syncStatus} />
               {hasActiveSessionData && (
@@ -6733,11 +6795,76 @@ function DailyRegisterView({
                           </select>
                         )}
 
+                        <div className="inline-flex items-center rounded-lg border border-slate-300 dark:border-[#1F1F1F] bg-slate-50 dark:bg-[#111111] p-0.5 gap-0.5">
+                          <button
+                            type="button"
+                            onClick={() => setHubBillType("WITHOUT_BILL")}
+                            className={`rounded-md px-2.5 py-1.5 text-xs font-bold transition whitespace-nowrap ${
+                              hubBillType === "WITHOUT_BILL"
+                                ? "bg-jct-turquoise text-jct-charcoal shadow-sm"
+                                : "text-slate-500 hover:text-jct-charcoal dark:hover:text-white"
+                            }`}
+                          >
+                            📝 Without Bill
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setHubBillType("WITH_BILL")}
+                            className={`rounded-md px-2.5 py-1.5 text-xs font-bold transition whitespace-nowrap ${
+                              hubBillType === "WITH_BILL"
+                                ? "bg-jct-turquoise text-jct-charcoal shadow-sm"
+                                : "text-slate-500 hover:text-jct-charcoal dark:hover:text-white"
+                            }`}
+                          >
+                            📄 With Bill
+                          </button>
+                        </div>
+
+                        {hubBillType === "WITH_BILL" && (
+                          <div className="flex items-center gap-1.5">
+                            <label className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md border border-dashed border-jct-turquoise/60 hover:border-jct-turquoise bg-jct-turquoise/10 text-jct-turquoise text-xs font-bold cursor-pointer transition whitespace-nowrap">
+                              <Upload size={14} />
+                              <span>
+                                {hubBillUploading
+                                  ? "Uploading..."
+                                  : hubBillFileName
+                                  ? `✓ ${hubBillFileName.slice(0, 14)}`
+                                  : "📎 Upload Bill"}
+                              </span>
+                              <input
+                                type="file"
+                                accept="image/*,application/pdf"
+                                capture="environment"
+                                onChange={handleHubFileUpload}
+                                className="hidden"
+                              />
+                            </label>
+                            {hubBillFileName && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setHubBillPdfUrl(null);
+                                  setHubBillFileName(null);
+                                }}
+                                className="text-rose-500 hover:text-rose-600 text-xs font-bold px-1"
+                                title="Remove attachment"
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </div>
+                        )}
+
                         <input
                           type="text"
+                          required={hubBillType === "WITHOUT_BILL"}
                           value={entryTitle}
                           onChange={(e) => setEntryTitle(e.target.value)}
-                          placeholder="Optional note / details..."
+                          placeholder={
+                            hubBillType === "WITHOUT_BILL"
+                              ? "Description / Note (Required without bill)..."
+                              : "Optional note / details..."
+                          }
                           className="flex-1 min-w-[150px] bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md text-sm px-3 py-2 placeholder:text-slate-400 outline-none transition"
                         />
                       </>
@@ -6936,29 +7063,34 @@ function DailyRegisterView({
                             </span>
                           )}
                           <span className="font-medium text-jct-charcoal dark:text-jct-offwhite truncate max-w-[140px]">{entry.title}</span>
+                          {(entry.billPdfUrl || entry.receiptUrl) && (
+                            <button
+                              type="button"
+                              onClick={() => setPreviewBillUrl(entry.billPdfUrl || entry.receiptUrl || null)}
+                              className="inline-flex items-center gap-1 rounded-full bg-jct-turquoise/20 hover:bg-jct-turquoise/30 px-2 py-0.5 text-[10px] font-bold text-jct-charcoal dark:text-jct-turquoise transition"
+                            >
+                              📎 View Bill
+                            </button>
+                          )}
                           <span className={`font-mono font-bold ${meta.isOutflow ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-jct-turquoise"}`}>
                             {meta.isOutflow ? "-" : "+"}SAR {fmt(entry.amount)}
                           </span>
-                          {isOwner && (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => handleOpenEditEntryModal(entry)}
-                                className="bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 transition-all rounded px-1.5 py-0.5 text-[10px]"
-                                title="Edit entry"
-                              >
-                                ✏️ Edit
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveEntry(entry.id)}
-                                className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/20 transition"
-                                title="Delete entry"
-                              >
-                                🗑️ Delete
-                              </button>
-                            </>
-                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditEntryModal(entry)}
+                            className="bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 transition-all rounded px-1.5 py-0.5 text-[10px]"
+                            title="Edit entry"
+                          >
+                            ✏️ Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveEntry(entry.id)}
+                            className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/20 transition"
+                            title="Delete entry"
+                          >
+                            🗑️ Delete
+                          </button>
                         </div>
                       );
                     })}
@@ -7346,43 +7478,41 @@ function DailyRegisterView({
                       <span>Report Date: {activeSessionDate}</span>
                     </span>
                   </div>
-                  {/* Clean Optional Toggle Switch: Estimate POS Merchant Fees (MDR) - Staff RBAC */}
-                  {isOwner && (
-                    <div className="pt-0.5 flex flex-wrap items-center">
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={trackPosFees}
-                        onClick={() => setTrackPosFees((prev) => !prev)}
-                        className={`inline-flex items-center gap-2.5 rounded-lg border px-3 py-1.5 text-xs font-bold transition-colors shadow-sm ${
-                          trackPosFees
-                            ? "border-jct-turquoise bg-jct-turquoise text-jct-charcoal"
-                            : "border-slate-200 dark:border-[#1F1F1F] bg-white dark:bg-black text-slate-500 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-jct-offwhite"
+                  {/* Optional Toggle Switch: Estimate POS Merchant Fees (MDR) */}
+                  <div className="pt-0.5 flex flex-wrap items-center">
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={trackPosFees}
+                      onClick={() => setTrackPosFees((prev) => !prev)}
+                      className={`inline-flex items-center gap-2.5 rounded-lg border px-3 py-1.5 text-xs font-bold transition-colors shadow-sm ${
+                        trackPosFees
+                          ? "border-jct-turquoise bg-jct-turquoise text-jct-charcoal"
+                          : "border-slate-200 dark:border-[#1F1F1F] bg-white dark:bg-black text-slate-500 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-jct-offwhite"
+                      }`}
+                    >
+                      <span>Estimate POS Merchant Fees (MDR)</span>
+                      <span
+                        className={`inline-flex h-4 w-7 items-center rounded-full p-0.5 transition-colors ${
+                          trackPosFees ? "bg-jct-charcoal" : "bg-slate-300 dark:bg-slate-600"
                         }`}
                       >
-                        <span>Estimate POS Merchant Fees (MDR)</span>
                         <span
-                          className={`inline-flex h-4 w-7 items-center rounded-full p-0.5 transition-colors ${
-                            trackPosFees ? "bg-jct-charcoal" : "bg-slate-300 dark:bg-slate-600"
+                          className={`h-3 w-3 rounded-full bg-white transition-transform ${
+                            trackPosFees ? "translate-x-3" : "translate-x-0"
                           }`}
-                        >
-                          <span
-                            className={`h-3 w-3 rounded-full bg-white transition-transform ${
-                              trackPosFees ? "translate-x-3" : "translate-x-0"
-                            }`}
-                          />
-                        </span>
-                        <span className="text-[10px] font-bold uppercase tracking-wider">
-                          {trackPosFees ? "ON" : "OFF"}
-                        </span>
-                      </button>
-                      {trackPosFees && (
-                        <span className="text-sm text-slate-400 ml-4">
-                          Rates: mada (0.8%, Cap SAR 40) | Visa/MC (2.2%)
-                        </span>
-                      )}
-                    </div>
-                  )}
+                        />
+                      </span>
+                      <span className="text-[10px] font-bold uppercase tracking-wider">
+                        {trackPosFees ? "ON" : "OFF"}
+                      </span>
+                    </button>
+                    {trackPosFees && (
+                      <span className="text-sm text-slate-400 ml-4">
+                        Rates: mada (0.8%, Cap SAR 40) | Visa/MC (2.2%)
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 shrink-0">
@@ -7408,7 +7538,7 @@ function DailyRegisterView({
                     <span className="mt-0.5 block text-[11px] text-slate-500 dark:text-slate-400">
                       100% Gross Face Value Settlement
                     </span>
-                    {isOwner && trackPosFees && (
+                    {trackPosFees && (
                       <span className="mt-0.5 block text-[11px] text-slate-500 dark:text-slate-400">
                         Est. MDR fee (audit only): SAR {fmt(totalPosFees)}
                       </span>
@@ -7806,18 +7936,16 @@ function DailyRegisterView({
                             {inv.isReturned ? "↺ Undo Return" : "↩ Return Bill"}
                           </button>
 
-                          {/* Subtle Trash Icon Delete Button (Owner Only) */}
-                          {isOwner && (
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveErpInvoice(rowKey)}
-                              className="text-slate-400 hover:text-rose-500 p-1.5 rounded-lg hover:bg-rose-500/10 transition-colors"
-                              title="Delete invoice row"
-                              aria-label={`Delete invoice ${inv.branchInvNo || inv.invoiceNo || "manual"}`}
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          )}
+                          {/* Subtle Trash Icon Delete Button */}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveErpInvoice(rowKey)}
+                            className="text-slate-400 hover:text-rose-500 p-1.5 rounded-lg hover:bg-rose-500/10 transition-colors"
+                            title="Delete invoice row"
+                            aria-label={`Delete invoice ${inv.branchInvNo || inv.invoiceNo || "manual"}`}
+                          >
+                            <Trash2 size={14} />
+                          </button>
                         </div>
                       </div>
 
@@ -8016,7 +8144,7 @@ function DailyRegisterView({
                                 Bank/Card: SAR {fmt(inv.splitBankAmount)}
                               </span>
                             </div>
-                            {isOwner && trackPosFees && inv.splitBankMethod === "POS_SWIPE" && posFee > 0 && (
+                            {trackPosFees && inv.splitBankMethod === "POS_SWIPE" && posFee > 0 && (
                               <span className="text-[10px] text-slate-500 dark:text-slate-400">
                                 {(() => {
                                   const fb = calcInvoiceFeeBreakdown(inv);
@@ -8094,7 +8222,7 @@ function DailyRegisterView({
                                 ? "mada · SNB"
                                 : "mada · SAB"}: SAR {fmt(inv.amount)}
                             </span>
-                            {isOwner && trackPosFees && posFee > 0 && (
+                            {trackPosFees && posFee > 0 && (
                               <span className="text-[10px] text-slate-500 dark:text-slate-400">
                                 {(() => {
                                   const fb = calcInvoiceFeeBreakdown(inv);
@@ -8773,25 +8901,21 @@ function DailyRegisterView({
                                   <span className="font-display text-sm font-bold whitespace-nowrap text-jct-charcoal dark:text-jct-offwhite">
                                     {isCreditSaleRow ? "" : "+"}SAR {fmt(item.amount)}
                                   </span>
-                                  {isOwner && (
-                                    <>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleOpenEditEntryModal(item)}
-                                        className="bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 transition-all rounded-md px-2.5 py-1 text-xs"
-                                      >
-                                        ✏️ Edit
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleRemoveEntry(item.id)}
-                                        className="text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 p-1.5 rounded-md transition-colors"
-                                        title="Delete entry"
-                                      >
-                                        <Trash2 size={15} />
-                                      </button>
-                                    </>
-                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenEditEntryModal(item)}
+                                    className="bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 transition-all rounded-md px-2.5 py-1 text-xs"
+                                  >
+                                    ✏️ Edit
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveEntry(item.id)}
+                                    className="text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 p-1.5 rounded-md transition-colors"
+                                    title="Delete entry"
+                                  >
+                                    <Trash2 size={15} />
+                                  </button>
                                 </>
                               )}
                             </div>
@@ -8901,9 +9025,7 @@ function DailyRegisterView({
                             } else if (category === "Cash Purchase") {
                               setStep4PaymentMode("CASH");
                             }
-                            setStep4Amount(
-                              existing ? String(existing.amount) : ""
-                            );
+                            setStep4Amount("");
                           }}
                           className={`rounded-lg px-3 py-1.5 text-xs transition-all ${
                             active
@@ -8913,7 +9035,7 @@ function DailyRegisterView({
                               : "border border-slate-200 dark:border-[#1F1F1F] bg-slate-50 dark:bg-[#111111] text-jct-charcoal dark:text-jct-offwhite font-medium hover:brightness-95"
                           }`}
                         >
-                          {category} {existing ? `(${existing.amount} SAR)` : ""}
+                          {category}
                         </button>
                       );
                     })}
@@ -9091,7 +9213,7 @@ function DailyRegisterView({
                               : "border border-slate-200 dark:border-[#1F1F1F] bg-slate-50 dark:bg-[#111111] text-slate-500 hover:text-jct-charcoal dark:hover:text-white"
                           }`}
                         >
-                          <span>🧾 With Bill (Upload)</span>
+                          <span>📄 With Bill</span>
                         </button>
                       </div>
                     </div>
@@ -9125,6 +9247,7 @@ function DailyRegisterView({
                             <input
                               type="file"
                               accept="image/*,application/pdf"
+                              capture="environment"
                               onChange={handleStep4FileUpload}
                               className="hidden"
                             />
@@ -9266,16 +9389,15 @@ function DailyRegisterView({
                                     #{item.supplierInvoiceNum}
                                   </span>
                                 )}
-                                {item.billPdfUrl && (
-                                  <a
-                                    href={item.billPdfUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
+                                {(item.billPdfUrl || item.receiptUrl) && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setPreviewBillUrl(item.billPdfUrl || item.receiptUrl || null)}
                                     className="inline-flex items-center gap-1 rounded-full bg-jct-turquoise/20 hover:bg-jct-turquoise/30 px-2.5 py-0.5 text-[10px] font-bold text-jct-charcoal dark:text-jct-turquoise transition"
                                   >
                                     <FileText size={10} />
-                                    <span>📄 View Bill</span>
-                                  </a>
+                                    <span>📎 View Bill</span>
+                                  </button>
                                 )}
                               </div>
                               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
@@ -9335,27 +9457,23 @@ function DailyRegisterView({
                                   >
                                     {item.isReturned ? "↺ Undo Return" : "↩ Return Bill"}
                                   </button>
-                                  {isOwner && (
-                                    <>
-                                      {!item.isReturned && (
-                                        <button
-                                          type="button"
-                                          onClick={() => handleOpenEditEntryModal(item)}
-                                          className="bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 transition-all rounded-md px-2.5 py-1 text-xs"
-                                        >
-                                          ✏️ Edit
-                                        </button>
-                                      )}
-                                      <button
-                                        type="button"
-                                        onClick={() => handleRemoveEntry(item.id)}
-                                        className="text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 p-1.5 rounded-md transition-colors"
-                                        title="Delete expense"
-                                      >
-                                        <Trash2 size={15} />
-                                      </button>
-                                    </>
+                                  {!item.isReturned && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenEditEntryModal(item)}
+                                      className="bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 transition-all rounded-md px-2.5 py-1 text-xs"
+                                    >
+                                      ✏️ Edit
+                                    </button>
                                   )}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveEntry(item.id)}
+                                    className="text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 p-1.5 rounded-md transition-colors"
+                                    title="Delete expense"
+                                  >
+                                    <Trash2 size={15} />
+                                  </button>
                                 </>
                               )}
                             </div>
@@ -9403,9 +9521,8 @@ function DailyRegisterView({
                   date={activeSessionDate}
                 />
 
-                {/* 1. Consolidated Settlement & Merchant Fee Header Strip - Staff RBAC */}
-                {isOwner && (
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 transition-all duration-300 print:hidden">
+                {/* 1. Consolidated Settlement & Merchant Fee Header Strip */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 transition-all duration-300 print:hidden">
                     <div className="flex flex-wrap items-center gap-3">
                       <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                         Audit Settlement Mode:
@@ -9448,7 +9565,6 @@ function DailyRegisterView({
                       )}
                     </div>
                   </div>
-                )}
 
                 {/* 2. Streamlined Hero Drawer Closing Card */}
                 <div className="w-full bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-yellow/20 dark:border-jct-yellow/30 hover:border-jct-yellow/80 hover:shadow-[0_0_15px_rgba(255,222,89,0.1)] rounded-xl p-6 mb-2 transition-all duration-300 print:shadow-none print:border print:border-black print:rounded-none print:bg-white print:text-black print:p-6 print:mb-4 print:break-inside-avoid">
@@ -9890,39 +10006,35 @@ function DailyRegisterView({
                                       +SAR {fmt(entry.amount)}
                                     </span>
                                   )}
-                                  {isOwner && (
-                                    <>
-                                      {!entry.isReturned && (
-                                        <button
-                                          type="button"
-                                          onClick={() => handleOpenEditEntryModal(entry)}
-                                          className="rounded bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-2 py-0.5 text-[10px] print:hidden"
-                                        >
-                                          ✏️ Edit
-                                        </button>
-                                      )}
-                                      <button
-                                        type="button"
-                                        onClick={() => handleToggleReturnEntry(entry.id)}
-                                        className={`rounded border px-2 py-0.5 text-[10px] font-bold transition print:hidden ${
-                                          entry.isReturned
-                                            ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/25"
-                                            : "border-amber-500/40 bg-amber-500/15 text-amber-700 dark:text-amber-300 hover:bg-amber-500/25"
-                                        }`}
-                                        title={entry.isReturned ? "Undo Return Bill" : "Mark Bill as Returned (SAR 0.00)"}
-                                      >
-                                        {entry.isReturned ? "↺ Undo Return" : "↩ Return Bill"}
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleRemoveEntry(entry.id)}
-                                        className="rounded border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-600 dark:text-rose-400 transition print:hidden"
-                                        title="Delete inflow"
-                                      >
-                                        🗑️ Delete
-                                      </button>
-                                    </>
+                                  {!entry.isReturned && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenEditEntryModal(entry)}
+                                      className="rounded bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-2 py-0.5 text-[10px] print:hidden"
+                                    >
+                                      ✏️ Edit
+                                    </button>
                                   )}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleReturnEntry(entry.id)}
+                                    className={`rounded border px-2 py-0.5 text-[10px] font-bold transition print:hidden ${
+                                      entry.isReturned
+                                        ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/25"
+                                        : "border-amber-500/40 bg-amber-500/15 text-amber-700 dark:text-amber-300 hover:bg-amber-500/25"
+                                    }`}
+                                    title={entry.isReturned ? "Undo Return Bill" : "Mark Bill as Returned (SAR 0.00)"}
+                                  >
+                                    {entry.isReturned ? "↺ Undo Return" : "↩ Return Bill"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveEntry(entry.id)}
+                                    className="rounded border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-600 dark:text-rose-400 transition print:hidden"
+                                    title="Delete inflow"
+                                  >
+                                    🗑️ Delete
+                                  </button>
                                 </>
                               )}
                             </div>
@@ -10115,6 +10227,20 @@ function DailyRegisterView({
                                   Orig: SAR {fmt(entry.originalAmount)}
                                 </span>
                               )}
+                              {(entry.billPdfUrl || entry.receiptUrl) ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setPreviewBillUrl(entry.billPdfUrl || entry.receiptUrl || null)}
+                                  className="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/30 px-2 py-0.5 text-[10px] font-bold shrink-0 print:hidden"
+                                >
+                                  <FileText size={10} />
+                                  <span>📎 View Bill</span>
+                                </button>
+                              ) : entry.hasBill === false ? (
+                                <span className="rounded-full bg-slate-200/70 dark:bg-[#1A1A1A] text-slate-500 dark:text-slate-400 px-2 py-0.5 text-[10px] font-bold shrink-0 print:hidden">
+                                  📝 No Bill
+                                </span>
+                              ) : null}
                             </div>
 
                             {expandedAuditBox === "EXPENSES" && !entry.isReturned && (
@@ -10194,39 +10320,35 @@ function DailyRegisterView({
                                       {bucket === "CASH" ? "-SAR " : "SAR "}{fmt(entry.amount)}
                                     </span>
                                   )}
-                                  {isOwner && (
-                                    <>
-                                      {!entry.isReturned && (
-                                        <button
-                                          type="button"
-                                          onClick={() => handleOpenEditEntryModal(entry)}
-                                          className="rounded bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-2 py-0.5 text-[10px] print:hidden"
-                                        >
-                                          ✏️ Edit
-                                        </button>
-                                      )}
-                                      <button
-                                        type="button"
-                                        onClick={() => handleToggleReturnEntry(entry.id)}
-                                        className={`rounded border px-2 py-0.5 text-[10px] font-bold transition print:hidden ${
-                                          entry.isReturned
-                                            ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/25"
-                                            : "border-amber-500/40 bg-amber-500/15 text-amber-700 dark:text-amber-300 hover:bg-amber-500/25"
-                                        }`}
-                                        title={entry.isReturned ? "Undo Return Bill" : "Mark Bill as Returned (SAR 0.00)"}
-                                      >
-                                        {entry.isReturned ? "↺ Undo Return" : "↩ Return Bill"}
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleRemoveEntry(entry.id)}
-                                        className="rounded border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-600 dark:text-rose-400 transition print:hidden"
-                                        title="Delete expense"
-                                      >
-                                        🗑️ Delete
-                                      </button>
-                                    </>
+                                  {!entry.isReturned && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenEditEntryModal(entry)}
+                                      className="rounded bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-2 py-0.5 text-[10px] print:hidden"
+                                    >
+                                      ✏️ Edit
+                                    </button>
                                   )}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleReturnEntry(entry.id)}
+                                    className={`rounded border px-2 py-0.5 text-[10px] font-bold transition print:hidden ${
+                                      entry.isReturned
+                                        ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/25"
+                                        : "border-amber-500/40 bg-amber-500/15 text-amber-700 dark:text-amber-300 hover:bg-amber-500/25"
+                                    }`}
+                                    title={entry.isReturned ? "Undo Return Bill" : "Mark Bill as Returned (SAR 0.00)"}
+                                  >
+                                    {entry.isReturned ? "↺ Undo Return" : "↩ Return Bill"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveEntry(entry.id)}
+                                    className="rounded border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-600 dark:text-rose-400 transition print:hidden"
+                                    title="Delete expense"
+                                  >
+                                    🗑️ Delete
+                                  </button>
                                 </>
                               )}
                             </div>
@@ -10316,16 +10438,14 @@ function DailyRegisterView({
                       <div className="flex items-center gap-3 shrink-0 print:hidden">
                         <div className="text-right">
                           <span className="block font-display text-base font-extrabold text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap">
-                            {isOwner && bankSettlementMode === "NET" ? "Net: " : ""}SAR{" "}
+                            {bankSettlementMode === "NET" ? "Net: " : ""}SAR{" "}
                             {fmt(activeBankSettlementTotal)}
                           </span>
-                          {isOwner && (
-                            <span className="block text-[10px] font-medium text-slate-500 dark:text-slate-400">
-                              {bankSettlementMode === "NET"
-                                ? `Gross: SAR ${fmt(bankSwipeGrossTotal)} · Fees: -SAR ${fmt(totalPosFees)}`
-                                : `Est. MDR + VAT: -SAR ${fmt(totalPosFees)}`}
-                            </span>
-                          )}
+                          <span className="block text-[10px] font-medium text-slate-500 dark:text-slate-400">
+                            {bankSettlementMode === "NET"
+                              ? `Gross: SAR ${fmt(bankSwipeGrossTotal)} · Fees: -SAR ${fmt(totalPosFees)}`
+                              : `Est. MDR + VAT: -SAR ${fmt(totalPosFees)}`}
+                          </span>
                         </div>
                         <button
                           type="button"
@@ -10369,13 +10489,9 @@ function DailyRegisterView({
                           ? inv.splitBankMethod === "BANK_TRANSFER"
                           : inv.paymentMode === "BANK_TRANSFER";
                         const showExpandedFeeBreakdown =
-                          isOwner && (
-                            expandedAuditBox === "BANK_POS" ||
-                            bankSettlementMode === "NET" ||
-                            trackPosFees
-                          );
-                        // Interactive switcher only displays when actively editing or when box is expanded
-                        const showInteractiveSwitcher = isEditing || expandedAuditBox === "BANK_POS";
+                          expandedAuditBox === "BANK_POS" ||
+                          bankSettlementMode === "NET" ||
+                          trackPosFees;
                         const rowLookupId = inv.internalId || inv.id || inv.invoiceNo;
 
                         return (
@@ -10387,12 +10503,12 @@ function DailyRegisterView({
                                 : "hover:bg-slate-100/70 dark:hover:bg-[#111111]"
                             }`}
                           >
-                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 print:flex print:flex-row print:justify-between print:items-center print:w-full">
-                              <div className="flex flex-wrap items-center gap-2.5 min-w-0 flex-1">
-                                <span className="font-mono text-xs font-extrabold text-slate-500 dark:text-slate-400 w-20 shrink-0 print:text-black print:font-bold print:w-20">
+                            <div className="flex flex-wrap items-center justify-between gap-2.5 print:flex print:flex-row print:justify-between print:items-center print:w-full">
+                              <div className="flex flex-wrap items-center gap-2 min-w-0 flex-1">
+                                <span className="font-mono text-xs font-extrabold text-slate-500 dark:text-slate-400 shrink-0 print:text-black print:font-bold print:w-20">
                                   {inv.branchInvNo || `#${inv.invoiceNo}`}
                                 </span>
-                                <span className={`text-xs font-semibold truncate max-w-[200px] sm:max-w-[260px] print:text-black print:text-sm ${
+                                <span className={`text-xs font-semibold truncate max-w-[180px] sm:max-w-[240px] print:text-black print:text-sm ${
                                   inv.isReturned
                                     ? "line-through text-rose-500 dark:text-rose-400"
                                     : "text-jct-charcoal dark:text-jct-offwhite"
@@ -10406,15 +10522,9 @@ function DailyRegisterView({
                                   </span>
                                 )}
 
-                                {/* Card Type Tag: Display clean chosen badge in review mode; hide on screen when interactive bar is shown */}
+                                {/* Print-only Card Type Tag (never rendered on screen alongside the interactive selector bar) */}
                                 <span
-                                  className={`rounded px-2.5 py-1 font-mono text-[10px] font-bold shrink-0 shadow-sm print:inline-block print:border print:border-black print:bg-white print:text-black ${
-                                    showInteractiveSwitcher ? "hidden print:inline-block" : "inline-block"
-                                  } ${
-                                    isBankTransferRow
-                                      ? "bg-jct-turquoise/25 border border-jct-turquoise/40 text-jct-charcoal dark:text-jct-offwhite"
-                                      : "bg-jct-yellow text-jct-charcoal"
-                                  }`}
+                                  className="hidden print:inline-block rounded px-2 py-0.5 font-mono text-[10px] font-bold shrink-0 print:border print:border-black print:bg-white print:text-black"
                                 >
                                   [
                                   {isBankTransferRow
@@ -10445,8 +10555,8 @@ function DailyRegisterView({
                               </div>
 
                               {/* Action Area: Interactive Terminal Switcher & Amount / Edit Controls */}
-                              <div className="flex flex-wrap items-center justify-between md:justify-end gap-2 shrink-0 print:hidden">
-                                {showInteractiveSwitcher && !inv.isReturned && (
+                              <div className="flex flex-wrap items-center justify-end gap-2 shrink-0 print:hidden">
+                                {!inv.isReturned && (
                                   <div className="inline-flex flex-wrap rounded-lg bg-white dark:bg-[#0A0A0A] p-0.5 border border-slate-200 dark:border-[#1F1F1F] gap-0.5 shadow-sm">
                                     {(["SAB", "AL_RAJHI", "SNB", "VISA_MC"] as PosTerminalBank[]).map(
                                       (term) => (
@@ -11901,6 +12011,60 @@ function DailyRegisterView({
           </div>
         </div>
       )}
+
+      {/* Bill / Receipt Preview Modal */}
+      {previewBillUrl && (
+        <ModalPortal isOpen={Boolean(previewBillUrl)}>
+          <div
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+            onClick={() => setPreviewBillUrl(null)}
+          >
+            <div
+              className="relative w-full max-w-2xl max-h-[88vh] flex flex-col rounded-2xl border border-slate-200 dark:border-[#1F1F1F] bg-white dark:bg-[#0A0A0A] shadow-2xl overflow-hidden text-jct-charcoal dark:text-jct-offwhite"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-200 dark:border-[#1F1F1F]">
+                <span className="text-sm font-black uppercase tracking-wider text-jct-turquoise">
+                  📎 Attached Bill / Receipt Preview
+                </span>
+                <div className="flex items-center gap-2">
+                  <a
+                    href={previewBillUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="rounded-lg bg-jct-turquoise/15 border border-jct-turquoise/40 px-2.5 py-1 text-xs font-bold text-jct-turquoise hover:bg-jct-turquoise/25 transition"
+                  >
+                    Open Full ↗
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewBillUrl(null)}
+                    className="rounded-lg bg-slate-100 dark:bg-[#111111] px-2.5 py-1 text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-white"
+                  >
+                    ✕ Close
+                  </button>
+                </div>
+              </div>
+              <div className="flex-1 overflow-auto p-4 flex items-center justify-center bg-slate-50 dark:bg-black/60 min-h-[320px]">
+                {previewBillUrl.startsWith("data:application/pdf") || previewBillUrl.toLowerCase().endsWith(".pdf") ? (
+                  <iframe
+                    src={previewBillUrl}
+                    title="Bill PDF Preview"
+                    className="w-full h-[65vh] rounded-lg border border-slate-200 dark:border-[#1F1F1F]"
+                  />
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={previewBillUrl}
+                    alt="Attached Bill Receipt"
+                    className="max-w-full max-h-[65vh] object-contain rounded-lg"
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+        </ModalPortal>
+      )}
     </div>
   );
 }
@@ -12034,14 +12198,14 @@ function CreditRadarView({
 
   return (
     <div className="flex flex-col h-full w-full gap-5 p-4 md:p-6 lg:p-8 overflow-hidden">
-      {/* Owner Edit Customer Modal */}
-      {isOwner && editingCustomer && (
+      {/* Edit Customer Modal */}
+      {editingCustomer && (
         <ModalPortal isOpen={Boolean(editingCustomer)}>
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm overflow-y-auto">
             <div className="w-full max-w-md bg-white dark:bg-[#0A0A0A] shadow-2xl border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 text-jct-charcoal dark:text-jct-offwhite my-auto">
             <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#1F1F1F] pb-3 mb-4">
               <h3 className="font-display text-lg font-extrabold text-jct-charcoal dark:text-jct-offwhite">
-                ✏️ Edit Credit Account (Owner Override)
+                ✏️ Edit Credit Account
               </h3>
               <button
                 type="button"
@@ -12391,31 +12555,29 @@ function CreditRadarView({
                           On Track
                         </span>
                       )}
-                      {isOwner && (
-                        <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={(e) => handleOpenEditCustomer(c, e)}
+                          className="rounded-lg bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-2 py-1 text-[10px] transition"
+                          title="Edit Credit Account"
+                        >
+                          ✏️ Edit
+                        </button>
+                        {isOwner && onDeleteCustomer && (
                           <button
                             type="button"
-                            onClick={(e) => handleOpenEditCustomer(c, e)}
-                            className="rounded-lg bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-2 py-1 text-[10px] transition"
-                            title="Owner Edit Credit Account"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDeleteCustomer(c.id);
+                            }}
+                            className="rounded-lg bg-rose-500/15 hover:bg-rose-500/30 px-2 py-1 text-[10px] font-bold text-rose-500 transition"
+                            title="Owner Delete Credit Account"
                           >
-                            ✏️ Edit
+                            🗑️ Delete
                           </button>
-                          {onDeleteCustomer && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onDeleteCustomer(c.id);
-                              }}
-                              className="rounded-lg bg-rose-500/15 hover:bg-rose-500/30 px-2 py-1 text-[10px] font-bold text-rose-500 transition"
-                              title="Owner Delete Credit Account"
-                            >
-                              🗑️ Delete
-                            </button>
-                          )}
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -12861,14 +13023,14 @@ function SupplierHubView({
         </span>
       </div>
 
-      {/* Owner Edit Bill Modal */}
-      {editingBill && isOwner && (
+      {/* Edit Bill Modal */}
+      {editingBill && (
         <ModalPortal isOpen={Boolean(editingBill)}>
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm overflow-y-auto">
             <div className="w-full max-w-md bg-white dark:bg-[#0A0A0A] rounded-xl p-6 border border-jct-yellow/40 dark:border-jct-yellow/50 shadow-2xl transition-all text-jct-charcoal dark:text-jct-offwhite my-auto">
             <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#1F1F1F] pb-4 mb-5">
               <h3 className="font-display text-lg font-extrabold tracking-tight text-jct-charcoal dark:text-white">
-                👑 Edit Supplier Bill / Purchase
+                ✏️ Edit Supplier Bill / Purchase
               </h3>
               <button
                 type="button"
@@ -13069,46 +13231,41 @@ function SupplierHubView({
                               title="Open bill in new tab"
                             >
                               <FileText size={13} />
-                              <span>📄 View Bill</span>
+                              <span>📎 View Bill</span>
                             </a>
-                          ) : isOwner ? (
+                          ) : (
                             <label className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-dashed border-jct-yellow/60 hover:border-jct-yellow bg-jct-yellow/10 text-jct-charcoal dark:text-jct-yellow font-bold text-xs cursor-pointer transition">
                               <Upload size={12} />
                               <span>{retroUploadingId === bill.id ? "Uploading..." : "⬆️ Attach PDF"}</span>
                               <input
                                 type="file"
                                 accept="application/pdf,image/*"
+                                capture="environment"
                                 onChange={(e) => handleRetroactivePdfUpload(bill.id, e)}
                                 className="hidden"
                               />
                             </label>
-                          ) : (
-                            <span className="text-slate-400 text-xs italic">No bill attached</span>
                           )}
                         </td>
                         <td className="px-4 py-3.5 text-right">
-                          {isOwner ? (
-                            <div className="flex items-center justify-end gap-1.5">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditBill(bill)}
+                              className="rounded-lg bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-2.5 py-1 text-xs transition"
+                            >
+                              ✏️ Edit
+                            </button>
+                            {isOwner && onDeleteBill && (
                               <button
                                 type="button"
-                                onClick={() => handleOpenEditBill(bill)}
-                                className="rounded-lg bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-2.5 py-1 text-xs transition"
+                                onClick={() => onDeleteBill(bill.id)}
+                                className="rounded-lg bg-rose-500/15 hover:bg-rose-500/30 px-2.5 py-1 text-xs font-bold text-rose-500 transition"
                               >
-                                ✏️ Edit
+                                🗑️ Delete
                               </button>
-                              {onDeleteBill && (
-                                <button
-                                  type="button"
-                                  onClick={() => onDeleteBill(bill.id)}
-                                  className="rounded-lg bg-rose-500/15 hover:bg-rose-500/30 px-2.5 py-1 text-xs font-bold text-rose-500 transition"
-                                >
-                                  🗑️ Delete
-                                </button>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-slate-400 text-xs font-medium">Locked (Staff)</span>
-                          )}
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -13406,26 +13563,24 @@ function SupplierHubView({
                       <span className="font-display font-extrabold text-jct-charcoal dark:text-jct-offwhite">
                         SAR {fmt(bill.amount)}
                       </span>
-                      {isOwner && (
-                        <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditBill(bill)}
+                          className="rounded-lg bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-2 py-1 text-xs transition"
+                        >
+                          ✏️ Edit
+                        </button>
+                        {isOwner && onDeleteBill && (
                           <button
                             type="button"
-                            onClick={() => handleOpenEditBill(bill)}
-                            className="rounded-lg bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-2 py-1 text-xs transition"
+                            onClick={() => onDeleteBill(bill.id)}
+                            className="rounded-lg bg-rose-500/15 hover:bg-rose-500/30 px-2 py-1 text-xs font-bold text-rose-500 transition"
                           >
-                            ✏️ Edit
+                            🗑️ Delete
                           </button>
-                          {onDeleteBill && (
-                            <button
-                              type="button"
-                              onClick={() => onDeleteBill(bill.id)}
-                              className="rounded-lg bg-rose-500/15 hover:bg-rose-500/30 px-2 py-1 text-xs font-bold text-rose-500 transition"
-                            >
-                              🗑️ Delete
-                            </button>
-                          )}
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
@@ -16481,7 +16636,14 @@ function StaffPayrollView({
   }) => void;
 }) {
   const isOwner = Boolean(profile?.isOwner);
-  const [branchFilter, setBranchFilter] = useState<string>("ALL");
+  const [branchFilter, setBranchFilter] = useState<string>(() =>
+    isOwner ? "ALL" : branchId || profile?.id || "JCT_HARDWARE_JOTUN"
+  );
+  useEffect(() => {
+    if (!isOwner && branchId) {
+      setBranchFilter(branchId);
+    }
+  }, [isOwner, branchId]);
   const [selectedMonth, setSelectedMonth] = useState<string>(() => saudiMonthIso());
   const [searchQuery, setSearchQuery] = useState("");
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
@@ -17039,17 +17201,23 @@ function StaffPayrollView({
           </div>
 
           {/* Branch Filter */}
-          <select
-            value={branchFilter}
-            onChange={(e) => setBranchFilter(e.target.value)}
-            className="rounded-md bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise px-3 py-2 text-xs font-bold text-jct-charcoal dark:text-jct-offwhite outline-none"
-          >
-            <option value="ALL">All Branches (Combined)</option>
-            <option value="JCT_HARDWARE_JOTUN">JCT Hardware + Jotun</option>
-            <option value="HEMPEL">Hempel</option>
-            <option value="DAMMAM_JOTUN">Dammam Jotun</option>
-            <option value="SIGMA">Sigma</option>
-          </select>
+          {isOwner ? (
+            <select
+              value={branchFilter}
+              onChange={(e) => setBranchFilter(e.target.value)}
+              className="rounded-md bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise px-3 py-2 text-xs font-bold text-jct-charcoal dark:text-jct-offwhite outline-none"
+            >
+              <option value="ALL">All Branches (Combined)</option>
+              <option value="JCT_HARDWARE_JOTUN">JCT Hardware + Jotun</option>
+              <option value="HEMPEL">Hempel</option>
+              <option value="DAMMAM_JOTUN">Dammam Jotun</option>
+              <option value="SIGMA">Sigma</option>
+            </select>
+          ) : (
+            <span className="rounded-md border border-jct-turquoise/40 bg-jct-turquoise/10 px-3 py-2 text-xs font-bold text-jct-charcoal dark:text-jct-turquoise">
+              {getBranchBadgeInfo(branchFilter).name}
+            </span>
+          )}
 
           {/* Add Staff Button */}
           {isOwner && (
@@ -17168,15 +17336,15 @@ function StaffPayrollView({
             </p>
           </div>
         ) : (
-          <div className="w-full overflow-x-auto">
+          <div className="w-full overflow-x-auto pb-3">
             <table className="w-full min-w-[950px] text-left text-xs whitespace-nowrap">
               <thead className="border-b border-slate-200 dark:border-[#1F1F1F] text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-[#111111] font-bold">
                 <tr>
                   <th className="py-3.5 px-4 min-w-[200px]">Employee &amp; Role</th>
                   <th className="py-3.5 px-4 min-w-[120px]">Branch</th>
                   <th className="py-3.5 px-4 text-right min-w-[100px]">Base Salary</th>
-                  <th className="py-3.5 px-4 text-right min-w-[130px]">Advances ({selectedMonth})</th>
-                  <th className="py-3.5 px-4 text-right min-w-[150px]">Outstanding Loan Balance</th>
+                  <th className="py-3.5 px-4 text-right min-w-[140px]">Advance Salary ({selectedMonth})</th>
+                  <th className="py-3.5 px-4 text-right min-w-[150px]">Staff Loans (Outstanding)</th>
                   <th className="py-3.5 px-4 text-right min-w-[130px]">Net Remaining Due</th>
                   <th className="py-3.5 px-4 text-center min-w-[90px]">Status</th>
                   <th className="py-3.5 px-4 text-right min-w-[160px]">Actions</th>
@@ -18446,8 +18614,8 @@ const USER_PROFILES: UserProfile[] = [
 ];
 
 const OWNER_TABS: TabId[] = ["register", "archive", "radar", "suppliers", "payroll", "pulse", "consolidation", "ai", "settings", "monthly-audits"];
-// RBAC: STAFF accounts can only access Daily Register (/daily-register)
-const STAFF_TABS: TabId[] = ["register"];
+// RBAC: STAFF accounts have full operational & data-entry parity for their assigned branch
+const STAFF_TABS: TabId[] = ["register", "radar", "suppliers", "payroll", "archive"];
 
 const OWNER_BRANCH_OPTIONS = [
   "All Branches (Combined)",
@@ -18682,13 +18850,17 @@ export default function Page() {
 
       // Client-side RBAC enforcement for STAFF accounts
       if (!matched.isOwner) {
-        setTab("register");
-        if (
+        const resolved = resolveInitialTabFromPath(pathname);
+        const isOwnerOnlyPath =
           pathname &&
-          pathname !== "/daily-register" &&
-          pathname !== "/"
-        ) {
+          (pathname.startsWith("/pulse") ||
+            pathname.startsWith("/monthly-audits") ||
+            pathname.startsWith("/nauman-ai"));
+        if (isOwnerOnlyPath) {
+          setTab("register");
           router.replace("/daily-register");
+        } else {
+          setTab(STAFF_TABS.includes(resolved) ? resolved : "register");
         }
       } else {
         setTab(resolveInitialTabFromPath(pathname));
@@ -19135,6 +19307,7 @@ export default function Page() {
       const origAmt = isRet ? (t.originalAmount ?? t.amount) : (t.originalAmount ?? undefined);
       if (t.type === "EXPENSE") {
         if (t.paymentSource === "OWNER_POCKET") return; // owner's own money: not a drawer outflow
+        const billUrl = t.billPdfUrl || t.receiptUrl || undefined;
         injected.push({
           id: entryId,
           sourcePocketId: t.id,
@@ -19147,8 +19320,13 @@ export default function Page() {
           isReturned: isRet,
           time,
           paymentMode: (t.paymentMode as UniversalPaymentMode) || "CASH",
+          hasBill: Boolean(t.hasBill || billUrl),
+          billFileName: t.billFileName || undefined,
+          billPdfUrl: billUrl,
+          receiptUrl: billUrl,
         });
       } else if (t.type === "PURCHASE") {
+        const billUrl = t.billPdfUrl || t.receiptUrl || undefined;
         if (t.paymentMode === "CREDIT" || t.paymentSource === "SUPPLIER_CREDIT") {
           const dueDate = saudiTodayIso(Date.now() + 30 * 86400000);
           if (!isRet) {
@@ -19157,7 +19335,9 @@ export default function Page() {
               t.amount,
               dueDate,
               "Credit Purchase",
-              "CREDIT"
+              "CREDIT",
+              undefined,
+              billUrl
             );
           }
         } else if (t.paymentMode === "CASH") {
@@ -19173,6 +19353,10 @@ export default function Page() {
             isReturned: isRet,
             time,
             paymentMode: "CASH",
+            hasBill: Boolean(t.hasBill || billUrl),
+            billFileName: t.billFileName || undefined,
+            billPdfUrl: billUrl,
+            receiptUrl: billUrl,
           });
         } else {
           injected.push({
@@ -19187,6 +19371,10 @@ export default function Page() {
             isReturned: isRet,
             time,
             paymentMode: (t.paymentMode as UniversalPaymentMode) || "SAB",
+            hasBill: Boolean(t.hasBill || billUrl),
+            billFileName: t.billFileName || undefined,
+            billPdfUrl: billUrl,
+            receiptUrl: billUrl,
           });
         }
       } else if (t.type === "ADVANCE") {
