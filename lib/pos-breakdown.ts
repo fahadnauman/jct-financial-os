@@ -65,6 +65,7 @@ export interface GenericInvoiceLike {
   amount: number;
   netPayableAmount?: number;
   isReturned?: boolean;
+  isManualPos?: boolean;
   paymentMode?: string;
   posTerminal?: string;
   posTerminalDevice?: string;
@@ -174,12 +175,13 @@ export function calcSessionPosBreakdown(
         : inv.amount;
     const mode = (inv.paymentMode || "").toUpperCase();
 
-    if (mode === "POS_SWIPE" || mode === "SWIPE") {
-      const termKey = normalizeTerminalKey(
-        inv.posTerminalDevice || inv.terminal || (inv.posTerminal === "VISA_MC" ? "SAB" : inv.posTerminal)
-      );
+    if (mode === "POS_SWIPE" || mode === "SWIPE" || mode === "CARD") {
+      const rawTerm = inv.posTerminalDevice || inv.terminal || inv.posTerminal;
+      const termKey = normalizeTerminalKey(rawTerm === "VISA_MC" ? "SAB" : rawTerm);
       const cardType =
-        inv.posTerminal === "VISA_MC" && inv.cardNetwork !== "mada"
+        termKey === "BANK_TRANSFER"
+          ? "Direct Transfer"
+          : inv.posTerminal === "VISA_MC" && inv.cardNetwork !== "mada"
           ? "Visa"
           : normalizeCardType(inv.splitCardBrand || inv.cardNetwork || inv.network);
       addRecord(termKey, cardType, effectiveInvAmount);

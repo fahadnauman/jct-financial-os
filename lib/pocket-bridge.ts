@@ -24,7 +24,8 @@ export type PocketType =
   | "CREDIT_COLLECTION"
   | "PURCHASE"
   | "SUPPLIER_ADVANCE"
-  | "CUSTOMER_ADVANCE";
+  | "CUSTOMER_ADVANCE"
+  | "POS_SALE";
 export type PaymentSource = "DRAWER_CASH" | "OWNER_POCKET" | "BANK_TRANSFER" | "SUPPLIER_CREDIT";
 
 export const POCKET_BRANCHES: { id: BranchId; short: string; full: string }[] = [
@@ -48,6 +49,10 @@ export interface PocketTransaction {
   recipientName: string | null;
   paymentSource: PaymentSource;
   paymentMode?: string | null;
+  terminal?: string | null;
+  cardNetwork?: string | null;
+  isManualPos?: boolean;
+  supplierInvoiceNum?: string | null;
   hasBill?: boolean;
   billFileName?: string | null;
   receiptUrl?: string | null;
@@ -67,6 +72,8 @@ export const POCKET_POLL_MS = 5000;
 export const pocketTag = (type: PocketType): string =>
   type === "CREDIT_COLLECTION"
     ? "⚡ Collected by Owner (On-Road)"
+    : type === "POS_SALE"
+    ? "⚡ Manual POS (Owner Pocket)"
     : type === "PURCHASE"
     ? "⚡ Logged by Owner (Purchase)"
     : type === "SUPPLIER_ADVANCE"

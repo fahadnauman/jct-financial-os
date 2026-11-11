@@ -22,6 +22,7 @@ import SettingsView from "./settings-view";
 import MonthlyAuditsView from "./monthly-audits-view";
 import { calcSessionPosBreakdown, type PosSessionBreakdown } from "../lib/pos-breakdown";
 import { useActiveSessionSync, type ActiveSessionSyncStatus } from "../lib/active-session-sync";
+import { RapidPosModal, type RapidPosSubmitPayload } from "../components/RapidPosModal";
 import * as Dropdown from "@radix-ui/react-dropdown-menu";
 import * as XLSX from "xlsx";
 import {
@@ -184,7 +185,7 @@ export interface SupplierBillItem {
   dueDate: string;
   followUpDate?: string;
   followUpStatus?: string;
-  category: "Credit Purchase" | "Cash Purchase" | "Bank Purchase" | "Return";
+  category: "Credit Purchase" | "Cash Purchase" | "Return";
   paymentMode?: string;
   createdAt: string;
   source: "Daily Register" | "Supplier Hub";
@@ -647,6 +648,7 @@ export type InvoicePaymentMode =
   | "CASH"
   | "BANK_TRANSFER"
   | "POS_SWIPE"
+  | "CARD"
   | "SPLIT"
   | "OTHER_RECD"
   | "CREDIT_SALE"
@@ -665,7 +667,6 @@ export const STRICT_EXPENSE_CATEGORIES = [
   "Supplier Advance",
   "Credit Purchase",
   "Cash Purchase",
-  "Bank Purchase",
   "Medical Expenses",
   "Staff Expenses",
   "Other Expenses",
@@ -755,8 +756,8 @@ export interface PreLoggedEntry {
   staffId?: string;
   staffName?: string;
   paymentMode?: string;
-  terminal?: "SAB" | "AL_RAJHI" | "SNB";
-  network?: "mada" | "visa";
+  terminal?: "SAB" | "AL_RAJHI" | "SNB" | "BANK_TRANSFER";
+  network?: "mada" | "visa" | "mastercard";
   note?: string;
   amount: number;
   originalAmount?: number;
@@ -794,6 +795,7 @@ export interface ErpInvoiceItem {
   linkedInvoiceNum?: string;
   isReturned?: boolean;
   isManual?: boolean;
+  isManualPos?: boolean;
   discountAmount?: number;
   roundOffAmount?: number;
   businessCommission?: number;
@@ -804,10 +806,10 @@ export interface ErpInvoiceItem {
   overrideNote?: string;
   paymentMode: InvoicePaymentMode;
   posTerminal: PosTerminalBank;
-  posTerminalDevice?: "SAB" | "AL_RAJHI" | "SNB";
-  terminal?: "SAB" | "AL_RAJHI" | "SNB";
-  cardNetwork?: "mada" | "visa";
-  network?: "mada" | "visa";
+  posTerminalDevice?: "SAB" | "AL_RAJHI" | "SNB" | "BANK_TRANSFER";
+  terminal?: "SAB" | "AL_RAJHI" | "SNB" | "BANK_TRANSFER";
+  cardNetwork?: "mada" | "visa" | "mastercard";
+  network?: "mada" | "visa" | "mastercard";
   bankPaymentMode?: string;
   isSplit?: boolean;
   splitCashAmount: number;
@@ -1014,7 +1016,7 @@ function buildClassicDataSheetRows(
         } else if (inv.paymentMode === "BANK_TRANSFER") {
           toBankAmt = effInvAmt;
           toBank = `Bank #${invoiceNo} - SAR ${fmt(effInvAmt)}`;
-        } else if (inv.paymentMode === "POS_SWIPE") {
+        } else if (inv.paymentMode === "POS_SWIPE" || inv.paymentMode === "CARD") {
           toBankAmt = effInvAmt;
           toBank = `Card #${invoiceNo} - SAR ${fmt(effInvAmt)}`;
         }
@@ -1086,7 +1088,7 @@ function buildClassicDataSheetRows(
     const excessAmt: number | null = sRow && parseNum(sRow.excessAmt) > 0 ? parseNum(sRow.excessAmt) : null;
 
     if (exp && !exp.isReturned) {
-      const cat = exp.expenseCategory || exp.title;
+      const cat = (exp.expenseCategory || exp.title) as string;
       const pm = (exp.paymentMode || "CASH").toUpperCase();
       const isCreditExp = cat === "Credit Purchase" || pm === "CREDIT" || pm === "PAY_LATER" || exp.title.toLowerCase().includes("credit purchase");
       const isBankExp = cat === "Bank Purchase" || ["CARD", "POS_SWIPE", "VISA", "MADA", "BANK", "BANK_TRANSFER", "SAB", "AL_RAJHI", "SNB"].includes(pm);
@@ -1463,11 +1465,14 @@ export interface PosFeeBreakdown {
 
 export const calcAmountPosFeeBreakdown = (
   amount: number,
-  terminal: PosTerminalBank = "SAB",
-  network?: "mada" | "visa"
+  terminal: PosTerminalBank | "BANK_TRANSFER" = "SAB",
+  network?: "mada" | "visa" | "mastercard"
 ): PosFeeBreakdown => {
   const gross = r2(Math.max(0, amount));
-  const isVisa = network === "visa" || terminal === "VISA_MC";
+  if (terminal === "BANK_TRANSFER") {
+    return { gross, mdrBase: 0, vatOnFee: 0, totalFee: 0, net: gross, isMada: false };
+  }
+  const isVisa = network === "visa" || network === "mastercard" || terminal === "VISA_MC";
   const feeRate = isVisa ? 0.022 : 0.008;
   const samaCap = isVisa ? undefined : 40;
   const rawMdr = gross * feeRate;
@@ -1516,7 +1521,13 @@ export const calcInvoiceCashPortion = (inv: ErpInvoiceItem): number => {
 
 export const calcInvoiceBankGrossPortion = (inv: ErpInvoiceItem): number => {
   if (inv.isReturned) return 0;
-  if (inv.paymentMode === "BANK_TRANSFER" || inv.paymentMode === "POS_SWIPE") return inv.amount;
+  if (
+    inv.paymentMode === "BANK_TRANSFER" ||
+    inv.paymentMode === "POS_SWIPE" ||
+    inv.paymentMode === "CARD"
+  ) {
+    return inv.amount;
+  }
   if (inv.paymentMode === "SPLIT") return r2(inv.splitBankAmount || 0);
   if (inv.paymentMode === "CREDIT_SALE" && inv.creditDownMethod === "POS_SWIPE") {
     return r2(inv.creditDownAmount || 0);
@@ -1535,17 +1546,18 @@ export const calcInvoiceFeeBreakdown = (inv: ErpInvoiceItem): PosFeeBreakdown =>
       isMada: false,
     };
   }
-  const term = (inv.posTerminalDevice || inv.terminal || (inv.posTerminal === "VISA_MC" ? "SAB" : inv.posTerminal) || "SAB") as PosTerminalBank;
-  const netw: "mada" | "visa" = inv.cardNetwork || inv.network || (inv.posTerminal === "VISA_MC" ? "visa" : "mada");
+  const term = (inv.posTerminalDevice || inv.terminal || (inv.posTerminal === "VISA_MC" ? "SAB" : inv.posTerminal) || "SAB") as PosTerminalBank | "BANK_TRANSFER";
+  const netw: "mada" | "visa" | "mastercard" =
+    inv.cardNetwork || inv.network || (inv.posTerminal === "VISA_MC" ? "visa" : "mada");
 
   if (inv.paymentMode === "CREDIT_SALE" && inv.creditDownMethod === "POS_SWIPE") {
     return calcAmountPosFeeBreakdown(
       inv.creditDownAmount || 0,
-      inv.creditDownTerminal || term,
+      inv.creditDownTerminal || (term === "BANK_TRANSFER" ? "SAB" : term),
       netw
     );
   }
-  if (inv.paymentMode === "POS_SWIPE") {
+  if (inv.paymentMode === "POS_SWIPE" || inv.paymentMode === "CARD") {
     return calcAmountPosFeeBreakdown(inv.amount, term, netw);
   }
   if (inv.paymentMode === "SPLIT" && inv.splitBankMethod === "POS_SWIPE") {
@@ -1586,8 +1598,9 @@ export const calcEntryPosFeeBreakdown = (entry: PreLoggedEntry): PosFeeBreakdown
     const gross = r2(Math.max(0, entry.amount));
     return { gross, mdrBase: 0, vatOnFee: 0, totalFee: 0, net: gross, isMada: false };
   }
-  const term = (entry.terminal || "SAB") as PosTerminalBank;
-  const netw: "mada" | "visa" = entry.network || (entry.paymentMode === "VISA" ? "visa" : "mada");
+  const term = (entry.terminal || "SAB") as PosTerminalBank | "BANK_TRANSFER";
+  const netw: "mada" | "visa" | "mastercard" =
+    entry.network || (entry.paymentMode === "VISA" ? "visa" : "mada");
   return calcAmountPosFeeBreakdown(entry.amount, term, netw);
 };
 
@@ -1595,7 +1608,7 @@ export const classifyExpenseOutflow = (
   e: PreLoggedEntry
 ): "CASH" | "BANK" | "CREDIT" | "RETURNED" => {
   if (e.isReturned) return "RETURNED";
-  const cat = (e.expenseCategory || "").trim();
+  const cat = ((e.expenseCategory || "") as string).trim();
   const titleLower = (e.title || "").toLowerCase();
   const pm = (e.paymentMode || "CASH").toUpperCase().trim();
   if (
@@ -2081,7 +2094,7 @@ interface DailyRegisterViewProps {
     supplierName: string,
     amount: number,
     dueDate: string,
-    category: "Credit Purchase" | "Cash Purchase" | "Bank Purchase" | "Supplier Advance" | "Return",
+    category: "Credit Purchase" | "Cash Purchase" | "Supplier Advance" | "Return",
     paymentMode?: UniversalPaymentMode | string,
     supplierInvoiceNum?: string,
     billPdfUrl?: string
@@ -3022,6 +3035,49 @@ function DailyRegisterView({
     targetTab: TabId;
     targetLabel: string;
   } | null>(null);
+  const [rapidPosOpen, setRapidPosOpen] = useState(false);
+
+  const handleAddRapidPosEntry = (payload: RapidPosSubmitPayload) => {
+    const newPosInvoice: ErpInvoiceItem = {
+      internalId: `pos-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      id: `POS-${Date.now()}`,
+      invoiceNo: payload.invoiceNo,
+      branchInvNo: payload.invoiceNo,
+      customer: "Manual POS Entry",
+      customerName: "Manual POS Entry",
+      amount: payload.amount,
+      originalDate: activeSessionDate,
+      isManual: true,
+      isManualPos: true,
+      isConfirmed: true,
+      autoMatched: true,
+      paymentMode: "CARD",
+      posTerminal:
+        payload.terminal === "BANK_TRANSFER"
+          ? "SAB"
+          : payload.cardNetwork === "visa" || payload.cardNetwork === "mastercard"
+          ? "VISA_MC"
+          : payload.terminal,
+      posTerminalDevice: payload.terminal,
+      terminal: payload.terminal,
+      cardNetwork: payload.cardNetwork,
+      network: payload.cardNetwork,
+      splitCashAmount: 0,
+      splitBankAmount: 0,
+      splitBankMethod: payload.terminal === "BANK_TRANSFER" ? "BANK_TRANSFER" : "POS_SWIPE",
+      time: nowHHMM(),
+    };
+    setErpInvoices((prev) => [newPosInvoice, ...prev]);
+    setSyncBannerMsg({
+      text: `⚡ Manual POS ${payload.invoiceNo}: SAR ${fmt(payload.amount)} (${
+        payload.terminal === "BANK_TRANSFER"
+          ? "Bank Transfer"
+          : `${payload.terminal} · ${payload.cardNetwork}`
+      }) added to session`,
+      targetTab: "pulse",
+      targetLabel: "View Financial Pulse →",
+    });
+  };
 
   // Active Branch Staff State for Outflows & Advances
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
@@ -4173,7 +4229,7 @@ function DailyRegisterView({
 
   const handleSelectInvoicePosTerminal = (
     invoiceNo: string,
-    terminal: "SAB" | "AL_RAJHI" | "SNB"
+    terminal: "SAB" | "AL_RAJHI" | "SNB" | "BANK_TRANSFER"
   ) => {
     setErpInvoices((prev) => {
       const base = prev;
@@ -4183,8 +4239,14 @@ function DailyRegisterView({
           (inv.id && inv.id === invoiceNo) ||
           inv.invoiceNo === invoiceNo;
         if (!matches) return inv;
-        const currentNetwork = inv.cardNetwork || inv.network || (inv.posTerminal === "VISA_MC" ? "visa" : "mada");
-        const nextTerminal: PosTerminalBank = currentNetwork === "visa" ? "VISA_MC" : terminal;
+        const currentNetwork =
+          inv.cardNetwork || inv.network || (inv.posTerminal === "VISA_MC" ? "visa" : "mada");
+        const nextTerminal: PosTerminalBank =
+          terminal === "BANK_TRANSFER"
+            ? "SAB"
+            : currentNetwork === "visa" || currentNetwork === "mastercard"
+            ? "VISA_MC"
+            : terminal;
         return {
           ...inv,
           posTerminalDevice: terminal,
@@ -4200,7 +4262,7 @@ function DailyRegisterView({
 
   const handleSelectInvoiceCardNetwork = (
     invoiceNo: string,
-    network: "mada" | "visa"
+    network: "mada" | "visa" | "mastercard"
   ) => {
     setErpInvoices((prev) => {
       const base = prev;
@@ -4211,8 +4273,15 @@ function DailyRegisterView({
           inv.invoiceNo === invoiceNo;
         if (!matches) return inv;
         const currentDevice =
-          inv.posTerminalDevice || inv.terminal || (inv.posTerminal === "AL_RAJHI" ? "AL_RAJHI" : inv.posTerminal === "SNB" ? "SNB" : "SAB");
-        const nextTerminal: PosTerminalBank = network === "visa" ? "VISA_MC" : currentDevice;
+          inv.posTerminalDevice ||
+          inv.terminal ||
+          (inv.posTerminal === "AL_RAJHI" ? "AL_RAJHI" : inv.posTerminal === "SNB" ? "SNB" : "SAB");
+        const nextTerminal: PosTerminalBank =
+          currentDevice === "BANK_TRANSFER"
+            ? "SAB"
+            : network === "visa" || network === "mastercard"
+            ? "VISA_MC"
+            : currentDevice;
         return {
           ...inv,
           posTerminalDevice: currentDevice,
@@ -4385,14 +4454,13 @@ function DailyRegisterView({
       const isPurchase =
         hubExpenseCat === "Credit Purchase" ||
         hubExpenseCat === "Cash Purchase" ||
-        hubExpenseCat === "Bank Purchase" ||
         isSupplierAdvance;
       const isStaffExpense = hubExpenseCat === "Staff Advance" || hubExpenseCat === "Salary";
       const selectedStaff = staffList.find((s) => s.id === step4StaffId);
       const staffName = selectedStaff?.name || "";
       const supplierClean = hubSupplierName.trim() || "Jotun";
       const displayTitle = isPurchase
-        ? `${hubExpenseCat} — ${supplierClean}${entryTitle.trim() ? ` (${entryTitle.trim()})` : ""}`
+        ? `${hubExpenseCat === "Cash Purchase" ? "Supplier / Cash Purchase" : hubExpenseCat} — ${supplierClean}${entryTitle.trim() ? ` (${entryTitle.trim()})` : ""}`
         : isStaffExpense && staffName
         ? `${hubExpenseCat} — ${staffName}${entryTitle.trim() ? ` (${entryTitle.trim()})` : ""}`
         : entryTitle.trim()
@@ -4407,8 +4475,6 @@ function DailyRegisterView({
 
       const effectiveHubMode = isCreditPurchase
         ? "CREDIT"
-        : hubExpenseCat === "Bank Purchase" && hubPaymentMode === "CASH"
-        ? "SAB"
         : hubPaymentMode;
 
       upsertEntry({
@@ -4834,7 +4900,6 @@ function DailyRegisterView({
     const isSupplierPurchase =
       step4Category === "Credit Purchase" ||
       step4Category === "Cash Purchase" ||
-      step4Category === "Bank Purchase" ||
       isSupplierAdvance;
     const isStaffExpense = step4Category === "Staff Advance" || step4Category === "Salary";
     const selectedStaff = staffList.find((s) => s.id === step4StaffId);
@@ -4842,7 +4907,7 @@ function DailyRegisterView({
 
     const cleanSupplier = step4SupplierName.trim() || "Jotun";
     const displayTitle = isSupplierPurchase
-      ? `${step4Category} — ${cleanSupplier}${step4Note.trim() ? ` (${step4Note.trim()})` : ""}`
+      ? `${step4Category === "Cash Purchase" ? "Supplier / Cash Purchase" : step4Category} — ${cleanSupplier}${step4Note.trim() ? ` (${step4Note.trim()})` : ""}`
       : isStaffExpense && staffName
       ? `${step4Category} — ${staffName}${step4Note.trim() ? ` (${step4Note.trim()})` : ""}`
       : step4Note.trim()
@@ -4851,8 +4916,6 @@ function DailyRegisterView({
 
     const effectiveStep4Mode = isCreditPurchase
       ? "CREDIT"
-      : step4Category === "Bank Purchase" && (step4PaymentMode === "CASH" || step4PaymentMode === "SAB")
-      ? "BANK_TRANSFER"
       : step4PaymentMode;
 
     const isStep4Card = effectiveStep4Mode === "CARD";
@@ -5078,8 +5141,14 @@ function DailyRegisterView({
     setEditModalAmount(String(entry.amount));
     setEditModalPaymentMode(entry.paymentMode || "CASH");
     setEditModalCategory(entry.expenseCategory || "Food");
-    setEditModalTerminal(entry.terminal || "SAB");
-    setEditModalNetwork(entry.network || (entry.paymentMode === "VISA" ? "visa" : "mada"));
+    setEditModalTerminal(
+      entry.terminal && entry.terminal !== "BANK_TRANSFER" ? entry.terminal : "SAB"
+    );
+    setEditModalNetwork(
+      entry.network === "visa" || entry.network === "mastercard" || entry.paymentMode === "VISA"
+        ? "visa"
+        : "mada"
+    );
   };
 
   const handleSaveEditEntryModal = (e: React.FormEvent) => {
@@ -5633,7 +5702,6 @@ function DailyRegisterView({
     const isPurchase =
       missingExpenseCat === "Credit Purchase" ||
       missingExpenseCat === "Cash Purchase" ||
-      missingExpenseCat === "Bank Purchase" ||
       isSupplierAdvance;
     const supplier = missingExpenseSupplier.trim() || "Jotun";
     const title = isPurchase
@@ -5679,11 +5747,12 @@ function DailyRegisterView({
         i.creditDownMethod === "CASH" &&
         (i.creditDownAmount || 0) > 0)
   );
-  // Bank / POS Invoices include "BANK_TRANSFER", "POS_SWIPE", and the Bank/Card Share of "SPLIT" invoices
+  // Bank / POS Invoices include "BANK_TRANSFER", "POS_SWIPE", "CARD", and the Bank/Card Share of "SPLIT" invoices
   const bankSwipeInvoices = activeErpList.filter(
     (i) =>
       i.paymentMode === "BANK_TRANSFER" ||
       i.paymentMode === "POS_SWIPE" ||
+      i.paymentMode === "CARD" ||
       (i.paymentMode === "SPLIT" && i.splitBankAmount > 0) ||
       (i.paymentMode === "CREDIT_SALE" &&
         i.creditDownMethod === "POS_SWIPE" &&
@@ -5698,6 +5767,8 @@ function DailyRegisterView({
   const printBankTransferInvoices = activeErpList.filter(
     (i) =>
       i.paymentMode === "BANK_TRANSFER" ||
+      (i.paymentMode === "CARD" &&
+        (i.terminal === "BANK_TRANSFER" || i.posTerminalDevice === "BANK_TRANSFER")) ||
       (i.paymentMode as string) === "Bank" ||
       (i.paymentMode as string) === "BANK" ||
       (i.paymentMode === "SPLIT" &&
@@ -5705,10 +5776,13 @@ function DailyRegisterView({
         i.splitBankAmount > 0)
   );
 
-  // Page 4: POS Swipes Section (paymentMode === 'Swipe' / 'POS_SWIPE', Split swipe portion, Credit POS down)
+  // Page 4: POS Swipes Section (paymentMode === 'Swipe' / 'POS_SWIPE' / 'CARD', Split swipe portion, Credit POS down)
   const printPosSwipeInvoices = activeErpList.filter(
     (i) =>
       i.paymentMode === "POS_SWIPE" ||
+      (i.paymentMode === "CARD" &&
+        i.terminal !== "BANK_TRANSFER" &&
+        i.posTerminalDevice !== "BANK_TRANSFER") ||
       (i.paymentMode as string) === "Swipe" ||
       (i.paymentMode as string) === "SWIPE" ||
       (i.paymentMode === "SPLIT" &&
@@ -6355,6 +6429,16 @@ function DailyRegisterView({
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
+              {/* Rapid Manual POS Entry Trigger */}
+              <button
+                type="button"
+                onClick={() => setRapidPosOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-full bg-jct-yellow hover:brightness-95 px-4 py-1.5 text-xs font-black text-jct-charcoal shadow-[0_0_16px_rgba(255,222,89,0.3)] transition whitespace-nowrap"
+              >
+                <Zap size={13} className="fill-current" />
+                <span>⚡ Rapid Manual POS Entry</span>
+              </button>
+
               {/* POS Fee Toggle */}
               <button
                 type="button"
@@ -6666,14 +6750,13 @@ function DailyRegisterView({
                         >
                           {STRICT_EXPENSE_CATEGORIES.map((cat) => (
                             <option key={cat} value={cat} className="bg-white dark:bg-[#0A0A0A]">
-                              {cat}
+                              {cat === "Cash Purchase" ? "Supplier / Cash Purchase" : cat}
                             </option>
                           ))}
                         </select>
 
                         {(hubExpenseCat === "Credit Purchase" ||
                           hubExpenseCat === "Cash Purchase" ||
-                          hubExpenseCat === "Bank Purchase" ||
                           hubExpenseCat === "Supplier Advance") && (
                           <input
                             type="text"
@@ -7470,19 +7553,29 @@ function DailyRegisterView({
                 </div>
               </div>
 
-              {/* Editable CSV Grid Header + Add Row Button */}
+              {/* Editable CSV Grid Header + Rapid POS & Add Row Buttons */}
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/60 bg-slate-50 dark:bg-[#111111] px-4 py-3 text-xs transition-all duration-300">
                 <span className="text-slate-500 dark:text-slate-400">
                   <strong className="font-semibold text-jct-charcoal dark:text-jct-offwhite">Editable CSV Grid:</strong> Click any Customer Name or Amount below to override directly, select Mode of Payment, or remove rows before saving.
                 </span>
-                <button
-                  type="button"
-                  onClick={handleAddManualErpInvoice}
-                  className="bg-jct-turquoise text-jct-charcoal font-bold hover:brightness-95 transition-all shadow-sm rounded-lg px-4 py-2 inline-flex items-center gap-1.5 text-xs"
-                >
-                  <Plus size={14} />
-                  <span>+ Add Invoice Row</span>
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setRapidPosOpen(true)}
+                    className="bg-jct-yellow text-jct-charcoal font-black hover:brightness-95 transition-all shadow-[0_0_16px_rgba(255,222,89,0.28)] rounded-lg px-4 py-2 inline-flex items-center gap-1.5 text-xs"
+                  >
+                    <Zap size={14} className="fill-current" />
+                    <span>⚡ Rapid Manual POS Entry</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleAddManualErpInvoice}
+                    className="bg-jct-turquoise text-jct-charcoal font-bold hover:brightness-95 transition-all shadow-sm rounded-lg px-4 py-2 inline-flex items-center gap-1.5 text-xs"
+                  >
+                    <Plus size={14} />
+                    <span>+ Add Invoice Row</span>
+                  </button>
+                </div>
               </div>
 
               {/* Clean Spreadsheet Table of Imported Invoices with Progressive Disclosure */}
@@ -7504,8 +7597,13 @@ function DailyRegisterView({
                 {activeErpList.map((inv) => {
                   const rowKey = inv.internalId || inv.id || inv.invoiceNo;
                   const isBankOrPos =
-                    inv.paymentMode === "BANK_TRANSFER" || inv.paymentMode === "POS_SWIPE";
-                  const isPosSwipe = inv.paymentMode === "POS_SWIPE";
+                    inv.paymentMode === "BANK_TRANSFER" ||
+                    inv.paymentMode === "POS_SWIPE" ||
+                    inv.paymentMode === "CARD";
+                  const isPosSwipe =
+                    (inv.paymentMode === "POS_SWIPE" || inv.paymentMode === "CARD") &&
+                    inv.terminal !== "BANK_TRANSFER" &&
+                    inv.posTerminalDevice !== "BANK_TRANSFER";
                   const isSplitMode = inv.paymentMode === "SPLIT";
                   const isOtherRecd = inv.paymentMode === "OTHER_RECD";
                   const isCreditSaleInv = inv.paymentMode === "CREDIT_SALE";
@@ -7515,10 +7613,14 @@ function DailyRegisterView({
                   const pmBadge = formatPaymentModeBadge(
                     inv.paymentMode === "CASH"
                       ? "CASH"
-                      : inv.paymentMode === "POS_SWIPE"
-                      ? inv.posTerminal === "VISA_MC"
+                      : inv.paymentMode === "POS_SWIPE" || inv.paymentMode === "CARD"
+                      ? inv.terminal === "BANK_TRANSFER" || inv.posTerminalDevice === "BANK_TRANSFER"
+                        ? "BANK_TRANSFER"
+                        : inv.cardNetwork === "visa" ||
+                          inv.cardNetwork === "mastercard" ||
+                          inv.posTerminal === "VISA_MC"
                         ? "VISA"
-                        : inv.posTerminal || "SAB"
+                        : inv.posTerminalDevice || inv.terminal || inv.posTerminal || "SAB"
                       : inv.bankPaymentMode || "BANK_TRANSFER"
                   );
 
@@ -7623,7 +7725,7 @@ function DailyRegisterView({
                           </span>
                           {isManualRow && (
                             <span className="rounded-full bg-jct-turquoise/20 text-jct-charcoal dark:text-jct-turquoise border border-jct-turquoise/40 px-2.5 py-0.5 text-[10px] font-bold shrink-0">
-                              Manual
+                              {inv.isManualPos ? "⚡ Manual POS" : "Manual"}
                             </span>
                           )}
                           {isSplitMode && (
@@ -7730,7 +7832,7 @@ function DailyRegisterView({
                                 type="button"
                                 onClick={() => handleSetInvoiceMode(rowKey, "POS_SWIPE")}
                                 className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
-                                  inv.paymentMode === "POS_SWIPE"
+                                  inv.paymentMode === "POS_SWIPE" || inv.paymentMode === "CARD"
                                     ? "bg-jct-turquoise text-jct-charcoal font-bold"
                                     : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
                                 }`}
@@ -8048,7 +8150,7 @@ function DailyRegisterView({
                             <div className="flex items-center gap-1.5">
                               <span className="font-semibold text-slate-500 dark:text-slate-400">Card Network:</span>
                               <div className="bg-white dark:bg-[#0A0A0A] p-0.5 rounded-lg border border-slate-200 dark:border-[#222222] flex items-center gap-1">
-                                {(["mada", "visa"] as const).map((net) => {
+                                {(["mada", "visa", "mastercard"] as const).map((net) => {
                                   const isSelected = (inv.cardNetwork || inv.network || (inv.posTerminal === "VISA_MC" ? "visa" : "mada")) === net;
                                   return (
                                     <button
@@ -8063,6 +8165,8 @@ function DailyRegisterView({
                                     >
                                       {net === "mada"
                                         ? (trackPosFees ? "mada (0.80% fee, cap SAR 40)" : "mada")
+                                        : net === "mastercard"
+                                        ? (trackPosFees ? "Mastercard (2.20%)" : "Mastercard")
                                         : (trackPosFees ? "Visa (2.20%)" : "Visa")}
                                     </button>
                                   );
@@ -8879,9 +8983,7 @@ function DailyRegisterView({
                           type="button"
                           onClick={() => {
                             setStep4Category(category);
-                            if (category === "Bank Purchase" && step4PaymentMode === "CASH") {
-                              setStep4PaymentMode("SAB");
-                            } else if (category === "Cash Purchase") {
+                            if (category === "Cash Purchase") {
                               setStep4PaymentMode("CASH");
                             }
                             setStep4Amount("");
@@ -8894,7 +8996,7 @@ function DailyRegisterView({
                               : "border border-slate-200 dark:border-[#1F1F1F] bg-slate-50 dark:bg-[#111111] text-jct-charcoal dark:text-jct-offwhite font-medium hover:brightness-95"
                           }`}
                         >
-                          {category}
+                          {category === "Cash Purchase" ? "Supplier / Cash Purchase" : category}
                         </button>
                       );
                     })}
@@ -8927,10 +9029,9 @@ function DailyRegisterView({
                       )}
                     </div>
 
-                    {/* Show Supplier Name when Credit Purchase, Cash Purchase, Bank Purchase, or Supplier Advance is selected */}
+                    {/* Show Supplier Name when Credit Purchase, Cash Purchase, or Supplier Advance is selected */}
                     {(step4Category === "Credit Purchase" ||
                       step4Category === "Cash Purchase" ||
-                      step4Category === "Bank Purchase" ||
                       step4Category === "Supplier Advance") && (
                       <div className="space-y-2.5 bg-slate-50 dark:bg-[#111111] border border-slate-200 dark:border-[#1F1F1F] text-jct-charcoal dark:text-jct-offwhite text-sm p-3 rounded-lg">
                         <div>
@@ -10228,7 +10329,7 @@ function DailyRegisterView({
                       >
                         {STRICT_EXPENSE_CATEGORIES.map((c) => (
                           <option key={c} value={c} className="bg-white dark:bg-[#0A0A0A]">
-                            {c}
+                            {c === "Cash Purchase" ? "Supplier / Cash Purchase" : c}
                           </option>
                         ))}
                       </select>
@@ -10247,8 +10348,7 @@ function DailyRegisterView({
                         onChange={(e) => setMissingExpenseSupplier(e.target.value)}
                         placeholder={
                           missingExpenseCat === "Credit Purchase" ||
-                          missingExpenseCat === "Cash Purchase" ||
-                          missingExpenseCat === "Bank Purchase"
+                          missingExpenseCat === "Cash Purchase"
                             ? "Supplier Name (e.g. Jotun)..."
                             : "Note / Details..."
                         }
@@ -10346,7 +10446,10 @@ function DailyRegisterView({
                         const termMeta = POS_TERMINAL_META[activeTerm];
                         const isBankTransferRow = isSplitRow
                           ? inv.splitBankMethod === "BANK_TRANSFER"
-                          : inv.paymentMode === "BANK_TRANSFER";
+                          : inv.paymentMode === "BANK_TRANSFER" ||
+                            (inv.paymentMode === "CARD" &&
+                              (inv.terminal === "BANK_TRANSFER" ||
+                                inv.posTerminalDevice === "BANK_TRANSFER"));
                         const showExpandedFeeBreakdown =
                           expandedAuditBox === "BANK_POS" ||
                           bankSettlementMode === "NET" ||
@@ -10435,8 +10538,10 @@ function DailyRegisterView({
                                             (isSplitRow
                                               ? inv.splitBankMethod === "POS_SWIPE" &&
                                                 activeTerm === term
-                                              : inv.paymentMode === "POS_SWIPE" &&
-                                                inv.posTerminal === term)
+                                              : (inv.paymentMode === "POS_SWIPE" ||
+                                                  inv.paymentMode === "CARD") &&
+                                                !isBankTransferRow &&
+                                                (inv.posTerminalDevice || inv.terminal || inv.posTerminal) === term)
                                               ? "bg-jct-turquoise text-jct-charcoal shadow-sm"
                                               : "text-slate-500 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-jct-offwhite"
                                           }`}
@@ -11924,6 +12029,13 @@ function DailyRegisterView({
           </div>
         </ModalPortal>
       )}
+      <RapidPosModal
+        open={rapidPosOpen}
+        onClose={() => setRapidPosOpen(false)}
+        onSubmit={handleAddRapidPosEntry}
+        branchLabel={getBranchBadgeInfo(branchId).name}
+        sessionDate={activeSessionDate}
+      />
     </div>
   );
 }
@@ -12615,7 +12727,7 @@ function SupplierHubView({
     supplierName: string,
     amount: number,
     dueDate: string,
-    category: "Credit Purchase" | "Cash Purchase" | "Bank Purchase" | "Supplier Advance" | "Return",
+    category: "Credit Purchase" | "Cash Purchase" | "Supplier Advance" | "Return",
     paymentMode?: UniversalPaymentMode | string,
     supplierInvoiceNum?: string,
     billPdfUrl?: string
@@ -12701,7 +12813,7 @@ function SupplierHubView({
 
   const [supplierSearch, setSupplierSearch] = useState("");
   const [logAmount, setLogAmount] = useState("");
-  const [logType, setLogType] = useState<"Credit Purchase" | "Cash Purchase" | "Bank Purchase" | "Supplier Advance" | "Return">("Credit Purchase");
+  const [logType, setLogType] = useState<"Credit Purchase" | "Cash Purchase" | "Supplier Advance" | "Return">("Credit Purchase");
   const [logPaymentMode] = useState<UniversalPaymentMode>("SAB");
   const [logDate, setLogDate] = useState(() => addSaudiDays(14));
   const [logInvoiceNum, setLogInvoiceNum] = useState("");
@@ -13218,14 +13330,13 @@ function SupplierHubView({
               <select
                 value={logType}
                 onChange={(e) =>
-                  setLogType(e.target.value as "Credit Purchase" | "Cash Purchase" | "Bank Purchase" | "Supplier Advance" | "Return")
+                  setLogType(e.target.value as "Credit Purchase" | "Cash Purchase" | "Supplier Advance" | "Return")
                 }
                 className="flex-1 min-w-[150px] px-4 py-2.5 bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md outline-none font-bold text-sm"
               >
                 <option value="Credit Purchase" className="bg-white dark:bg-[#0A0A0A]">Credit Purchase</option>
                 <option value="Supplier Advance" className="bg-white dark:bg-[#0A0A0A]">🏭 Supplier Advance</option>
-                <option value="Cash Purchase" className="bg-white dark:bg-[#0A0A0A]">Cash Purchase</option>
-                <option value="Bank Purchase" className="bg-white dark:bg-[#0A0A0A]">Bank Purchase</option>
+                <option value="Cash Purchase" className="bg-white dark:bg-[#0A0A0A]">Supplier / Cash Purchase</option>
                 <option value="Return" className="bg-white dark:bg-[#0A0A0A]">Return / Refund</option>
               </select>
               <QuickFollowUpPicker
@@ -18784,7 +18895,7 @@ export default function Page() {
     supplierName: string,
     amount: number,
     dueDate: string,
-    category: "Credit Purchase" | "Cash Purchase" | "Bank Purchase" | "Supplier Advance" | "Return",
+    category: "Credit Purchase" | "Cash Purchase" | "Supplier Advance" | "Return",
     paymentMode?: UniversalPaymentMode | string,
     supplierInvoiceNum?: string,
     billPdfUrl?: string
@@ -18796,7 +18907,7 @@ export default function Page() {
       amount,
       dueDate: dueDate || addSaudiDays(14),
       category: category === "Supplier Advance" ? "Cash Purchase" : category,
-      paymentMode: paymentMode || (category === "Bank Purchase" ? "SAB" : "CASH"),
+      paymentMode: paymentMode || "CASH",
       createdAt: saudiCalendarDateStr(),
       source: "Daily Register",
       supplierInvoiceNum: supplierInvoiceNum || undefined,
@@ -18822,7 +18933,7 @@ export default function Page() {
               ? Math.max(0, r2(target.pendingBills - amount))
               : target.pendingBills,
           amountPaid:
-            category === "Cash Purchase" || category === "Bank Purchase" || category === "Supplier Advance"
+            category === "Cash Purchase" || category === "Supplier Advance"
               ? r2(target.amountPaid + amount)
               : target.amountPaid,
         };
@@ -18833,7 +18944,7 @@ export default function Page() {
         {
           id: Date.now(),
           brand: cleanName,
-          amountPaid: category === "Cash Purchase" || category === "Bank Purchase" || category === "Supplier Advance" ? amount : 0,
+          amountPaid: category === "Cash Purchase" || category === "Supplier Advance" ? amount : 0,
           pendingBills: category === "Credit Purchase" ? amount : 0,
           color: "purple",
         },
@@ -19192,6 +19303,7 @@ export default function Page() {
     const fresh = pocketTxns.filter((t) => !pocketSyncedRef.current.has(t.id));
     if (fresh.length === 0) return;
     const injected: PreLoggedEntry[] = [];
+    const injectedPosInvoices: ErpInvoiceItem[] = [];
     fresh.forEach((t) => {
       pocketSyncedRef.current.add(t.id);
       const time = saudiHHMM(t.createdAt);
@@ -19200,7 +19312,42 @@ export default function Page() {
       const isRet = Boolean(t.isReturned);
       const effAmount = isRet ? 0 : t.amount;
       const origAmt = isRet ? (t.originalAmount ?? t.amount) : (t.originalAmount ?? undefined);
-      if (t.type === "EXPENSE") {
+      if (t.type === "POS_SALE") {
+        const term = (t.terminal as "SAB" | "AL_RAJHI" | "SNB" | "BANK_TRANSFER") || "SAB";
+        const net = (t.cardNetwork as "mada" | "visa" | "mastercard") || "mada";
+        const refNo = t.supplierInvoiceNum || `POS-${t.id.slice(-6).toUpperCase()}`;
+        injectedPosInvoices.push({
+          internalId: `pk-pos-${t.id}`,
+          id: `pk-pos-${t.id}`,
+          invoiceNo: refNo,
+          branchInvNo: refNo,
+          customer: "Manual POS Entry",
+          customerName: "Manual POS Entry",
+          amount: effAmount,
+          originalAmount: origAmt,
+          originalDate: t.date || activeSessionDate,
+          isReturned: isRet,
+          isManual: true,
+          isManualPos: true,
+          isConfirmed: true,
+          autoMatched: true,
+          paymentMode: "CARD",
+          posTerminal:
+            term === "BANK_TRANSFER"
+              ? "SAB"
+              : net === "visa" || net === "mastercard"
+              ? "VISA_MC"
+              : term,
+          posTerminalDevice: term,
+          terminal: term,
+          cardNetwork: net,
+          network: net,
+          splitCashAmount: 0,
+          splitBankAmount: 0,
+          splitBankMethod: term === "BANK_TRANSFER" ? "BANK_TRANSFER" : "POS_SWIPE",
+          time,
+        });
+      } else if (t.type === "EXPENSE") {
         if (t.paymentSource === "OWNER_POCKET") return; // owner's own money: not a drawer outflow
         const billUrl = t.billPdfUrl || t.receiptUrl || undefined;
         injected.push({
@@ -19258,8 +19405,10 @@ export default function Page() {
             id: entryId,
             sourcePocketId: t.id,
             type: "EXPENSE",
-            expenseCategory: "Bank Purchase",
-            title: t.note ? `Card Purchase · ${t.note}` : "Card Purchase",
+            expenseCategory: "Cash Purchase",
+            title: t.note
+              ? `Supplier Purchase (${t.paymentMode || "Card"}) · ${t.note}`
+              : `Supplier Purchase (${t.paymentMode || "Card"})`,
             note: [tag, t.note].filter(Boolean).join(" · "),
             amount: effAmount,
             originalAmount: origAmt,
@@ -19362,7 +19511,14 @@ export default function Page() {
     if (injected.length) {
       setPreLoggedEntries((prev) => deduplicatePreLoggedEntries([...prev, ...injected]));
     }
-  }, [pocketTxns]);
+    if (injectedPosInvoices.length) {
+      setErpInvoices((prev) => {
+        const seen = new Set(prev.map((i) => i.internalId || i.id));
+        const freshPos = injectedPosInvoices.filter((i) => !seen.has(i.internalId));
+        return freshPos.length ? [...freshPos, ...prev] : prev;
+      });
+    }
+  }, [pocketTxns, activeSessionDate]);
 
   // Publish credit customer names so /owner-pocket can auto-lookup (same-browser convenience)
   useEffect(() => {

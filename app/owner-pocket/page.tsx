@@ -16,8 +16,9 @@ import {
 import {
   Users, Plus, X,
   RotateCcw, CheckCircle2,
-  CalendarDays, Trash2, Search, Camera, Upload
+  CalendarDays, Trash2, Search, Camera, Upload, Zap
 } from "lucide-react";
+import { RapidPosModal, type RapidPosSubmitPayload } from "../../components/RapidPosModal";
 
 /** Client-side convenience PIN (NOT real security). Override with NEXT_PUBLIC_OWNER_PIN. */
 const OWNER_PIN = process.env.NEXT_PUBLIC_OWNER_PIN || "1234";
@@ -190,6 +191,8 @@ export default function OwnerPocketPage() {
   const [activeTab, setActiveTab] = useState<"actions" | "payroll">("actions");
   const [branch, setBranch] = useState<BranchId>("JCT_HARDWARE_JOTUN");
   const [action, setAction] = useState<PocketType | null>(null);
+  const [rapidPosOpen, setRapidPosOpen] = useState(false);
+  const [rapidPosSaving, setRapidPosSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
   // Purchase form
@@ -1012,6 +1015,8 @@ export default function OwnerPocketPage() {
   const kindLabel = (k: PocketType) =>
     k === "EXPENSE"
       ? "💸 Expense"
+      : k === "POS_SALE"
+      ? "⚡ Manual POS"
       : k === "ADVANCE"
       ? "🤝 Staff Advance"
       : k === "PURCHASE"
@@ -1125,6 +1130,19 @@ export default function OwnerPocketPage() {
             {/* Action cards */}
             {action === null && (
               <div className="space-y-3">
+                <button
+                  type="button"
+                  onClick={() => setRapidPosOpen(true)}
+                  className="w-full rounded-2xl border-2 border-[#00BAC7] bg-gradient-to-r from-[#00BAC7] to-[#2DE2E6] p-5 text-left text-black shadow-[0_0_24px_rgba(45,226,230,0.3)] active:scale-[0.98] transition"
+                >
+                  <span className="flex items-center gap-2 text-xl font-black">
+                    <Zap size={20} className="fill-current" />
+                    <span>⚡ Rapid Manual POS Entry</span>
+                  </span>
+                  <span className="text-xs font-bold opacity-80">
+                    Fast card / bank slip logger (SAB, Al Rajhi, SNB · mada, Visa, Mastercard)
+                  </span>
+                </button>
                 <button
                   type="button"
                   onClick={() => setAction("EXPENSE")}
@@ -2709,6 +2727,49 @@ export default function OwnerPocketPage() {
           </div>
         </div>
       )}
+
+      {/* Rapid Manual POS Entry Modal */}
+      <RapidPosModal
+        open={rapidPosOpen}
+        onClose={() => setRapidPosOpen(false)}
+        submitting={rapidPosSaving}
+        branchLabel={POCKET_BRANCHES.find((b) => b.id === branch)?.full}
+        sessionDate={todayIso()}
+        onSubmit={async (payload: RapidPosSubmitPayload) => {
+          setRapidPosSaving(true);
+          try {
+            await postPocketTransaction({
+              branch,
+              type: "POS_SALE",
+              amount: payload.amount,
+              category:
+                payload.terminal === "BANK_TRANSFER"
+                  ? "Bank Transfer"
+                  : `${payload.terminal} · ${payload.cardNetwork}`,
+              recipientName: "Manual POS Entry",
+              paymentSource: "BANK_TRANSFER",
+              paymentMode: payload.paymentMode,
+              terminal: payload.terminal,
+              cardNetwork: payload.cardNetwork,
+              isManualPos: true,
+              supplierInvoiceNum: payload.invoiceNo,
+              note: `Manual POS · ${payload.invoiceNo} (${payload.terminal} / ${payload.cardNetwork})`,
+              date: todayIso(),
+            });
+            await refresh();
+            setToast(
+              `⚡ POS SAR ${fmt(payload.amount)} (${payload.terminal} · ${payload.cardNetwork}) synced — ${branchShort(branch)}`
+            );
+            setTimeout(() => setToast(null), 4000);
+          } catch (err) {
+            console.error("Failed to save rapid POS entry:", err);
+            setToast("Failed to save POS entry — check connection.");
+            setTimeout(() => setToast(null), 4000);
+          } finally {
+            setRapidPosSaving(false);
+          }
+        }}
+      />
 
       {/* Bill / Receipt Preview Modal */}
       {previewBillUrl && (

@@ -11,6 +11,7 @@ const TYPES = [
   "PURCHASE",
   "SUPPLIER_ADVANCE",
   "CUSTOMER_ADVANCE",
+  "POS_SALE",
 ];
 const SOURCES = ["DRAWER_CASH", "OWNER_POCKET", "BANK_TRANSFER", "SUPPLIER_CREDIT"];
 
@@ -96,6 +97,9 @@ export async function POST(req: Request) {
         recipientName: str(body.recipientName),
         paymentSource,
         paymentMode,
+        terminal: str(body.terminal),
+        cardNetwork: str(body.cardNetwork),
+        isManualPos: Boolean(body.isManualPos),
         supplierInvoiceNum: str(body.supplierInvoiceNum),
         hasBill: Boolean(body.hasBill || resolvedReceiptUrl || resolvedBillPdfUrl),
         billFileName: str(body.billFileName),

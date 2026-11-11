@@ -24,7 +24,10 @@ model PocketTransaction {
   category       String?
   recipientName  String?
   paymentSource  String   // DRAWER_CASH | OWNER_POCKET | BANK_TRANSFER
-  paymentMode    String?  // e.g., "SAB", "AL_RAJHI", "SNB", "VISA", "MADA", "BANK_TRANSFER", "CASH"
+  paymentMode    String?  // e.g., "SAB", "AL_RAJHI", "SNB", "VISA", "MADA", "BANK_TRANSFER", "CASH", "CARD"
+  terminal       String?  // SAB | AL_RAJHI | SNB | BANK_TRANSFER
+  cardNetwork    String?  // mada | visa | mastercard
+  isManualPos    Boolean  @default(false)
   supplierInvoiceNum String?
   hasBill        Boolean  @default(false)
   billFileName   String?
