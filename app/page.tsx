@@ -772,7 +772,12 @@ export interface PreLoggedEntry {
   time: string;
 }
 
-export type OverrideReason = "BUSINESS_COMMISSION" | "BILL_MISTAKE" | "CUSTOM";
+export type OverrideReason =
+  | "BUSINESS_COMMISSION"
+  | "DISCOUNT"
+  | "ROUND_OFF"
+  | "BILL_MISTAKE"
+  | "CUSTOM";
 
 export interface ErpInvoiceItem {
   internalId?: string;
@@ -5216,8 +5221,7 @@ function DailyRegisterView({
   const handleEditErpInvoiceAmount = (identifier: string, rawVal: string) => {
     const val = Math.max(0, parseFloat(rawVal) || 0);
     setErpInvoices((prev) => {
-      const base = prev;
-      return base.map((inv) => {
+      const updated = prev.map((inv) => {
         const matches =
           (inv.internalId && inv.internalId === identifier) ||
           inv.invoiceNo === identifier ||
@@ -5234,6 +5238,10 @@ function DailyRegisterView({
           amount: val,
           netPayableAmount: val,
           isEdited,
+          adjustmentsApplied: false,
+          discountAmount: isEdited ? inv.discountAmount : 0,
+          roundOffAmount: isEdited ? inv.roundOffAmount : 0,
+          businessCommission: isEdited ? inv.businessCommission : 0,
           overrideReason: isEdited ? (inv.overrideReason || "BUSINESS_COMMISSION") : undefined,
           overrideNote: isEdited ? inv.overrideNote : undefined,
           splitCashAmount: cashShare,
@@ -5244,48 +5252,12 @@ function DailyRegisterView({
               : inv.creditBalance,
         };
       });
+      syncCommissionExpenses(updated);
+      return updated;
     });
   };
 
-  // ── Round-Off Discount, Business Commission & Submit Adjustment Controls ──
-  const [openAdjRowId, setOpenAdjRowId] = useState<string | null>(null);
-  const [adjInputs, setAdjInputs] = useState<
-    Record<string, { discount: string; roundOff: string; commission: string }>
-  >({});
-
-  const getRowAdjInput = (inv: ErpInvoiceItem, rowKey: string) => {
-    const cur = adjInputs[rowKey];
-    if (cur) return cur;
-    return {
-      discount: inv.discountAmount ? String(inv.discountAmount) : "",
-      roundOff: inv.roundOffAmount ? String(inv.roundOffAmount) : "",
-      commission: inv.businessCommission ? String(inv.businessCommission) : "",
-    };
-  };
-
-  const updateRowAdjInput = (
-    inv: ErpInvoiceItem,
-    rowKey: string,
-    field: "discount" | "roundOff" | "commission",
-    val: string
-  ) => {
-    setAdjInputs((prev) => {
-      const base = prev[rowKey] || {
-        discount: inv.discountAmount ? String(inv.discountAmount) : "",
-        roundOff: inv.roundOffAmount ? String(inv.roundOffAmount) : "",
-        commission: inv.businessCommission ? String(inv.businessCommission) : "",
-      };
-      return {
-        ...prev,
-        [rowKey]: {
-          ...base,
-          [field]: val,
-        },
-      };
-    });
-  };
-
-  // "Round Off" button: extracts exact decimal fraction (e.g. 347.50 -> 0.50, 347.10 -> 0.10) and rounds invoice down to integer (347.00)
+  // "Round Off" button: extracts exact decimal fraction (e.g. 347.50 -> 0.50) and rounds invoice down to integer, opening inline reason confirmation
   const handleRoundOffInvoice = (identifier: string) => {
     setErpInvoices((prev) => {
       const updated = prev.map((inv) => {
@@ -5298,55 +5270,42 @@ function DailyRegisterView({
         if (!matches) return inv;
 
         const orig = inv.originalAmount && inv.originalAmount > 0 ? inv.originalAmount : inv.amount;
-        const disc = r2(inv.discountAmount || 0);
-        const comm = r2(inv.businessCommission || 0);
-        const baseBeforeRound = Math.max(0, r2(orig - disc - comm));
         const currentAmt = inv.amount;
         const decimalPart = r2(currentAmt - Math.floor(currentAmt));
 
-        let nextRoundOff = r2(inv.roundOffAmount || 0);
         let nextNet = currentAmt;
+        let nextRoundOff = 0;
 
         if (decimalPart > 0.0001) {
-          // Strip decimal portion and add to roundOffAmount
-          nextRoundOff = r2((inv.roundOffAmount || 0) + decimalPart);
           nextNet = Math.floor(currentAmt);
-        } else if ((inv.roundOffAmount || 0) > 0) {
-          // Toggle off if already rounded to integer
+          nextRoundOff = r2(Math.max(0, orig - nextNet));
+        } else if (orig !== currentAmt && (inv.roundOffAmount || 0) > 0) {
+          // Toggle off back to original amount
+          nextNet = orig;
           nextRoundOff = 0;
-          nextNet = baseBeforeRound;
         } else {
-          // Check if baseBeforeRound had a decimal
-          const baseDec = r2(baseBeforeRound - Math.floor(baseBeforeRound));
-          if (baseDec > 0.0001) {
-            nextRoundOff = baseDec;
-            nextNet = Math.floor(baseBeforeRound);
+          const origDec = r2(orig - Math.floor(orig));
+          if (origDec > 0.0001) {
+            nextNet = Math.floor(orig);
+            nextRoundOff = origDec;
           }
         }
 
-        setAdjInputs((prevAdj) => ({
-          ...prevAdj,
-          [rowKey]: {
-            discount: disc > 0 ? String(disc) : "",
-            roundOff: nextRoundOff > 0 ? String(nextRoundOff) : "",
-            commission: comm > 0 ? String(comm) : "",
-          },
-        }));
-
+        const isEdited = nextNet !== orig;
         const cashShare = inv.isSplit ? r2(nextNet / 2) : inv.splitCashAmount;
         const bankShare = inv.isSplit ? r2(nextNet - cashShare) : inv.splitBankAmount;
 
         return {
           ...inv,
           originalAmount: orig,
-          discountAmount: disc,
+          discountAmount: isEdited ? (inv.discountAmount || 0) : 0,
           roundOffAmount: nextRoundOff,
-          businessCommission: comm,
+          businessCommission: isEdited ? (inv.businessCommission || 0) : 0,
           netPayableAmount: nextNet,
           amount: nextNet,
-          adjustmentsApplied: disc > 0 || nextRoundOff > 0 || comm > 0,
-          isEdited: nextNet !== orig,
-          overrideReason: comm > 0 ? "BUSINESS_COMMISSION" : (inv.overrideReason || "CUSTOM"),
+          adjustmentsApplied: false,
+          isEdited,
+          overrideReason: isEdited ? "ROUND_OFF" as OverrideReason : undefined,
           splitCashAmount: cashShare,
           splitBankAmount: bankShare,
           creditBalance:
@@ -5355,17 +5314,13 @@ function DailyRegisterView({
               : inv.creditBalance,
         };
       });
+      syncCommissionExpenses(updated);
       return updated;
     });
   };
 
-  // Explicit "Submit" button for Discount, Round-Off, and Business Commission
-  const handleSubmitInvoiceAdjustments = (
-    identifier: string,
-    discountRaw?: string,
-    roundOffRaw?: string,
-    commissionRaw?: string
-  ) => {
+  // Explicit "✓ Submit" inside the inline amber adjustment box to confirm/lock the edit & reason
+  const handleConfirmInlineOverride = (identifier: string) => {
     setErpInvoices((prev) => {
       const updated = prev.map((inv) => {
         const rowKey = inv.internalId || inv.id || inv.invoiceNo;
@@ -5376,71 +5331,39 @@ function DailyRegisterView({
           inv.invoiceNo === identifier;
         if (!matches) return inv;
 
-        const orig = inv.originalAmount && inv.originalAmount > 0 ? inv.originalAmount : inv.amount;
-        const curInputs = adjInputs[rowKey];
-        const disc = Math.max(
-          0,
-          r2(
-            parseFloat(
-              discountRaw !== undefined
-                ? discountRaw
-                : curInputs?.discount !== undefined
-                ? curInputs.discount
-                : String(inv.discountAmount || 0)
-            ) || 0
-          )
-        );
-        const roff = Math.max(
-          0,
-          r2(
-            parseFloat(
-              roundOffRaw !== undefined
-                ? roundOffRaw
-                : curInputs?.roundOff !== undefined
-                ? curInputs.roundOff
-                : String(inv.roundOffAmount || 0)
-            ) || 0
-          )
-        );
-        const comm = Math.max(
-          0,
-          r2(
-            parseFloat(
-              commissionRaw !== undefined
-                ? commissionRaw
-                : curInputs?.commission !== undefined
-                ? curInputs.commission
-                : String(inv.businessCommission || 0)
-            ) || 0
-          )
-        );
-
-        const net = Math.max(0, r2(orig - disc - roff - comm));
-        const cashShare = inv.isSplit ? r2(net / 2) : inv.splitCashAmount;
-        const bankShare = inv.isSplit ? r2(net - cashShare) : inv.splitBankAmount;
+        const orig = inv.originalAmount ?? inv.amount;
+        const reason: OverrideReason = inv.overrideReason || "BUSINESS_COMMISSION";
+        const diff = Math.max(0, r2(orig - inv.amount));
 
         return {
           ...inv,
           originalAmount: orig,
-          discountAmount: disc,
-          roundOffAmount: roff,
-          businessCommission: comm,
-          netPayableAmount: net,
-          amount: net,
-          adjustmentsApplied: disc > 0 || roff > 0 || comm > 0,
-          isEdited: net !== orig,
-          overrideReason: comm > 0 ? "BUSINESS_COMMISSION" : (inv.overrideReason || "CUSTOM"),
-          splitCashAmount: cashShare,
-          splitBankAmount: bankShare,
-          creditBalance:
-            inv.paymentMode === "CREDIT_SALE"
-              ? Math.max(0, r2(net - (inv.creditDownAmount || 0)))
-              : inv.creditBalance,
+          overrideReason: reason,
+          discountAmount: reason === "DISCOUNT" ? diff : 0,
+          roundOffAmount: reason === "ROUND_OFF" ? diff : 0,
+          businessCommission: reason === "BUSINESS_COMMISSION" ? diff : 0,
+          netPayableAmount: inv.amount,
+          adjustmentsApplied: inv.amount !== orig,
+          isEdited: inv.amount !== orig,
         };
       });
       syncCommissionExpenses(updated);
       return updated;
     });
+  };
+
+  const handleReopenInlineOverride = (identifier: string) => {
+    setErpInvoices((prev) =>
+      prev.map((inv) => {
+        const rowKey = inv.internalId || inv.id || inv.invoiceNo;
+        const matches =
+          rowKey === identifier ||
+          (inv.internalId && inv.internalId === identifier) ||
+          (inv.id && inv.id === identifier) ||
+          inv.invoiceNo === identifier;
+        return matches ? { ...inv, adjustmentsApplied: false } : inv;
+      })
+    );
   };
 
   // ── "Return Bill" Feature in Bank/POS Match (Invoices) & Expenses ──
@@ -7604,18 +7527,24 @@ function DailyRegisterView({
                     inv.isManual || inv.isManualEntry || (inv.id && inv.id.startsWith("MANUAL-"))
                   );
                   const isUnconfirmedManual = isManualRow && !inv.isConfirmed;
-                  const rowAdj = getRowAdjInput(inv, rowKey);
-                  const hasAdjustments =
-                    Boolean(inv.adjustmentsApplied) ||
-                    (inv.discountAmount || 0) > 0 ||
-                    (inv.roundOffAmount || 0) > 0 ||
-                    (inv.businessCommission || 0) > 0;
-                  const isAdjOpen = openAdjRowId === rowKey || hasAdjustments;
+                  const isAmountEdited =
+                    !inv.isReturned &&
+                    inv.originalAmount !== undefined &&
+                    inv.amount !== inv.originalAmount;
+                  const reasonLabelMap: Record<OverrideReason, string> = {
+                    BUSINESS_COMMISSION: "Business Commission",
+                    DISCOUNT: "Discount",
+                    ROUND_OFF: "Round Off",
+                    BILL_MISTAKE: "Bill Mistake / Correction",
+                    CUSTOM: inv.overrideNote?.trim() || "Other",
+                  };
+                  const activeReason: OverrideReason = inv.overrideReason || "BUSINESS_COMMISSION";
+                  const reasonDiff = isAmountEdited ? r2((inv.originalAmount ?? inv.amount) - inv.amount) : 0;
 
                   return (
                     <div
                       key={rowKey}
-                      className={`border-b pt-2 pb-6 mb-4 last:border-b-0 last:pb-0 transition-all duration-500 rounded-xl px-2 -mx-2 ${
+                      className={`border-b pt-3 pb-5 mb-4 last:border-b-0 last:pb-0 transition-all duration-500 rounded-xl px-3 -mx-2 ${
                         inv.isReturned
                           ? "border-rose-500/40 bg-rose-500/5 opacity-80"
                           : isJustConfirmed
@@ -7623,10 +7552,11 @@ function DailyRegisterView({
                           : "border-slate-200 dark:border-[#1F1F1F] hover:bg-slate-50/50 dark:hover:bg-[#0A0A0A]/50"
                       }`}
                     >
-                      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-                        <div className="flex flex-wrap items-center gap-2.5 min-w-0 flex-1">
+                      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+                        {/* Left / Top Group: Invoice Badge, Seq No, Customer Name (capped width) & Badges */}
+                        <div className="flex flex-wrap items-center gap-2.5 min-w-0 flex-1 mr-2">
                           {isManualRow ? (
-                            <div className="flex items-center gap-0.5 shrink-0 min-w-[118px]">
+                            <div className="flex items-center gap-1 shrink-0 min-w-[118px]">
                               <input
                                 type="text"
                                 value={inv.branchInvNo ?? inv.invoiceNo ?? ""}
@@ -7658,13 +7588,14 @@ function DailyRegisterView({
                                 className="w-28 bg-transparent border-b border-transparent hover:border-slate-300 dark:hover:border-white/20 focus:border-jct-turquoise text-jct-turquoise text-xs font-mono font-semibold focus:outline-none px-1 py-0.5 transition-colors"
                               />
                               {inv.seqInvoiceNo && inv.seqInvoiceNo !== (inv.branchInvNo || inv.invoiceNo) && (
-                                <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 hidden sm:inline">
+                                <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 shrink-0">
                                   (#{inv.seqInvoiceNo})
                                 </span>
                               )}
                             </div>
                           )}
-                          {/* Editable Customer / Description Input */}
+
+                          {/* Editable Customer / Description Input — isolated min/max width prevents overlap */}
                           <input
                             type="text"
                             value={inv.customerName ?? inv.customer ?? ""}
@@ -7672,12 +7603,13 @@ function DailyRegisterView({
                               handleEditErpInvoiceCustomer(rowKey, e.target.value)
                             }
                             placeholder="Enter Customer / Description..."
-                            className={`min-w-[180px] flex-1 max-w-sm text-sm font-medium bg-transparent border-b text-jct-charcoal dark:text-white placeholder-slate-400 focus:outline-none focus:ring-0 focus:border-b-2 focus:border-jct-turquoise transition-all rounded-none px-2 py-1 ${
+                            className={`w-full sm:w-[240px] min-w-[180px] max-w-[260px] truncate mr-2 text-sm font-medium bg-transparent border-b text-jct-charcoal dark:text-white placeholder-slate-400 focus:outline-none focus:ring-0 focus:border-b-2 focus:border-jct-turquoise transition-all rounded-none px-2 py-1 shrink-0 ${
                               isManualRow && !(inv.customerName || inv.customer)
                                 ? "border-jct-turquoise/50"
                                 : "border-transparent"
                             } ${inv.isReturned ? "line-through opacity-60" : ""}`}
                           />
+
                           {inv.isReturned && (
                             <span className="rounded-full bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/40 px-3 py-1 text-[10px] font-extrabold shrink-0">
                               ↩ RETURNED BILL (Orig: SAR {fmt(inv.originalAmount ?? 0)})
@@ -7715,9 +7647,10 @@ function DailyRegisterView({
                           )}
                         </div>
 
-                        <div className="flex flex-wrap items-center justify-between lg:justify-end gap-2.5 shrink-0">
-                          {/* Editable Invoice Amount Input + Round-Off & Adjustment Controls */}
-                          <div className="flex flex-wrap items-center gap-2">
+                        {/* Middle + Right Groups in a clean non-colliding bar */}
+                        <div className="flex flex-wrap items-center justify-between xl:justify-end gap-3 shrink-0">
+                          {/* Middle Group: Isolated SAR Amount Input + Round Off Button */}
+                          <div className="shrink-0 flex items-center gap-2">
                             {inv.isReturned ? (
                               <div className="flex items-center gap-2 font-mono text-xs">
                                 <span className="line-through text-slate-400">
@@ -7728,7 +7661,7 @@ function DailyRegisterView({
                                 </span>
                               </div>
                             ) : (
-                              <div className="flex items-center gap-1.5">
+                              <div className="flex items-center gap-1.5 rounded-lg bg-slate-50 dark:bg-[#111111] border border-slate-200 dark:border-[#222222] px-2.5 py-1">
                                 <span className="text-xs font-medium text-slate-500 dark:text-slate-400">SAR</span>
                                 <input
                                   type="number"
@@ -7738,8 +7671,8 @@ function DailyRegisterView({
                                   onChange={(e) =>
                                     handleEditErpInvoiceAmount(rowKey, e.target.value)
                                   }
-                                  className={`w-24 font-mono text-sm font-semibold text-right bg-transparent border-b text-jct-charcoal dark:text-white placeholder-slate-400 focus:outline-none focus:ring-0 px-1.5 py-0.5 transition-colors ${
-                                    inv.originalAmount !== undefined && inv.amount !== inv.originalAmount
+                                  className={`w-24 font-mono text-sm font-semibold text-right bg-transparent border-b text-jct-charcoal dark:text-white placeholder-slate-400 focus:outline-none focus:ring-0 px-1 py-0.5 transition-colors ${
+                                    isAmountEdited
                                       ? "border-amber-500 text-amber-600 dark:text-amber-400 font-bold"
                                       : isManualRow && inv.amount === 0
                                       ? "border-jct-turquoise/50 focus:border-b-2 focus:border-jct-turquoise"
@@ -7749,276 +7682,201 @@ function DailyRegisterView({
                               </div>
                             )}
 
-                            {/* "Round Off" Button & "Adjust / Comm" Toggle Button */}
                             {!inv.isReturned && (
-                              <div className="flex items-center gap-1">
-                                <button
-                                  type="button"
-                                  onClick={() => handleRoundOffInvoice(rowKey)}
-                                  className={`rounded-md px-2 py-1 text-[11px] font-bold transition-colors whitespace-nowrap ${
-                                    (inv.roundOffAmount || 0) > 0
-                                      ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/40"
-                                      : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-jct-turquoise/20 hover:text-jct-turquoise border border-slate-200 dark:border-slate-700"
-                                  }`}
-                                  title="Strip decimal fraction (e.g. 347.50 -> 347.00) and apply as Round-Off Discount"
-                                >
-                                  {(inv.roundOffAmount || 0) > 0
-                                    ? `✂️ Rounded (-${fmt(inv.roundOffAmount || 0)})`
-                                    : "✂️ Round Off"}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setOpenAdjRowId(openAdjRowId === rowKey ? null : rowKey)
-                                  }
-                                  className={`rounded-md px-2 py-1 text-[11px] font-bold transition-colors whitespace-nowrap ${
-                                    isAdjOpen
-                                      ? "bg-jct-yellow text-jct-charcoal"
-                                      : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700"
-                                  }`}
-                                  title="Open Discount, Round-Off & Business Commission adjustment panel"
-                                >
-                                  ⚙️ Disc / Comm
-                                </button>
-                              </div>
-                            )}
-
-                            {/* Green Confirmation Badge when Adjustments are Applied */}
-                            {!inv.isReturned && hasAdjustments && (
-                              <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/40 bg-emerald-500/15 px-2.5 py-0.5 font-mono text-[10px] font-bold text-emerald-700 dark:text-emerald-300 whitespace-nowrap">
-                                ✓ Applied · Orig: {fmt(inv.originalAmount ?? inv.amount)}
+                              <button
+                                type="button"
+                                onClick={() => handleRoundOffInvoice(rowKey)}
+                                className={`rounded-md px-2.5 py-1.5 text-[11px] font-bold transition-colors whitespace-nowrap shrink-0 ${
+                                  (inv.roundOffAmount || 0) > 0
+                                    ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/40"
+                                    : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-jct-turquoise/20 hover:text-jct-turquoise border border-slate-200 dark:border-slate-700"
+                                }`}
+                                title="Strip decimal fraction (e.g. 347.50 -> 347.00) and record Round Off"
+                              >
                                 {(inv.roundOffAmount || 0) > 0
-                                  ? ` | Round-off: -${fmt(inv.roundOffAmount || 0)}`
-                                  : ""}
-                                {(inv.discountAmount || 0) > 0
-                                  ? ` | Disc: -${fmt(inv.discountAmount || 0)}`
-                                  : ""}
-                                {(inv.businessCommission || 0) > 0
-                                  ? ` | Comm: -${fmt(inv.businessCommission || 0)}`
-                                  : ""}{" "}
-                                | Net: {fmt(inv.amount)}
-                              </span>
+                                  ? `✂️ Rounded (-${fmt(inv.roundOffAmount || 0)})`
+                                  : "✂️ Round Off"}
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Right Group: Payment Mode Selector + Return Bill & Delete */}
+                          <div className="shrink-0 flex flex-wrap items-center gap-2">
+                            <div className="bg-slate-100 dark:bg-[#111111] p-1 rounded-lg flex flex-wrap gap-1">
+                              <button
+                                type="button"
+                                onClick={() => handleSetInvoiceMode(rowKey, "CASH")}
+                                className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                                  inv.paymentMode === "CASH" || (inv.paymentMode as string) === "Cash"
+                                    ? "bg-jct-turquoise text-jct-charcoal font-bold"
+                                    : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                                }`}
+                              >
+                                Cash
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleSetInvoiceMode(rowKey, "BANK_TRANSFER")}
+                                className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                                  inv.paymentMode === "BANK_TRANSFER"
+                                    ? "bg-jct-turquoise text-jct-charcoal font-bold"
+                                    : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                                }`}
+                              >
+                                Bank
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleSetInvoiceMode(rowKey, "POS_SWIPE")}
+                                className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                                  inv.paymentMode === "POS_SWIPE"
+                                    ? "bg-jct-turquoise text-jct-charcoal font-bold"
+                                    : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                                }`}
+                              >
+                                Card
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleSetInvoiceMode(rowKey, "SPLIT")}
+                                className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                                  inv.paymentMode === "SPLIT"
+                                    ? "bg-jct-turquoise text-jct-charcoal font-bold"
+                                    : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                                }`}
+                              >
+                                Split/Partial
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setCreditModalInvNo(rowKey)}
+                                className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                                  inv.paymentMode === "CREDIT_SALE"
+                                    ? "bg-jct-turquoise text-jct-charcoal font-bold"
+                                    : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                                }`}
+                              >
+                                Credit
+                              </button>
+                            </div>
+
+                            {isUnconfirmedManual && (
+                              <button
+                                type="button"
+                                onClick={() => handleConfirmManualRow(rowKey)}
+                                disabled={inv.paymentMode === "SPLIT" && !resolveSplitBankChoice(inv)}
+                                className="bg-jct-turquoise text-jct-charcoal hover:brightness-95 disabled:opacity-40 disabled:cursor-not-allowed px-3 py-1.5 rounded-md text-xs font-bold transition-colors flex items-center gap-1 shrink-0 shadow-sm"
+                                title={
+                                  inv.paymentMode === "SPLIT" && !resolveSplitBankChoice(inv)
+                                    ? "Select the bank / terminal for the split first"
+                                    : "Finalize and save manual invoice row"
+                                }
+                              >
+                                ✅ Save Row
+                              </button>
                             )}
 
-                            {/* Dynamic Mandatory Reason Dropdown on Direct Amount Change */}
-                            {!inv.isReturned &&
-                              !hasAdjustments &&
-                              inv.originalAmount !== undefined &&
-                              inv.amount !== inv.originalAmount && (
-                                <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs">
-                                  <span className="text-[10px] font-mono font-bold text-amber-600 dark:text-amber-400 whitespace-nowrap">
-                                    Orig: SAR {fmt(inv.originalAmount)}
-                                  </span>
-                                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 whitespace-nowrap">
-                                    Reason *:
-                                  </span>
-                                  <select
-                                    value={inv.overrideReason || "BUSINESS_COMMISSION"}
-                                    onChange={(e) =>
-                                      handleEditErpInvoiceOverrideReason(
-                                        rowKey,
-                                        e.target.value as OverrideReason
-                                      )
-                                    }
-                                    className="rounded bg-white dark:bg-black px-2 py-0.5 text-xs font-bold text-amber-600 dark:text-amber-400 border border-amber-500/40 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                                    title="Mandatory reason for changing ERP invoice amount"
-                                  >
-                                    <option value="BUSINESS_COMMISSION">Business Commission</option>
-                                    <option value="BILL_MISTAKE">Bill Mistake</option>
-                                    <option value="CUSTOM">Custom Note</option>
-                                  </select>
-                                  {inv.overrideReason === "CUSTOM" && (
-                                    <input
-                                      type="text"
-                                      placeholder="Enter note..."
-                                      value={inv.overrideNote || ""}
-                                      onChange={(e) =>
-                                        handleEditErpInvoiceOverrideNote(rowKey, e.target.value)
-                                      }
-                                      className="w-28 rounded bg-white dark:bg-black px-2 py-0.5 text-xs text-jct-charcoal dark:text-white border border-amber-500/40 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                                    />
-                                  )}
-                                </div>
-                              )}
-                          </div>
-
-                          {/* Segmented Payment Type Selector */}
-                          <div className="bg-slate-100 dark:bg-[#111111] p-1 rounded-lg flex flex-wrap gap-1">
                             <button
                               type="button"
-                              onClick={() => handleSetInvoiceMode(rowKey, "CASH")}
-                              className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
-                                inv.paymentMode === "CASH" || (inv.paymentMode as string) === "Cash"
-                                  ? "bg-jct-turquoise text-jct-charcoal font-bold"
-                                  : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                              onClick={() => handleToggleReturnErpInvoice(rowKey)}
+                              className={`rounded-md px-2.5 py-1.5 text-xs font-bold transition-colors flex items-center gap-1 shrink-0 ${
+                                inv.isReturned
+                                  ? "bg-amber-500/20 text-amber-600 dark:text-amber-300 border border-amber-500/40 hover:bg-amber-500/30"
+                                  : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/30 hover:bg-rose-500/20"
                               }`}
-                            >
-                              Cash
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleSetInvoiceMode(rowKey, "BANK_TRANSFER")}
-                              className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
-                                inv.paymentMode === "BANK_TRANSFER"
-                                  ? "bg-jct-turquoise text-jct-charcoal font-bold"
-                                  : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-                              }`}
-                            >
-                              Bank
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleSetInvoiceMode(rowKey, "POS_SWIPE")}
-                              className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
-                                inv.paymentMode === "POS_SWIPE"
-                                  ? "bg-jct-turquoise text-jct-charcoal font-bold"
-                                  : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-                              }`}
-                            >
-                              Card
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleSetInvoiceMode(rowKey, "SPLIT")}
-                              className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
-                                inv.paymentMode === "SPLIT"
-                                  ? "bg-jct-turquoise text-jct-charcoal font-bold"
-                                  : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-                              }`}
-                            >
-                              Split/Partial
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setCreditModalInvNo(rowKey)}
-                              className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
-                                inv.paymentMode === "CREDIT_SALE"
-                                  ? "bg-jct-turquoise text-jct-charcoal font-bold"
-                                  : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-                              }`}
-                            >
-                              Credit
-                            </button>
-                          </div>
-
-                          {/* Inline Submit Button for Unconfirmed Manual Invoices */}
-                          {isUnconfirmedManual && (
-                            <button
-                              type="button"
-                              onClick={() => handleConfirmManualRow(rowKey)}
-                              disabled={inv.paymentMode === "SPLIT" && !resolveSplitBankChoice(inv)}
-                              className="bg-jct-turquoise text-jct-charcoal hover:brightness-95 disabled:opacity-40 disabled:cursor-not-allowed px-3 py-1.5 rounded-md text-xs font-bold transition-colors flex items-center gap-1 shrink-0 shadow-sm"
                               title={
-                                inv.paymentMode === "SPLIT" && !resolveSplitBankChoice(inv)
-                                  ? "Select the bank / terminal for the split first"
-                                  : "Finalize and save manual invoice row"
+                                inv.isReturned
+                                  ? "Restore returned bill to original amount"
+                                  : "Mark bill as Returned (sets effective total to SAR 0.00 while preserving audit record)"
                               }
                             >
-                              ✅ Save Row
+                              {inv.isReturned ? "↺ Undo Return" : "↩ Return Bill"}
                             </button>
-                          )}
 
-                          {/* "Return Bill" / "Undo Return" Button */}
-                          <button
-                            type="button"
-                            onClick={() => handleToggleReturnErpInvoice(rowKey)}
-                            className={`rounded-md px-2.5 py-1.5 text-xs font-bold transition-colors flex items-center gap-1 shrink-0 ${
-                              inv.isReturned
-                                ? "bg-amber-500/20 text-amber-600 dark:text-amber-300 border border-amber-500/40 hover:bg-amber-500/30"
-                                : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/30 hover:bg-rose-500/20"
-                            }`}
-                            title={
-                              inv.isReturned
-                                ? "Restore returned bill to original amount"
-                                : "Mark bill as Returned (sets effective total to SAR 0.00 while preserving audit record)"
-                            }
-                          >
-                            {inv.isReturned ? "↺ Undo Return" : "↩ Return Bill"}
-                          </button>
-
-                          {/* Subtle Trash Icon Delete Button */}
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveErpInvoice(rowKey)}
-                            className="text-slate-400 hover:text-rose-500 p-1.5 rounded-lg hover:bg-rose-500/10 transition-colors"
-                            title="Delete invoice row"
-                            aria-label={`Delete invoice ${inv.branchInvNo || inv.invoiceNo || "manual"}`}
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveErpInvoice(rowKey)}
+                              className="text-slate-400 hover:text-rose-500 p-1.5 rounded-lg hover:bg-rose-500/10 transition-colors"
+                              title="Delete invoice row"
+                              aria-label={`Delete invoice ${inv.branchInvNo || inv.invoiceNo || "manual"}`}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
                         </div>
                       </div>
 
-                      {/* Adjustment Sub-Row: Discount, Round-Off, Business Commission + Explicit Submit Button */}
-                      {!inv.isReturned && isAdjOpen && (
-                        <div className="bg-slate-50 dark:bg-[#111111] border border-jct-turquoise/30 rounded-lg mt-2 p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
-                          <div className="flex flex-wrap items-center gap-3">
-                            <span className="font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-[10px]">
+                      {/* Automatic Inline Edit Detection: Amber Box when edited and unconfirmed */}
+                      {isAmountEdited && !inv.adjustmentsApplied && (
+                        <div className="mt-2.5 flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs w-fit">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 whitespace-nowrap">
+                            REASON *:
+                          </span>
+                          <select
+                            value={activeReason}
+                            onChange={(e) =>
+                              handleEditErpInvoiceOverrideReason(
+                                rowKey,
+                                e.target.value as OverrideReason
+                              )
+                            }
+                            className="rounded bg-white dark:bg-black px-2 py-1 text-xs font-bold text-amber-600 dark:text-amber-400 border border-amber-500/40 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                            title="Mandatory reason for modifying invoice amount"
+                          >
+                            <option value="BUSINESS_COMMISSION">Business Commission</option>
+                            <option value="DISCOUNT">Discount</option>
+                            <option value="ROUND_OFF">Round Off</option>
+                            <option value="BILL_MISTAKE">Bill Mistake / Correction</option>
+                            <option value="CUSTOM">Other</option>
+                          </select>
+                          {activeReason === "CUSTOM" && (
+                            <input
+                              type="text"
+                              placeholder="Enter note..."
+                              value={inv.overrideNote || ""}
+                              onChange={(e) =>
+                                handleEditErpInvoiceOverrideNote(rowKey, e.target.value)
+                              }
+                              className="w-32 rounded bg-white dark:bg-black px-2 py-1 text-xs text-jct-charcoal dark:text-white border border-amber-500/40 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                            />
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleConfirmInlineOverride(rowKey)}
+                            className="rounded-md bg-jct-turquoise text-jct-charcoal font-extrabold hover:brightness-95 px-2.5 py-1 text-[11px] shadow-sm transition whitespace-nowrap"
+                          >
+                            ✓ Submit
+                          </button>
+                          <span className="rounded bg-amber-500/20 border border-amber-500/40 px-2 py-0.5 text-[10px] font-mono font-bold text-amber-700 dark:text-amber-300 whitespace-nowrap">
+                            Orig: SAR {fmt(inv.originalAmount ?? inv.amount)}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Confirmed Inline Adjustment Pill with Orig: SAR ... cleanly at the end */}
+                      {isAmountEdited && inv.adjustmentsApplied && (
+                        <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                          <span className="inline-flex flex-wrap items-center gap-1.5 rounded-md border border-emerald-500/40 bg-emerald-500/15 px-2.5 py-1 font-mono text-[11px] font-bold text-emerald-700 dark:text-emerald-300">
+                            <span>✓ {reasonLabelMap[activeReason]}</span>
+                            <span>·</span>
+                            <span>
+                              {reasonDiff >= 0
+                                ? `-SAR ${fmt(reasonDiff)}`
+                                : `+SAR ${fmt(Math.abs(reasonDiff))}`}
+                            </span>
+                            <span>·</span>
+                            <span>Net: SAR {fmt(inv.amount)}</span>
+                            <span className="ml-1 rounded bg-jct-yellow text-jct-charcoal px-1.5 py-0.5 text-[10px] font-extrabold">
                               Orig: SAR {fmt(inv.originalAmount ?? inv.amount)}
                             </span>
-                            <div className="flex items-center gap-1.5">
-                              <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                                Discount (SAR):
-                              </label>
-                              <input
-                                type="number"
-                                step="0.01"
-                                placeholder="0.00"
-                                value={rowAdj.discount}
-                                onChange={(e) =>
-                                  updateRowAdjInput(inv, rowKey, "discount", e.target.value)
-                                }
-                                className="w-20 rounded bg-white dark:bg-black border border-slate-300 dark:border-[#222222] focus:border-jct-turquoise px-2 py-1 font-mono text-xs font-bold text-jct-charcoal dark:text-white outline-none"
-                              />
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                              <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                                Round Off (SAR):
-                              </label>
-                              <input
-                                type="number"
-                                step="0.01"
-                                placeholder="0.00"
-                                value={rowAdj.roundOff}
-                                onChange={(e) =>
-                                  updateRowAdjInput(inv, rowKey, "roundOff", e.target.value)
-                                }
-                                className="w-20 rounded bg-white dark:bg-black border border-slate-300 dark:border-[#222222] focus:border-jct-turquoise px-2 py-1 font-mono text-xs font-bold text-jct-charcoal dark:text-white outline-none"
-                              />
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                              <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                                Business Commission (SAR):
-                              </label>
-                              <input
-                                type="number"
-                                step="0.01"
-                                placeholder="0.00"
-                                value={rowAdj.commission}
-                                onChange={(e) =>
-                                  updateRowAdjInput(inv, rowKey, "commission", e.target.value)
-                                }
-                                className="w-20 rounded bg-white dark:bg-black border border-slate-300 dark:border-[#222222] focus:border-jct-turquoise px-2 py-1 font-mono text-xs font-bold text-jct-charcoal dark:text-white outline-none"
-                              />
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleSubmitInvoiceAdjustments(
-                                  rowKey,
-                                  rowAdj.discount,
-                                  rowAdj.roundOff,
-                                  rowAdj.commission
-                                )
-                              }
-                              className="rounded-md bg-jct-turquoise text-jct-charcoal font-extrabold hover:brightness-95 px-3.5 py-1.5 text-xs shadow-sm transition"
-                            >
-                              ✓ Submit
-                            </button>
-                          </div>
-                          <div className="font-mono text-xs font-bold text-emerald-600 dark:text-jct-turquoise">
-                            Net Payable: SAR {fmt(inv.amount)}
-                          </div>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleReopenInlineOverride(rowKey)}
+                            className="rounded border border-slate-300 dark:border-[#2A2A2A] px-2 py-0.5 text-[10px] font-bold text-slate-500 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-white transition"
+                          >
+                            Edit Reason
+                          </button>
                         </div>
                       )}
 
