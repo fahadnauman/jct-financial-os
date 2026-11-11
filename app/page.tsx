@@ -763,6 +763,7 @@ export interface PreLoggedEntry {
   originalAmount?: number;
   isReturned?: boolean;
   isEdited?: boolean;
+  isInvoiceAdjustment?: boolean;
   overrideReason?: OverrideReason;
   overrideNote?: string;
   isSplit?: boolean;
@@ -1087,7 +1088,7 @@ function buildClassicDataSheetRows(
     const loanOut: number | null = sRow && parseNum(sRow.loanOut) > 0 ? parseNum(sRow.loanOut) : null;
     const excessAmt: number | null = sRow && parseNum(sRow.excessAmt) > 0 ? parseNum(sRow.excessAmt) : null;
 
-    if (exp && !exp.isReturned) {
+    if (exp && !exp.isReturned && classifyExpenseOutflow(exp) !== "ADJUSTMENT") {
       const cat = (exp.expenseCategory || exp.title) as string;
       const pm = (exp.paymentMode || "CASH").toUpperCase();
       const isCreditExp = cat === "Credit Purchase" || pm === "CREDIT" || pm === "PAY_LATER" || exp.title.toLowerCase().includes("credit purchase");
@@ -1606,11 +1607,21 @@ export const calcEntryPosFeeBreakdown = (entry: PreLoggedEntry): PosFeeBreakdown
 
 export const classifyExpenseOutflow = (
   e: PreLoggedEntry
-): "CASH" | "BANK" | "CREDIT" | "RETURNED" => {
+): "CASH" | "BANK" | "CREDIT" | "ADJUSTMENT" | "RETURNED" => {
   if (e.isReturned) return "RETURNED";
   const cat = ((e.expenseCategory || "") as string).trim();
   const titleLower = (e.title || "").toLowerCase();
+  const noteLower = (e.note || "").toLowerCase();
   const pm = (e.paymentMode || "CASH").toUpperCase().trim();
+  if (
+    e.isInvoiceAdjustment ||
+    (e.id && e.id.startsWith("comm-exp-")) ||
+    (cat === "Business Commission" &&
+      (e.overrideReason === "BUSINESS_COMMISSION" ||
+        noteLower.includes("auto-synced from")))
+  ) {
+    return "ADJUSTMENT";
+  }
   if (
     cat === "Credit Purchase" ||
     pm === "CREDIT" ||
@@ -5566,6 +5577,8 @@ function DailyRegisterView({
             amount: diff,
             originalAmount: diff,
             isEdited: false,
+            isInvoiceAdjustment: true,
+            overrideReason: "BUSINESS_COMMISSION",
             paymentMode: "CASH",
             note: "Auto-synced from invoice commission adjustment",
             time: nowHHMM(),
@@ -5578,6 +5591,8 @@ function DailyRegisterView({
               title: `Business Commission (Inv #${displayInvNo})`,
               amount: diff,
               originalAmount: diff,
+              isInvoiceAdjustment: true,
+              overrideReason: "BUSINESS_COMMISSION",
               note: "Auto-synced from invoice commission adjustment",
             };
           } else {
@@ -5843,7 +5858,7 @@ function DailyRegisterView({
   );
   const expenseEntries = preLoggedEntries.filter((e) => e.type === "EXPENSE");
 
-  // Strict Accounting Separation: Cash Outflows vs Bank/Card Outflows vs Credit/Pay Later
+  // Strict Accounting Separation: Cash Outflows vs Bank/Card Outflows vs Credit/Pay Later vs Invoice Net Adjustments
   const cashExpenseEntries = expenseEntries.filter(
     (e) => classifyExpenseOutflow(e) === "CASH"
   );
@@ -5852,6 +5867,9 @@ function DailyRegisterView({
   );
   const creditPurchaseEntries = expenseEntries.filter(
     (e) => classifyExpenseOutflow(e) === "CREDIT"
+  );
+  const adjustmentExpenseEntries = expenseEntries.filter(
+    (e) => classifyExpenseOutflow(e) === "ADJUSTMENT"
   );
 
   const totalCashOutflows = r2(
@@ -5863,6 +5881,31 @@ function DailyRegisterView({
   const totalCreditOutflows = r2(
     creditPurchaseEntries.reduce((a, b) => a + (b.isReturned ? 0 : b.amount), 0)
   );
+  const totalAdjustmentOutflows = r2(
+    adjustmentExpenseEntries.reduce((a, b) => a + (b.isReturned ? 0 : b.amount), 0)
+  );
+  // Invoice-level Business Commissions deducted directly from Cash / Split-Cash Sales
+  const cashCommissionAdjustmentsTotal = r2(
+    activeErpList.reduce((sum, inv) => {
+      if (inv.isReturned) return sum;
+      const cashPortion = calcInvoiceCashPortion(inv);
+      if (cashPortion <= 0) return sum;
+      const orig = inv.originalAmount ?? inv.amount;
+      const explicitComm = inv.businessCommission || 0;
+      const rawComm =
+        explicitComm > 0
+          ? r2(explicitComm)
+          : inv.overrideReason === "BUSINESS_COMMISSION"
+          ? r2(Math.max(0, orig - inv.amount - (inv.discountAmount || 0) - (inv.roundOffAmount || 0)))
+          : 0;
+      if (rawComm <= 0) return sum;
+      if (inv.paymentMode === "SPLIT" && inv.amount > 0) {
+        return sum + r2(rawComm * Math.min(1, cashPortion / inv.amount));
+      }
+      return sum + rawComm;
+    }, 0)
+  );
+  const cashGrossSalesBeforeCommissions = r2(cashSalesTotal + cashCommissionAdjustmentsTotal);
 
   const totalCreditInvAmount = r2(
     creditSaleEntries.reduce((a, b) => a + (b.isReturned ? 0 : b.amount), 0)
@@ -5957,34 +6000,8 @@ function DailyRegisterView({
         );
       }
 
-      // Persist any auto-generated business commission expenses to Neon /api/pocket
-      activeErpList.forEach((inv) => {
-        const orig = inv.originalAmount ?? inv.amount;
-        const diff = r2(orig - inv.amount);
-        if (inv.overrideReason === "BUSINESS_COMMISSION" && diff > 0) {
-          fetch("/api/pocket", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "x-branch-id": branchId || "JCT_HARDWARE_JOTUN",
-            },
-            body: JSON.stringify({
-              branch: branchId || "JCT_HARDWARE_JOTUN",
-              type: "EXPENSE",
-              amount: diff,
-              originalAmount: orig,
-              isEdited: true,
-              overrideReason: "BUSINESS_COMMISSION",
-              overrideNote: inv.overrideNote || null,
-              category: "Business Commission",
-              paymentSource: "DRAWER_CASH",
-              paymentMode: "CASH",
-              note: `Auto-synced from CSV invoice edit (Inv #${inv.invoiceNo})`,
-              date: effectiveReportDate,
-            }),
-          }).catch((e) => console.error("Error saving commission expense to pocket:", e));
-        }
-      });
+      // Auto-synced invoice commissions are already reflected in net invoice cash/bank totals
+      // and persisted inside ArchiveRecord dataJson; do not post a second DRAWER_CASH outflow.
 
       // Persist lock or pending draft record to Neon PostgreSQL
       const archiveRes = await fetch("/api/archive", {
@@ -9300,6 +9317,10 @@ function DailyRegisterView({
                                   <span className="rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/40 px-2.5 py-0.5 text-[10px] font-bold shrink-0">
                                     Pay Later · Not Deducted Today
                                   </span>
+                                ) : outflowKind === "ADJUSTMENT" ? (
+                                  <span className="rounded-full bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/40 px-2.5 py-0.5 text-[10px] font-bold shrink-0">
+                                    Netted in Invoice Sales · Not Deducted Twice
+                                  </span>
                                 ) : outflowKind === "BANK" ? (
                                   <span className="rounded-full bg-jct-turquoise/20 text-jct-charcoal dark:text-jct-turquoise border border-jct-turquoise/40 px-2.5 py-0.5 text-[10px] font-bold shrink-0">
                                     Bank / Card Outflow (Non-Cash)
@@ -9547,12 +9568,20 @@ function DailyRegisterView({
                   <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-slate-200 dark:border-[#1F1F1F] text-xs text-slate-500 dark:text-slate-400 print:text-black print:border-black">
                     <span>Opening Float: <strong className="text-jct-charcoal dark:text-jct-offwhite print:text-black">SAR {fmt(openingBalance)}</strong></span>
                     <span className="text-jct-turquoise font-bold print:text-black">+</span>
-                    <span>Inflows: <strong className="text-jct-charcoal dark:text-jct-offwhite print:text-black">SAR {fmt(totalCashInSalesAndReceipts)}</strong></span>
+                    <span>Inflows{cashCommissionAdjustmentsTotal > 0 ? " (Net)" : ""}: <strong className="text-jct-charcoal dark:text-jct-offwhite print:text-black">SAR {fmt(totalCashInSalesAndReceipts)}</strong></span>
                     <span className="text-rose-500 font-bold print:text-black">-</span>
                     <span>Outflows: <strong className="text-jct-charcoal dark:text-jct-offwhite print:text-black">SAR {fmt(totalMoneyOutDrawer)}</strong></span>
                     <span className="text-jct-yellow font-bold print:text-black">=</span>
                     <span>Closing Cash: <strong className="text-jct-charcoal dark:text-jct-offwhite print:text-black">SAR {fmt(calculatedClosingBalance)}</strong></span>
                   </div>
+                  {cashCommissionAdjustmentsTotal > 0 && (
+                    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-indigo-700 dark:text-indigo-300 bg-indigo-500/10 border border-indigo-500/25 rounded-lg px-3 py-1.5 print:border-black print:bg-white print:text-black">
+                      <span>Gross Cash Sales: <strong>SAR {fmt(cashGrossSalesBeforeCommissions)}</strong></span>
+                      <span>Commission Adjustments (Netted at Invoice): <strong>-SAR {fmt(cashCommissionAdjustmentsTotal)}</strong></span>
+                      <span>Net Cash Collected: <strong>SAR {fmt(cashSalesTotal)}</strong></span>
+                      <span className="opacity-80">· Already deducted from Net Cash Collected (excluded from Outflows)</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* 3. The 3 Financial Pillars Grid (Inflows · Bank/Swipes · Outflows) */}
@@ -9566,6 +9595,13 @@ function DailyRegisterView({
                       <span className="mt-2 block font-mono text-2xl font-black text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap print:text-black print:text-2xl print:font-bold">
                         SAR {fmt(totalCashInSalesAndReceipts)}
                       </span>
+                      {cashCommissionAdjustmentsTotal > 0 && (
+                        <div className="mt-2 space-y-0.5 text-[11px] text-slate-500 dark:text-slate-400 print:text-black">
+                          <div>Gross Cash Sales: <strong className="text-jct-charcoal dark:text-jct-offwhite print:text-black">SAR {fmt(cashGrossSalesBeforeCommissions)}</strong></div>
+                          <div>Commission Adjustments: <strong className="text-indigo-600 dark:text-indigo-400 print:text-black">-SAR {fmt(cashCommissionAdjustmentsTotal)}</strong></div>
+                          <div>Net Cash Collected: <strong className="text-emerald-600 dark:text-emerald-400 print:text-black">SAR {fmt(cashSalesTotal)}</strong></div>
+                        </div>
+                      )}
                     </div>
                     <span className="block text-xs text-slate-500 dark:text-slate-400 border-t border-slate-200 dark:border-[#1F1F1F] pt-2 print:text-black print:border-black">
                       + Opening Float <strong className="text-jct-charcoal dark:text-jct-offwhite print:text-black">SAR {fmt(openingBalance)}</strong>
@@ -10121,6 +10157,14 @@ function DailyRegisterView({
                         </span>
                       </div>
                     </div>
+                    {totalAdjustmentOutflows > 0 && (
+                      <div className="rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-3 py-2 flex items-center justify-between text-xs text-indigo-800 dark:text-indigo-200 print:hidden">
+                        <span className="font-semibold">
+                          Invoice Commission Adjustments (Already Netted in Invoice Sales — Not Deducted from Drawer)
+                        </span>
+                        <span className="font-mono font-black">SAR {fmt(totalAdjustmentOutflows)}</span>
+                      </div>
+                    )}
 
                     <div className="w-full overflow-x-auto hide-scrollbar">
                       <div className="min-w-[520px] divide-y divide-slate-200 dark:divide-[#1F1F1F] rounded-xl border border-slate-200 dark:border-[#1F1F1F] bg-slate-50/50 dark:bg-black overflow-hidden print:border print:border-slate-300 print:rounded-none print:bg-white print:divide-slate-200">
@@ -10154,6 +10198,11 @@ function DailyRegisterView({
                               {bucket === "BANK" && !entry.isReturned && (
                                 <span className="rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/40 px-2 py-0.5 text-[10px] font-bold shrink-0 print:hidden">
                                   Bank/Card · Not Deducted from Cash Drawer
+                                </span>
+                              )}
+                              {bucket === "ADJUSTMENT" && !entry.isReturned && (
+                                <span className="rounded-full bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/40 px-2 py-0.5 text-[10px] font-bold shrink-0 print:hidden">
+                                  Netted in Invoice Sales · Not Deducted Twice
                                 </span>
                               )}
                               {(entry.paymentMode === "CARD" || entry.terminal || entry.network) && (
@@ -19349,6 +19398,10 @@ export default function Page() {
         });
       } else if (t.type === "EXPENSE") {
         if (t.paymentSource === "OWNER_POCKET") return; // owner's own money: not a drawer outflow
+        const isAutoCommAdj =
+          (t as { overrideReason?: string }).overrideReason === "BUSINESS_COMMISSION" ||
+          (t.category === "Business Commission" &&
+            (t.note || "").toLowerCase().includes("auto-synced from"));
         const billUrl = t.billPdfUrl || t.receiptUrl || undefined;
         injected.push({
           id: entryId,
@@ -19360,6 +19413,8 @@ export default function Page() {
           amount: effAmount,
           originalAmount: origAmt,
           isReturned: isRet,
+          isInvoiceAdjustment: isAutoCommAdj,
+          overrideReason: isAutoCommAdj ? "BUSINESS_COMMISSION" : undefined,
           time,
           paymentMode: (t.paymentMode as UniversalPaymentMode) || "CASH",
           hasBill: Boolean(t.hasBill || billUrl),
