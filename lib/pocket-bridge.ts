@@ -105,19 +105,21 @@ export async function fetchPocketTransactions(
 }
 
 /** Polls Neon so every device sees new entries within a few seconds. */
-export function usePocketTransactions(branch: BranchId | "ALL", enabled = true) {
+export function usePocketTransactions(branch: BranchId | "ALL", enabled = true, date?: string) {
   const [transactions, setTransactions] = useState<PocketTransaction[]>([]);
   const [error, setError] = useState(false);
 
+  const effectiveDate = date || todayIso();
+
   const refresh = useCallback(async () => {
     try {
-      const rows = await fetchPocketTransactions(branch, todayIso());
+      const rows = await fetchPocketTransactions(branch, effectiveDate);
       setTransactions(rows);
       setError(false);
     } catch {
       setError(true);
     }
-  }, [branch]);
+  }, [branch, effectiveDate]);
 
   useEffect(() => {
     if (!enabled) return;

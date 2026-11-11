@@ -7,6 +7,8 @@ const NEXTAUTH_FALLBACK_SECRET =
 
 const OWNER_ONLY_PATHS = [
   "/pulse",
+  "/monthly-audits",
+  "/settings",
   "/suppliers",
   "/audit-library",
   "/nauman-ai",

@@ -236,10 +236,11 @@ model PayrollLog {
   @@index([date])
 }
 
-// Live multi-device Daily Register session (one active draft per branch)
+// Live multi-device Daily Register session (one active draft per branch + reportDate)
 model ActiveRegisterSession {
   id         String   @id @default(cuid())
-  branch     String   @unique // JCT_HARDWARE_JOTUN | HEMPEL | DAMMAM_JOTUN | SIGMA
+  sessionKey String?  // "<branch>::<reportDate>" (nullable for non-destructive migration of existing rows)
+  branch     String   // JCT_HARDWARE_JOTUN | HEMPEL | DAMMAM_JOTUN | SIGMA
   status     String   @default("DRAFT") // DRAFT | IN_PROGRESS | CLEARED | COMPLETED
   reportDate String?
   dataJson   String?  // { erpInvoices, preLoggedBankInvoices, preLoggedEntries, reportDate }
@@ -247,6 +248,9 @@ model ActiveRegisterSession {
   updatedBy  String?  // client/device id that wrote the latest revision
   updatedAt  DateTime @updatedAt
   createdAt  DateTime @default(now())
+
+  @@index([sessionKey])
+  @@index([branch, reportDate])
 }
 
 // Per-branch opening baseline (initial setup) used as the starting point for cash & bank totals

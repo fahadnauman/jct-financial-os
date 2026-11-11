@@ -41,6 +41,7 @@ interface RemoteSession {
 
 interface UseActiveSessionSyncOptions<I, B, E> {
   branch: string;
+  reportDate: string;
   enabled: boolean;
   snapshot: ActiveSessionSnapshot<I, B, E>;
   onRemoteSnapshot: (snapshot: ActiveSessionSnapshot<I, B, E>, meta: { status: string; isEmpty: boolean }) => void;
@@ -107,6 +108,7 @@ const parseRemote = <I, B, E>(session: RemoteSession | null): ActiveSessionSnaps
 
 export function useActiveSessionSync<I, B, E>({
   branch,
+  reportDate,
   enabled,
   snapshot,
   onRemoteSnapshot,
@@ -130,6 +132,7 @@ export function useActiveSessionSync<I, B, E>({
   const snapshotRef = useRef(snapshot);
   const onRemoteRef = useRef(onRemoteSnapshot);
   const branchRef = useRef(branch);
+  const reportDateRef = useRef(reportDate);
 
   useEffect(() => {
     snapshotRef.current = snapshot;
@@ -139,6 +142,7 @@ export function useActiveSessionSync<I, B, E>({
   const pushSnapshot = useCallback(async (snap: ActiveSessionSnapshot<I, B, E>) => {
     const serialized = serializeSnapshot(snap);
     const empty = isSnapshotEmpty(snap);
+    const effectiveDate = snap.reportDate || reportDateRef.current || null;
     setStatus((s) => ({ ...s, state: "saving" }));
     try {
       const res = await fetch("/api/active-session", {
@@ -148,7 +152,7 @@ export function useActiveSessionSync<I, B, E>({
           branch: branchRef.current,
           clientId: clientIdRef.current,
           status: empty ? "DRAFT" : "IN_PROGRESS",
-          reportDate: empty ? null : snap.reportDate,
+          reportDate: effectiveDate,
           data: serialized,
         }),
       });
@@ -202,9 +206,12 @@ export function useActiveSessionSync<I, B, E>({
           }
           return;
         }
-        const res = await fetch(`/api/active-session?branch=${encodeURIComponent(branchRef.current)}`, {
-          cache: "no-store",
-        });
+        const res = await fetch(
+          `/api/active-session?branch=${encodeURIComponent(branchRef.current)}&date=${encodeURIComponent(
+            reportDateRef.current
+          )}`,
+          { cache: "no-store" }
+        );
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = (await res.json()) as { session: RemoteSession | null };
         const session = data.session;
@@ -213,7 +220,7 @@ export function useActiveSessionSync<I, B, E>({
           hydratedRef.current = true;
           const remoteSnap = parseRemote<I, B, E>(session);
           if (isSnapshotEmpty(remoteSnap) && !isSnapshotEmpty(snapshotRef.current)) {
-            // Nothing shared yet but this device already has data: publish it
+            // Fresh PDF upload or reopened draft already populated local state for this date: publish it
             if (session) revisionRef.current = session.revision;
             await pushSnapshot(snapshotRef.current);
             return;
@@ -240,14 +247,16 @@ export function useActiveSessionSync<I, B, E>({
     [applyRemote, pushSnapshot]
   );
 
-  // Hydrate + start polling (re-hydrate when the branch changes)
+  // Hydrate + start polling (re-hydrate whenever branch or reportDate changes)
   useEffect(() => {
-    if (!enabled || !branch) return;
+    if (!enabled || !branch || !reportDate) return;
     clientIdRef.current = clientIdRef.current || getClientId();
     branchRef.current = branch;
+    reportDateRef.current = reportDate;
     hydratedRef.current = false;
     revisionRef.current = 0;
     dirtyRef.current = false;
+    lastSerializedRef.current = EMPTY_SERIALIZED;
     if (saveTimerRef.current) {
       clearTimeout(saveTimerRef.current);
       saveTimerRef.current = null;
@@ -268,7 +277,7 @@ export function useActiveSessionSync<I, B, E>({
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleFocus);
     };
-  }, [enabled, branch, pollMs, poll]);
+  }, [enabled, branch, reportDate, pollMs, poll]);
 
   // Debounced persistence whenever local session data changes
   const serializedLocal = serializeSnapshot(snapshot);
@@ -302,9 +311,9 @@ export function useActiveSessionSync<I, B, E>({
       const res =
         finalStatus === "CLEARED"
           ? await fetch(
-              `/api/active-session?branch=${encodeURIComponent(branchRef.current)}&clientId=${encodeURIComponent(
-                clientIdRef.current
-              )}`,
+              `/api/active-session?branch=${encodeURIComponent(branchRef.current)}&date=${encodeURIComponent(
+                reportDateRef.current
+              )}&clientId=${encodeURIComponent(clientIdRef.current)}`,
               { method: "DELETE" }
             )
           : await fetch("/api/active-session", {
@@ -314,7 +323,7 @@ export function useActiveSessionSync<I, B, E>({
                 branch: branchRef.current,
                 clientId: clientIdRef.current,
                 status: "COMPLETED",
-                reportDate: null,
+                reportDate: reportDateRef.current || null,
                 data: null,
               }),
             });

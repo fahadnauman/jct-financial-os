@@ -7599,11 +7599,12 @@ function DailyRegisterView({
                           <input
                             type="text"
                             value={inv.customerName ?? inv.customer ?? ""}
+                            title={inv.customerName ?? inv.customer ?? ""}
                             onChange={(e) =>
                               handleEditErpInvoiceCustomer(rowKey, e.target.value)
                             }
                             placeholder="Enter Customer / Description..."
-                            className={`w-full sm:w-[240px] min-w-[180px] max-w-[260px] truncate mr-2 text-sm font-medium bg-transparent border-b text-jct-charcoal dark:text-white placeholder-slate-400 focus:outline-none focus:ring-0 focus:border-b-2 focus:border-jct-turquoise transition-all rounded-none px-2 py-1 shrink-0 ${
+                            className={`w-full sm:w-[220px] min-w-[160px] max-w-[240px] truncate mr-4 text-sm font-medium bg-transparent border-b text-jct-charcoal dark:text-white placeholder-slate-400 focus:outline-none focus:ring-0 focus:border-b-2 focus:border-jct-turquoise transition-all rounded-none px-2 py-1 shrink-0 ${
                               isManualRow && !(inv.customerName || inv.customer)
                                 ? "border-jct-turquoise/50"
                                 : "border-transparent"
@@ -15440,10 +15441,11 @@ function AuditLibraryView({
     }
   };
 
-  // Merge local completedDaysLog drafts if not already in DB records
+  // Merge local completedDaysLog drafts if not already in DB records (strictly branch-scoped for Staff)
   const mergedRecords: ArchiveRecord[] = [
     ...records,
     ...completedDaysLog
+      .filter((d) => isOwner || d.branch === profile?.branch || d.branch === staffBranchId)
       .filter((d) => !records.some((r) => r.date === d.date))
       .map((d, idx) => ({
         id: `local-rec-${idx}`,
@@ -18472,8 +18474,8 @@ const USER_PROFILES: UserProfile[] = [
 ];
 
 const OWNER_TABS: TabId[] = ["register", "archive", "radar", "suppliers", "payroll", "pulse", "consolidation", "ai", "settings", "monthly-audits"];
-// RBAC: STAFF accounts have full operational & data-entry parity for their assigned branch
-const STAFF_TABS: TabId[] = ["register", "radar", "suppliers", "payroll", "archive"];
+// RBAC: STAFF accounts are strictly limited to Daily Register & viewing/printing their own branch Archive
+const STAFF_TABS: TabId[] = ["register", "archive"];
 
 const OWNER_BRANCH_OPTIONS = [
   "All Branches (Combined)",
@@ -18713,6 +18715,12 @@ export default function Page() {
           pathname &&
           (pathname.startsWith("/pulse") ||
             pathname.startsWith("/monthly-audits") ||
+            pathname.startsWith("/settings") ||
+            pathname.startsWith("/suppliers") ||
+            pathname.startsWith("/credit-radar") ||
+            pathname.startsWith("/payroll") ||
+            pathname.startsWith("/consolidation") ||
+            pathname.startsWith("/owner-pocket") ||
             pathname.startsWith("/nauman-ai"));
         if (isOwnerOnlyPath) {
           setTab("register");
@@ -18731,21 +18739,6 @@ export default function Page() {
     setProfile(found);
     setProfileLoaded(true);
   }, [session, sessionStatus, pathname, router]);
-
-  const handleSelectProfile = (p: UserProfile) => {
-    window.localStorage.setItem(PROFILE_STORAGE_KEY, p.id);
-    setProfile(p);
-    setTab("register");
-    if (!p.isOwner) {
-      router.replace("/daily-register");
-    }
-  };
-
-  const handleSwitchProfile = async () => {
-    window.localStorage.removeItem(PROFILE_STORAGE_KEY);
-    setProfile(null);
-    await signOut({ callbackUrl: "/login" });
-  };
 
   const allowedTabs = profile?.isOwner ? OWNER_TABS : STAFF_TABS;
   const activeBranchLabel = profile?.isOwner ? ownerBranch : profile?.branch ?? "";
@@ -19053,9 +19046,13 @@ export default function Page() {
       : "JCT_HARDWARE_JOTUN"
     : (profile?.id as BranchId) || "JCT_HARDWARE_JOTUN";
 
-  const { transactions: pocketTxns } = usePocketTransactions(activePocketBranch, Boolean(profile));
+  const { transactions: pocketTxns } = usePocketTransactions(
+    activePocketBranch,
+    Boolean(profile),
+    activeSessionDate
+  );
 
-  // Multi-device live Daily Register session (Prisma ActiveRegisterSession, polled every 4s)
+  // Multi-device live Daily Register session (Prisma ActiveRegisterSession, scoped by branch + date)
   const syncBranch = activePocketBranch === "ALL" ? "JCT_HARDWARE_JOTUN" : activePocketBranch;
 
   // Owner-configured opening baseline + manual capital deposits (Settings → Initial Setup), per branch
@@ -19111,6 +19108,7 @@ export default function Page() {
       ignore = true;
     };
   }, [syncBranch, settingsRefresh]);
+  const pocketSyncedRef = useRef<Set<string>>(new Set());
   const [remoteClearSignal, setRemoteClearSignal] = useState(0);
   const { syncStatus, clearRemoteSession } = useActiveSessionSync<
     ErpInvoiceItem,
@@ -19118,6 +19116,7 @@ export default function Page() {
     PreLoggedEntry
   >({
     branch: syncBranch,
+    reportDate: activeSessionDate,
     enabled: Boolean(profile),
     snapshot: {
       erpInvoices,
@@ -19129,7 +19128,6 @@ export default function Page() {
       setErpInvoices(snap.erpInvoices);
       setPreLoggedBankInvoices(snap.preLoggedBankInvoices);
       setPreLoggedEntries(deduplicatePreLoggedEntries(snap.preLoggedEntries));
-      setActiveSessionDate(snap.reportDate || getTodaySessionDate());
       if (meta.isEmpty) {
         setRemoteClearSignal((n) => n + 1);
         if (trackingMode === "wizard") setWizardStep(1);
@@ -19137,14 +19135,53 @@ export default function Page() {
     },
   });
 
-  const handleClearActiveSession = (finalStatus: "CLEARED" | "COMPLETED" = "CLEARED") => {
+  const resetLocalSessionState = () => {
     setErpInvoices([]);
     setPreLoggedBankInvoices([]);
     setPreLoggedEntries([]);
-    setActiveSessionDate(getTodaySessionDate());
+    pocketSyncedRef.current.clear();
+    setWizardStep(1);
+  };
+
+  const handleChangeOwnerBranch = (b: string) => {
+    if (b === ownerBranch) return;
+    resetLocalSessionState();
+    setOwnerBranch(b);
+  };
+
+  const handleChangeSessionDate = (nextDate: string) => {
+    if (!nextDate || nextDate === activeSessionDate) return;
+    resetLocalSessionState();
+    setActiveSessionDate(nextDate);
+  };
+
+  const handleSelectProfile = (p: UserProfile) => {
+    window.localStorage.setItem(PROFILE_STORAGE_KEY, p.id);
+    resetLocalSessionState();
+    setCompletedDaysLog([]);
+    setTrackingMode("hub");
+    setProfile(p);
+    setTab("register");
+    if (!p.isOwner) {
+      router.replace("/daily-register");
+    }
+  };
+
+  const handleSwitchProfile = async () => {
+    window.localStorage.removeItem(PROFILE_STORAGE_KEY);
+    resetLocalSessionState();
+    setCompletedDaysLog([]);
+    setProfile(null);
+    await signOut({ callbackUrl: "/login" });
+  };
+
+  const handleClearActiveSession = (finalStatus: "CLEARED" | "COMPLETED" = "CLEARED") => {
+    resetLocalSessionState();
+    if (finalStatus === "COMPLETED") {
+      setActiveSessionDate(getTodaySessionDate());
+    }
     void clearRemoteSession(finalStatus);
   };
-  const pocketSyncedRef = useRef<Set<string>>(new Set());
   const syncCustomerRef = useRef(handleSyncCreditCustomer);
   const syncCreditPurchaseRef = useRef(handleSyncCreditPurchase);
   useEffect(() => {
@@ -19378,9 +19415,29 @@ export default function Page() {
               Switch Profile <Repeat size={12} />
             </button>
             <div className="h-4 w-px bg-slate-200 dark:bg-[#1F1F1F] hidden sm:block"></div>
-            <div className="flex items-center gap-2 bg-slate-50 dark:bg-[#111111] border border-slate-200 dark:border-[#1F1F1F] text-jct-charcoal dark:text-jct-offwhite text-xs font-medium px-3 py-1.5 rounded-lg">
-              <CalendarDays size={14} className="text-jct-charcoal dark:text-jct-turquoise" /> {activeSessionDate}
-            </div>
+            <label
+              title="Select active working register date"
+              className="flex items-center gap-2 bg-slate-50 dark:bg-[#111111] border border-slate-200 dark:border-[#1F1F1F] hover:border-jct-turquoise focus-within:border-jct-turquoise text-jct-charcoal dark:text-jct-offwhite text-xs font-medium px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+            >
+              <CalendarDays size={14} className="text-jct-charcoal dark:text-jct-turquoise shrink-0" />
+              <input
+                type="date"
+                aria-label="Session Date"
+                value={activeSessionDate}
+                onChange={(e) => handleChangeSessionDate(e.target.value)}
+                className="bg-transparent text-xs font-mono font-semibold text-jct-charcoal dark:text-jct-offwhite outline-none cursor-pointer [color-scheme:dark] dark:[color-scheme:dark]"
+              />
+              {activeSessionDate !== saudiSessionDate() && (
+                <button
+                  type="button"
+                  onClick={() => handleChangeSessionDate(saudiSessionDate())}
+                  className="rounded bg-jct-turquoise/20 px-1.5 py-0.5 text-[10px] font-bold text-jct-charcoal dark:text-jct-turquoise hover:bg-jct-turquoise/30"
+                  title="Jump back to Saudi Today"
+                >
+                  Today
+                </button>
+              )}
+            </label>
             <SaudiClock />
             <div className="h-4 w-px bg-slate-200 dark:bg-[#1F1F1F] hidden sm:block"></div>
             {profile.isOwner ? (
@@ -19399,7 +19456,7 @@ export default function Page() {
                     {OWNER_BRANCH_OPTIONS.map((b) => (
                       <Dropdown.Item
                         key={b}
-                        onSelect={() => setOwnerBranch(b)}
+                        onSelect={() => handleChangeOwnerBranch(b)}
                         className="cursor-pointer rounded-lg px-3 py-2 text-xs text-jct-charcoal dark:text-jct-offwhite outline-none data-[highlighted]:bg-jct-turquoise data-[highlighted]:text-jct-charcoal data-[highlighted]:font-bold"
                       >
                         {b}
