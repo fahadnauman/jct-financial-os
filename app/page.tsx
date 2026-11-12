@@ -23,6 +23,8 @@ import MonthlyAuditsView from "./monthly-audits-view";
 import { calcSessionPosBreakdown, type PosSessionBreakdown } from "../lib/pos-breakdown";
 import { useActiveSessionSync, type ActiveSessionSyncStatus } from "../lib/active-session-sync";
 import { RapidPosModal, type RapidPosSubmitPayload } from "../components/RapidPosModal";
+import { PartyDropdownSelector } from "../components/PartyDropdownSelector";
+import { ReturnBillModal } from "../components/ReturnBillModal";
 import * as Dropdown from "@radix-ui/react-dropdown-menu";
 import * as XLSX from "xlsx";
 import {
@@ -736,6 +738,7 @@ export interface PreLoggedBankInvoice {
 
 export interface PreLoggedEntry {
   id: string;
+  clientTxnId?: string;
   sourcePocketId?: string;
   invoiceNumber?: string;
   linkedInvoiceNum?: string;
@@ -784,6 +787,7 @@ export type OverrideReason =
 export interface ErpInvoiceItem {
   internalId?: string;
   id?: string;
+  clientTxnId?: string;
   referenceId?: string;
   invoiceNo: string;
   branchInvNo?: string;
@@ -1654,6 +1658,7 @@ export const deduplicatePreLoggedEntries = (entries: PreLoggedEntry[]): PreLogge
   const result: PreLoggedEntry[] = [];
   const seenIds = new Set<string>();
   const seenPocketIds = new Set<string>();
+  const seenClientTxnIds = new Set<string>();
   const seenSignatures = new Map<string, number>();
 
   const getPocketId = (e: PreLoggedEntry): string | null => {
@@ -1696,6 +1701,7 @@ export const deduplicatePreLoggedEntries = (entries: PreLoggedEntry[]): PreLogge
   for (const item of sorted) {
     if (!item || !item.id) continue;
     if (seenIds.has(item.id)) continue;
+    if (item.clientTxnId && seenClientTxnIds.has(item.clientTxnId)) continue;
 
     const pkId = getPocketId(item);
     if (pkId && seenPocketIds.has(pkId)) {
@@ -1767,6 +1773,7 @@ export const deduplicatePreLoggedEntries = (entries: PreLoggedEntry[]): PreLogge
 
     seenIds.add(item.id);
     if (pkId) seenPocketIds.add(pkId);
+    if (item.clientTxnId) seenClientTxnIds.add(item.clientTxnId);
     seenSignatures.set(sig, result.length);
     result.push(item);
     keptById.set(item.id, item);
@@ -1820,7 +1827,9 @@ export const parseErpCsvText = (
     const hasDualTenderValues =
       !Number.isNaN(cashCol) && cashCol > 0 && !Number.isNaN(bankCol) && bankCol > 0;
     const isSplitType =
+      /\b(SPLIT|PARTIAL|MULTI|MULTI[- ]?BILL|MULTI[- ]?PAY|MULTI[- ]?PAYMENT|CASH\/BANK|CASH\+BANK|CASH\/CARD)\b/i.test(rawType) ||
       rawType.includes("SPLIT") ||
+      rawType.includes("MULTI") ||
       rawType.includes("PARTIAL") ||
       rawType.includes("CASH/BANK") ||
       rawType.includes("CASH+BANK") ||
@@ -3121,7 +3130,7 @@ function DailyRegisterView({
   const [hubPaymentMode, setHubPaymentMode] = useState<UniversalPaymentMode>("CASH");
   const [entryTitle, setEntryTitle] = useState("");
   const [entryAmount, setEntryAmount] = useState("");
-  const [hubSupplierName, setHubSupplierName] = useState("Jotun");
+  const [hubSupplierName, setHubSupplierName] = useState("");
   const [hubDueDate, setHubDueDate] = useState(() => addSaudiDays(14));
   const [hubBillType, setHubBillType] = useState<"WITHOUT_BILL" | "WITH_BILL">("WITHOUT_BILL");
   const [hubBillPdfUrl, setHubBillPdfUrl] = useState<string | null>(null);
@@ -3207,7 +3216,8 @@ function DailyRegisterView({
   const [step4PaymentMode, setStep4PaymentMode] = useState<UniversalPaymentMode>("CASH");
   const [step4Terminal, setStep4Terminal] = useState<"SAB" | "AL_RAJHI" | "SNB">("SAB");
   const [step4Network, setStep4Network] = useState<"mada" | "visa">("mada");
-  const [step4SupplierName, setStep4SupplierName] = useState("Jotun");
+  const [step4SupplierName, setStep4SupplierName] = useState("");
+  const [isReturnBillModalOpen, setIsReturnBillModalOpen] = useState(false);
   const [step4DueDate, setStep4DueDate] = useState(() => addSaudiDays(14));
   const [step4SupplierInvoiceNum, setStep4SupplierInvoiceNum] = useState("");
   const [step4BillPdfUrl, setStep4BillPdfUrl] = useState<string | null>(null);
@@ -4488,8 +4498,10 @@ function DailyRegisterView({
         ? "CREDIT"
         : hubPaymentMode;
 
+      const hubClientTxnId = typeof crypto !== "undefined" ? crypto.randomUUID() : undefined;
       upsertEntry({
         id: hubEntryId,
+        clientTxnId: hubClientTxnId,
         type: "EXPENSE",
         expenseCategory: hubExpenseCat,
         supplierName: isPurchase ? supplierClean : undefined,
@@ -4581,6 +4593,7 @@ function DailyRegisterView({
 
       setEntryTitle("");
       setEntryAmount("");
+      setHubSupplierName("");
       setHubBillPdfUrl(null);
       setHubBillFileName(null);
       setHubBillType("WITHOUT_BILL");
@@ -4931,6 +4944,7 @@ function DailyRegisterView({
 
     const isStep4Card = effectiveStep4Mode === "CARD";
     const isStep4Bank = effectiveStep4Mode === "BANK_TRANSFER";
+    const clientTxnId = typeof crypto !== "undefined" ? crypto.randomUUID() : undefined;
     const step4EntryId = isSupplierPurchase
       ? `ple-${step4Category.toLowerCase().replace(/\s+/g, "-")}-${cleanSupplier.toLowerCase().replace(/\s+/g, "-")}${step4SupplierInvoiceNum.trim() ? `-${step4SupplierInvoiceNum.trim().toLowerCase()}` : `-${Date.now().toString().slice(-4)}`}`
       : isStaffExpense && step4StaffId
@@ -4939,6 +4953,7 @@ function DailyRegisterView({
 
     upsertEntry({
       id: step4EntryId,
+      clientTxnId,
       type: "EXPENSE",
       expenseCategory: step4Category,
       supplierName: isSupplierPurchase ? cleanSupplier : undefined,
@@ -4994,6 +5009,7 @@ function DailyRegisterView({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          clientTxnId,
           branch: branchId || "JCT_HARDWARE_JOTUN",
           type: "EXPENSE",
           amount: val,
@@ -5035,6 +5051,7 @@ function DailyRegisterView({
         targetTab: "suppliers",
         targetLabel: "View in Suppliers & Payables →",
       });
+      setStep4SupplierName("");
       setStep4SupplierInvoiceNum("");
       setStep4BillPdfUrl(null);
       setStep4PdfFileName(null);
@@ -5351,20 +5368,20 @@ function DailyRegisterView({
 
         const orig = inv.originalAmount && inv.originalAmount > 0 ? inv.originalAmount : inv.amount;
         const currentAmt = inv.amount;
-        const decimalPart = r2(currentAmt - Math.floor(currentAmt));
+        const decimalPart = Number((currentAmt - Math.floor(currentAmt)).toFixed(2));
 
         let nextNet = currentAmt;
         let nextRoundOff = 0;
 
         if (decimalPart > 0.0001) {
           nextNet = Math.floor(currentAmt);
-          nextRoundOff = r2(Math.max(0, orig - nextNet));
+          nextRoundOff = Number(Math.max(0, orig - nextNet).toFixed(2));
         } else if (orig !== currentAmt && (inv.roundOffAmount || 0) > 0) {
           // Toggle off back to original amount
           nextNet = orig;
           nextRoundOff = 0;
         } else {
-          const origDec = r2(orig - Math.floor(orig));
+          const origDec = Number((orig - Math.floor(orig)).toFixed(2));
           if (origDec > 0.0001) {
             nextNet = Math.floor(orig);
             nextRoundOff = origDec;
@@ -5372,8 +5389,17 @@ function DailyRegisterView({
         }
 
         const isEdited = nextNet !== orig;
-        const cashShare = inv.isSplit ? r2(nextNet / 2) : inv.splitCashAmount;
-        const bankShare = inv.isSplit ? r2(nextNet - cashShare) : inv.splitBankAmount;
+        let cashShare = inv.splitCashAmount;
+        let bankShare = inv.splitBankAmount;
+        if (inv.isSplit) {
+          if (cashShare && cashShare > 0) {
+            cashShare = Math.min(cashShare, nextNet);
+            bankShare = r2(nextNet - cashShare);
+          } else {
+            cashShare = r2(nextNet / 2);
+            bankShare = r2(nextNet - cashShare);
+          }
+        }
 
         return {
           ...inv,
@@ -5517,6 +5543,42 @@ function DailyRegisterView({
         };
       })
     );
+  };
+
+  const handleConfirmReturnCandidate = (candidate: {
+    id: string;
+    source: string;
+    invoiceNo: string;
+    branchInvNo: string;
+    amount: number;
+    originalAmount?: number;
+    paymentMode: string;
+    partyName: string;
+  }) => {
+    if (candidate.source === "CURRENT_SESSION_INVOICE") {
+      handleToggleReturnErpInvoice(candidate.id);
+      setJustCompletedToast(`Invoice ${candidate.branchInvNo} marked as Returned (SAR 0.00 contribution)`);
+    } else if (candidate.source === "CURRENT_SESSION_ENTRY") {
+      handleToggleReturnEntry(candidate.id);
+      setJustCompletedToast(`Entry ${candidate.branchInvNo} marked as Returned (SAR 0.00 contribution)`);
+    } else {
+      const retId = `ret-prior-${Date.now()}`;
+      const retAmt = candidate.amount;
+      upsertEntry({
+        id: retId,
+        clientTxnId: typeof crypto !== "undefined" ? crypto.randomUUID() : undefined,
+        type: "EXPENSE",
+        title: `Returned Prior Bill — ${candidate.branchInvNo} (${candidate.partyName})`,
+        expenseCategory: "Other Expenses",
+        amount: retAmt,
+        originalAmount: candidate.originalAmount ?? retAmt,
+        isReturned: true,
+        paymentMode: candidate.paymentMode || "CASH",
+        note: `Prior date bill returned & reversed: Inv #${candidate.branchInvNo}`,
+        time: nowHHMM(),
+      });
+      setJustCompletedToast(`Prior Bill #${candidate.branchInvNo} logged as Return Reversal`);
+    }
   };
 
   const handleEditErpInvoiceOverrideReason = (
@@ -6775,20 +6837,17 @@ function DailyRegisterView({
                         {(hubExpenseCat === "Credit Purchase" ||
                           hubExpenseCat === "Cash Purchase" ||
                           hubExpenseCat === "Supplier Advance") && (
-                          <input
-                            type="text"
-                            list="hub-suppliers-list"
+                          <PartyDropdownSelector
+                            id="hub-supplier-party"
                             value={hubSupplierName}
-                            onChange={(e) => setHubSupplierName(e.target.value)}
-                            placeholder="Supplier Name (e.g. Jotun)"
-                            className="flex-1 min-w-[150px] bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md text-sm px-3 py-2 placeholder:text-slate-400 outline-none transition"
+                            onChange={(val) => setHubSupplierName(val)}
+                            partyType="SUPPLIER"
+                            branch={branchId}
+                            placeholder="Supplier (e.g. Jotun)..."
+                            className="flex-1 min-w-[150px]"
+                            extraParties={["Jotun", "Hempel", "Sigma"]}
                           />
                         )}
-                        <datalist id="hub-suppliers-list">
-                          <option value="Jotun" />
-                          <option value="Hempel" />
-                          <option value="Sigma" />
-                        </datalist>
 
                         {(hubExpenseCat === "Credit Purchase" || hubExpenseCat === "Supplier Advance") && (
                           <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-slate-300 dark:border-[#1F1F1F] bg-transparent px-2.5 py-1.5">
@@ -7578,6 +7637,15 @@ function DailyRegisterView({
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
+                    onClick={() => setIsReturnBillModalOpen(true)}
+                    className="bg-rose-500/15 hover:bg-rose-500/25 text-rose-600 dark:text-rose-400 border border-rose-500/40 font-bold transition-all shadow-sm rounded-lg px-4 py-2 inline-flex items-center gap-1.5 text-xs"
+                    title="Search today's bills or historical database records to log a Return Bill"
+                  >
+                    <RotateCcw size={14} />
+                    <span>↩ Log Return Bill</span>
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setRapidPosOpen(true)}
                     className="bg-jct-yellow text-jct-charcoal font-black hover:brightness-95 transition-all shadow-[0_0_16px_rgba(255,222,89,0.28)] rounded-lg px-4 py-2 inline-flex items-center gap-1.5 text-xs"
                   >
@@ -7976,20 +8044,41 @@ function DailyRegisterView({
                       {/* Confirmed Inline Adjustment Pill with Orig: SAR ... cleanly at the end */}
                       {isAmountEdited && inv.adjustmentsApplied && (
                         <div className="mt-2.5 flex flex-wrap items-center gap-2">
-                          <span className="inline-flex flex-wrap items-center gap-1.5 rounded-md border border-emerald-500/40 bg-emerald-500/15 px-2.5 py-1 font-mono text-[11px] font-bold text-emerald-700 dark:text-emerald-300">
-                            <span>✓ {reasonLabelMap[activeReason]}</span>
-                            <span>·</span>
-                            <span>
-                              {reasonDiff >= 0
-                                ? `-SAR ${fmt(reasonDiff)}`
-                                : `+SAR ${fmt(Math.abs(reasonDiff))}`}
+                          {activeReason === "BUSINESS_COMMISSION" ? (
+                            <span className="inline-flex flex-wrap items-center gap-2 rounded-xl border-2 border-amber-400 bg-amber-500/20 text-amber-900 dark:text-amber-200 px-3.5 py-1.5 font-bold text-xs shadow-md shadow-amber-500/15">
+                              <span className="flex items-center gap-1.5 text-xs md:text-sm font-black text-amber-800 dark:text-amber-300">
+                                💼 Business Commission
+                              </span>
+                              <span>·</span>
+                              <span className="font-mono text-xs md:text-sm font-black text-rose-600 dark:text-rose-400">
+                                {reasonDiff >= 0
+                                  ? `-SAR ${fmt(reasonDiff)}`
+                                  : `+SAR ${fmt(Math.abs(reasonDiff))}`}
+                              </span>
+                              <span>·</span>
+                              <span className="font-mono text-xs font-bold">
+                                Net: SAR {fmt(inv.amount)}
+                              </span>
+                              <span className="ml-1 rounded bg-amber-400 text-slate-950 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider">
+                                Orig: SAR {fmt(inv.originalAmount ?? inv.amount)}
+                              </span>
                             </span>
-                            <span>·</span>
-                            <span>Net: SAR {fmt(inv.amount)}</span>
-                            <span className="ml-1 rounded bg-jct-yellow text-jct-charcoal px-1.5 py-0.5 text-[10px] font-extrabold">
-                              Orig: SAR {fmt(inv.originalAmount ?? inv.amount)}
+                          ) : (
+                            <span className="inline-flex flex-wrap items-center gap-1.5 rounded-md border border-emerald-500/40 bg-emerald-500/15 px-2.5 py-1 font-mono text-[11px] font-bold text-emerald-700 dark:text-emerald-300">
+                              <span>✓ {reasonLabelMap[activeReason]}</span>
+                              <span>·</span>
+                              <span>
+                                {reasonDiff >= 0
+                                  ? `-SAR ${fmt(reasonDiff)}`
+                                  : `+SAR ${fmt(Math.abs(reasonDiff))}`}
+                              </span>
+                              <span>·</span>
+                              <span>Net: SAR {fmt(inv.amount)}</span>
+                              <span className="ml-1 rounded bg-jct-yellow text-jct-charcoal px-1.5 py-0.5 text-[10px] font-extrabold">
+                                Orig: SAR {fmt(inv.originalAmount ?? inv.amount)}
+                              </span>
                             </span>
-                          </span>
+                          )}
                           <button
                             type="button"
                             onClick={() => handleReopenInlineOverride(rowKey)}
@@ -8002,8 +8091,11 @@ function DailyRegisterView({
 
                       {/* Progressive Disclosure Sub-Row: Split/Partial Allocation & Card Method */}
                       {isSplitMode && (
-                        <div className="bg-slate-50 dark:bg-[#111111] rounded-lg mt-2 p-3 flex flex-col xl:flex-row xl:items-center justify-between gap-2.5 text-xs">
+                        <div className="bg-slate-50 dark:bg-[#111111] rounded-lg mt-2 p-3 border border-jct-turquoise/40 dark:border-jct-turquoise/30 flex flex-col xl:flex-row xl:items-center justify-between gap-2.5 text-xs">
                           <div className="flex flex-wrap items-center gap-2.5">
+                            <span className="rounded-full bg-jct-turquoise/20 text-jct-charcoal dark:text-jct-turquoise border border-jct-turquoise/50 px-2 py-0.5 text-[10px] font-black shrink-0">
+                              ⚡ Split / Multi Bill
+                            </span>
                             {/* Cash Portion Input */}
                             <div className="flex items-center gap-1.5">
                               <span className="font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">
@@ -8559,23 +8651,27 @@ function DailyRegisterView({
                       </div>
                     )}
 
-                    {/* 3. Customer / Contractor Name */}
+                    {/* 3. Customer / Contractor Name with Global Directory live selector */}
                     <div className="space-y-1.5">
-                      <label className="block text-xs font-medium text-slate-500 dark:text-slate-400">
-                        {step3Kind === "CREDIT_RECD" || step3Kind === "CREDIT_SALE" || step3Kind === "CUSTOMER_ADVANCE" || step3SplitEnabled
-                          ? "Customer / Contractor Name"
-                          : "Source or Note"}
-                      </label>
-                      <input
-                        type="text"
-                        value={step3Title}
-                        onChange={(e) => setStep3Title(e.target.value)}
-                        placeholder={
+                      <PartyDropdownSelector
+                        id="step3-customer-party"
+                        label={
                           step3Kind === "CREDIT_RECD" || step3Kind === "CREDIT_SALE" || step3Kind === "CUSTOMER_ADVANCE" || step3SplitEnabled
-                            ? "Customer Name (auto-populates from ERP)"
+                            ? "Customer / Contractor Name"
                             : "Source or Note"
                         }
-                        className="w-full bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-3.5 py-2.5 text-sm font-medium placeholder:text-slate-400 outline-none"
+                        value={step3Title}
+                        onChange={(name) => setStep3Title(name)}
+                        partyType="CUSTOMER"
+                        branch={branchId}
+                        placeholder={
+                          step3Kind === "CREDIT_RECD" || step3Kind === "CREDIT_SALE" || step3Kind === "CUSTOMER_ADVANCE" || step3SplitEnabled
+                            ? "Select or search Customer / Contractor..."
+                            : "Source or Note"
+                        }
+                        extraParties={erpInvoices
+                          .map((i) => i.customer || i.customerName)
+                          .filter((c): c is string => Boolean(c))}
                       />
                     </div>
 
@@ -9007,13 +9103,18 @@ function DailyRegisterView({
                           }}
                           className={`rounded-lg px-3 py-1.5 text-xs transition-all ${
                             active
-                              ? "bg-jct-turquoise text-jct-charcoal font-bold shadow-sm"
+                              ? category === "Business Commission"
+                                ? "bg-amber-500 text-slate-950 font-black ring-2 ring-amber-300 shadow-lg shadow-amber-500/30 flex items-center gap-1.5"
+                                : "bg-jct-turquoise text-jct-charcoal font-bold shadow-sm"
                               : existing
                               ? "bg-jct-yellow text-jct-charcoal font-bold"
                               : "border border-slate-200 dark:border-[#1F1F1F] bg-slate-50 dark:bg-[#111111] text-jct-charcoal dark:text-jct-offwhite font-medium hover:brightness-95"
                           }`}
                         >
-                          {category === "Cash Purchase" ? "Supplier / Cash Purchase" : category}
+                          {active && category === "Business Commission" && (
+                            <Check size={12} className="stroke-[3]" />
+                          )}
+                          <span>{category === "Cash Purchase" ? "Supplier / Cash Purchase" : category}</span>
                         </button>
                       );
                     })}
@@ -9052,22 +9153,16 @@ function DailyRegisterView({
                       step4Category === "Supplier Advance") && (
                       <div className="space-y-2.5 bg-slate-50 dark:bg-[#111111] border border-slate-200 dark:border-[#1F1F1F] text-jct-charcoal dark:text-jct-offwhite text-sm p-3 rounded-lg">
                         <div>
-                          <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
-                            Supplier Name (Syncs to Suppliers &amp; Payables)
-                          </label>
-                          <input
-                            type="text"
-                            list="step4-suppliers-list"
+                          <PartyDropdownSelector
+                            id="step4-supplier-party"
+                            label="Supplier Name (Syncs to Suppliers & Payables)"
                             value={step4SupplierName}
-                            onChange={(e) => setStep4SupplierName(e.target.value)}
-                            placeholder="e.g. Jotun, Hempel, Sigma..."
-                            className="w-full bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-3.5 py-2 text-sm font-medium placeholder:text-slate-400 outline-none"
+                            onChange={(val) => setStep4SupplierName(val)}
+                            partyType="SUPPLIER"
+                            branch={branchId}
+                            placeholder="Select or type Supplier (e.g. Jotun, Hempel)..."
+                            extraParties={["Jotun", "Hempel", "Sigma"]}
                           />
-                          <datalist id="step4-suppliers-list">
-                            <option value="Jotun" />
-                            <option value="Hempel" />
-                            <option value="Sigma" />
-                          </datalist>
                         </div>
 
                         {(step4Category === "Credit Purchase" || step4Category === "Supplier Advance") && (
@@ -9281,9 +9376,20 @@ function DailyRegisterView({
                       <span className="text-xs uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400">
                         Logged Expenses &amp; Supplier Purchases ({expenseEntries.length})
                       </span>
-                      <span className="text-xs text-slate-500 dark:text-slate-400">
-                        Deduplicated automatically
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setIsReturnBillModalOpen(true)}
+                          className="rounded-lg border border-rose-500/40 bg-rose-500/10 hover:bg-rose-500/20 px-2.5 py-1 text-[11px] font-bold text-rose-600 dark:text-rose-400 transition shadow-sm flex items-center gap-1"
+                          title="Search and return a bill"
+                        >
+                          <RotateCcw size={12} />
+                          <span>↩ Log Return Bill</span>
+                        </button>
+                        <span className="text-xs text-slate-500 dark:text-slate-400">
+                          Deduplicated automatically
+                        </span>
+                      </div>
                     </div>
 
                     <div className="w-full overflow-x-auto hide-scrollbar">
@@ -12085,6 +12191,14 @@ function DailyRegisterView({
         branchLabel={getBranchBadgeInfo(branchId).name}
         sessionDate={activeSessionDate}
       />
+      <ReturnBillModal
+        isOpen={isReturnBillModalOpen}
+        onClose={() => setIsReturnBillModalOpen(false)}
+        branch={branchId}
+        currentErpInvoices={activeErpList}
+        currentPreLoggedEntries={preLoggedEntries}
+        onConfirmReturn={handleConfirmReturnCandidate}
+      />
     </div>
   );
 }
@@ -12361,13 +12475,13 @@ function CreditRadarView({
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              <div className="flex-[2] min-w-[200px] relative">
-                <input
-                  type="text"
+              <div className="flex-[2] min-w-[200px]">
+                <PartyDropdownSelector
+                  id="credit-radar-party"
                   value={contractorInput}
-                  onChange={(e) => setContractorInput(e.target.value)}
-                  placeholder="Customer / Contractor Name..."
-                  className="w-full px-4 py-2.5 bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md font-medium text-sm outline-none"
+                  onChange={(val) => setContractorInput(val)}
+                  partyType="CUSTOMER"
+                  placeholder="Select or type Customer / Contractor Name..."
                 />
               </div>
               <input
@@ -13348,19 +13462,15 @@ function SupplierHubView({
               Log Supplier Credit Purchase or Return
             </h3>
             <div className="flex flex-wrap items-center gap-3">
-              <input
-                list="suppliers-list"
-                type="text"
-                placeholder="Search Supplier (Jotun, Hempel, Sigma...)"
+              <PartyDropdownSelector
+                id="suppliers-hub-party"
                 value={supplierSearch}
-                onChange={(e) => setSupplierSearch(e.target.value)}
-                className="flex-[2] min-w-[180px] px-4 py-2.5 bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md font-medium text-sm outline-none"
+                onChange={(val) => setSupplierSearch(val)}
+                partyType="SUPPLIER"
+                placeholder="Search or Select Supplier (Jotun, Hempel, Sigma...)"
+                className="flex-[2] min-w-[200px]"
+                extraParties={["Jotun", "Hempel", "Sigma"]}
               />
-              <datalist id="suppliers-list">
-                <option value="Jotun" />
-                <option value="Hempel" />
-                <option value="Sigma" />
-              </datalist>
               <input
                 type="text"
                 placeholder="Invoice # (e.g., INV-0992)"

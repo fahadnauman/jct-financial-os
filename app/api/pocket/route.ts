@@ -81,10 +81,39 @@ export async function POST(req: Request) {
   const urlStr = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
   const resolvedReceiptUrl = urlStr(body.receiptUrl) || urlStr(body.billPdfUrl);
   const resolvedBillPdfUrl = urlStr(body.billPdfUrl) || urlStr(body.receiptUrl);
+  const clientTxnId = str(body.clientTxnId);
 
   try {
+    // 1. Strict Idempotency Key check: if clientTxnId already exists, return existing row immediately
+    if (clientTxnId) {
+      const existingKey = await prisma.pocketTransaction.findFirst({
+        where: { clientTxnId },
+      });
+      if (existingKey) {
+        return NextResponse.json({ transaction: existingKey, duplicate: true }, { status: 200 });
+      }
+    }
+
+    // 2. Synchronous State Deduplication: check identical submission within the last 30 seconds
+    const thirtySecAgo = new Date(Date.now() - 30000);
+    const existingRecent = await prisma.pocketTransaction.findFirst({
+      where: {
+        branch,
+        date: String(body.date),
+        type: String(body.type),
+        amount,
+        category: str(body.category),
+        note: str(body.note),
+        createdAt: { gte: thirtySecAgo },
+      },
+    });
+    if (existingRecent) {
+      return NextResponse.json({ transaction: existingRecent, duplicate: true }, { status: 200 });
+    }
+
     const row = await prisma.pocketTransaction.create({
       data: {
+        clientTxnId,
         branch,
         type: String(body.type),
         amount,
@@ -111,6 +140,38 @@ export async function POST(req: Request) {
         date: String(body.date),
       },
     });
+
+    // 3. Instant Party Auto-Harvesting into PartyDirectory
+    const partyCandidate = str(body.recipientName) || (
+      String(body.type).includes("PURCHASE") || String(body.category).includes("Purchase")
+        ? str(body.note)
+        : null
+    );
+    if (partyCandidate && partyCandidate.length >= 2) {
+      const normName = partyCandidate.trim().replace(/\s+/g, " ").toUpperCase();
+      const pType: "SUPPLIER" | "CUSTOMER" =
+        String(body.type).includes("PURCHASE") || String(body.type).includes("SUPPLIER")
+          ? "SUPPLIER"
+          : "CUSTOMER";
+      prisma.partyDirectory
+        .upsert({
+          where: { name_partyType: { name: normName, partyType: pType } },
+          update: {
+            branch: (branch as string) !== "ALL" ? branch : undefined,
+            lastAmount: amount,
+            lastInvoiceNo: str(body.supplierInvoiceNum) || undefined,
+          },
+          create: {
+            name: normName,
+            partyType: pType,
+            branch,
+            lastAmount: amount,
+            lastInvoiceNo: str(body.supplierInvoiceNum) || undefined,
+          },
+        })
+        .catch(() => {});
+    }
+
     return NextResponse.json({ transaction: row }, { status: 201 });
   } catch (err) {
     console.error("POST /api/pocket failed", err);

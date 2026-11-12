@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { PDFParse } from "pdf-parse";
 import { getData as getPdfWorkerData } from "pdf-parse/worker";
+import { prisma } from "../../../lib/prisma";
 
 export const runtime = "nodejs";
 
@@ -80,7 +81,9 @@ const mapJctPayTypeToMode = (rawPayType: string): {
       : "SAB";
 
   const isSplit =
+    /\b(SPLIT|PARTIAL|MULTI|MULTI[- ]?BILL|MULTI[- ]?PAY|MULTI[- ]?PAYMENT|CASH\/BANK|CASH\+BANK|CASH\/CARD)\b/i.test(upper) ||
     upper.includes("SPLIT") ||
+    upper.includes("MULTI") ||
     upper.includes("PARTIAL") ||
     upper.includes("CASH/BANK") ||
     upper.includes("CASH+BANK") ||
@@ -286,11 +289,11 @@ export const parseJctPdfTextToInvoices = (rawText: string): ParsedErpInvoiceItem
     // Separate 2-decimal currency amounts glued to a following digit
     .replace(/(\d+\.\d{1,2})(?=\d)/g, "$1 ")
     // Separate standalone 5-digit invoice numbers glued to a Payment Type or Date
-    .replace(/(\b\d{5})(?=(?:Cash|Card|Bank|Credit|\d{2}[/-]\d{2}[/-]\d{2,4}))/gi, "$1 ")
+    .replace(/(\b\d{5})(?=(?:Cash|Card|Bank|Credit|Multi|Split|\d{2}[/-]\d{2}[/-]\d{2,4}))/gi, "$1 ")
     // Separate Payment Type keywords glued to a number (e.g. "Cash347.15" -> "Cash 347.15")
-    .replace(/\b(Cash|Card|Bank|Credit)(?=\d)/gi, "$1 ")
+    .replace(/\b(Cash|Card|Bank|Credit|Multi|Split)(?=\d)/gi, "$1 ")
     // Separate customer text glued to a Payment Type when followed by pipe/space and a number
-    .replace(/([A-Za-z])(Cash|Card|Bank|Credit)(?=[\s|]+\d)/gi, "$1 $2 ")
+    .replace(/([A-Za-z])(Cash|Card|Bank|Credit|Multi|Split)(?=[\s|]+\d)/gi, "$1 $2 ")
     // Replace pipes, tabs, and newlines with spaces
     .replace(/[|\t\r\n]+/g, " ")
     .replace(/\s+/g, " ")
@@ -303,7 +306,7 @@ export const parseJctPdfTextToInvoices = (rawText: string): ParsedErpInvoiceItem
 
   const isFiveDigitInv = (tok: string): boolean => /^\d{5}$/.test(tok) && tok !== "31951";
   const isPayTypeToken = (tok: string): boolean =>
-    /^(Cash|Card|Bank|Credit|POS|Mada|Visa|Split)$/i.test(tok.replace(/^[:|]+|[:|]+$/g, ""));
+    /^(Cash|Card|Bank|Credit|POS|Mada|Visa|Split|Multi)$/i.test(tok.replace(/^[:|]+|[:|]+$/g, ""));
   const isNumericAmountToken = (tok: string): boolean =>
     /^(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?$/.test(tok);
   const isBranchInvToken = (tok: string): boolean =>
@@ -339,11 +342,11 @@ export const parseJctPdfTextToInvoices = (rawText: string): ParsedErpInvoiceItem
 
       if (isPayTypeToken(candidate)) {
         // Check the token immediately after Payment Type for the numeric Inv. Amount
-        // (Also handle two-word payment types like "Bank Transfer" or "Credit Sale", or optional "SAR" prefix)
+        // (Also handle two-word payment types like "Bank Transfer", "Credit Sale", "Multi Bill", "Multi Payment", or optional "SAR" prefix)
         let amtIdx = j + 1;
         if (
           amtIdx < tokens.length &&
-          /^(Transfer|Sale|Sales|SAR)$/i.test(tokens[amtIdx])
+          /^(Transfer|Sale|Sales|SAR|Bill|Payment|Pay)$/i.test(tokens[amtIdx])
         ) {
           amtIdx++;
         }
@@ -743,6 +746,44 @@ export async function POST(req: NextRequest) {
           }
         }
       }
+    }
+
+    // Instant Auto-Harvesting of parsed customer names into PartyDirectory
+    if (invoices.length > 0) {
+      const rawBranch = req.headers.get("x-branch-id") || "ALL";
+      const uniqueCusts = Array.from(
+        new Set(
+          invoices
+            .map((inv) => (inv.customer || inv.customerName || "").trim())
+            .filter(
+              (c) =>
+                c &&
+                c.length >= 2 &&
+                !c.toLowerCase().includes("walkin") &&
+                !c.toLowerCase().includes("walk-in")
+            )
+        )
+      );
+
+      // Async upsert to party directory without delaying response
+      (async () => {
+        for (const cust of uniqueCusts) {
+          const norm = cust.replace(/\s+/g, " ").toUpperCase();
+          await prisma.partyDirectory
+            .upsert({
+              where: { name_partyType: { name: norm, partyType: "CUSTOMER" } },
+              update: {
+                branch: rawBranch !== "ALL" ? rawBranch : undefined,
+              },
+              create: {
+                name: norm,
+                partyType: "CUSTOMER",
+                branch: rawBranch,
+              },
+            })
+            .catch(() => {});
+        }
+      })().catch(() => {});
     }
 
     return NextResponse.json({ invoices, reportDate });

@@ -14,7 +14,7 @@ import {
   type PocketType,
 } from "../../lib/pocket-bridge";
 import {
-  Users, Plus, X,
+  Users, Plus, X, Check,
   RotateCcw, CheckCircle2,
   CalendarDays, Trash2, Search, Camera, Upload, Zap
 } from "lucide-react";
@@ -23,7 +23,17 @@ import { RapidPosModal, type RapidPosSubmitPayload } from "../../components/Rapi
 /** Client-side convenience PIN (NOT real security). Override with NEXT_PUBLIC_OWNER_PIN. */
 const OWNER_PIN = process.env.NEXT_PUBLIC_OWNER_PIN || "1234";
 
-const EXPENSE_CATEGORIES = ["Fuel / Vehicle", "Shop Maintenance", "Food & Refreshments", "Freight", "Medical Expenses", "Staff Expenses", "Other Expenses", "Misc"];
+const EXPENSE_CATEGORIES = [
+  "Fuel / Vehicle",
+  "Shop Maintenance",
+  "Food & Refreshments",
+  "Freight",
+  "Medical Expenses",
+  "Staff Expenses",
+  "Other Expenses",
+  "Business Commission",
+  "Misc",
+];
 const ADVANCE_PURPOSES = ["Salary Advance", "Daily Lunch / Travel Allowance", "Shop Runner Float"];
 const FALLBACK_CUSTOMERS: string[] = [];
 
@@ -97,20 +107,27 @@ function Pills<T extends string>({
 }) {
   return (
     <div className="flex flex-wrap gap-2">
-      {options.map((o) => (
-        <button
-          key={o}
-          type="button"
-          onClick={() => onChange(o)}
-          className={`rounded-xl border px-3 py-2 text-xs font-bold transition ${
-            value === o
-              ? "border-[#FFD200] bg-[#FFD200] text-black shadow-sm"
-              : "border-white/10 bg-[#061416] text-slate-300 hover:border-white/20"
-          }`}
-        >
-          {render ? render(o) : o}
-        </button>
-      ))}
+      {options.map((o) => {
+        const isSelected = value === o;
+        const isComm = o === "Business Commission";
+        return (
+          <button
+            key={o}
+            type="button"
+            onClick={() => onChange(o)}
+            className={`rounded-xl border px-3 py-2 text-xs font-bold transition flex items-center gap-1.5 ${
+              isSelected
+                ? isComm
+                  ? "border-amber-300 bg-amber-500 text-slate-950 font-black ring-2 ring-amber-300 shadow-lg shadow-amber-500/30"
+                  : "border-[#FFD200] bg-[#FFD200] text-black shadow-sm"
+                : "border-white/10 bg-[#061416] text-slate-300 hover:border-white/20"
+            }`}
+          >
+            {isSelected && isComm && <Check size={13} className="stroke-[3]" />}
+            <span>{render ? render(o) : o}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }

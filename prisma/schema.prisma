@@ -9,6 +9,7 @@ generator client {
 // Owner mobile ("JCT Pocket") + desktop register shared ledger
 model PocketTransaction {
   id             String   @id @default(cuid())
+  clientTxnId    String?  // Deterministic frontend idempotency key (UUID)
   branch         String   // JCT_HARDWARE_JOTUN | HEMPEL | DAMMAM_JOTUN | SIGMA
   type           String   // EXPENSE | ADVANCE | CREDIT_COLLECTION
   amount         Float
@@ -40,6 +41,7 @@ model PocketTransaction {
   createdAt      DateTime @default(now())
 
   @@index([branch, date])
+  @@index([clientTxnId])
 }
 
 model DailyRegisterLock {
@@ -305,4 +307,23 @@ model AdvanceRecord {
   @@index([branch, direction, status])
   @@index([partyName])
 }
+
+// Global Instant Party Directory (Suppliers, Customers & Creditors)
+model PartyDirectory {
+  id            String   @id @default(cuid())
+  name          String
+  partyType     String   // "SUPPLIER" | "CUSTOMER" | "CREDITOR" | "BOTH"
+  branch        String?  @default("ALL")
+  phone         String?
+  lastAmount    Float?
+  lastInvoiceNo String?
+  updatedAt     DateTime @updatedAt
+  createdAt     DateTime @default(now())
+
+  @@unique([name, partyType])
+  @@index([name])
+  @@index([partyType])
+  @@index([branch])
+}
+
 

@@ -38,6 +38,7 @@ export const POCKET_BRANCHES: { id: BranchId; short: string; full: string }[] = 
 /** Row shape returned by /api/pocket (mirrors the PocketTransaction model). */
 export interface PocketTransaction {
   id: string;
+  clientTxnId?: string | null;
   branch: BranchId;
   type: PocketType;
   amount: number;
@@ -86,6 +87,7 @@ export const pocketTag = (type: PocketType): string =>
 export const todayIso = (): string => saudiTodayIso();
 
 export async function postPocketTransaction(tx: NewPocketTransaction): Promise<PocketTransaction> {
+  const clientTxnId = tx.clientTxnId || (typeof crypto !== "undefined" ? crypto.randomUUID() : undefined);
   const res = await fetch("/api/pocket", {
     method: "POST",
     headers: {
@@ -94,7 +96,7 @@ export async function postPocketTransaction(tx: NewPocketTransaction): Promise<P
       "x-user-role": "OWNER",
       "x-branch-id": tx.branch,
     },
-    body: JSON.stringify(tx),
+    body: JSON.stringify({ ...tx, clientTxnId }),
   });
   if (!res.ok) throw new Error("Could not save to the database");
   const json = (await res.json()) as { transaction: PocketTransaction };
