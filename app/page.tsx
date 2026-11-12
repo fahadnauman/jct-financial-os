@@ -22,7 +22,7 @@ import SettingsView from "./settings-view";
 import MonthlyAuditsView from "./monthly-audits-view";
 import { calcSessionPosBreakdown, type PosSessionBreakdown } from "../lib/pos-breakdown";
 import { useActiveSessionSync, type ActiveSessionSyncStatus } from "../lib/active-session-sync";
-import { RapidPosModal, type RapidPosSubmitPayload } from "../components/RapidPosModal";
+import { RapidPosModal, type RapidPosSubmitPayload, type RapidPosBatchEntry } from "../components/RapidPosModal";
 import { PartyDropdownSelector } from "../components/PartyDropdownSelector";
 import { ReturnBillModal } from "../components/ReturnBillModal";
 import * as Dropdown from "@radix-ui/react-dropdown-menu";
@@ -3059,8 +3059,9 @@ function DailyRegisterView({
 
   const handleAddRapidPosEntry = (payload: RapidPosSubmitPayload) => {
     const newPosInvoice: ErpInvoiceItem = {
-      internalId: `pos-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      internalId: payload.clientTxnId || `pos-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       id: `POS-${Date.now()}`,
+      clientTxnId: payload.clientTxnId,
       invoiceNo: payload.invoiceNo,
       branchInvNo: payload.invoiceNo,
       customer: "Manual POS Entry",
@@ -3085,7 +3086,7 @@ function DailyRegisterView({
       splitCashAmount: 0,
       splitBankAmount: 0,
       splitBankMethod: payload.terminal === "BANK_TRANSFER" ? "BANK_TRANSFER" : "POS_SWIPE",
-      time: nowHHMM(),
+      time: payload.time || nowHHMM(),
     };
     setErpInvoices((prev) => [newPosInvoice, ...prev]);
     setSyncBannerMsg({
@@ -3094,6 +3095,22 @@ function DailyRegisterView({
           ? "Bank Transfer"
           : `${payload.terminal} · ${payload.cardNetwork}`
       }) added to session`,
+      targetTab: "pulse",
+      targetLabel: "View Financial Pulse →",
+    });
+  };
+
+  const handleUndoRapidPosEntry = (lastEntry: RapidPosBatchEntry) => {
+    setErpInvoices((prev) =>
+      prev.filter((inv) => {
+        if (lastEntry.clientTxnId && inv.clientTxnId === lastEntry.clientTxnId) return false;
+        if (lastEntry.id && (inv.internalId === lastEntry.id || inv.id === lastEntry.id)) return false;
+        if (lastEntry.slipNo && (inv.invoiceNo === lastEntry.slipNo || inv.branchInvNo === lastEntry.slipNo)) return false;
+        return true;
+      })
+    );
+    setSyncBannerMsg({
+      text: `↩ Reverted last POS entry (${lastEntry.slipNo || "slip"})`,
       targetTab: "pulse",
       targetLabel: "View Financial Pulse →",
     });
@@ -7739,7 +7756,7 @@ function DailyRegisterView({
                           : "border-slate-200 dark:border-[#1F1F1F] hover:bg-slate-50/50 dark:hover:bg-[#0A0A0A]/50"
                       }`}
                     >
-                      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+                      <div className="flex flex-col 2xl:flex-row 2xl:items-center justify-between gap-3">
                         {/* Left / Top Group: Invoice Badge, Seq No, Customer Name (capped width) & Badges */}
                         <div className="flex flex-wrap items-center gap-2.5 min-w-0 flex-1 mr-2">
                           {isManualRow ? (
@@ -7782,21 +7799,23 @@ function DailyRegisterView({
                             </div>
                           )}
 
-                          {/* Editable Customer / Description Input — isolated min/max width prevents overlap */}
-                          <input
-                            type="text"
-                            value={inv.customerName ?? inv.customer ?? ""}
-                            title={inv.customerName ?? inv.customer ?? ""}
-                            onChange={(e) =>
-                              handleEditErpInvoiceCustomer(rowKey, e.target.value)
-                            }
-                            placeholder="Enter Customer / Description..."
-                            className={`w-full sm:w-[220px] min-w-[160px] max-w-[240px] truncate mr-4 text-sm font-medium bg-transparent border-b text-jct-charcoal dark:text-white placeholder-slate-400 focus:outline-none focus:ring-0 focus:border-b-2 focus:border-jct-turquoise transition-all rounded-none px-2 py-1 shrink-0 ${
-                              isManualRow && !(inv.customerName || inv.customer)
-                                ? "border-jct-turquoise/50"
-                                : "border-transparent"
-                            } ${inv.isReturned ? "line-through opacity-60" : ""}`}
-                          />
+                          {/* Editable Customer / Description Input — isolated container prevents overlap */}
+                          <div className="shrink-0 w-full sm:w-[220px] max-w-[240px]">
+                            <input
+                              type="text"
+                              value={inv.customerName ?? inv.customer ?? ""}
+                              title={inv.customerName ?? inv.customer ?? ""}
+                              onChange={(e) =>
+                                handleEditErpInvoiceCustomer(rowKey, e.target.value)
+                              }
+                              placeholder="Enter Customer / Description..."
+                              className={`w-full truncate text-sm font-medium bg-transparent border-b text-jct-charcoal dark:text-white placeholder-slate-400 focus:outline-none focus:ring-0 focus:border-b-2 focus:border-jct-turquoise transition-all rounded-none px-2 py-1 ${
+                                isManualRow && !(inv.customerName || inv.customer)
+                                  ? "border-jct-turquoise/50"
+                                  : "border-transparent"
+                              } ${inv.isReturned ? "line-through opacity-60" : ""}`}
+                            />
+                          </div>
 
                           {inv.isReturned && (
                             <span className="rounded-full bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/40 px-3 py-1 text-[10px] font-extrabold shrink-0">
@@ -7836,7 +7855,7 @@ function DailyRegisterView({
                         </div>
 
                         {/* Middle + Right Groups in a clean non-colliding bar */}
-                        <div className="flex flex-wrap items-center justify-between xl:justify-end gap-3 shrink-0">
+                        <div className="flex flex-wrap items-center justify-between 2xl:justify-end gap-3 shrink-0">
                           {/* Middle Group: Isolated SAR Amount Input + Round Off Button */}
                           <div className="shrink-0 flex items-center gap-2">
                             {inv.isReturned ? (
@@ -12188,6 +12207,7 @@ function DailyRegisterView({
         open={rapidPosOpen}
         onClose={() => setRapidPosOpen(false)}
         onSubmit={handleAddRapidPosEntry}
+        onUndoLast={handleUndoRapidPosEntry}
         branchLabel={getBranchBadgeInfo(branchId).name}
         sessionDate={activeSessionDate}
       />

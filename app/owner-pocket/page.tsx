@@ -18,7 +18,7 @@ import {
   RotateCcw, CheckCircle2,
   CalendarDays, Trash2, Search, Camera, Upload, Zap
 } from "lucide-react";
-import { RapidPosModal, type RapidPosSubmitPayload } from "../../components/RapidPosModal";
+import { RapidPosModal, type RapidPosSubmitPayload, type RapidPosBatchEntry } from "../../components/RapidPosModal";
 
 /** Client-side convenience PIN (NOT real security). Override with NEXT_PUBLIC_OWNER_PIN. */
 const OWNER_PIN = process.env.NEXT_PUBLIC_OWNER_PIN || "1234";
@@ -210,6 +210,7 @@ export default function OwnerPocketPage() {
   const [action, setAction] = useState<PocketType | null>(null);
   const [rapidPosOpen, setRapidPosOpen] = useState(false);
   const [rapidPosSaving, setRapidPosSaving] = useState(false);
+  const [pocketPosBatch, setPocketPosBatch] = useState<Array<{ clientTxnId: string; txId?: string }>>([]);
   const [toast, setToast] = useState<string | null>(null);
 
   // Purchase form
@@ -2752,10 +2753,28 @@ export default function OwnerPocketPage() {
         submitting={rapidPosSaving}
         branchLabel={POCKET_BRANCHES.find((b) => b.id === branch)?.full}
         sessionDate={todayIso()}
+        onUndoLast={async (lastEntry: RapidPosBatchEntry) => {
+          const match = pocketPosBatch.find((b) => b.clientTxnId === lastEntry.clientTxnId);
+          if (match?.txId) {
+            await handleDeletePocketTx(match.txId);
+          } else if (lastEntry.clientTxnId) {
+            try {
+              await fetch(`/api/pocket?clientTxnId=${encodeURIComponent(lastEntry.clientTxnId)}`, {
+                method: "DELETE",
+                headers: { "x-user-is-owner": "true", "x-user-role": "OWNER" },
+              });
+            } catch {
+              /* ignore */
+            }
+          }
+          await refresh();
+          setToast("↩ Last POS entry reverted.");
+          setTimeout(() => setToast(null), 3000);
+        }}
         onSubmit={async (payload: RapidPosSubmitPayload) => {
           setRapidPosSaving(true);
           try {
-            await postPocketTransaction({
+            const savedTx = await postPocketTransaction({
               branch,
               type: "POS_SALE",
               amount: payload.amount,
@@ -2769,15 +2788,22 @@ export default function OwnerPocketPage() {
               terminal: payload.terminal,
               cardNetwork: payload.cardNetwork,
               isManualPos: true,
+              clientTxnId: payload.clientTxnId,
               supplierInvoiceNum: payload.invoiceNo,
               note: `Manual POS · ${payload.invoiceNo} (${payload.terminal} / ${payload.cardNetwork})`,
               date: todayIso(),
             });
+            if (savedTx?.id) {
+              setPocketPosBatch((prev) => [
+                { clientTxnId: payload.clientTxnId, txId: savedTx.id },
+                ...prev,
+              ]);
+            }
             await refresh();
             setToast(
               `⚡ POS SAR ${fmt(payload.amount)} (${payload.terminal} · ${payload.cardNetwork}) synced — ${branchShort(branch)}`
             );
-            setTimeout(() => setToast(null), 4000);
+            setTimeout(() => setToast(null), 3500);
           } catch (err) {
             console.error("Failed to save rapid POS entry:", err);
             setToast("Failed to save POS entry — check connection.");
