@@ -25,8 +25,10 @@ export type PocketType =
   | "PURCHASE"
   | "SUPPLIER_ADVANCE"
   | "CUSTOMER_ADVANCE"
-  | "POS_SALE";
-export type PaymentSource = "DRAWER_CASH" | "OWNER_POCKET" | "BANK_TRANSFER" | "SUPPLIER_CREDIT";
+  | "POS_SALE"
+  | "SALES_BILL"
+  | "SALES_RETURN";
+export type PaymentSource = "DRAWER_CASH" | "OWNER_POCKET" | "BANK_TRANSFER" | "SUPPLIER_CREDIT" | "CARD";
 
 export const POCKET_BRANCHES: { id: BranchId; short: string; full: string }[] = [
   { id: "JCT_HARDWARE_JOTUN", short: "JCT", full: "JCT Hardware + Jotun" },
@@ -75,6 +77,10 @@ export const pocketTag = (type: PocketType): string =>
     ? "⚡ Collected by Owner (On-Road)"
     : type === "POS_SALE"
     ? "⚡ Manual POS (Owner Pocket)"
+    : type === "SALES_BILL"
+    ? "⚡ Sales Bill (Express)"
+    : type === "SALES_RETURN"
+    ? "↩ Sales Return (Audit)"
     : type === "PURCHASE"
     ? "⚡ Logged by Owner (Purchase)"
     : type === "SUPPLIER_ADVANCE"

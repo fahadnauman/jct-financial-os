@@ -19,6 +19,8 @@ import {
   CalendarDays, Trash2, Search, Camera, Upload, Zap
 } from "lucide-react";
 import { RapidPosModal, type RapidPosSubmitPayload, type RapidPosBatchEntry } from "../../components/RapidPosModal";
+import { SaudiLiveClock } from "../../components/SaudiLiveClock";
+import { SalesReturnModal, type SalesReturnSubmitPayload } from "../../components/SalesReturnModal";
 
 /** Client-side convenience PIN (NOT real security). Override with NEXT_PUBLIC_OWNER_PIN. */
 const OWNER_PIN = process.env.NEXT_PUBLIC_OWNER_PIN || "1234";
@@ -210,6 +212,7 @@ export default function OwnerPocketPage() {
   const [action, setAction] = useState<PocketType | null>(null);
   const [rapidPosOpen, setRapidPosOpen] = useState(false);
   const [rapidPosSaving, setRapidPosSaving] = useState(false);
+  const [isSalesReturnModalOpen, setIsSalesReturnModalOpen] = useState(false);
   const [pocketPosBatch, setPocketPosBatch] = useState<Array<{ clientTxnId: string; txId?: string }>>([]);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -752,6 +755,30 @@ export default function OwnerPocketPage() {
     }
   };
 
+  const handlePocketSalesReturnSubmit = async (payload: SalesReturnSubmitPayload) => {
+    try {
+      await postPocketTransaction({
+        branch,
+        type: "EXPENSE",
+        amount: payload.returnedAmount,
+        category: `Sales Return (${payload.refundMode})`,
+        recipientName: payload.customerName || "Customer Return",
+        paymentSource: payload.refundMode === "CASH_REFUND" ? "DRAWER_CASH" : "BANK_TRANSFER",
+        paymentMode: payload.refundMode === "CASH_REFUND" ? "CASH" : payload.refundMode === "CARD_BANK_REVERSAL" ? "CARD" : "CREDIT",
+        supplierInvoiceNum: payload.invoiceNo,
+        note: `[Mobile PWA Return] ${payload.reason}${payload.salesNo ? ` · Seq #${payload.salesNo}` : ""}${payload.notes ? ` · Note: ${payload.notes}` : ""}`,
+        date: todayIso(),
+        clientTxnId: payload.clientTxnId,
+      });
+      await refresh();
+      setToast(`↩ Sales Return SAR ${fmt(payload.returnedAmount)} logged & synced to audit.`);
+      setTimeout(() => setToast(null), 3500);
+    } catch (err) {
+      console.error("Sales return mobile error:", err);
+      setToast("Failed to record return.");
+    }
+  };
+
   const handleDeletePocketTx = async (id: string) => {
     try {
       const res = await fetch(`/api/pocket?id=${encodeURIComponent(id)}`, {
@@ -1082,6 +1109,11 @@ export default function OwnerPocketPage() {
           </div>
         </header>
 
+        {/* Real-time Authoritative Saudi AST Clock */}
+        <div className="flex items-center justify-between rounded-xl bg-[#071618] border border-white/5 px-3 py-1.5">
+          <SaudiLiveClock compact />
+        </div>
+
         {/* Navigation Tabs Switcher */}
         <div className="grid grid-cols-2 gap-1 rounded-2xl bg-[#061416] p-1 border border-white/10">
           <button
@@ -1159,6 +1191,19 @@ export default function OwnerPocketPage() {
                   </span>
                   <span className="text-xs font-bold opacity-80">
                     Fast card / bank slip logger (SAB, Al Rajhi, SNB · mada, Visa, Mastercard)
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsSalesReturnModalOpen(true)}
+                  className="w-full rounded-2xl border-2 border-rose-500 bg-gradient-to-r from-rose-600 to-rose-500 p-4 text-left text-white shadow-[0_0_20px_rgba(244,63,94,0.25)] active:scale-[0.98] transition"
+                >
+                  <span className="flex items-center gap-2 text-xl font-black">
+                    <RotateCcw size={20} />
+                    <span>↩ Log Sales Return</span>
+                  </span>
+                  <span className="text-xs font-semibold opacity-90">
+                    Deduct drawer cash / bank reversal &amp; file into Sales Return Bills archive
                   </span>
                 </button>
                 <button
@@ -2812,6 +2857,14 @@ export default function OwnerPocketPage() {
             setRapidPosSaving(false);
           }
         }}
+      />
+
+      {/* Sales Return Modal */}
+      <SalesReturnModal
+        isOpen={isSalesReturnModalOpen}
+        onClose={() => setIsSalesReturnModalOpen(false)}
+        branch={branch}
+        onSubmitReturn={handlePocketSalesReturnSubmit}
       />
 
       {/* Bill / Receipt Preview Modal */}

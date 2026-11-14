@@ -12,8 +12,10 @@ const TYPES = [
   "SUPPLIER_ADVANCE",
   "CUSTOMER_ADVANCE",
   "POS_SALE",
+  "SALES_BILL",
+  "SALES_RETURN",
 ];
-const SOURCES = ["DRAWER_CASH", "OWNER_POCKET", "BANK_TRANSFER", "SUPPLIER_CREDIT"];
+const SOURCES = ["DRAWER_CASH", "OWNER_POCKET", "BANK_TRANSFER", "SUPPLIER_CREDIT", "CARD"];
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);

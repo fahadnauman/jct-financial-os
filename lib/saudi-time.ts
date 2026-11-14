@@ -194,10 +194,45 @@ export function getSaudiMonthGroup(input: string | Date | number | null | undefi
     };
   }
 
-  // Ultimate fallback to current Saudi month
-  const p = saudiParts(new Date());
-  const m = Number(p.month);
-  const y = Number(p.year);
-  return { key: `${y}-${String(m).padStart(2, "0")}`, label: `${SAUDI_MONTHS[m - 1]} ${y}`, year: y, month: m };
+  const nowParts = saudiParts(new Date());
+  const nm = Number(nowParts.month);
+  const ny = Number(nowParts.year);
+  return {
+    key: `${ny}-${String(nm).padStart(2, "0")}`,
+    label: `${SAUDI_MONTHS[nm - 1]} ${ny}`,
+    year: ny,
+    month: nm,
+  };
 }
+
+/**
+ * Authoritative real-time Saudi AST payload used by /api/time and <SaudiLiveClock />.
+ */
+export function getAuthoritativeSaudiTime(input: Date | string | number = new Date()) {
+  const d = input instanceof Date ? input : new Date(input);
+  const p = saudiParts(d);
+  const dayOfWeek = new Intl.DateTimeFormat("en-US", { timeZone: SAUDI_TZ, weekday: "long" }).format(d);
+  const isFriday = dayOfWeek.toLowerCase() === "friday";
+  const shortDate = new Intl.DateTimeFormat("en-GB", {
+    timeZone: SAUDI_TZ,
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(d);
+
+  return {
+    utc: d.toISOString(),
+    timestamp: d.getTime(),
+    timezone: SAUDI_TZ,
+    saudiToday: `${p.year}-${p.month}-${p.day}`,
+    saudiSessionDate: `${p.day}-${SAUDI_MONTHS[Number(p.month) - 1]}-${p.year}`,
+    saudiDateFormatted: `${shortDate} • Riyadh AST`,
+    saudiTime24: `${p.hour}:${p.minute}:${p.second}`,
+    saudiTime12: saudiTime12(d, true),
+    dayOfWeek,
+    isFriday,
+  };
+}
+
 

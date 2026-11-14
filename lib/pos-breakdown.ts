@@ -285,3 +285,17 @@ export function calcSessionPosBreakdown(
     cardList,
   };
 }
+
+export function getBranchBadgeInfo(b: string) {
+  const clean = (b || "").trim().toUpperCase().replace(/[\s-]+/g, "_");
+  if (clean.includes("HEMPEL")) {
+    return { name: "Hempel", color: "bg-jct-turquoise text-jct-charcoal font-bold border-jct-turquoise" };
+  }
+  if (clean.includes("DAMMAM")) {
+    return { name: "Dammam Jotun", color: "bg-jct-yellow text-jct-charcoal font-bold border-jct-yellow" };
+  }
+  if (clean.includes("SIGMA")) {
+    return { name: "Sigma", color: "bg-jct-turquoise text-jct-charcoal font-bold border-jct-turquoise" };
+  }
+  return { name: "JCT Hardware + Jotun", color: "bg-jct-yellow text-jct-charcoal font-bold border-jct-yellow" };
+}

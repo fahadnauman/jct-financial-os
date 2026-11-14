@@ -326,4 +326,31 @@ model PartyDirectory {
   @@index([branch])
 }
 
+// Dedicated Sales Return Audit Archive Record
+model SalesReturnRecord {
+  id              String   @id @default(cuid())
+  clientTxnId     String?  // Idempotency key
+  branch          String   // JCT_HARDWARE_JOTUN | HEMPEL | DAMMAM_JOTUN | SIGMA
+  returnDate      String   // YYYY-MM-DD (Saudi AST)
+  returnTime      String?  // HH:MM:SS (Saudi AST)
+  invoiceNo       String   // W#JB...
+  salesNo         String?  // Sequence / Sales Doc #...
+  customerName    String?
+  returnedAmount  Float
+  originalAmount  Float?
+  refundMode      String   @default("CASH_REFUND") // CASH_REFUND | CARD_BANK_REVERSAL | CREDIT_NOTE
+  reason          String   @default("Customer Cancelled") // Defective / Damaged Goods, Wrong Item Supplied, Customer Cancelled, Billing Error, Other
+  notes           String?
+  loggedBy        String   @default("Staff")
+  isPastDayReturn Boolean  @default(false)
+  pastDayDate     String?
+  createdAt       DateTime @default(now())
+
+  @@index([branch, returnDate])
+  @@index([invoiceNo])
+  @@index([salesNo])
+  @@index([clientTxnId])
+}
+
+
 

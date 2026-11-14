@@ -25,6 +25,10 @@ import { useActiveSessionSync, type ActiveSessionSyncStatus } from "../lib/activ
 import { RapidPosModal, type RapidPosSubmitPayload, type RapidPosBatchEntry } from "../components/RapidPosModal";
 import { PartyDropdownSelector } from "../components/PartyDropdownSelector";
 import { ReturnBillModal } from "../components/ReturnBillModal";
+import { SaudiLiveClock } from "../components/SaudiLiveClock";
+import { SalesReturnModal, type SalesReturnSubmitPayload } from "../components/SalesReturnModal";
+import { SalesReturnAuditView } from "../components/SalesReturnAuditView";
+import { ExpressQuickLogView, type QuickLogType } from "../components/ExpressQuickLogView";
 import * as Dropdown from "@radix-ui/react-dropdown-menu";
 import * as XLSX from "xlsx";
 import {
@@ -72,7 +76,7 @@ function ModalPortal({
    TYPES & CONSTANTS
    ════════════════════════════════════════════════════════════════════════ */
 
-type TabId = "register" | "archive" | "radar" | "suppliers" | "payroll" | "pulse" | "consolidation" | "ai" | "settings" | "monthly-audits";
+type TabId = "register" | "quick-log" | "archive" | "radar" | "suppliers" | "payroll" | "pulse" | "consolidation" | "ai" | "settings" | "monthly-audits";
 type Kind = "cash_sale" | "credit_received" | "bank_in" | "jotun" | "hempel" | "sigma" | "other" | "salaries" | "tax" | "misc_expense";
 
 interface Txn {
@@ -460,6 +464,7 @@ function SaudiClock() {
 function Sidebar({ tab, setTab, allowedTabs }: { tab: TabId; setTab: (t: TabId) => void; allowedTabs: TabId[] }) {
   const nav = [
     { id: "register" as TabId, label: "Daily Register", icon: Wallet },
+    { id: "quick-log" as TabId, label: "⚡ Express Quick-Log", icon: Zap },
     { id: "archive" as TabId, label: "Audit Library", icon: Archive },
     { id: "radar" as TabId, label: "Credit Radar", icon: Target },
     { id: "suppliers" as TabId, label: "Suppliers & Payables", icon: Package },
@@ -534,6 +539,7 @@ function MobileSidebarDrawer({
 }) {
   const nav = [
     { id: "register" as TabId, label: "Daily Register", icon: Wallet },
+    { id: "quick-log" as TabId, label: "⚡ Express Quick-Log", icon: Zap },
     { id: "archive" as TabId, label: "Audit Library", icon: Archive },
     { id: "radar" as TabId, label: "Credit Radar", icon: Target },
     { id: "suppliers" as TabId, label: "Suppliers & Payables", icon: Package },
@@ -728,12 +734,16 @@ export const POS_TERMINAL_META: Record<
 };
 
 export interface PreLoggedBankInvoice {
+  id?: string;
+  clientTxnId?: string;
+  slipNo?: string;
   invoiceNo: string;
   amount?: number;
   paymentMode: "BANK_TRANSFER" | "POS_SWIPE";
   posTerminal?: PosTerminalBank;
   cardNetwork?: "mada" | "visa";
   time: string;
+  bankMethod?: string;
 }
 
 export interface PreLoggedEntry {
@@ -797,6 +807,8 @@ export interface ErpInvoiceItem {
   amount: number;
   originalAmount?: number;
   originalDate?: string;
+  pdfDocumentDate?: string;
+  salesNumber?: string;
   linkedInvoiceNum?: string;
   isReturned?: boolean;
   isManual?: boolean;
@@ -837,6 +849,7 @@ export interface ErpInvoiceItem {
   time: string;
   isManualEntry?: boolean;
   isConfirmed?: boolean;
+  receiptUrl?: string;
 }
 
 export interface CompletedDaySummary {
@@ -3954,7 +3967,15 @@ function DailyRegisterView({
       }
 
       if (extractedReportDate) {
-        setActiveSessionDate(extractedReportDate);
+        // Architectural Rule: Decouple Session Date from Uploaded PDF Dates
+        // Do NOT overwrite activeSessionDate with the PDF's internal report date.
+        // Active register always runs on live Saudi Today (Asia/Riyadh AST) or user's manually chosen date.
+        // Store the PDF's original document date purely as reference metadata on the invoice rows.
+        extracted = extracted.map((inv) => ({
+          ...inv,
+          pdfDocumentDate: extractedReportDate,
+          originalDate: inv.originalDate || extractedReportDate,
+        }));
       }
 
       const matched = applyPreLoggedMatchesToImported(extracted);
@@ -5595,6 +5616,59 @@ function DailyRegisterView({
         time: nowHHMM(),
       });
       setJustCompletedToast(`Prior Bill #${candidate.branchInvNo} logged as Return Reversal`);
+    }
+  };
+
+  const handleSalesReturnModalSubmit = async (payload: SalesReturnSubmitPayload) => {
+    if (payload.isTodaySessionInvoice) {
+      setErpInvoices((prev) =>
+        prev.map((inv) => {
+          const match =
+            inv.invoiceNo === payload.invoiceNo ||
+            inv.branchInvNo === payload.invoiceNo ||
+            inv.internalId === payload.invoiceNo;
+          if (match) {
+            return {
+              ...inv,
+              isReturned: true,
+              amount: 0,
+              salesNumber: payload.salesNo || inv.salesNumber,
+            };
+          }
+          return inv;
+        })
+      );
+      setJustCompletedToast(`Invoice ${payload.invoiceNo} marked as Returned (SAR 0.00 contribution)`);
+    } else {
+      const retId = `ret-${Date.now()}`;
+      upsertEntry({
+        id: retId,
+        clientTxnId: payload.clientTxnId,
+        type: "EXPENSE",
+        title: `Returned Bill — ${payload.invoiceNo} (${payload.customerName || "Customer"}) [${payload.reason}]`,
+        expenseCategory: "Other Expenses",
+        amount: payload.returnedAmount,
+        originalAmount: payload.originalAmount ?? payload.returnedAmount,
+        isReturned: true,
+        paymentMode: payload.refundMode === "CARD_BANK_REVERSAL" ? "CARD" : "CASH",
+        note: payload.notes || payload.reason,
+        time: nowHHMM(),
+      });
+      setJustCompletedToast(`Past-day Sales Return logged: ${payload.invoiceNo} (SAR ${fmt(payload.returnedAmount)})`);
+    }
+
+    try {
+      await fetch("/api/sales-returns", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...payload,
+          branch: branchId,
+          loggedBy: "Staff / Register",
+        }),
+      });
+    } catch (err) {
+      console.warn("Failed to sync sales return record:", err);
     }
   };
 
@@ -12211,13 +12285,12 @@ function DailyRegisterView({
         branchLabel={getBranchBadgeInfo(branchId).name}
         sessionDate={activeSessionDate}
       />
-      <ReturnBillModal
+      <SalesReturnModal
         isOpen={isReturnBillModalOpen}
         onClose={() => setIsReturnBillModalOpen(false)}
         branch={branchId}
         currentErpInvoices={activeErpList}
-        currentPreLoggedEntries={preLoggedEntries}
-        onConfirmReturn={handleConfirmReturnCandidate}
+        onSubmitReturn={handleSalesReturnModalSubmit}
       />
     </div>
   );
@@ -15446,6 +15519,7 @@ function AuditLibraryView({
     isOwner ? "ALL" : staffBranchId
   );
   const [auditTabFilter, setAuditTabFilter] = useState<"ALL" | "PENDING_AUDIT" | "LOCKED">("ALL");
+  const [activeLibraryFolder, setActiveLibraryFolder] = useState<"DAILY_REGISTERS" | "SALES_RETURNS">("DAILY_REGISTERS");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedRecord, setSelectedRecord] = useState<ArchiveRecord | null>(null);
 
@@ -16461,8 +16535,41 @@ function AuditLibraryView({
   // ══════════════════════════════════════════════════════════════════════════
   return (
     <div className="flex flex-col h-full overflow-y-auto p-4 md:p-6 lg:p-8 w-full gap-6">
-      {/* Header & Controls */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      {/* Primary Folder Switcher: Daily Registers vs Sales Return Bills */}
+      <div className="flex items-center gap-2 border-b border-slate-200 dark:border-[#1F1F1F] pb-2 print:hidden">
+        <button
+          type="button"
+          onClick={() => setActiveLibraryFolder("DAILY_REGISTERS")}
+          className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-black transition-all ${
+            activeLibraryFolder === "DAILY_REGISTERS"
+              ? "bg-jct-turquoise text-jct-charcoal shadow-sm"
+              : "text-slate-500 hover:text-jct-charcoal dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5"
+          }`}
+        >
+          <Archive size={15} />
+          <span>📁 Daily Register Archives ({totalAudits})</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveLibraryFolder("SALES_RETURNS")}
+          className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-black transition-all ${
+            activeLibraryFolder === "SALES_RETURNS"
+              ? "bg-rose-600 text-white shadow-sm"
+              : "text-slate-500 hover:text-jct-charcoal dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5"
+          }`}
+        >
+          <RotateCcw size={15} />
+          <span>📁 Sales Return Bills</span>
+        </button>
+      </div>
+
+      {activeLibraryFolder === "SALES_RETURNS" ? (
+        <SalesReturnAuditView isOwner={isOwner} staffBranchId={staffBranchId} />
+      ) : (
+        <>
+          {/* Header & Controls */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
             <Archive className="text-jct-turquoise" size={24} />
@@ -16759,6 +16866,8 @@ function AuditLibraryView({
           </div>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 }
@@ -18763,9 +18872,9 @@ const USER_PROFILES: UserProfile[] = [
   },
 ];
 
-const OWNER_TABS: TabId[] = ["register", "archive", "radar", "suppliers", "payroll", "pulse", "consolidation", "ai", "settings", "monthly-audits"];
-// RBAC: STAFF accounts are strictly limited to Daily Register & viewing/printing their own branch Archive
-const STAFF_TABS: TabId[] = ["register", "archive"];
+const OWNER_TABS: TabId[] = ["register", "quick-log", "archive", "radar", "suppliers", "payroll", "pulse", "consolidation", "ai", "settings", "monthly-audits"];
+// RBAC: STAFF accounts have full operational access to Daily Register, Express Quick-Log & their branch Archive
+const STAFF_TABS: TabId[] = ["register", "quick-log", "archive"];
 
 const OWNER_BRANCH_OPTIONS = [
   "All Branches (Combined)",
@@ -19648,6 +19757,44 @@ export default function Page() {
           );
           setAdvancesRefresh((n) => n + 1);
         }
+      } else if (t.type === "SALES_BILL") {
+        const refNo = t.supplierInvoiceNum || `INV-${t.id.slice(-6).toUpperCase()}`;
+        injectedPosInvoices.push({
+          internalId: `pk-bill-${t.id}`,
+          id: `pk-bill-${t.id}`,
+          invoiceNo: refNo,
+          branchInvNo: refNo,
+          customer: t.recipientName || "Customer",
+          customerName: t.recipientName || "Customer",
+          amount: effAmount,
+          originalAmount: origAmt,
+          originalDate: t.date || activeSessionDate,
+          isReturned: isRet,
+          isManual: true,
+          isConfirmed: true,
+          autoMatched: false,
+          paymentMode: (t.paymentMode as any) || "CASH",
+          posTerminal: "SAB",
+          splitCashAmount: 0,
+          splitBankAmount: 0,
+          splitBankMethod: "POS_SWIPE",
+          receiptUrl: t.receiptUrl || t.billPdfUrl || undefined,
+          time,
+        });
+      } else if (t.type === "SALES_RETURN") {
+        injected.push({
+          id: entryId,
+          sourcePocketId: t.id,
+          type: "EXPENSE",
+          expenseCategory: "Other Expenses",
+          title: `Sales Return · ${t.recipientName || "Customer"}`,
+          note: [tag, t.note].filter(Boolean).join(" · "),
+          amount: effAmount,
+          originalAmount: origAmt,
+          isReturned: true,
+          time,
+          paymentMode: (t.paymentMode as UniversalPaymentMode) || "CASH",
+        });
       } else if (t.type === "CUSTOMER_ADVANCE") {
         const followUp = addSaudiDays(7);
         injected.push({
@@ -19709,6 +19856,120 @@ export default function Page() {
   useEffect(() => {
     window.localStorage.setItem(POCKET_CUSTOMERS_KEY, JSON.stringify(creditCustomers.map((c) => c.name)));
   }, [creditCustomers]);
+
+  const handleExpressQuickLogSync = (entryData: {
+    type: QuickLogType;
+    payload: Record<string, unknown>;
+  }) => {
+    const { type, payload } = entryData;
+    const amount = Number(payload.amount) || 0;
+    const clientTxnId = typeof payload.clientTxnId === "string" ? payload.clientTxnId : undefined;
+    const description = typeof payload.description === "string" ? payload.description : "";
+    const category = typeof payload.category === "string" ? payload.category : undefined;
+    const paymentMode = typeof payload.paymentMode === "string" ? payload.paymentMode : "CASH";
+    const invoiceNo = typeof payload.invoiceNo === "string" ? payload.invoiceNo : undefined;
+    const customerName = typeof payload.customerName === "string" ? payload.customerName : undefined;
+    const supplierName = typeof payload.supplierName === "string" ? payload.supplierName : undefined;
+    const roundOffAmount = Number(payload.roundOffAmount) || 0;
+    const receiptUrl = typeof payload.receiptUrl === "string" ? payload.receiptUrl : undefined;
+
+    if (type === "SALES_BILL") {
+      const invNo = invoiceNo || `W#MANUAL-${Date.now().toString().slice(-4)}`;
+      const newInv: ErpInvoiceItem = {
+        internalId: clientTxnId || `inv-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        id: invNo,
+        clientTxnId,
+        invoiceNo: invNo,
+        branchInvNo: invNo,
+        customer: customerName || "Customer",
+        customerName: customerName || "Customer",
+        amount,
+        originalAmount: amount + roundOffAmount,
+        roundOffAmount,
+        paymentMode:
+          paymentMode === "CARD"
+            ? "POS_SWIPE"
+            : paymentMode === "BANK"
+            ? "BANK_TRANSFER"
+            : paymentMode === "CREDIT"
+            ? "CREDIT_SALE"
+            : "CASH",
+        posTerminal: "SAB",
+        splitCashAmount: 0,
+        splitBankAmount: 0,
+        splitBankMethod: "POS_SWIPE",
+        isManual: true,
+        isConfirmed: true,
+        autoMatched: false,
+        receiptUrl,
+        time: nowHHMM(),
+      };
+      setErpInvoices((prev) => [newInv, ...prev]);
+    } else if (type === "POS_SWIPE") {
+      const posNo = invoiceNo || `POS-${Date.now().toString().slice(-4)}`;
+      const newPos: ErpInvoiceItem = {
+        internalId: clientTxnId || `pos-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        id: `POS-${Date.now()}`,
+        clientTxnId,
+        invoiceNo: posNo,
+        branchInvNo: posNo,
+        customer: "Manual POS Entry",
+        amount,
+        originalAmount: amount,
+        paymentMode: "POS_SWIPE",
+        posTerminal: "SAB",
+        splitCashAmount: 0,
+        splitBankAmount: 0,
+        splitBankMethod: "POS_SWIPE",
+        isManual: true,
+        isManualPos: true,
+        isConfirmed: true,
+        autoMatched: true,
+        time: nowHHMM(),
+      };
+      setErpInvoices((prev) => [newPos, ...prev]);
+      setPreLoggedBankInvoices((prev) => [
+        {
+          id: `bank-pos-${Date.now()}`,
+          clientTxnId,
+          slipNo: posNo,
+          invoiceNo: posNo,
+          amount,
+          time: nowHHMM(),
+          paymentMode: "POS_SWIPE",
+          bankMethod: "POS_SWIPE",
+        },
+        ...prev,
+      ]);
+    } else if (type === "EXPENSE" || type === "PURCHASE" || type === "SALES_RETURN") {
+      const entry: PreLoggedEntry = {
+        id: clientTxnId || `exp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        clientTxnId,
+        type: "EXPENSE",
+        amount,
+        expenseCategory:
+          (category as any) ||
+          (type === "PURCHASE" ? "Cash Purchase" : "Other Expenses"),
+        title:
+          description ||
+          (supplierName
+            ? `Supplier: ${supplierName}`
+            : customerName
+            ? `Return: ${customerName}`
+            : "Quick-Log Entry"),
+        paymentMode:
+          paymentMode === "BANK"
+            ? "BANK"
+            : paymentMode === "CARD"
+            ? "CARD"
+            : "CASH",
+        receiptUrl,
+        hasBill: Boolean(receiptUrl),
+        time: nowHHMM(),
+      };
+      setPreLoggedEntries((prev) => [entry, ...prev]);
+    }
+  };
 
   if (!profileLoaded) {
     return <div className="h-screen w-full bg-slate-50 dark:bg-black" />;
@@ -19779,7 +20040,7 @@ export default function Page() {
                 </button>
               )}
             </label>
-            <SaudiClock />
+            <SaudiLiveClock />
             <div className="h-4 w-px bg-slate-200 dark:bg-[#1F1F1F] hidden sm:block"></div>
             {profile.isOwner ? (
               <Dropdown.Root>
@@ -19865,6 +20126,15 @@ export default function Page() {
                 onClearActiveSession={handleClearActiveSession}
                 syncStatus={syncStatus}
                 remoteClearSignal={remoteClearSignal}
+              />
+            ) : safeTab === "quick-log" ? (
+              <ExpressQuickLogView
+                branchId={activePocketBranch === "ALL" ? "JCT_HARDWARE_JOTUN" : activePocketBranch}
+                branchName={getBranchBadgeInfo(activePocketBranch === "ALL" ? "JCT_HARDWARE_JOTUN" : activePocketBranch).name}
+                isOwner={Boolean(profile?.isOwner)}
+                currentUserRole={profile?.isOwner ? "OWNER" : "STAFF"}
+                activeSessionDate={activeSessionDate}
+                onSyncWithRegister={handleExpressQuickLogSync}
               />
             ) : safeTab === "archive" ? (
               <AuditLibraryView
