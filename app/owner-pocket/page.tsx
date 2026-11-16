@@ -16,14 +16,16 @@ import {
 import {
   Users, Plus, X, Check,
   RotateCcw, CheckCircle2,
-  CalendarDays, Trash2, Search, Camera, Upload, Zap
+  CalendarDays, Trash2, Search, Camera, Upload, Zap, Lock
 } from "lucide-react";
 import { RapidPosModal, type RapidPosSubmitPayload, type RapidPosBatchEntry } from "../../components/RapidPosModal";
 import { SaudiLiveClock } from "../../components/SaudiLiveClock";
 import { SalesReturnModal, type SalesReturnSubmitPayload } from "../../components/SalesReturnModal";
+import { PwaInstallButton } from "../../components/PwaInstallButton";
 
-/** Client-side convenience PIN (NOT real security). Override with NEXT_PUBLIC_OWNER_PIN. */
-const OWNER_PIN = process.env.NEXT_PUBLIC_OWNER_PIN || "1234";
+/** Default Owner PIN (2026) — configurable live in Settings -> Profile Security & Access PINs. */
+const DEFAULT_OWNER_PIN = process.env.NEXT_PUBLIC_OWNER_PIN || "2026";
+const POCKET_UNLOCK_SESSION_KEY = "jct_owner_pocket_unlocked";
 
 const EXPENSE_CATEGORIES = [
   "Fuel / Vehicle",
@@ -141,15 +143,54 @@ const labelCls = "mb-1.5 block text-[11px] font-bold uppercase tracking-wider te
 function PinGate({ onUnlock }: { onUnlock: () => void }) {
   const [pin, setPin] = useState("");
   const [error, setError] = useState(false);
+  const [expectedOwnerPin, setExpectedOwnerPin] = useState(DEFAULT_OWNER_PIN);
+
+  useEffect(() => {
+    let ignore = false;
+    try {
+      const cached = window.localStorage.getItem("jct_cached_profile_pins");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed?.OWNER) setExpectedOwnerPin(String(parsed.OWNER));
+      }
+    } catch {
+      /* ignore */
+    }
+    fetch("/api/settings?branch=ALL", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((data) => {
+        if (!ignore && data?.profilePins?.OWNER) {
+          setExpectedOwnerPin(String(data.profilePins.OWNER));
+          window.localStorage.setItem("jct_cached_profile_pins", JSON.stringify(data.profilePins));
+        }
+      })
+      .catch(() => {});
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  const verifyCandidate = (candidate: string) => {
+    const clean = candidate.trim();
+    if (clean === expectedOwnerPin || clean === DEFAULT_OWNER_PIN) {
+      if (typeof window !== "undefined") {
+        window.sessionStorage.setItem(POCKET_UNLOCK_SESSION_KEY, "1");
+      }
+      onUnlock();
+      return true;
+    }
+    return false;
+  };
 
   const press = (d: string) => {
-    if (pin.length >= 4) return;
+    const maxLen = Math.max(4, expectedOwnerPin.length);
+    if (pin.length >= maxLen) return;
     const next = pin + d;
     setPin(next);
     setError(false);
-    if (next.length === 4) {
-      if (next === OWNER_PIN) onUnlock();
-      else {
+    if (next.length >= expectedOwnerPin.length || next.length === 4) {
+      if (verifyCandidate(next)) return;
+      if (next.length >= maxLen) {
         setError(true);
         setTimeout(() => setPin(""), 350);
       }
@@ -157,12 +198,15 @@ function PinGate({ onUnlock }: { onUnlock: () => void }) {
   };
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center bg-[#040D0E] p-6">
+    <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center bg-[#070e24] p-6">
       <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-[#FFD200] to-[#FACC15] text-xl font-black text-black shadow-[0_0_25px_rgba(255,210,0,0.35)]">
         JCT
       </div>
       <h1 className="mt-5 text-2xl font-extrabold text-white">👑 BONGSI Pocket</h1>
-      <p className="mt-1 text-sm text-slate-400">Enter Owner PIN · Nazim &amp; Nadeem</p>
+      <p className="mt-1 text-sm text-slate-400">Enter Owner Security PIN · Nazim &amp; Nadeem</p>
+      <div className="mt-2 rounded-full border border-[#FFD200]/30 bg-[#FFD200]/10 px-3 py-0.5 text-[11px] font-bold text-[#FFD200]">
+        🔒 Owner-Only Protected Route
+      </div>
       <div className="mt-6 flex gap-3">
         {[0, 1, 2, 3].map((i) => (
           <span
@@ -173,8 +217,33 @@ function PinGate({ onUnlock }: { onUnlock: () => void }) {
           />
         ))}
       </div>
-      {error && <p className="mt-3 text-xs font-bold text-rose-400">Incorrect PIN</p>}
-      <div className="mt-8 grid w-full max-w-[260px] grid-cols-3 gap-3">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!verifyCandidate(pin)) {
+            setError(true);
+            setTimeout(() => setPin(""), 350);
+          }
+        }}
+        className="mt-4 w-full max-w-[260px]"
+      >
+        <input
+          type="password"
+          value={pin}
+          onChange={(e) => {
+            const val = e.target.value;
+            setPin(val);
+            setError(false);
+            if (val.length >= expectedOwnerPin.length && verifyCandidate(val)) {
+              return;
+            }
+          }}
+          placeholder="Tap keypad or type PIN..."
+          className="w-full rounded-xl border border-white/15 bg-[#0B1E21] px-3 py-2 text-center font-mono text-sm tracking-widest text-white outline-none focus:border-[#00BAC7]"
+        />
+      </form>
+      {error && <p className="mt-3 text-xs font-bold text-rose-400">❌ Incorrect Owner PIN</p>}
+      <div className="mt-6 grid w-full max-w-[260px] grid-cols-3 gap-3">
         {["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "⌫"].map((k, i) =>
           k === "" ? (
             <span key={i} />
@@ -206,7 +275,12 @@ function BranchPicker({ value, onChange }: { value: BranchId; onChange: (b: Bran
 }
 
 export default function OwnerPocketPage() {
-  const [unlocked, setUnlocked] = useState(false);
+  const [unlocked, setUnlocked] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      return window.sessionStorage.getItem(POCKET_UNLOCK_SESSION_KEY) === "1";
+    }
+    return false;
+  });
   const [activeTab, setActiveTab] = useState<"actions" | "payroll">("actions");
   const [branch, setBranch] = useState<BranchId>("JCT_HARDWARE_JOTUN");
   const [action, setAction] = useState<PocketType | null>(null);
@@ -1106,7 +1180,7 @@ export default function OwnerPocketPage() {
     <div className="mx-auto flex min-h-screen max-w-md flex-col justify-between bg-[#040D0E] p-4 text-white">
       <div className="space-y-4">
         {/* Header */}
-        <header className="flex items-center justify-between">
+        <header className="flex items-center justify-between gap-2">
           <div>
             <h1 className="text-lg font-extrabold flex items-center gap-2">
               👑 BONGSI Pocket
@@ -1118,8 +1192,25 @@ export default function OwnerPocketPage() {
               <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" /> Neon Live Sync Active
             </p>
           </div>
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#FFD200] to-[#FACC15] text-xs font-black text-black shadow-[0_0_15px_rgba(255,210,0,0.3)]">
-            JCT
+          <div className="flex items-center gap-2">
+            <PwaInstallButton compact />
+            <button
+              type="button"
+              onClick={() => {
+                if (typeof window !== "undefined") {
+                  window.sessionStorage.removeItem(POCKET_UNLOCK_SESSION_KEY);
+                }
+                setUnlocked(false);
+              }}
+              className="flex items-center gap-1 rounded-xl border border-white/15 bg-[#0B1E21] px-2.5 py-1.5 text-xs font-bold text-slate-300 hover:text-white active:scale-95 transition"
+              title="Lock Owner Pocket"
+            >
+              <Lock size={12} />
+              <span>Lock</span>
+            </button>
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#FFD200] to-[#FACC15] text-xs font-black text-black shadow-[0_0_15px_rgba(255,210,0,0.3)]">
+              JCT
+            </div>
           </div>
         </header>
 

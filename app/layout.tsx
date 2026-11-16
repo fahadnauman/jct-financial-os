@@ -22,7 +22,7 @@ export const metadata: Metadata = {
   applicationName: "JCT Financial OS",
   appleWebApp: {
     capable: true,
-    title: "JCT Financial OS",
+    title: "JCT OS",
     statusBarStyle: "black-translucent",
   },
   icons: {
@@ -35,7 +35,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0A0A0A",
+  themeColor: "#070e24",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,

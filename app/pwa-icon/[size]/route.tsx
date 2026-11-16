@@ -12,7 +12,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ size: string }
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "#040D0E",
+          background: "#070e24",
         }}
       >
         <div

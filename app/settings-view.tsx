@@ -68,6 +68,18 @@ export default function SettingsView({
   const [deletingDepositId, setDeletingDepositId] = useState<string | null>(null);
   const [depositMessage, setDepositMessage] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
+  // Profile Security & Access PINs state
+  const [profilePins, setProfilePins] = useState<Record<string, string>>({
+    OWNER: "2026",
+    JCT_HARDWARE_JOTUN: "1111",
+    HEMPEL: "2222",
+    DAMMAM_JOTUN: "3333",
+    SIGMA: "4444",
+  });
+  const [showPins, setShowPins] = useState(false);
+  const [savingPins, setSavingPins] = useState(false);
+  const [pinMessage, setPinMessage] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+
   const load = useCallback(async (b: string) => {
     setLoading(true);
     try {
@@ -80,12 +92,77 @@ export default function SettingsView({
       if (Array.isArray(json.capitalDeposits)) {
         setDeposits(json.capitalDeposits);
       }
+      if (json.profilePins && typeof json.profilePins === "object") {
+        setProfilePins({
+          OWNER: json.profilePins.OWNER || json.profilePins.BONGSI || "2026",
+          JCT_HARDWARE_JOTUN: json.profilePins.JCT_HARDWARE_JOTUN || "1111",
+          HEMPEL: json.profilePins.HEMPEL || "2222",
+          DAMMAM_JOTUN: json.profilePins.DAMMAM_JOTUN || "3333",
+          SIGMA: json.profilePins.SIGMA || "4444",
+        });
+      }
     } catch {
       setMessage({ kind: "err", text: "Could not load saved settings." });
     } finally {
       setLoading(false);
     }
   }, []);
+
+  const handleSavePins = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPinMessage(null);
+    const entries = Object.entries(profilePins);
+    for (const [k, v] of entries) {
+      if (!v || v.trim().length < 4) {
+        setPinMessage({
+          kind: "err",
+          text: `PIN / Password for ${k} must be at least 4 characters.`,
+        });
+        return;
+      }
+    }
+    setSavingPins(true);
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-is-owner": String(isOwner),
+          "x-user-role": isOwner ? "OWNER" : "STAFF",
+        },
+        body: JSON.stringify({
+          action: "UPDATE_PINS",
+          profilePins,
+          isOwner,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to update security PINs");
+      if (json.profilePins) {
+        setProfilePins({
+          OWNER: json.profilePins.OWNER || "2026",
+          JCT_HARDWARE_JOTUN: json.profilePins.JCT_HARDWARE_JOTUN || "1111",
+          HEMPEL: json.profilePins.HEMPEL || "2222",
+          DAMMAM_JOTUN: json.profilePins.DAMMAM_JOTUN || "3333",
+          SIGMA: json.profilePins.SIGMA || "4444",
+        });
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem("jct_cached_profile_pins", JSON.stringify(json.profilePins));
+        }
+      }
+      setPinMessage({
+        kind: "ok",
+        text: "Security PINs & Passwords updated across Desktop & Mobile PWA!",
+      });
+    } catch (err) {
+      setPinMessage({
+        kind: "err",
+        text: err instanceof Error ? err.message : "Failed to save PINs",
+      });
+    } finally {
+      setSavingPins(false);
+    }
+  };
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -579,6 +656,147 @@ export default function SettingsView({
           )}
         </div>
       </div>
+
+      {/* CARD 3: Profile Security & Access PINs */}
+      <form
+        onSubmit={handleSavePins}
+        className="max-w-3xl bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/30 dark:border-jct-turquoise/30 rounded-xl p-6 flex flex-col gap-5"
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h3 className="font-display font-extrabold text-lg text-jct-charcoal dark:text-jct-offwhite flex items-center gap-2">
+              <Lock size={18} className="text-jct-yellow" />
+              Profile Security &amp; Access PINs
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold mt-1">
+              Protect the Owner portal, Mobile PWA (/owner-pocket), and all 4 Branch Staff profiles with a mandatory
+              PIN or password when signing in or switching profiles.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setShowPins((s) => !s)}
+              className="rounded-lg border border-slate-300 dark:border-[#262626] bg-slate-50 dark:bg-[#141414] px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:border-jct-turquoise transition"
+            >
+              {showPins ? "🙈 Hide PINs" : "👁️ Show PINs"}
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                setProfilePins({
+                  OWNER: "2026",
+                  JCT_HARDWARE_JOTUN: "1111",
+                  HEMPEL: "2222",
+                  DAMMAM_JOTUN: "3333",
+                  SIGMA: "4444",
+                })
+              }
+              disabled={!isOwner}
+              className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-bold text-amber-700 dark:text-amber-300 hover:bg-amber-500/20 disabled:opacity-50 transition"
+            >
+              ↺ Reset Defaults
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {[
+            {
+              key: "OWNER",
+              title: "👑 Owner (Nazim & Nadeem)",
+              sub: "Unlocks Executive Dashboard, Payroll, Radar & /owner-pocket",
+              defaultPin: "2026",
+              highlight: true,
+            },
+            {
+              key: "JCT_HARDWARE_JOTUN",
+              title: "🏪 JCT Hardware + Jotun Staff",
+              sub: "Branch Daily Register, Quick-Log & Archives",
+              defaultPin: "1111",
+            },
+            {
+              key: "HEMPEL",
+              title: "🎨 Hempel Staff",
+              sub: "Branch Daily Register, Quick-Log & Archives",
+              defaultPin: "2222",
+            },
+            {
+              key: "DAMMAM_JOTUN",
+              title: "🌊 Dammam Jotun Staff",
+              sub: "Branch Daily Register, Quick-Log & Archives",
+              defaultPin: "3333",
+            },
+            {
+              key: "SIGMA",
+              title: "⚡ Sigma Staff",
+              sub: "Branch Daily Register, Quick-Log & Archives",
+              defaultPin: "4444",
+            },
+          ].map((item) => (
+            <div
+              key={item.key}
+              className={`rounded-xl border p-3.5 flex flex-col gap-2 ${
+                item.highlight
+                  ? "sm:col-span-2 border-jct-yellow/50 bg-jct-yellow/5"
+                  : "border-slate-200 dark:border-[#1F1F1F] bg-slate-50/50 dark:bg-[#111111]"
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <div className="text-xs font-extrabold text-jct-charcoal dark:text-white">
+                    {item.title}
+                  </div>
+                  <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                    {item.sub}
+                  </div>
+                </div>
+                <span className="rounded bg-slate-200 dark:bg-white/10 px-2 py-0.5 font-mono text-[10px] font-bold text-slate-600 dark:text-slate-300">
+                  Default: {item.defaultPin}
+                </span>
+              </div>
+              <input
+                type={showPins ? "text" : "password"}
+                value={profilePins[item.key] || ""}
+                onChange={(e) =>
+                  setProfilePins((prev) => ({
+                    ...prev,
+                    [item.key]: e.target.value,
+                  }))
+                }
+                disabled={!isOwner || savingPins}
+                placeholder={`Enter PIN (default ${item.defaultPin})`}
+                className={`${inputCls} tracking-widest`}
+              />
+            </div>
+          ))}
+        </div>
+
+        {pinMessage && (
+          <div
+            className={`flex items-start gap-2 rounded-lg px-3 py-2 text-xs font-bold ${
+              pinMessage.kind === "ok"
+                ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                : "bg-rose-500/10 text-rose-600 dark:text-rose-300"
+            }`}
+          >
+            {pinMessage.kind === "ok" ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}
+            <span>{pinMessage.text}</span>
+          </div>
+        )}
+
+        {isOwner && (
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              disabled={savingPins || loading}
+              className="flex items-center gap-2 bg-jct-yellow text-jct-charcoal font-extrabold hover:brightness-95 disabled:opacity-60 transition-all shadow-sm rounded-lg px-5 py-2.5 text-sm"
+            >
+              <Save size={15} /> {savingPins ? "Saving PINs…" : "Save Security PINs"}
+            </button>
+          </div>
+        )}
+      </form>
     </div>
   );
 }

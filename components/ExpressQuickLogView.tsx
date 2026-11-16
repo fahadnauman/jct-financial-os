@@ -167,8 +167,20 @@ export function ExpressQuickLogView({
 
   useEffect(() => {
     void loadFeed();
-    const interval = setInterval(loadFeed, 6000);
-    return () => clearInterval(interval);
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      void loadFeed();
+    }, 6000);
+    const onVisible = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        void loadFeed();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [branchId, effectiveDate]);
 
   // Auto focus amount input on tab switch

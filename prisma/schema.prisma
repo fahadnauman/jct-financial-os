@@ -258,12 +258,14 @@ model ActiveRegisterSession {
   @@index([branch, reportDate])
 }
 
-// Per-branch opening baseline (initial setup) used as the starting point for cash & bank totals
+// Per-branch opening baseline (initial setup) and configurable Profile Security PINs
 model BranchSettings {
   id                 String   @id @default(cuid())
-  branch             String   @unique // JCT_HARDWARE_JOTUN | HEMPEL | DAMMAM_JOTUN | SIGMA
+  branch             String   @unique // JCT_HARDWARE_JOTUN | HEMPEL | DAMMAM_JOTUN | SIGMA | OWNER
   openingCashBalance Float    @default(0)
   openingBankBalance Float    @default(0)
+  accessPin          String?  // Configurable PIN/password for this branch or OWNER profile
+  ownerPin           String?  // Optional Owner PIN mirror
   updatedBy          String?
   updatedAt          DateTime @updatedAt
   createdAt          DateTime @default(now())

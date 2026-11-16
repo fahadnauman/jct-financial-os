@@ -29,6 +29,7 @@ import { SaudiLiveClock } from "../components/SaudiLiveClock";
 import { SalesReturnModal, type SalesReturnSubmitPayload } from "../components/SalesReturnModal";
 import { SalesReturnAuditView } from "../components/SalesReturnAuditView";
 import { ExpressQuickLogView, type QuickLogType } from "../components/ExpressQuickLogView";
+import { PwaInstallButton } from "../components/PwaInstallButton";
 import * as Dropdown from "@radix-ui/react-dropdown-menu";
 import * as XLSX from "xlsx";
 import {
@@ -19529,11 +19530,62 @@ const OWNER_BRANCH_OPTIONS = [
   "Sigma",
 ];
 
+const VERIFIED_SESSION_KEY = "jct_verified_profile_session";
+const FALLBACK_PROFILE_PINS: Record<string, string> = {
+  OWNER: "2026",
+  BONGSI: "2026",
+  JCT_HARDWARE_JOTUN: "1111",
+  HEMPEL: "2222",
+  DAMMAM_JOTUN: "3333",
+  SIGMA: "4444",
+};
+
 function ProfileGate({ onSelect }: { onSelect: (p: UserProfile) => void }) {
   const [signingInId, setSigningInId] = useState<ProfileId | null>(null);
+  const [selectedForPin, setSelectedForPin] = useState<UserProfile | null>(null);
+  const [pinInput, setPinInput] = useState("");
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [profilePins, setProfilePins] = useState<Record<string, string>>(FALLBACK_PROFILE_PINS);
 
-  const handleProfileClick = async (p: UserProfile) => {
+  useEffect(() => {
+    let ignore = false;
+    try {
+      const cached = window.localStorage.getItem("jct_cached_profile_pins");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed && typeof parsed === "object") {
+          setProfilePins({ ...FALLBACK_PROFILE_PINS, ...parsed });
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    fetch("/api/settings?branch=ALL", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((data) => {
+        if (!ignore && data?.profilePins && typeof data.profilePins === "object") {
+          setProfilePins({ ...FALLBACK_PROFILE_PINS, ...data.profilePins });
+          window.localStorage.setItem("jct_cached_profile_pins", JSON.stringify(data.profilePins));
+        }
+      })
+      .catch(() => {});
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  const getExpectedPin = (p: UserProfile): string => {
+    if (p.isOwner || p.id === "BONGSI") {
+      return profilePins.OWNER || profilePins.BONGSI || "2026";
+    }
+    return profilePins[p.id] || FALLBACK_PROFILE_PINS[p.id] || "1111";
+  };
+
+  const completeProfileSignIn = async (p: UserProfile) => {
     setSigningInId(p.id);
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem(VERIFIED_SESSION_KEY, p.id);
+    }
     const defaultUser = p.isOwner
       ? "owner"
       : p.id === "JCT_HARDWARE_JOTUN" || p.id === "JCT_HQ"
@@ -19554,12 +19606,55 @@ function ProfileGate({ onSelect }: { onSelect: (p: UserProfile) => void }) {
       // proceed with profile selection
     } finally {
       setSigningInId(null);
+      setSelectedForPin(null);
+      setPinInput("");
       onSelect(p);
     }
   };
 
+  const handleProfileClick = (p: UserProfile) => {
+    setSelectedForPin(p);
+    setPinInput("");
+    setPinError(null);
+  };
+
+  const verifyAndSignIn = (candidatePin: string, targetProfile = selectedForPin) => {
+    if (!targetProfile) return false;
+    const clean = candidatePin.trim();
+    const expected = getExpectedPin(targetProfile);
+    const ownerMasterPin = profilePins.OWNER || profilePins.BONGSI || "2026";
+    // Target profile's PIN or Owner Master PIN unlocks branch profiles; Owner strictly requires Owner PIN
+    const matches = targetProfile.isOwner
+      ? clean === expected
+      : clean === expected || clean === ownerMasterPin;
+
+    if (matches) {
+      setPinError(null);
+      void completeProfileSignIn(targetProfile);
+      return true;
+    }
+    return false;
+  };
+
+  const handleKeypadPress = (digit: string) => {
+    if (!selectedForPin) return;
+    const expected = getExpectedPin(selectedForPin);
+    const maxLen = Math.max(4, expected.length);
+    if (pinInput.length >= maxLen) return;
+    const next = pinInput + digit;
+    setPinInput(next);
+    setPinError(null);
+    if (next.length >= expected.length || next.length === 4) {
+      if (verifyAndSignIn(next, selectedForPin)) return;
+      if (next.length >= maxLen) {
+        setPinError(`Incorrect PIN for ${selectedForPin.name}`);
+        setTimeout(() => setPinInput(""), 350);
+      }
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center overflow-y-auto bg-[#0A0A0A] px-6 py-10 text-white select-none">
+    <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center overflow-y-auto bg-[#070e24] px-6 py-10 text-white select-none">
       <div className="relative z-10 flex w-full max-w-5xl flex-col items-center">
         <div className="flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-jct-turquoise font-display text-base font-black text-jct-charcoal shadow-sm">
@@ -19569,65 +19664,192 @@ function ProfileGate({ onSelect }: { onSelect: (p: UserProfile) => void }) {
             JCT Financial OS
           </span>
         </div>
-        <h1 className="mt-6 text-2xl md:text-4xl font-extrabold text-white tracking-tight text-center">
-          Who is signing in?
-        </h1>
-        <p className="text-xs sm:text-sm text-slate-400 mt-2 text-center">
-          Select your profile to launch your terminal session
-        </p>
-        <div className="mt-10 grid w-full grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-5">
-          {USER_PROFILES.map((p) => {
-            const Icon = p.icon;
-            const isBusy = signingInId === p.id;
-            return (
-              <button
-                key={p.id}
-                type="button"
-                disabled={signingInId !== null}
-                onClick={() => handleProfileClick(p)}
-                className="group flex flex-col items-center gap-3 text-center outline-none disabled:opacity-60"
-              >
-                <div
-                  className={`flex aspect-square w-full max-w-[160px] items-center justify-center bg-[#111111] shadow-lg border rounded-2xl p-6 transition-all duration-200 group-hover:scale-105 ${
-                    p.isOwner
-                      ? "border-jct-yellow/40 group-hover:border-jct-yellow group-hover:shadow-[0_0_25px_rgba(255,222,89,0.25)]"
-                      : "border-[#1F1F1F] group-hover:border-jct-turquoise group-hover:shadow-[0_0_25px_rgba(45,226,230,0.25)]"
+
+        {selectedForPin ? (
+          <div className="mt-8 w-full max-w-sm rounded-3xl border border-white/15 bg-[#0B1633] p-6 sm:p-8 shadow-2xl flex flex-col items-center text-center animate-in fade-in zoom-in-95 duration-200">
+            <div
+              className={`flex h-16 w-16 items-center justify-center rounded-2xl border ${
+                selectedForPin.isOwner
+                  ? "border-jct-yellow bg-jct-yellow/15 text-jct-yellow"
+                  : "border-jct-turquoise bg-jct-turquoise/15 text-jct-turquoise"
+              }`}
+            >
+              {(() => {
+                const Icon = selectedForPin.icon;
+                return <Icon size={34} />;
+              })()}
+            </div>
+            <h2 className="mt-4 text-xl font-extrabold text-white">
+              {selectedForPin.emoji} {selectedForPin.name}
+            </h2>
+            <p className="mt-1 text-xs text-slate-400">
+              Enter Security PIN / Password to unlock {selectedForPin.label}
+            </p>
+
+            {/* PIN Dots */}
+            <div className="mt-5 flex gap-3">
+              {[0, 1, 2, 3].map((i) => (
+                <span
+                  key={i}
+                  className={`h-3.5 w-3.5 rounded-full border transition-all ${
+                    pinError
+                      ? "border-rose-400 bg-rose-400"
+                      : i < pinInput.length
+                      ? selectedForPin.isOwner
+                        ? "border-jct-yellow bg-jct-yellow"
+                        : "border-jct-turquoise bg-jct-turquoise"
+                      : "border-white/30"
                   }`}
-                >
-                  {isBusy ? (
-                    <Sparkles
-                      size={48}
-                      className={`animate-spin ${
-                        p.isOwner ? "text-jct-yellow" : "text-jct-turquoise"
-                      }`}
-                    />
-                  ) : (
-                    <Icon
-                      size={54}
-                      strokeWidth={1.5}
-                      className={p.isOwner ? "text-jct-yellow" : "text-jct-turquoise"}
-                    />
-                  )}
-                </div>
-                <div>
-                  <p className="text-base font-extrabold text-white group-hover:text-jct-turquoise transition-colors">
-                    {p.emoji} {p.name}
-                  </p>
-                  <p className="text-xs text-slate-400 mt-0.5">{p.label}</p>
-                  <span
-                    className={`mt-2 inline-block rounded-full px-3 py-0.5 text-[10px] font-extrabold ${
-                      p.isOwner
-                        ? "bg-jct-yellow text-jct-charcoal"
-                        : "bg-jct-turquoise text-jct-charcoal"
+                />
+              ))}
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!verifyAndSignIn(pinInput, selectedForPin)) {
+                  setPinError(`Incorrect PIN for ${selectedForPin.name}`);
+                  setTimeout(() => setPinInput(""), 350);
+                }
+              }}
+              className="mt-4 w-full"
+            >
+              <input
+                type="password"
+                autoFocus
+                value={pinInput}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setPinInput(val);
+                  setPinError(null);
+                  const expected = getExpectedPin(selectedForPin);
+                  if (val.length >= expected.length && verifyAndSignIn(val, selectedForPin)) {
+                    return;
+                  }
+                }}
+                placeholder="Type PIN or tap keypad..."
+                className="w-full rounded-xl border border-white/15 bg-[#070e24] px-3.5 py-2.5 text-center font-mono text-base font-bold tracking-widest text-white outline-none focus:border-jct-turquoise"
+              />
+              {pinError && (
+                <p className="mt-2 text-xs font-bold text-rose-400">❌ {pinError}</p>
+              )}
+
+              {/* Touch Keypad */}
+              <div className="mt-5 grid grid-cols-3 gap-2.5">
+                {["1", "2", "3", "4", "5", "6", "7", "8", "9", "CLR", "0", "⌫"].map((k) => (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => {
+                      if (k === "CLR") {
+                        setPinInput("");
+                        setPinError(null);
+                      } else if (k === "⌫") {
+                        setPinInput((p) => p.slice(0, -1));
+                        setPinError(null);
+                      } else {
+                        handleKeypadPress(k);
+                      }
+                    }}
+                    className={`h-12 rounded-xl border border-white/10 bg-[#070e24] font-bold text-white hover:border-jct-turquoise/50 active:bg-jct-turquoise/20 transition ${
+                      k === "CLR" ? "text-xs text-slate-400" : "text-lg"
                     }`}
                   >
-                    {p.badge}
-                  </span>
-                </div>
-              </button>
-            );
-          })}
-        </div>
+                    {k}
+                  </button>
+                ))}
+              </div>
+
+              <div className="mt-5 flex gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedForPin(null);
+                    setPinInput("");
+                    setPinError(null);
+                  }}
+                  className="flex-1 rounded-xl border border-white/15 py-2.5 text-xs font-bold text-slate-300 hover:text-white transition"
+                >
+                  ← Back
+                </button>
+                <button
+                  type="submit"
+                  disabled={!pinInput.trim() || signingInId !== null}
+                  className={`flex-1 rounded-xl py-2.5 text-xs font-extrabold text-jct-charcoal disabled:opacity-40 transition ${
+                    selectedForPin.isOwner ? "bg-jct-yellow" : "bg-jct-turquoise"
+                  }`}
+                >
+                  {signingInId ? "Unlocking…" : "🔓 Unlock"}
+                </button>
+              </div>
+            </form>
+          </div>
+        ) : (
+          <>
+            <h1 className="mt-6 text-2xl md:text-4xl font-extrabold text-white tracking-tight text-center">
+              Who is signing in?
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-400 mt-2 text-center">
+              Select your profile and enter your Security PIN to launch your terminal session
+            </p>
+            <div className="mt-10 grid w-full grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-5">
+              {USER_PROFILES.map((p) => {
+                const Icon = p.icon;
+                const isBusy = signingInId === p.id;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    disabled={signingInId !== null}
+                    onClick={() => handleProfileClick(p)}
+                    className="group flex flex-col items-center gap-3 text-center outline-none disabled:opacity-60"
+                  >
+                    <div
+                      className={`relative flex aspect-square w-full max-w-[160px] items-center justify-center bg-[#0B1633] shadow-lg border rounded-2xl p-6 transition-all duration-200 group-hover:scale-105 ${
+                        p.isOwner
+                          ? "border-jct-yellow/40 group-hover:border-jct-yellow group-hover:shadow-[0_0_25px_rgba(255,222,89,0.25)]"
+                          : "border-white/10 group-hover:border-jct-turquoise group-hover:shadow-[0_0_25px_rgba(45,226,230,0.25)]"
+                      }`}
+                    >
+                      <span className="absolute top-3 right-3 rounded-full bg-white/10 p-1.5 text-slate-300">
+                        <Lock size={12} />
+                      </span>
+                      {isBusy ? (
+                        <Sparkles
+                          size={48}
+                          className={`animate-spin ${
+                            p.isOwner ? "text-jct-yellow" : "text-jct-turquoise"
+                          }`}
+                        />
+                      ) : (
+                        <Icon
+                          size={54}
+                          strokeWidth={1.5}
+                          className={p.isOwner ? "text-jct-yellow" : "text-jct-turquoise"}
+                        />
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-base font-extrabold text-white group-hover:text-jct-turquoise transition-colors">
+                        {p.emoji} {p.name}
+                      </p>
+                      <p className="text-xs text-slate-400 mt-0.5">{p.label}</p>
+                      <span
+                        className={`mt-2 inline-block rounded-full px-3 py-0.5 text-[10px] font-extrabold ${
+                          p.isOwner
+                            ? "bg-jct-yellow text-jct-charcoal"
+                            : "bg-jct-turquoise text-jct-charcoal"
+                        }`}
+                      >
+                        {p.badge}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -19736,19 +19958,20 @@ export default function Page() {
   useEffect(() => {
     if (sessionStatus === "loading") return;
 
-    const sessionUser = session?.user as
-      | { id?: string; role?: "OWNER" | "STAFF"; profileId?: string }
-      | undefined;
+    const verifiedProfileId =
+      typeof window !== "undefined" ? window.sessionStorage.getItem(VERIFIED_SESSION_KEY) : null;
 
-    if (sessionUser) {
-      const targetId =
-        sessionUser.profileId ||
-        (sessionUser.role === "OWNER" ? "BONGSI" : sessionUser.id || "JCT_HARDWARE_JOTUN");
-      const matched =
-        USER_PROFILES.find((p) => p.id === targetId) ||
-        (sessionUser.role === "OWNER" ? USER_PROFILES[0] : USER_PROFILES[1]);
+    if (!verifiedProfileId) {
+      // Fresh browser session or locked profile: require PIN verification in ProfileGate
       // eslint-disable-next-line react-hooks/set-state-in-effect
-            setProfile(matched);
+      setProfile(null);
+      setProfileLoaded(true);
+      return;
+    }
+
+    const matched = USER_PROFILES.find((p) => p.id === verifiedProfileId) || null;
+    if (matched) {
+      setProfile(matched);
       window.localStorage.setItem(PROFILE_STORAGE_KEY, matched.id);
       setProfileLoaded(true);
 
@@ -19778,9 +20001,7 @@ export default function Page() {
       return;
     }
 
-    const saved = window.localStorage.getItem(PROFILE_STORAGE_KEY);
-    const found = USER_PROFILES.find((p) => p.id === saved) || null;
-    setProfile(found);
+    setProfile(null);
     setProfileLoaded(true);
   }, [session, sessionStatus, pathname, router]);
 
@@ -20201,6 +20422,7 @@ export default function Page() {
 
   const handleSelectProfile = (p: UserProfile) => {
     window.localStorage.setItem(PROFILE_STORAGE_KEY, p.id);
+    window.sessionStorage.setItem(VERIFIED_SESSION_KEY, p.id);
     resetLocalSessionState();
     setCompletedDaysLog([]);
     setTrackingMode("hub");
@@ -20213,10 +20435,11 @@ export default function Page() {
 
   const handleSwitchProfile = async () => {
     window.localStorage.removeItem(PROFILE_STORAGE_KEY);
+    window.sessionStorage.removeItem(VERIFIED_SESSION_KEY);
     resetLocalSessionState();
     setCompletedDaysLog([]);
     setProfile(null);
-    await signOut({ callbackUrl: "/login" });
+    await signOut({ redirect: false });
   };
 
   const handleClearActiveSession = (finalStatus: "CLEARED" | "COMPLETED" = "CLEARED") => {
@@ -20692,8 +20915,11 @@ export default function Page() {
               type="button"
               onClick={handleSwitchProfile}
               className="flex items-center gap-1.5 rounded-lg bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 transition-all px-2.5 py-1.5 text-xs shadow-sm"
+              title="Lock current session and require PIN to switch profiles"
             >
-              Switch Profile <Repeat size={12} />
+              <Lock size={12} />
+              <span>🔒 Lock / Switch Profile</span>
+              <Repeat size={12} />
             </button>
             <div className="h-4 w-px bg-slate-200 dark:bg-[#1F1F1F] hidden sm:block"></div>
             <label
@@ -20759,7 +20985,8 @@ export default function Page() {
             )}
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            <PwaInstallButton />
             <ThemeToggle dark={dark} onToggle={() => setDark(!dark)} />
           </div>
         </header>

@@ -268,7 +268,10 @@ export function useActiveSessionSync<I, B, E>({
       void poll(false);
     }, pollMs);
 
-    const handleFocus = () => void poll(false);
+    const handleFocus = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      void poll(false);
+    };
     window.addEventListener("focus", handleFocus);
     document.addEventListener("visibilitychange", handleFocus);
 

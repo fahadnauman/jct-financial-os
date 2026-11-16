@@ -16,6 +16,41 @@ export interface CapitalDepositDTO {
   createdAt: string;
 }
 
+export const DEFAULT_PROFILE_PINS: Record<string, string> = {
+  OWNER: "2026",
+  BONGSI: "2026",
+  JCT_HARDWARE_JOTUN: "1111",
+  HEMPEL: "2222",
+  DAMMAM_JOTUN: "3333",
+  SIGMA: "4444",
+};
+
+const buildProfilePins = (
+  rows: Array<{ branch: string; accessPin?: string | null; ownerPin?: string | null }>
+): Record<string, string> => {
+  const pins: Record<string, string> = { ...DEFAULT_PROFILE_PINS };
+  for (const r of rows) {
+    if (r.branch === "OWNER" && r.accessPin && r.accessPin.trim()) {
+      pins.OWNER = r.accessPin.trim();
+      pins.BONGSI = r.accessPin.trim();
+    } else if (r.ownerPin && r.ownerPin.trim() && pins.OWNER === DEFAULT_PROFILE_PINS.OWNER) {
+      pins.OWNER = r.ownerPin.trim();
+      pins.BONGSI = r.ownerPin.trim();
+    }
+    if (
+      (r.branch === "JCT_HARDWARE_JOTUN" ||
+        r.branch === "HEMPEL" ||
+        r.branch === "DAMMAM_JOTUN" ||
+        r.branch === "SIGMA") &&
+      r.accessPin &&
+      r.accessPin.trim()
+    ) {
+      pins[r.branch] = r.accessPin.trim();
+    }
+  }
+  return pins;
+};
+
 const serializeDeposit = (d: {
   id: string;
   branch: string;
@@ -66,12 +101,20 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const rawBranch = searchParams.get("branch") || req.headers.get("x-branch-id");
   try {
+    const [rows, allDeposits] = await Promise.all([
+      prisma.branchSettings.findMany(),
+      rawBranch === "ALL"
+        ? prisma.capitalDeposit.findMany({ orderBy: { createdAt: "desc" }, take: 200 })
+        : prisma.capitalDeposit.findMany({
+            where: { branch: normalizeBranch(rawBranch) },
+            orderBy: { createdAt: "desc" },
+            take: 100,
+          }),
+    ]);
+    const profilePins = buildProfilePins(rows);
+    const serializedDeposits = allDeposits.map(serializeDeposit);
+
     if (rawBranch === "ALL") {
-      const [rows, allDeposits] = await Promise.all([
-        prisma.branchSettings.findMany(),
-        prisma.capitalDeposit.findMany({ orderBy: { createdAt: "desc" }, take: 200 }),
-      ]);
-      const serializedDeposits = allDeposits.map(serializeDeposit);
       const branches = ["JCT_HARDWARE_JOTUN", "HEMPEL", "DAMMAM_JOTUN", "SIGMA"];
       const settingsList = branches.map((b) => {
         const row = rows.find((r) => r.branch === b) || null;
@@ -82,24 +125,19 @@ export async function GET(req: Request) {
         {
           settings: settingsList,
           capitalDeposits: serializedDeposits,
+          profilePins,
         },
         { headers: { "Cache-Control": "no-store" } }
       );
     }
+
     const branch = normalizeBranch(rawBranch);
-    const [row, deposits] = await Promise.all([
-      prisma.branchSettings.findUnique({ where: { branch } }),
-      prisma.capitalDeposit.findMany({
-        where: { branch },
-        orderBy: { createdAt: "desc" },
-        take: 100,
-      }),
-    ]);
-    const serializedDeposits = deposits.map(serializeDeposit);
+    const row = rows.find((r) => r.branch === branch) || null;
     return NextResponse.json(
       {
         settings: serialize(branch, row, serializedDeposits),
         capitalDeposits: serializedDeposits,
+        profilePins,
       },
       { headers: { "Cache-Control": "no-store" } }
     );
@@ -108,13 +146,14 @@ export async function GET(req: Request) {
     return NextResponse.json({
       settings: serialize(normalizeBranch(rawBranch), null, []),
       capitalDeposits: [],
+      profilePins: { ...DEFAULT_PROFILE_PINS },
     });
   }
 }
 
 /**
  * PUT /api/settings  (Owner only)
- * Body: { branch, openingCashBalance, openingBankBalance }
+ * Body: { branch, openingCashBalance, openingBankBalance } OR { action: "UPDATE_PINS", profilePins }
  */
 export async function PUT(req: Request) {
   try {
@@ -122,6 +161,52 @@ export async function PUT(req: Request) {
     if (!checkIsOwner(req, body)) {
       return NextResponse.json({ error: "Only the Owner can change settings" }, { status: 403 });
     }
+
+    if (body.action === "UPDATE_PINS" && body.profilePins && typeof body.profilePins === "object") {
+      const incoming = body.profilePins as Record<string, string>;
+      const ownerPinVal = (incoming.OWNER || incoming.BONGSI || DEFAULT_PROFILE_PINS.OWNER).trim();
+      const targets: Array<{ key: string; pin: string }> = [
+        { key: "OWNER", pin: ownerPinVal },
+        {
+          key: "JCT_HARDWARE_JOTUN",
+          pin: (incoming.JCT_HARDWARE_JOTUN || DEFAULT_PROFILE_PINS.JCT_HARDWARE_JOTUN).trim(),
+        },
+        { key: "HEMPEL", pin: (incoming.HEMPEL || DEFAULT_PROFILE_PINS.HEMPEL).trim() },
+        {
+          key: "DAMMAM_JOTUN",
+          pin: (incoming.DAMMAM_JOTUN || DEFAULT_PROFILE_PINS.DAMMAM_JOTUN).trim(),
+        },
+        { key: "SIGMA", pin: (incoming.SIGMA || DEFAULT_PROFILE_PINS.SIGMA).trim() },
+      ];
+
+      await Promise.all(
+        targets.map((t) =>
+          prisma.branchSettings.upsert({
+            where: { branch: t.key },
+            create: {
+              branch: t.key,
+              openingCashBalance: 0,
+              openingBankBalance: 0,
+              accessPin: t.pin,
+              ownerPin: ownerPinVal,
+              updatedBy: "OWNER",
+            },
+            update: {
+              accessPin: t.pin,
+              ownerPin: ownerPinVal,
+              updatedBy: "OWNER",
+            },
+          })
+        )
+      );
+
+      const allRows = await prisma.branchSettings.findMany();
+      return NextResponse.json({
+        ok: true,
+        profilePins: buildProfilePins(allRows),
+      });
+    }
+
     const branch = normalizeBranch(body.branch || req.headers.get("x-branch-id"));
     const cash = Number(body.openingCashBalance);
     const bank = Number(body.openingBankBalance);
@@ -129,7 +214,7 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: "Balances must be valid numbers" }, { status: 400 });
     }
     const round = (n: number) => Math.round(n * 100) / 100;
-    const [row, deposits] = await Promise.all([
+    const [row, deposits, allRows] = await Promise.all([
       prisma.branchSettings.upsert({
         where: { branch },
         create: {
@@ -149,11 +234,13 @@ export async function PUT(req: Request) {
         orderBy: { createdAt: "desc" },
         take: 100,
       }),
+      prisma.branchSettings.findMany(),
     ]);
     const serializedDeposits = deposits.map(serializeDeposit);
     return NextResponse.json({
       settings: serialize(branch, row, serializedDeposits),
       capitalDeposits: serializedDeposits,
+      profilePins: buildProfilePins(allRows),
     });
   } catch (err) {
     console.error("PUT /api/settings error:", err);
@@ -162,13 +249,29 @@ export async function PUT(req: Request) {
 }
 
 /**
- * POST /api/settings  (Owner only)
- * Creates a Manual Cash or Bank Deposit (CapitalDeposit)
- * Body: { branch, targetAccount: "CASH" | "BANK", amount, date?, notes }
+ * POST /api/settings
+ * Supports:
+ * 1) { action: "VERIFY_PIN", profileId, pin } -> verifies PIN against DB / default PINs
+ * 2) Owner Manual Cash or Bank Deposit (CapitalDeposit)
  */
 export async function POST(req: Request) {
   try {
     const body = await req.json();
+
+    if (body.action === "VERIFY_PIN") {
+      const profileId = String(body.profileId || "OWNER").trim().toUpperCase();
+      const enteredPin = String(body.pin || "").trim();
+      const rows = await prisma.branchSettings.findMany();
+      const pins = buildProfilePins(rows);
+      const normalizedKey =
+        profileId === "BONGSI" || profileId === "OWNER"
+          ? "OWNER"
+          : normalizeBranch(profileId);
+      const expected = pins[normalizedKey] || DEFAULT_PROFILE_PINS[normalizedKey] || "2026";
+      const verified = enteredPin === expected;
+      return NextResponse.json({ verified, profileId: normalizedKey });
+    }
+
     if (!checkIsOwner(req, body)) {
       return NextResponse.json({ error: "Only the Owner can add manual deposits" }, { status: 403 });
     }

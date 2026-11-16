@@ -139,15 +139,20 @@ export function usePocketTransactions(branch: BranchId | "ALL", enabled = true, 
   useEffect(() => {
     if (!enabled) return;
     const first = window.setTimeout(refresh, 0);
-    const timer = window.setInterval(refresh, POCKET_POLL_MS);
+    const timer = window.setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      void refresh();
+    }, POCKET_POLL_MS);
     const onFocus = () => {
-      if (document.visibilityState === "visible") refresh();
+      if (document.visibilityState === "visible") void refresh();
     };
     document.addEventListener("visibilitychange", onFocus);
+    window.addEventListener("focus", onFocus);
     return () => {
       window.clearTimeout(first);
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onFocus);
+      window.removeEventListener("focus", onFocus);
     };
   }, [refresh, enabled]);
 
