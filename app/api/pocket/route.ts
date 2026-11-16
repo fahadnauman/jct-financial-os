@@ -86,12 +86,31 @@ export async function POST(req: Request) {
   const clientTxnId = str(body.clientTxnId);
 
   try {
-    // 1. Strict Idempotency Key check: if clientTxnId already exists, return existing row immediately
+    // 1. Strict Idempotency Key check: if clientTxnId already exists, update or return existing row immediately
     if (clientTxnId) {
       const existingKey = await prisma.pocketTransaction.findFirst({
         where: { clientTxnId },
       });
       if (existingKey) {
+        if (
+          existingKey.amount !== amount ||
+          existingKey.paymentMode !== paymentMode ||
+          existingKey.paymentSource !== paymentSource ||
+          existingKey.recipientName !== str(body.recipientName) ||
+          existingKey.note !== str(body.note)
+        ) {
+          const updatedKey = await prisma.pocketTransaction.update({
+            where: { id: existingKey.id },
+            data: {
+              amount,
+              paymentMode,
+              paymentSource,
+              recipientName: str(body.recipientName),
+              note: str(body.note),
+            },
+          });
+          return NextResponse.json({ transaction: updatedKey, duplicate: true, updated: true }, { status: 200 });
+        }
         return NextResponse.json({ transaction: existingKey, duplicate: true }, { status: 200 });
       }
     }
@@ -242,23 +261,29 @@ export async function DELETE(req: Request) {
   let body: Record<string, unknown> | null = null;
   const { searchParams } = new URL(req.url);
   let id = searchParams.get("id") || "";
+  let clientTxnId = searchParams.get("clientTxnId") || "";
 
-  if (!id) {
+  if (!id && !clientTxnId) {
     try {
       body = await req.json();
       if (typeof body?.id === "string") id = body.id.trim();
+      if (typeof body?.clientTxnId === "string") clientTxnId = body.clientTxnId.trim();
     } catch {
       // ignore
     }
   }
 
-  if (!id) {
-    return NextResponse.json({ error: "Transaction ID is required" }, { status: 400 });
+  if (!id && !clientTxnId) {
+    return NextResponse.json({ error: "Transaction ID or clientTxnId is required" }, { status: 400 });
   }
 
   try {
-    await prisma.pocketTransaction.delete({ where: { id } });
-    return NextResponse.json({ deleted: true, id });
+    if (id) {
+      await prisma.pocketTransaction.deleteMany({ where: { OR: [{ id }, ...(clientTxnId ? [{ clientTxnId }] : [])] } });
+    } else if (clientTxnId) {
+      await prisma.pocketTransaction.deleteMany({ where: { clientTxnId } });
+    }
+    return NextResponse.json({ deleted: true, id, clientTxnId });
   } catch (err) {
     console.error("DELETE /api/pocket failed", err);
     return NextResponse.json({ error: "Failed to delete transaction" }, { status: 500 });

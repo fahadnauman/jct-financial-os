@@ -108,6 +108,8 @@ export function ExpressQuickLogView({
   // Expense specific
   const [expenseCategory, setExpenseCategory] = useState("Food");
   const [expensePaymentMode, setExpensePaymentMode] = useState<"CASH" | "CARD" | "BANK_TRANSFER">("CASH");
+  const [expenseCommInvNo, setExpenseCommInvNo] = useState("");
+  const [expenseCommRecipient, setExpenseCommRecipient] = useState("");
 
   // Purchase specific
   const [purchaseSupplier, setPurchaseSupplier] = useState("");
@@ -249,9 +251,20 @@ export function ExpressQuickLogView({
       if (activeType === "EXPENSE") {
         pocketType = "EXPENSE";
         category = expenseCategory;
-        recipientName = "Express Logger";
-        paymentSource = expensePaymentMode === "BANK_TRANSFER" ? "BANK_TRANSFER" : "DRAWER_CASH";
+        recipientName =
+          expenseCategory === "Business Commission" && expenseCommRecipient.trim()
+            ? expenseCommRecipient.trim()
+            : "Express Logger";
+        paymentSource = expensePaymentMode === "CASH" ? "DRAWER_CASH" : "BANK_TRANSFER";
         paymentMode = expensePaymentMode;
+        if (expenseCategory === "Business Commission") {
+          supplierInvoiceNum = expenseCommInvNo.trim() || null;
+          finalNote = `[Cross-Tender Commission] Business Commission${
+            expenseCommInvNo.trim() ? ` — Inv #${expenseCommInvNo.trim()}` : ""
+          }${
+            expenseCommRecipient.trim() ? ` (${expenseCommRecipient.trim()})` : ""
+          }${finalNote ? ` · ${finalNote}` : ""}`;
+        }
       } else if (activeType === "PURCHASE") {
         pocketType = "PURCHASE";
         category = purchasePaymentMode === "CREDIT" ? "Credit Purchase" : "Cash Purchase";
@@ -348,12 +361,24 @@ export function ExpressQuickLogView({
               amount: numAmt,
               category,
               recipientName,
+              customerName: recipientName !== "Express Logger" ? recipientName : undefined,
               paymentMode,
               invoiceNo: supplierInvoiceNum,
+              description:
+                activeType === "EXPENSE" && expenseCategory === "Business Commission"
+                  ? `Business Commission${
+                      supplierInvoiceNum ? ` — Inv #${supplierInvoiceNum}` : ""
+                    }${
+                      recipientName && recipientName !== "Express Logger"
+                        ? ` (${recipientName})`
+                        : ""
+                    }`
+                  : finalNote || category,
               salesNo: activeType === "SALES_BILL" ? salesSeqNo : activeType === "SALES_RETURN" ? returnSalesNo : undefined,
               time: nowTime,
               hasBill,
               billPdfUrl,
+              receiptUrl: billPdfUrl,
             },
           });
         }
@@ -361,6 +386,8 @@ export function ExpressQuickLogView({
         // Reset fields
         setAmount("");
         setNotes("");
+        setExpenseCommInvNo("");
+        setExpenseCommRecipient("");
         setHasBill(false);
         setBillFile(null);
         setBillPdfUrl(null);
@@ -583,6 +610,35 @@ export function ExpressQuickLogView({
                     ))}
                   </div>
                 </div>
+
+                {expenseCategory === "Business Commission" && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-xl border border-amber-400/40 bg-amber-500/10">
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300 mb-1">
+                        Linked Invoice # (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={expenseCommInvNo}
+                        onChange={(e) => setExpenseCommInvNo(e.target.value)}
+                        placeholder="e.g. W#JB006597"
+                        className="w-full rounded-lg border border-amber-500/40 bg-white dark:bg-black px-3 py-1.5 text-xs font-mono font-bold text-jct-charcoal dark:text-white outline-none focus:border-amber-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300 mb-1">
+                        Customer / Recipient Name
+                      </label>
+                      <input
+                        type="text"
+                        value={expenseCommRecipient}
+                        onChange={(e) => setExpenseCommRecipient(e.target.value)}
+                        placeholder="Customer / Procurement..."
+                        className="w-full rounded-lg border border-amber-500/40 bg-white dark:bg-black px-3 py-1.5 text-xs font-semibold text-jct-charcoal dark:text-white outline-none focus:border-amber-400"
+                      />
+                    </div>
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">

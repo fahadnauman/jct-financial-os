@@ -777,6 +777,8 @@ export interface PreLoggedEntry {
   isReturned?: boolean;
   isEdited?: boolean;
   isInvoiceAdjustment?: boolean;
+  isLinkedInvoiceCommission?: boolean;
+  linkedInvoiceNo?: string;
   overrideReason?: OverrideReason;
   overrideNote?: string;
   isSplit?: boolean;
@@ -816,6 +818,10 @@ export interface ErpInvoiceItem {
   discountAmount?: number;
   roundOffAmount?: number;
   businessCommission?: number;
+  cashCommissionAmount?: number;
+  cashCommissionPaidFrom?: "CASH" | "BANK";
+  cashCommissionRecipient?: string;
+  cashCommissionTxnId?: string;
   netPayableAmount?: number;
   adjustmentsApplied?: boolean;
   isEdited?: boolean;
@@ -1630,6 +1636,34 @@ export const classifyExpenseOutflow = (
   const titleLower = (e.title || "").toLowerCase();
   const noteLower = (e.note || "").toLowerCase();
   const pm = (e.paymentMode || "CASH").toUpperCase().trim();
+
+  // Scenario A: Cross-Tender Commission ("💵 Cash Comm." button)
+  // Gross sale on the invoice stays 100% intact; this linked commission deducts strictly once from its paidFrom tender (CASH or BANK).
+  if (
+    e.isLinkedInvoiceCommission ||
+    (e.id && e.id.startsWith("cash-comm-exp-")) ||
+    (cat === "Business Commission" && noteLower.includes("[cross-tender commission]"))
+  ) {
+    if (
+      pm === "CARD" ||
+      pm === "POS_SWIPE" ||
+      pm === "VISA" ||
+      pm === "MADA" ||
+      pm === "MASTERCARD" ||
+      pm === "BANK" ||
+      pm === "BANK_TRANSFER" ||
+      pm === "BANK TRANSFER" ||
+      pm === "SAB" ||
+      pm === "AL_RAJHI" ||
+      pm === "SNB"
+    ) {
+      return "BANK";
+    }
+    return "CASH";
+  }
+
+  // Scenario B: Inline Invoice Price Reduction (REASON *: Business Commission via direct amount edit)
+  // The invoice's collected amount is already net of this reduction, so exclude from totalMoneyOutDrawer to prevent double deduction.
   if (
     e.isInvoiceAdjustment ||
     (e.id && e.id.startsWith("comm-exp-")) ||
@@ -1714,7 +1748,17 @@ export const deduplicatePreLoggedEntries = (entries: PreLoggedEntry[]): PreLogge
   for (const item of sorted) {
     if (!item || !item.id) continue;
     if (seenIds.has(item.id)) continue;
-    if (item.clientTxnId && seenClientTxnIds.has(item.clientTxnId)) continue;
+    if (item.clientTxnId && seenClientTxnIds.has(item.clientTxnId)) {
+      const pkIdDup = getPocketId(item);
+      if (pkIdDup) {
+        const existingByClient = result.find((r) => r.clientTxnId === item.clientTxnId);
+        if (existingByClient && !existingByClient.sourcePocketId) {
+          existingByClient.sourcePocketId = pkIdDup;
+        }
+        seenPocketIds.add(pkIdDup);
+      }
+      continue;
+    }
 
     const pkId = getPocketId(item);
     if (pkId && seenPocketIds.has(pkId)) {
@@ -5132,6 +5176,43 @@ function DailyRegisterView({
       });
     }
 
+    if (!isSupplierPurchase && !isStaffExpense) {
+      fetch("/api/pocket", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientTxnId,
+          branch: branchId || "JCT_HARDWARE_JOTUN",
+          type: "EXPENSE",
+          amount: val,
+          category: step4Category,
+          recipientName: step4Note.trim() || null,
+          paymentSource: effectiveStep4Mode === "CASH" ? "DRAWER_CASH" : "BANK_TRANSFER",
+          paymentMode: effectiveStep4Mode,
+          hasBill: step4BillType === "WITH_BILL" && Boolean(step4BillPdfUrl),
+          billFileName: step4PdfFileName || undefined,
+          billPdfUrl: step4BillPdfUrl || undefined,
+          receiptUrl: step4BillPdfUrl || undefined,
+          note: step4Note.trim() || undefined,
+          date: saudiTodayIso(),
+        }),
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          const pkId = data?.transaction?.id;
+          if (pkId) {
+            setPreLoggedEntries((prev) =>
+              deduplicatePreLoggedEntries(
+                prev.map((item) =>
+                  item.id === step4EntryId ? { ...item, sourcePocketId: pkId } : item
+                )
+              )
+            );
+          }
+        })
+        .catch((e) => console.warn("Background pocket sync failed:", e));
+    }
+
     setStep4Amount("");
     setStep4Note("");
     setStep4BillPdfUrl(null);
@@ -5701,6 +5782,194 @@ function DailyRegisterView({
     });
   };
 
+  // ── Cross-Tender "💵 Cash Comm." State & Handlers ──
+  const [cashCommRowKey, setCashCommRowKey] = useState<string | null>(null);
+  const [cashCommAmtInput, setCashCommAmtInput] = useState<string>("");
+  const [cashCommPaidFrom, setCashCommPaidFrom] = useState<"CASH" | "BANK">("CASH");
+  const [cashCommRecipientInput, setCashCommRecipientInput] = useState<string>("");
+
+  const handleOpenCashCommBar = (inv: ErpInvoiceItem, rowKey: string) => {
+    if (cashCommRowKey === rowKey) {
+      setCashCommRowKey(null);
+      return;
+    }
+    setCashCommRowKey(rowKey);
+    setCashCommAmtInput(
+      inv.cashCommissionAmount && inv.cashCommissionAmount > 0
+        ? String(inv.cashCommissionAmount)
+        : ""
+    );
+    setCashCommPaidFrom(inv.cashCommissionPaidFrom || "CASH");
+    setCashCommRecipientInput(
+      inv.cashCommissionRecipient ?? inv.customerName ?? inv.customer ?? ""
+    );
+  };
+
+  const handleUndoCashCommission = (identifier: string) => {
+    let removedTxnId: string | undefined;
+    let removedExpId: string | undefined;
+    let removedInvNo = identifier;
+
+    setErpInvoices((prev) => {
+      const updated = prev.map((inv) => {
+        const rowKey = inv.internalId || inv.id || inv.invoiceNo;
+        const matches =
+          rowKey === identifier ||
+          (inv.internalId && inv.internalId === identifier) ||
+          (inv.id && inv.id === identifier) ||
+          inv.invoiceNo === identifier;
+        if (!matches) return inv;
+
+        removedTxnId = inv.cashCommissionTxnId;
+        removedExpId = `cash-comm-exp-${inv.internalId || inv.invoiceNo}`;
+        removedInvNo = inv.branchInvNo || inv.invoiceNo;
+
+        return {
+          ...inv,
+          cashCommissionAmount: 0,
+          cashCommissionPaidFrom: undefined,
+          cashCommissionRecipient: undefined,
+          cashCommissionTxnId: undefined,
+        };
+      });
+      syncCommissionExpenses(updated);
+      return updated;
+    });
+
+    if (removedTxnId || removedExpId) {
+      setPreLoggedEntries((prev) =>
+        prev.filter(
+          (e) =>
+            e.id !== removedExpId &&
+            !(removedTxnId && e.clientTxnId === removedTxnId)
+        )
+      );
+      if (removedTxnId) {
+        fetch(`/api/pocket?clientTxnId=${encodeURIComponent(removedTxnId)}`, {
+          method: "DELETE",
+          headers: {
+            "x-user-is-owner": String(isOwner),
+            "x-user-role": isOwner ? "OWNER" : "STAFF",
+          },
+        }).catch((err) => console.warn("Failed to delete pocket commission:", err));
+      }
+      setJustCompletedToast(`↩ Reverted Business Commission for Inv #${removedInvNo}`);
+    }
+  };
+
+  const handleSubmitCashCommission = (identifier: string) => {
+    const commAmt = r2(Math.max(0, parseFloat(cashCommAmtInput) || 0));
+    if (commAmt <= 0) {
+      handleUndoCashCommission(identifier);
+      setCashCommRowKey(null);
+      return;
+    }
+
+    const paidFrom = cashCommPaidFrom;
+    let targetInternalId = "";
+    let resolvedClientTxnId = "";
+    let resolvedRecipient = "";
+    let resolvedInvNo = "";
+
+    setErpInvoices((prev) => {
+      const updated = prev.map((inv) => {
+        const rowKey = inv.internalId || inv.id || inv.invoiceNo;
+        const matches =
+          rowKey === identifier ||
+          (inv.internalId && inv.internalId === identifier) ||
+          (inv.id && inv.id === identifier) ||
+          inv.invoiceNo === identifier;
+        if (!matches) return inv;
+
+        const orig = inv.originalAmount && inv.originalAmount > 0 ? inv.originalAmount : inv.amount;
+        const roundOff = inv.roundOffAmount || 0;
+        const discount = inv.discountAmount || 0;
+        // Scenario A Law: Keep Gross Sale Intact on the invoice (only net of any roundOff or standard discount, NEVER reduced by commission)
+        const intactGrossSale = r2(Math.max(0, orig - roundOff - discount));
+        const isStillEdited = intactGrossSale !== orig;
+        const recipient =
+          cashCommRecipientInput.trim() ||
+          inv.customerName ||
+          inv.customer ||
+          "Customer";
+        const clientTxnId =
+          inv.cashCommissionTxnId ||
+          `ccomm-${branchId || "JCT"}-${activeSessionDate}-${inv.internalId || inv.invoiceNo}`;
+
+        targetInternalId = inv.internalId || inv.invoiceNo;
+        resolvedClientTxnId = clientTxnId;
+        resolvedRecipient = recipient;
+        resolvedInvNo = inv.branchInvNo || inv.invoiceNo;
+
+        return {
+          ...inv,
+          originalAmount: orig,
+          amount: intactGrossSale,
+          netPayableAmount: intactGrossSale,
+          businessCommission: 0,
+          overrideReason: isStillEdited
+            ? roundOff > 0
+              ? ("ROUND_OFF" as OverrideReason)
+              : ("DISCOUNT" as OverrideReason)
+            : undefined,
+          adjustmentsApplied: isStillEdited,
+          isEdited: isStillEdited,
+          cashCommissionAmount: commAmt,
+          cashCommissionPaidFrom: paidFrom,
+          cashCommissionRecipient: recipient,
+          cashCommissionTxnId: clientTxnId,
+        };
+      });
+      syncCommissionExpenses(updated);
+      return updated;
+    });
+
+    setCashCommRowKey(null);
+
+    if (resolvedClientTxnId && resolvedInvNo) {
+      const expId = `cash-comm-exp-${targetInternalId || resolvedInvNo}`;
+      fetch("/api/pocket", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientTxnId: resolvedClientTxnId,
+          branch: branchId || "JCT_HARDWARE_JOTUN",
+          type: "EXPENSE",
+          amount: commAmt,
+          category: "Business Commission",
+          recipientName: resolvedRecipient,
+          paymentSource: paidFrom === "CASH" ? "DRAWER_CASH" : "BANK_TRANSFER",
+          paymentMode: paidFrom === "CASH" ? "CASH" : "BANK_TRANSFER",
+          supplierInvoiceNum: resolvedInvNo,
+          note: `[Cross-Tender Commission] Business Commission — Inv #${resolvedInvNo} (${resolvedRecipient})`,
+          date: saudiTodayIso(),
+        }),
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          const pkId = data?.transaction?.id;
+          if (pkId) {
+            setPreLoggedEntries((prev) =>
+              deduplicatePreLoggedEntries(
+                prev.map((item) =>
+                  item.id === expId || item.clientTxnId === resolvedClientTxnId
+                    ? { ...item, sourcePocketId: pkId }
+                    : item
+                )
+              )
+            );
+          }
+        })
+        .catch((err) => console.warn("Failed to sync Cash Commission to pocket:", err));
+
+      setJustCompletedToast(
+        `💵 Business Commission (-SAR ${fmt(commAmt)}) logged from ${
+          paidFrom === "CASH" ? "Cash Drawer" : "Bank / Card"
+        } for Inv #${resolvedInvNo}`
+      );
+    }
+  };
+
   const syncCommissionExpenses = (targetInvoices?: ErpInvoiceItem[]) => {
     const invoices = targetInvoices || erpInvoices;
     setPreLoggedEntries((prev) => {
@@ -5709,6 +5978,73 @@ function DailyRegisterView({
         const displayInvNo = inv.branchInvNo || inv.invoiceNo;
         const expId = `comm-exp-${inv.internalId || inv.invoiceNo}`;
         const legacyExpId = `comm-exp-${inv.invoiceNo}`;
+        const cashCommExpId = `cash-comm-exp-${inv.internalId || inv.invoiceNo}`;
+        const legacyCashCommExpId = `cash-comm-exp-${inv.invoiceNo}`;
+
+        const cashCommAmt = r2(inv.cashCommissionAmount || 0);
+
+        // Scenario A: Cross-Tender Commission ("💵 Cash Comm." button)
+        if (!inv.isReturned && cashCommAmt > 0) {
+          updated = updated.filter((e) => e.id !== expId && e.id !== legacyExpId);
+
+          const paidFrom = inv.cashCommissionPaidFrom || "CASH";
+          const recipient =
+            inv.cashCommissionRecipient ||
+            inv.customerName ||
+            inv.customer ||
+            "Customer";
+          const clientTxnId =
+            inv.cashCommissionTxnId ||
+            `ccomm-${branchId || "JCT"}-${activeSessionDate}-${inv.internalId || inv.invoiceNo}`;
+          const rowTitle = `Business Commission — Inv #${displayInvNo} (${recipient})`;
+          const rowNote = `[Cross-Tender Commission] Paid from ${
+            paidFrom === "BANK" ? "Bank / Card" : "Cash Drawer"
+          } · Inv #${displayInvNo} (${recipient})`;
+
+          const existingIdx = updated.findIndex(
+            (e) =>
+              e.id === cashCommExpId ||
+              e.id === legacyCashCommExpId ||
+              (clientTxnId && e.clientTxnId === clientTxnId)
+          );
+
+          const cashCommEntry: PreLoggedEntry = {
+            id: cashCommExpId,
+            clientTxnId,
+            type: "EXPENSE",
+            title: rowTitle,
+            expenseCategory: "Business Commission",
+            customerName: recipient,
+            invoiceNumber: displayInvNo,
+            linkedInvoiceNum: displayInvNo,
+            linkedInvoiceNo: displayInvNo,
+            isLinkedInvoiceCommission: true,
+            isInvoiceAdjustment: false,
+            amount: cashCommAmt,
+            originalAmount: cashCommAmt,
+            isEdited: false,
+            paymentMode: paidFrom === "BANK" ? "BANK" : "CASH",
+            note: rowNote,
+            time: inv.time || nowHHMM(),
+          };
+
+          if (existingIdx !== -1) {
+            updated[existingIdx] = {
+              ...updated[existingIdx],
+              ...cashCommEntry,
+              sourcePocketId: updated[existingIdx].sourcePocketId,
+            };
+          } else {
+            updated.push(cashCommEntry);
+          }
+          continue;
+        } else {
+          updated = updated.filter(
+            (e) => e.id !== cashCommExpId && e.id !== legacyCashCommExpId
+          );
+        }
+
+        // Scenario B: Inline Invoice Price Reduction (REASON *: Business Commission via direct amount edit)
         const orig = inv.originalAmount ?? inv.amount;
         const explicitComm = inv.businessCommission || 0;
         const diff =
@@ -5719,18 +6055,23 @@ function DailyRegisterView({
             : 0;
 
         if (!inv.isReturned && diff > 0) {
+          const customerLabel = inv.customerName || inv.customer || "Customer";
           const existingIdx = updated.findIndex(
             (e) => e.id === expId || e.id === legacyExpId
           );
           const commExpense: PreLoggedEntry = {
             id: expId,
             type: "EXPENSE",
-            title: `Business Commission (Inv #${displayInvNo})`,
+            title: `Business Commission — Inv #${displayInvNo} (${customerLabel})`,
             expenseCategory: "Business Commission",
+            customerName: customerLabel,
+            linkedInvoiceNum: displayInvNo,
+            linkedInvoiceNo: displayInvNo,
             amount: diff,
             originalAmount: diff,
             isEdited: false,
             isInvoiceAdjustment: true,
+            isLinkedInvoiceCommission: false,
             overrideReason: "BUSINESS_COMMISSION",
             paymentMode: "CASH",
             note: "Auto-synced from invoice commission adjustment",
@@ -5741,10 +6082,14 @@ function DailyRegisterView({
             updated[existingIdx] = {
               ...updated[existingIdx],
               id: expId,
-              title: `Business Commission (Inv #${displayInvNo})`,
+              title: `Business Commission — Inv #${displayInvNo} (${customerLabel})`,
+              customerName: customerLabel,
+              linkedInvoiceNum: displayInvNo,
+              linkedInvoiceNo: displayInvNo,
               amount: diff,
               originalAmount: diff,
               isInvoiceAdjustment: true,
+              isLinkedInvoiceCommission: false,
               overrideReason: "BUSINESS_COMMISSION",
               note: "Auto-synced from invoice commission adjustment",
             };
@@ -7964,20 +8309,39 @@ function DailyRegisterView({
                             )}
 
                             {!inv.isReturned && (
-                              <button
-                                type="button"
-                                onClick={() => handleRoundOffInvoice(rowKey)}
-                                className={`rounded-md px-2.5 py-1.5 text-[11px] font-bold transition-colors whitespace-nowrap shrink-0 ${
-                                  (inv.roundOffAmount || 0) > 0
-                                    ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/40"
-                                    : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-jct-turquoise/20 hover:text-jct-turquoise border border-slate-200 dark:border-slate-700"
-                                }`}
-                                title="Strip decimal fraction (e.g. 347.50 -> 347.00) and record Round Off"
-                              >
-                                {(inv.roundOffAmount || 0) > 0
-                                  ? `✂️ Rounded (-${fmt(inv.roundOffAmount || 0)})`
-                                  : "✂️ Round Off"}
-                              </button>
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRoundOffInvoice(rowKey)}
+                                  className={`rounded-md px-2.5 py-1.5 text-[11px] font-bold transition-colors whitespace-nowrap shrink-0 ${
+                                    (inv.roundOffAmount || 0) > 0
+                                      ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/40"
+                                      : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-jct-turquoise/20 hover:text-jct-turquoise border border-slate-200 dark:border-slate-700"
+                                  }`}
+                                  title="Strip decimal fraction (e.g. 347.50 -> 347.00) and record Round Off"
+                                >
+                                  {(inv.roundOffAmount || 0) > 0
+                                    ? `✂️ Rounded (-${fmt(inv.roundOffAmount || 0)})`
+                                    : "✂️ Round Off"}
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenCashCommBar(inv, rowKey)}
+                                  className={`rounded-md px-2.5 py-1.5 text-[11px] font-bold transition-colors whitespace-nowrap shrink-0 ${
+                                    (inv.cashCommissionAmount || 0) > 0
+                                      ? "bg-amber-500 text-slate-950 border border-amber-400 shadow-sm font-extrabold"
+                                      : cashCommRowKey === rowKey
+                                      ? "bg-amber-500/25 text-amber-700 dark:text-amber-300 border border-amber-500/60"
+                                      : "bg-amber-500/15 hover:bg-amber-500/25 text-amber-700 dark:text-amber-300 border border-amber-500/40"
+                                  }`}
+                                  title="Log Cross-Tender Business Commission (keeps Card/Bank gross sale intact & deducts commission strictly once from Cash Drawer or Bank)"
+                                >
+                                  {(inv.cashCommissionAmount || 0) > 0
+                                    ? `💵 Cash Comm. (-${fmt(inv.cashCommissionAmount || 0)})`
+                                    : "💵 Cash Comm."}
+                                </button>
+                              </>
                             )}
                           </div>
 
@@ -8086,6 +8450,154 @@ function DailyRegisterView({
                           </div>
                         </div>
                       </div>
+
+                      {/* ── Cross-Tender "💵 Cash Comm." Inline Adjustment Bar ── */}
+                      {!inv.isReturned && cashCommRowKey === rowKey && (
+                        <div className="mt-2.5 flex flex-wrap items-center gap-2.5 rounded-xl border-2 border-amber-400/70 bg-amber-500/10 px-3.5 py-2.5 text-xs shadow-sm animate-in fade-in duration-200">
+                          <span className="font-extrabold text-amber-800 dark:text-amber-300 whitespace-nowrap flex items-center gap-1">
+                            💵 Cash Comm. (SAR):
+                          </span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            autoFocus
+                            placeholder="0.00"
+                            value={cashCommAmtInput}
+                            onChange={(e) => setCashCommAmtInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                handleSubmitCashCommission(rowKey);
+                              } else if (e.key === "Escape") {
+                                setCashCommRowKey(null);
+                              }
+                            }}
+                            className="w-28 rounded-lg bg-white dark:bg-black px-2.5 py-1.5 font-mono text-sm font-black text-right text-amber-700 dark:text-amber-300 border border-amber-500/50 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                          />
+
+                          {/* Paid From Tender Selector */}
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                              Paid From:
+                            </span>
+                            <div className="flex items-center gap-1 rounded-lg bg-white/80 dark:bg-black/80 p-0.5 border border-amber-500/30">
+                              <button
+                                type="button"
+                                onClick={() => setCashCommPaidFrom("CASH")}
+                                className={`rounded-md px-2.5 py-1 text-[11px] font-bold transition whitespace-nowrap ${
+                                  cashCommPaidFrom === "CASH"
+                                    ? "bg-amber-500 text-slate-950 font-black shadow-sm"
+                                    : "text-slate-600 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-white"
+                                }`}
+                              >
+                                💵 Cash Drawer
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setCashCommPaidFrom("BANK")}
+                                className={`rounded-md px-2.5 py-1 text-[11px] font-bold transition whitespace-nowrap ${
+                                  cashCommPaidFrom === "BANK"
+                                    ? "bg-jct-turquoise text-jct-charcoal font-black shadow-sm"
+                                    : "text-slate-600 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-white"
+                                }`}
+                              >
+                                🏦 Bank / Card
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Recipient / Procurement Note */}
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                              Recipient:
+                            </span>
+                            <input
+                              type="text"
+                              placeholder="Customer / Procurement..."
+                              value={cashCommRecipientInput}
+                              onChange={(e) => setCashCommRecipientInput(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  handleSubmitCashCommission(rowKey);
+                                } else if (e.key === "Escape") {
+                                  setCashCommRowKey(null);
+                                }
+                              }}
+                              className="w-44 rounded-lg bg-white dark:bg-black px-2.5 py-1 text-xs font-semibold text-jct-charcoal dark:text-white border border-amber-500/40 focus:outline-none focus:ring-1 focus:ring-amber-400"
+                            />
+                          </div>
+
+                          {/* Submit & Cancel */}
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleSubmitCashCommission(rowKey)}
+                              className="rounded-lg bg-jct-turquoise text-jct-charcoal font-extrabold hover:brightness-95 px-3 py-1.5 text-[11px] shadow-sm transition whitespace-nowrap"
+                            >
+                              ✓ Submit Comm.
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setCashCommRowKey(null)}
+                              className="rounded-lg border border-slate-300 dark:border-white/20 bg-white/70 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 px-2.5 py-1.5 text-[11px] font-bold text-slate-600 dark:text-slate-300 transition whitespace-nowrap"
+                            >
+                              ✕ Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ── Confirmed Cross-Tender Cash/Bank Commission Audit Badge & Undo ── */}
+                      {!inv.isReturned &&
+                        (inv.cashCommissionAmount || 0) > 0 &&
+                        cashCommRowKey !== rowKey && (
+                          <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                            <span className="inline-flex flex-wrap items-center gap-2 rounded-xl border-2 border-amber-400 bg-amber-500/20 text-amber-950 dark:text-amber-200 px-3.5 py-1.5 font-bold text-xs shadow-md shadow-amber-500/10">
+                              <span className="font-mono font-extrabold text-jct-charcoal dark:text-jct-turquoise">
+                                {inv.paymentMode === "POS_SWIPE" || inv.paymentMode === "CARD"
+                                  ? "💳 Card Gross"
+                                  : inv.paymentMode === "BANK_TRANSFER"
+                                  ? "🏦 Bank Gross"
+                                  : inv.paymentMode === "SPLIT"
+                                  ? "⚡ Split Gross"
+                                  : inv.paymentMode === "CREDIT_SALE"
+                                  ? "📋 Credit Gross"
+                                  : "💵 Cash Gross"}
+                                : SAR {fmt(inv.amount)}
+                              </span>
+                              <span className="opacity-60">|</span>
+                              <span className="font-mono font-black text-rose-600 dark:text-rose-400">
+                                {(inv.cashCommissionPaidFrom || "CASH") === "BANK"
+                                  ? `🏦 Bank/Card Comm. Outflow: -SAR ${fmt(inv.cashCommissionAmount || 0)}`
+                                  : `💵 Cash Comm. Outflow: -SAR ${fmt(inv.cashCommissionAmount || 0)}`}
+                              </span>
+                              {inv.cashCommissionRecipient && (
+                                <>
+                                  <span className="opacity-60">·</span>
+                                  <span className="text-[11px] font-semibold">
+                                    To: {inv.cashCommissionRecipient}
+                                  </span>
+                                </>
+                              )}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenCashCommBar(inv, rowKey)}
+                              className="rounded-md border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 px-2 py-1 text-[10px] font-bold text-amber-700 dark:text-amber-300 transition"
+                            >
+                              ✏️ Edit Comm.
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleUndoCashCommission(rowKey)}
+                              className="rounded-md border border-rose-500/40 bg-rose-500/15 hover:bg-rose-500/25 px-2.5 py-1 text-[10px] font-extrabold text-rose-600 dark:text-rose-400 transition flex items-center gap-1"
+                              title="Undo and remove both this commission badge and the linked expense row"
+                            >
+                              ↩ Undo
+                            </button>
+                          </div>
+                        )}
 
                       {/* Automatic Inline Edit Detection: Amber Box when edited and unconfirmed */}
                       {isAmountEdited && !inv.adjustmentsApplied && (
@@ -10877,6 +11389,20 @@ function DailyRegisterView({
                                         </button>
                                         <button
                                           type="button"
+                                          onClick={() => handleOpenCashCommBar(inv, rowLookupId)}
+                                          className={`rounded border px-2 py-0.5 text-[10px] font-bold transition ${
+                                            (inv.cashCommissionAmount || 0) > 0
+                                              ? "border-amber-400 bg-amber-500 text-slate-950 font-extrabold"
+                                              : "border-amber-500/50 bg-amber-500/15 text-amber-700 dark:text-amber-300 hover:bg-amber-500/25"
+                                          }`}
+                                          title="Log Cross-Tender Business Commission (keeps Card/Bank gross intact & deducts once from Cash Drawer or Bank)"
+                                        >
+                                          {(inv.cashCommissionAmount || 0) > 0
+                                            ? `💵 Cash Comm. (-${fmt(inv.cashCommissionAmount || 0)})`
+                                            : "💵 Cash Comm."}
+                                        </button>
+                                        <button
+                                          type="button"
                                           onClick={() => {
                                             setEditingRowId(rowKey);
                                             setEditingRowVal(String(bankGross));
@@ -10917,6 +11443,107 @@ function DailyRegisterView({
                                 </span>
                               </div>
                             </div>
+
+                            {!inv.isReturned && cashCommRowKey === rowLookupId && (
+                              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-400/70 bg-amber-500/10 px-3 py-2 text-xs print:hidden">
+                                <span className="font-extrabold text-amber-800 dark:text-amber-300">
+                                  💵 Cash Comm. (SAR):
+                                </span>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  autoFocus
+                                  placeholder="0.00"
+                                  value={cashCommAmtInput}
+                                  onChange={(e) => setCashCommAmtInput(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      e.preventDefault();
+                                      handleSubmitCashCommission(rowLookupId);
+                                    } else if (e.key === "Escape") {
+                                      setCashCommRowKey(null);
+                                    }
+                                  }}
+                                  className="w-24 rounded bg-white dark:bg-black px-2 py-1 font-mono text-xs font-black text-right text-amber-700 dark:text-amber-300 border border-amber-500/50 focus:outline-none"
+                                />
+                                <div className="flex items-center gap-1 rounded bg-white/80 dark:bg-black/80 p-0.5 border border-amber-500/30">
+                                  <button
+                                    type="button"
+                                    onClick={() => setCashCommPaidFrom("CASH")}
+                                    className={`rounded px-2 py-0.5 text-[10px] font-bold ${
+                                      cashCommPaidFrom === "CASH"
+                                        ? "bg-amber-500 text-slate-950 font-black"
+                                        : "text-slate-600 dark:text-slate-400"
+                                    }`}
+                                  >
+                                    💵 Cash Drawer
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setCashCommPaidFrom("BANK")}
+                                    className={`rounded px-2 py-0.5 text-[10px] font-bold ${
+                                      cashCommPaidFrom === "BANK"
+                                        ? "bg-jct-turquoise text-jct-charcoal font-black"
+                                        : "text-slate-600 dark:text-slate-400"
+                                    }`}
+                                  >
+                                    🏦 Bank / Card
+                                  </button>
+                                </div>
+                                <input
+                                  type="text"
+                                  placeholder="Recipient..."
+                                  value={cashCommRecipientInput}
+                                  onChange={(e) => setCashCommRecipientInput(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      e.preventDefault();
+                                      handleSubmitCashCommission(rowLookupId);
+                                    }
+                                  }}
+                                  className="w-36 rounded bg-white dark:bg-black px-2 py-1 text-[11px] font-semibold text-jct-charcoal dark:text-white border border-amber-500/40 focus:outline-none"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleSubmitCashCommission(rowLookupId)}
+                                  className="rounded bg-jct-turquoise text-jct-charcoal font-extrabold px-2.5 py-1 text-[10px]"
+                                >
+                                  ✓ Submit Comm.
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setCashCommRowKey(null)}
+                                  className="rounded border border-slate-300 dark:border-white/20 px-2 py-1 text-[10px] font-bold text-slate-600 dark:text-slate-300"
+                                >
+                                  ✕ Cancel
+                                </button>
+                              </div>
+                            )}
+
+                            {!inv.isReturned &&
+                              (inv.cashCommissionAmount || 0) > 0 &&
+                              cashCommRowKey !== rowLookupId && (
+                                <div className="flex flex-wrap items-center gap-2 print:hidden">
+                                  <span className="inline-flex flex-wrap items-center gap-1.5 rounded-lg border border-amber-400 bg-amber-500/20 text-amber-950 dark:text-amber-200 px-2.5 py-1 font-bold text-[11px]">
+                                    <span className="font-mono font-extrabold">
+                                      {isBankTransferRow ? "🏦 Bank Gross" : "💳 Card Gross"}: SAR {fmt(bankGross)}
+                                    </span>
+                                    <span>|</span>
+                                    <span className="font-mono font-black text-rose-600 dark:text-rose-400">
+                                      {(inv.cashCommissionPaidFrom || "CASH") === "BANK"
+                                        ? `🏦 Bank/Card Comm. Outflow: -SAR ${fmt(inv.cashCommissionAmount || 0)}`
+                                        : `💵 Cash Comm. Outflow: -SAR ${fmt(inv.cashCommissionAmount || 0)}`}
+                                    </span>
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUndoCashCommission(rowLookupId)}
+                                    className="rounded border border-rose-500/40 bg-rose-500/15 hover:bg-rose-500/25 px-2 py-0.5 text-[10px] font-extrabold text-rose-600 dark:text-rose-400"
+                                  >
+                                    ↩ Undo
+                                  </button>
+                                </div>
+                              )}
 
                             {/* Detailed SAMA & ZATCA Fee Breakdown when Audit Details are Expanded */}
                             {showExpandedFeeBreakdown && !inv.isReturned && (
@@ -14454,13 +15081,31 @@ function BranchConsolidationView({ metrics }: { metrics: LiveCrossModuleMetrics 
 
   const calcActiveBranchTotals = (branchKey: string) => {
     const sess = activeSessions.find((s) => normalizeBranch(s.branch) === branchKey);
-    if (!sess) return { cashSales: 0, bankSales: 0 };
+    if (!sess) return { cashSales: 0, bankSales: 0, netDrawerCash: 0 };
     const invs = Array.isArray(sess.erpInvoices) ? sess.erpInvoices : [];
     const preBank = Array.isArray(sess.preLoggedBankInvoices) ? sess.preLoggedBankInvoices : [];
     const preEntries = Array.isArray(sess.preLoggedEntries) ? sess.preLoggedEntries : [];
     const cashSales = r2(invs.reduce((sum, inv) => sum + calcInvoiceCashPortion(inv), 0));
+    const cashInflows = r2(
+      preEntries
+        .filter(
+          (e) =>
+            !e.isReturned &&
+            e.type !== "EXPENSE" &&
+            e.type !== "CREDIT_SALE" &&
+            e.type !== "SPLIT_SALE" &&
+            (!e.paymentMode || e.paymentMode === "CASH")
+        )
+        .reduce((a, b) => a + b.amount, 0)
+    );
+    const cashExpenses = r2(
+      preEntries
+        .filter((e) => !e.isReturned && e.type === "EXPENSE" && classifyExpenseOutflow(e) === "CASH")
+        .reduce((a, b) => a + b.amount, 0)
+    );
     const bankSales = r2(calcSessionPosBreakdown(invs, preBank, preEntries).totalNonCashAmount);
-    return { cashSales, bankSales };
+    const netDrawerCash = r2(cashSales + cashInflows - cashExpenses);
+    return { cashSales, bankSales, netDrawerCash };
   };
 
   const sumBranchCash = (branchKey: string) =>
@@ -14483,17 +15128,17 @@ function BranchConsolidationView({ metrics }: { metrics: LiveCrossModuleMetrics 
   const jctStaffCount = staffMembers.filter((s) => normalizeBranch(s.branch) === "JCT_HARDWARE_JOTUN").length;
 
   const hempelLive = calcActiveBranchTotals("HEMPEL");
-  const hempelRegisterCash = r2(sumBranchCash("HEMPEL") + hempelLive.cashSales);
+  const hempelRegisterCash = r2(sumBranchCash("HEMPEL") + hempelLive.netDrawerCash);
   const hempelSales = r2(sumBranchSales("HEMPEL") + hempelLive.cashSales + hempelLive.bankSales);
   const hempelStaffCount = staffMembers.filter((s) => normalizeBranch(s.branch) === "HEMPEL").length;
 
   const dammamLive = calcActiveBranchTotals("DAMMAM_JOTUN");
-  const dammamRegisterCash = r2(sumBranchCash("DAMMAM_JOTUN") + dammamLive.cashSales);
+  const dammamRegisterCash = r2(sumBranchCash("DAMMAM_JOTUN") + dammamLive.netDrawerCash);
   const dammamSales = r2(sumBranchSales("DAMMAM_JOTUN") + dammamLive.cashSales + dammamLive.bankSales);
   const dammamStaffCount = staffMembers.filter((s) => normalizeBranch(s.branch) === "DAMMAM_JOTUN").length;
 
   const sigmaLive = calcActiveBranchTotals("SIGMA");
-  const sigmaRegisterCash = r2(sumBranchCash("SIGMA") + sigmaLive.cashSales);
+  const sigmaRegisterCash = r2(sumBranchCash("SIGMA") + sigmaLive.netDrawerCash);
   const sigmaSales = r2(sumBranchSales("SIGMA") + sigmaLive.cashSales + sigmaLive.bankSales);
   const sigmaStaffCount = staffMembers.filter((s) => normalizeBranch(s.branch) === "SIGMA").length;
 
@@ -19641,18 +20286,41 @@ export default function Page() {
           (t as { overrideReason?: string }).overrideReason === "BUSINESS_COMMISSION" ||
           (t.category === "Business Commission" &&
             (t.note || "").toLowerCase().includes("auto-synced from"));
+        const isCrossTenderComm =
+          !isAutoCommAdj &&
+          t.category === "Business Commission" &&
+          Boolean(
+            (t.note || "").includes("[Cross-Tender Commission]") ||
+              t.supplierInvoiceNum
+          );
         const billUrl = t.billPdfUrl || t.receiptUrl || undefined;
+        const expTitle =
+          t.category === "Business Commission"
+            ? t.supplierInvoiceNum
+              ? `Business Commission — Inv #${t.supplierInvoiceNum}${
+                  t.recipientName ? ` (${t.recipientName})` : ""
+                }`
+              : t.recipientName
+              ? `Business Commission — ${t.recipientName}`
+              : "Business Commission"
+            : t.category ?? "Owner Expense";
         injected.push({
           id: entryId,
+          clientTxnId: t.clientTxnId || undefined,
           sourcePocketId: t.id,
           type: "EXPENSE",
           expenseCategory: (t.category ?? "").startsWith("Food") ? "Food" : (t.category ?? "Other Expenses") as any,
-          title: t.category ?? "Owner Expense",
+          title: expTitle,
+          customerName: t.recipientName || undefined,
+          invoiceNumber: t.supplierInvoiceNum || undefined,
+          linkedInvoiceNum: t.supplierInvoiceNum || undefined,
+          linkedInvoiceNo: t.supplierInvoiceNum || undefined,
           note: [tag, t.note].filter(Boolean).join(" · "),
           amount: effAmount,
           originalAmount: origAmt,
           isReturned: isRet,
           isInvoiceAdjustment: isAutoCommAdj,
+          isLinkedInvoiceCommission: isCrossTenderComm,
           overrideReason: isAutoCommAdj ? "BUSINESS_COMMISSION" : undefined,
           time,
           paymentMode: (t.paymentMode as UniversalPaymentMode) || "CASH",
@@ -19942,6 +20610,7 @@ export default function Page() {
         ...prev,
       ]);
     } else if (type === "EXPENSE" || type === "PURCHASE" || type === "SALES_RETURN") {
+      const isBusComm = category === "Business Commission";
       const entry: PreLoggedEntry = {
         id: clientTxnId || `exp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         clientTxnId,
@@ -19950,15 +20619,25 @@ export default function Page() {
         expenseCategory:
           (category as any) ||
           (type === "PURCHASE" ? "Cash Purchase" : "Other Expenses"),
+        customerName: customerName || undefined,
+        invoiceNumber: invoiceNo || undefined,
+        linkedInvoiceNum: invoiceNo || undefined,
+        linkedInvoiceNo: invoiceNo || undefined,
+        isLinkedInvoiceCommission: isBusComm,
+        isInvoiceAdjustment: false,
         title:
           description ||
-          (supplierName
+          (isBusComm
+            ? `Business Commission${invoiceNo ? ` — Inv #${invoiceNo}` : ""}${
+                customerName ? ` (${customerName})` : ""
+              }`
+            : supplierName
             ? `Supplier: ${supplierName}`
             : customerName
             ? `Return: ${customerName}`
             : "Quick-Log Entry"),
         paymentMode:
-          paymentMode === "BANK"
+          paymentMode === "BANK" || paymentMode === "BANK_TRANSFER"
             ? "BANK"
             : paymentMode === "CARD"
             ? "CARD"
@@ -19967,7 +20646,7 @@ export default function Page() {
         hasBill: Boolean(receiptUrl),
         time: nowHHMM(),
       };
-      setPreLoggedEntries((prev) => [entry, ...prev]);
+      setPreLoggedEntries((prev) => deduplicatePreLoggedEntries([entry, ...prev]));
     }
   };
 

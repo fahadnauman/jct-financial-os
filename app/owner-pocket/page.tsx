@@ -240,6 +240,7 @@ export default function OwnerPocketPage() {
   const [eReceiptFileName, setEReceiptFileName] = useState<string | null>(null);
   const [uploadingReceipt, setUploadingReceipt] = useState(false);
   const [eNote, setENote] = useState("");
+  const [eCommInvNo, setECommInvNo] = useState("");
 
   const readFileAsDataUrl = (file: File): Promise<string> =>
     new Promise((resolve, reject) => {
@@ -543,20 +544,32 @@ export default function OwnerPocketPage() {
       setTimeout(() => setToast(null), 3500);
       return;
     }
+    const isComm = eCat === "Business Commission";
+    const cleanInv = eCommInvNo.trim();
     const ok = await finish(
       {
         branch: eBranch,
         type: "EXPENSE",
         amount,
         category: eCat,
-        recipientName: null,
-        paymentSource: eSource === "POCKET" ? "OWNER_POCKET" : "DRAWER_CASH",
+        recipientName: isComm ? eNote.trim() || "Customer" : null,
+        paymentSource:
+          eSource === "POCKET"
+            ? "OWNER_POCKET"
+            : ePaymentMode === "CASH"
+            ? "DRAWER_CASH"
+            : "BANK_TRANSFER",
         paymentMode: ePaymentMode,
+        supplierInvoiceNum: isComm && cleanInv ? cleanInv : null,
         hasBill: eBillType === "WITH_BILL" && Boolean(eReceiptUrl),
         billFileName: eReceiptFileName,
         receiptUrl: eReceiptUrl,
         billPdfUrl: eReceiptUrl,
-        note: eNote.trim() || (eBillType === "WITH_BILL" ? "With Attached Receipt" : null),
+        note: isComm
+          ? `[Cross-Tender Commission] Business Commission${cleanInv ? ` — Inv #${cleanInv}` : ""}${
+              eNote.trim() ? ` (${eNote.trim()})` : ""
+            }`
+          : eNote.trim() || (eBillType === "WITH_BILL" ? "With Attached Receipt" : null),
         date: todayIso(),
       },
       `Expense SAR ${fmt(amount)} saved · ${branchShort(eBranch)}`
@@ -564,6 +577,7 @@ export default function OwnerPocketPage() {
     if (ok) {
       setEAmount("");
       setENote("");
+      setECommInvNo("");
       setEReceiptUrl(null);
       setEReceiptFileName(null);
       setEBillType("WITHOUT_BILL");
@@ -1665,6 +1679,17 @@ export default function OwnerPocketPage() {
                   <span className={labelCls}>Category</span>
                   <Pills options={EXPENSE_CATEGORIES} value={eCat} onChange={setECat} />
                 </div>
+                {eCat === "Business Commission" && (
+                  <div>
+                    <label className={labelCls}>Linked Invoice # (Optional)</label>
+                    <input
+                      value={eCommInvNo}
+                      onChange={(e) => setECommInvNo(e.target.value)}
+                      placeholder="e.g. W#JB006597"
+                      className={`${inputCls} font-mono text-sm border-amber-400/40`}
+                    />
+                  </div>
+                )}
                 <div>
                   <span className={labelCls}>Payment Source</span>
                   <Pills
@@ -2045,13 +2070,26 @@ export default function OwnerPocketPage() {
               ) : (
                 recent.map((e) => {
                   const pBadge = formatPaymentModeBadge(e.paymentMode || (e.paymentSource === "BANK_TRANSFER" ? "BANK_TRANSFER" : "CASH"));
+                  const isBusComm = e.category === "Business Commission";
+                  const displayHeadline = isBusComm
+                    ? `💼 Business Commission${
+                        e.supplierInvoiceNum ? ` — Inv #${e.supplierInvoiceNum}` : ""
+                      }${e.recipientName ? ` (${e.recipientName})` : ""}`
+                    : `${kindLabel(e.type)}${e.category ? ` (${e.category})` : ""}`;
                   return (
-                    <div key={e.id} className="rounded-xl border border-white/5 bg-[#061416] p-3">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="font-bold">
-                          {kindLabel(e.type)} · SAR {fmt(e.amount)}
+                    <div
+                      key={e.id}
+                      className={`rounded-xl border p-3 ${
+                        isBusComm
+                          ? "border-amber-400/40 bg-amber-500/10"
+                          : "border-white/5 bg-[#061416]"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between text-sm gap-2">
+                        <span className={`font-bold truncate ${isBusComm ? "text-amber-300" : ""}`}>
+                          {displayHeadline} · SAR {fmt(e.amount)}
                         </span>
-                        <span className="text-[11px] text-slate-500">{hhmm(e.createdAt)}</span>
+                        <span className="text-[11px] text-slate-500 shrink-0">{hhmm(e.createdAt)}</span>
                       </div>
                       <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-[10px] font-bold">
                         <div className="flex flex-wrap items-center gap-1.5">

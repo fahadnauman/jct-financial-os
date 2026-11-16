@@ -63,6 +63,12 @@ export interface GenericInvoiceLike {
   branchInvNo?: string;
   referenceId?: string;
   amount: number;
+  originalAmount?: number;
+  roundOffAmount?: number;
+  discountAmount?: number;
+  cashCommissionAmount?: number;
+  cashCommissionPaidFrom?: "CASH" | "BANK";
+  cashCommissionRecipient?: string;
   netPayableAmount?: number;
   isReturned?: boolean;
   isManualPos?: boolean;
@@ -169,8 +175,20 @@ export function calcSessionPosBreakdown(
     if (inv.invoiceNo) processedInvoices.add(inv.invoiceNo.trim().replace(/^#/, ""));
     if (inv.branchInvNo) processedInvoices.add(inv.branchInvNo.trim().replace(/^#/, ""));
 
+    // When Cross-Tender Cash Commission is logged (inv.cashCommissionAmount > 0),
+    // keep the Card/Bank gross settlement 100% intact (only net of any roundOff or discount)
+    // because the commission is recorded as a separate linked Cash/Bank outflow.
     const effectiveInvAmount =
-      inv.netPayableAmount !== undefined && inv.netPayableAmount >= 0
+      (inv.cashCommissionAmount || 0) > 0
+        ? r2(
+            Math.max(
+              0,
+              (inv.originalAmount ?? inv.amount) -
+                (inv.roundOffAmount || 0) -
+                (inv.discountAmount || 0)
+            )
+          )
+        : inv.netPayableAmount !== undefined && inv.netPayableAmount >= 0
         ? inv.netPayableAmount
         : inv.amount;
     const mode = (inv.paymentMode || "").toUpperCase();
