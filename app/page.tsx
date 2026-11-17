@@ -846,6 +846,7 @@ export interface ErpInvoiceItem {
   splitCardBrand?: SplitCardBrand;
   /** True once a row was switched into Split mode and still needs its mandatory bank selection */
   splitChoiceRequired?: boolean;
+  isMultiBillUnconfirmedSplit?: boolean;
   otherNote?: string;
   creditDownAmount?: number;
   creditDownMethod?: "CASH" | "POS_SWIPE";
@@ -1905,9 +1906,32 @@ export const parseErpCsvText = (
         : "SAB";
 
     if (isSplitType) {
-      const cashShare = !Number.isNaN(cashCol) && cashCol > 0 ? cashCol : r2(grossAmt / 2);
-      const bankShare =
-        !Number.isNaN(bankCol) && bankCol > 0 ? bankCol : Math.max(0, r2(grossAmt - cashShare));
+      let resolvedCashCol = cashCol;
+      let resolvedBankCol = bankCol;
+      if (Number.isNaN(resolvedCashCol) || !(resolvedCashCol > 0 && resolvedBankCol > 0)) {
+        const joinedLine = cols.join(" ");
+        const cm = joinedLine.match(/\bCash\s*[:=-]?\s*(?:SAR\s*)?(\d+(?:\.\d{1,2})?)/i);
+        const bm = joinedLine.match(/\b(?:Card|Bank|POS|Swipe|Mada|Visa|Transfer)\s*[:=-]?\s*(?:SAR\s*)?(\d+(?:\.\d{1,2})?)/i);
+        const pc = cm ? parseFloat(cm[1]) : NaN;
+        const pb = bm ? parseFloat(bm[1]) : NaN;
+        if (!Number.isNaN(pc) && pc > 0 && pc < grossAmt) {
+          resolvedCashCol = r2(pc);
+          resolvedBankCol = r2(grossAmt - pc);
+        } else if (!Number.isNaN(pb) && pb > 0 && pb < grossAmt) {
+          resolvedBankCol = r2(pb);
+          resolvedCashCol = r2(grossAmt - pb);
+        }
+      }
+      const hasExplicitSplit =
+        !Number.isNaN(resolvedCashCol) &&
+        resolvedCashCol > 0 &&
+        !Number.isNaN(resolvedBankCol) &&
+        resolvedBankCol > 0;
+      const cashShare =
+        !Number.isNaN(resolvedCashCol) && resolvedCashCol > 0
+          ? r2(Math.min(grossAmt, resolvedCashCol))
+          : r2(grossAmt / 2);
+      const bankShare = Math.max(0, r2(grossAmt - cashShare));
       parsedRows.push({
         invoiceNo,
         customer,
@@ -1921,6 +1945,8 @@ export const parseErpCsvText = (
         splitBankAmount: bankShare,
         splitBankMethod: rawType.includes("TRANSFER") ? "BANK_TRANSFER" : "POS_SWIPE",
         splitPosTerminal: terminal,
+        splitChoiceRequired: !hasExplicitSplit,
+        isMultiBillUnconfirmedSplit: !hasExplicitSplit,
         autoMatched: true,
         time: nowHHMM(),
       });
@@ -2523,8 +2549,8 @@ function HandoverModalComponent({
 
   return (
     <ModalPortal isOpen={isOpen}>
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 sm:p-6 overflow-y-auto text-jct-charcoal dark:text-jct-offwhite">
-        <div className="w-full max-w-xl bg-white dark:bg-[#111111] border border-slate-200 dark:border-white/10 rounded-3xl p-6 sm:p-8 shadow-2xl relative overflow-hidden transition-all duration-500 my-auto">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 backdrop-blur-md transition-opacity duration-200 p-4 sm:p-6 overflow-y-auto text-jct-charcoal dark:text-jct-offwhite">
+        <div className="w-full max-w-xl bg-white dark:bg-[#111111] border border-slate-200 dark:border-white/10 rounded-3xl p-6 sm:p-8 shadow-2xl relative overflow-hidden animate-modal-scale-in my-auto">
         
         {/* ── STEP 1: PHYSICAL CASH VERIFICATION ── */}
         {drawerCloseStep === 1 && (
@@ -4213,6 +4239,7 @@ function DailyRegisterView({
           isSplit: true,
           splitCashAmount: cashShare,
           splitBankAmount: bankShare,
+          isMultiBillUnconfirmedSplit: false,
         };
       });
     });
@@ -5902,11 +5929,25 @@ function DailyRegisterView({
         resolvedRecipient = recipient;
         resolvedInvNo = inv.branchInvNo || inv.invoiceNo;
 
+        const isSplitInv = inv.paymentMode === "SPLIT" || Boolean(inv.isSplit);
+        const curBank = r2(inv.splitBankAmount || 0);
+        const curCash = r2(inv.splitCashAmount || 0);
+        const preservedBankShare = isSplitInv
+          ? curBank > 0 && curBank <= intactGrossSale
+            ? curBank
+            : r2(Math.max(0, intactGrossSale - Math.min(intactGrossSale, curCash)))
+          : inv.splitBankAmount;
+        const preservedCashShare = isSplitInv
+          ? r2(Math.max(0, intactGrossSale - preservedBankShare))
+          : inv.splitCashAmount;
+
         return {
           ...inv,
           originalAmount: orig,
           amount: intactGrossSale,
           netPayableAmount: intactGrossSale,
+          splitCashAmount: preservedCashShare,
+          splitBankAmount: preservedBankShare,
           businessCommission: 0,
           overrideReason: isStillEdited
             ? roundOff > 0
@@ -8257,6 +8298,12 @@ function DailyRegisterView({
                               Split Tender
                             </span>
                           )}
+                          {isSplitMode &&
+                            (inv.isMultiBillUnconfirmedSplit || inv.splitChoiceRequired) && (
+                              <span className="rounded-full bg-amber-500 text-slate-950 border border-amber-300 px-3 py-1 text-[10px] font-black shrink-0 shadow-sm">
+                                ⚡ Multi-Bill Detected: Confirm Cash vs. Card Split
+                              </span>
+                            )}
                           {inv.originalDate && (
                             <span className="rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 px-2.5 py-0.5 text-[10px] font-bold shrink-0">
                               Orig: {inv.originalDate}
@@ -8561,11 +8608,14 @@ function DailyRegisterView({
                                   : inv.paymentMode === "BANK_TRANSFER"
                                   ? "🏦 Bank Gross"
                                   : inv.paymentMode === "SPLIT"
-                                  ? "⚡ Split Gross"
+                                  ? "💳 Split Gross"
                                   : inv.paymentMode === "CREDIT_SALE"
                                   ? "📋 Credit Gross"
                                   : "💵 Cash Gross"}
                                 : SAR {fmt(inv.amount)}
+                                {inv.paymentMode === "SPLIT"
+                                  ? ` (Cash: ${fmt(inv.splitCashAmount || 0)} + Card/Bank: ${fmt(inv.splitBankAmount || 0)})`
+                                  : ""}
                               </span>
                               <span className="opacity-60">|</span>
                               <span className="font-mono font-black text-rose-600 dark:text-rose-400">
@@ -10585,16 +10635,40 @@ function DailyRegisterView({
                                     </span>
                                   )}
                                   {!inv.isReturned && (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setEditingRowId(rowKey);
-                                        setEditingRowVal(String(cashAmt));
-                                      }}
-                                      className="rounded bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-2 py-0.5 text-[10px] print:hidden"
-                                    >
-                                      ✏️ Edit
-                                    </button>
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRoundOffInvoice(rowLookupId)}
+                                        className="rounded border border-jct-turquoise/50 bg-jct-turquoise/15 text-jct-charcoal dark:text-jct-turquoise hover:bg-jct-turquoise hover:text-jct-charcoal font-bold px-2 py-0.5 text-[10px] transition print:hidden"
+                                        title="Auto Round-Off decimal fraction (e.g., .50 or .10 -> .00)"
+                                      >
+                                        ✂️ Round Off
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenCashCommBar(inv, rowLookupId)}
+                                        className={`rounded border px-2 py-0.5 text-[10px] font-bold transition print:hidden ${
+                                          (inv.cashCommissionAmount || 0) > 0
+                                            ? "border-amber-400 bg-amber-500 text-slate-950 font-extrabold"
+                                            : "border-amber-500/50 bg-amber-500/15 text-amber-700 dark:text-amber-300 hover:bg-amber-500/25"
+                                        }`}
+                                        title="Log Cross-Tender Business Commission (keeps gross sale intact & deducts once from Cash Drawer or Bank)"
+                                      >
+                                        {(inv.cashCommissionAmount || 0) > 0
+                                          ? `💵 Cash Comm. (-${fmt(inv.cashCommissionAmount || 0)})`
+                                          : "💵 Cash Comm."}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setEditingRowId(rowKey);
+                                          setEditingRowVal(String(cashAmt));
+                                        }}
+                                        className="rounded bg-jct-yellow text-jct-charcoal font-bold hover:brightness-95 px-2 py-0.5 text-[10px] print:hidden"
+                                      >
+                                        ✏️ Edit
+                                      </button>
+                                    </>
                                   )}
                                   <button
                                     type="button"
@@ -20898,7 +20972,7 @@ export default function Page() {
 
       <div className="flex flex-1 min-w-0 w-full flex-col overflow-hidden bg-slate-50 dark:bg-black print:overflow-visible print:h-auto print:w-full print:p-0 print:m-0 print:bg-white print:text-black">
         {/* Top Header */}
-        <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 sm:gap-4 border-b border-slate-200 dark:border-[#1F1F1F] bg-white dark:bg-[#0A0A0A] px-4 sm:px-6 py-3 sm:py-4 z-20 shadow-sm print:hidden">
+        <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 sm:gap-4 border-b border-slate-200 dark:border-slate-800/80 bg-white/90 dark:bg-[#070e24]/85 backdrop-blur-xl px-4 sm:px-6 py-3 sm:py-4 z-20 shadow-sm print:hidden">
           <div className="flex items-center gap-2 sm:gap-4">
             <button
               type="button"
@@ -21000,7 +21074,7 @@ export default function Page() {
                 <BranchAuditRadar />
               </div>
             )}
-            <div key={safeTab} className="flex-1 flex flex-col min-w-0 animate-in fade-in duration-300 ease-out">
+            <div key={safeTab} className="flex-1 flex flex-col min-w-0 animate-fade-slide-up">
             {safeTab === "register" ? (
               <DailyRegisterView
                 trackingMode={trackingMode}

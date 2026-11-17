@@ -43,6 +43,8 @@ export interface ParsedErpInvoiceItem {
   splitBankAmount: number;
   splitBankMethod: "BANK_TRANSFER" | "POS_SWIPE";
   splitPosTerminal: PosTerminalBank;
+  splitChoiceRequired?: boolean;
+  isMultiBillUnconfirmedSplit?: boolean;
   autoMatched: boolean;
   time: string;
 }
@@ -140,6 +142,44 @@ const mapJctPayTypeToMode = (rawPayType: string): {
   };
 };
 
+const extractInlineSplitAmounts = (
+  textContext: string,
+  grossAmt: number
+): { cash: number; bank: number; found: boolean } => {
+  if (!textContext || grossAmt <= 0) return { cash: NaN, bank: NaN, found: false };
+  const cashMatch = textContext.match(
+    /\bCash\s*[:=-]?\s*(?:SAR\s*)?(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)\b/i
+  );
+  const bankMatch = textContext.match(
+    /\b(?:Card|Bank|POS|Swipe|Mada|Visa|Mastercard|Transfer)\s*[:=-]?\s*(?:SAR\s*)?(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)\b/i
+  );
+  const parsedCash = cashMatch ? cleanNum(cashMatch[1]) : NaN;
+  const parsedBank = bankMatch ? cleanNum(bankMatch[1]) : NaN;
+
+  if (parsedCash > 0 && parsedBank > 0 && Math.abs(parsedCash + parsedBank - grossAmt) <= 1) {
+    return {
+      cash: r2(parsedCash),
+      bank: r2(Math.max(0, grossAmt - parsedCash)),
+      found: true,
+    };
+  }
+  if (parsedCash > 0 && parsedCash < grossAmt) {
+    return {
+      cash: r2(parsedCash),
+      bank: r2(grossAmt - parsedCash),
+      found: true,
+    };
+  }
+  if (parsedBank > 0 && parsedBank < grossAmt) {
+    return {
+      cash: r2(grossAmt - parsedBank),
+      bank: r2(parsedBank),
+      found: true,
+    };
+  }
+  return { cash: NaN, bank: NaN, found: false };
+};
+
 const buildInvoiceItem = (
   invoiceNo: string,
   customer: string,
@@ -149,19 +189,39 @@ const buildInvoiceItem = (
   cashCol = NaN,
   bankCol = NaN,
   branchInvNo?: string,
-  seqInvoiceNo?: string
+  seqInvoiceNo?: string,
+  extraContextText = ""
 ): ParsedErpInvoiceItem => {
   const cleanId = invoiceNo.replace(/^#/i, "").trim();
   const cleanCustomer = (customer || "Walk-in Customer").trim();
-  const { mode, isSplit, terminal, splitBankMethod } = mapJctPayTypeToMode(rawPayType);
-  const hasDualTenderValues = cashCol > 0 && bankCol > 0;
+  const { mode, isSplit, terminal, splitBankMethod } = mapJctPayTypeToMode(
+    `${rawPayType} ${extraContextText}`
+  );
+  let resolvedCashCol = cashCol;
+  let resolvedBankCol = bankCol;
+  if (!(resolvedCashCol > 0 && resolvedBankCol > 0) && (isSplit || extraContextText)) {
+    const inlineSplit = extractInlineSplitAmounts(
+      `${rawPayType} ${extraContextText}`,
+      grossAmt
+    );
+    if (inlineSplit.found) {
+      resolvedCashCol = inlineSplit.cash;
+      resolvedBankCol = inlineSplit.bank;
+    }
+  }
+  const hasDualTenderValues = resolvedCashCol > 0 && resolvedBankCol > 0;
   const finalIsSplit = isSplit || hasDualTenderValues;
   const branchInv = branchInvNo ? branchInvNo.replace(/^#/i, "").trim() : cleanId;
   const seqInv = seqInvoiceNo ? seqInvoiceNo.replace(/^#/i, "").trim() : undefined;
 
   if (finalIsSplit) {
-    const cashShare = cashCol > 0 ? cashCol : r2(grossAmt / 2);
-    const bankShare = bankCol > 0 ? bankCol : Math.max(0, r2(grossAmt - cashShare));
+    const cashShare =
+      resolvedCashCol > 0
+        ? r2(Math.min(grossAmt, resolvedCashCol))
+        : resolvedBankCol > 0 && resolvedBankCol < grossAmt
+        ? r2(grossAmt - resolvedBankCol)
+        : r2(grossAmt / 2);
+    const bankShare = Math.max(0, r2(grossAmt - cashShare));
     return {
       id: cleanId,
       referenceId: cleanId,
@@ -181,6 +241,8 @@ const buildInvoiceItem = (
       splitBankAmount: bankShare,
       splitBankMethod,
       splitPosTerminal: terminal,
+      splitChoiceRequired: !hasDualTenderValues,
+      isMultiBillUnconfirmedSplit: !hasDualTenderValues,
       autoMatched: true,
       time: timeVal,
     };
@@ -306,7 +368,9 @@ export const parseJctPdfTextToInvoices = (rawText: string): ParsedErpInvoiceItem
 
   const isFiveDigitInv = (tok: string): boolean => /^\d{5}$/.test(tok) && tok !== "31951";
   const isPayTypeToken = (tok: string): boolean =>
-    /^(Cash|Card|Bank|Credit|POS|Mada|Visa|Split|Multi)$/i.test(tok.replace(/^[:|]+|[:|]+$/g, ""));
+    /^(Cash|Card|Bank|Credit|POS|Mada|Visa|Split|Multi|Partial|Multi-Bill|Multi-Pay|Multi-Payment)$/i.test(
+      tok.replace(/^[:|]+|[:|]+$/g, "")
+    );
   const isNumericAmountToken = (tok: string): boolean =>
     /^(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?$/.test(tok);
   const isBranchInvToken = (tok: string): boolean =>
@@ -418,6 +482,10 @@ export const parseJctPdfTextToInvoices = (rawText: string): ParsedErpInvoiceItem
                 seenInvoices.add(foundBranchInv);
               }
 
+              const trailingContext = tokens
+                .slice(amtIdx + 1, Math.min(amtIdx + 15, tokens.length))
+                .join(" ");
+
               results.push(
                 buildInvoiceItem(
                   primaryId,
@@ -428,7 +496,8 @@ export const parseJctPdfTextToInvoices = (rawText: string): ParsedErpInvoiceItem
                   NaN,
                   NaN,
                   foundBranchInv || primaryId,
-                  currentInvNo
+                  currentInvNo,
+                  trailingContext
                 )
               );
 
@@ -675,7 +744,8 @@ const parseTableRowsToInvoices = (rows: unknown[][]): ParsedErpInvoiceItem[] => 
         cashCol,
         bankCol,
         detectedBranch || invoiceNo,
-        detectedSeq || undefined
+        detectedSeq || undefined,
+        cols.join(" ")
       )
     );
   }

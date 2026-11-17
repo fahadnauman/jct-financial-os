@@ -268,14 +268,14 @@ export function SalesReturnModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-md transition-opacity duration-200"
       role="dialog"
       aria-modal="true"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-full max-w-xl rounded-2xl border border-rose-500/50 bg-white dark:bg-[#0A0A0A] shadow-[0_0_50px_rgba(244,63,94,0.25)] overflow-hidden flex flex-col max-h-[92vh]">
+      <div className="animate-modal-scale-in w-full max-w-xl rounded-2xl border border-rose-500/50 bg-white dark:bg-[#0A0A0A] shadow-[0_0_50px_rgba(244,63,94,0.25)] overflow-hidden flex flex-col max-h-[92vh] scrollbar-thin">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-rose-500/30 px-6 py-4 bg-rose-500/10">
           <div className="flex items-center gap-3">

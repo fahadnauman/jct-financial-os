@@ -211,7 +211,7 @@ export function RapidPosModal({
 
   return (
     <div
-      className="fixed inset-0 z-[120] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm animate-in fade-in duration-150"
+      className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-md transition-opacity duration-200"
       role="dialog"
       aria-modal="true"
       aria-label="Rapid Manual POS Entry"
@@ -221,7 +221,7 @@ export function RapidPosModal({
     >
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-lg rounded-2xl border border-jct-turquoise/50 bg-white dark:bg-[#0A0A0A] p-5 sm:p-6 shadow-[0_0_40px_rgba(45,226,230,0.2)] space-y-4 text-jct-charcoal dark:text-jct-offwhite max-h-[92vh] overflow-y-auto"
+        className="animate-modal-scale-in w-full max-w-lg rounded-2xl border border-jct-turquoise/50 bg-white dark:bg-[#0A0A0A] p-5 sm:p-6 shadow-[0_0_40px_rgba(45,226,230,0.2)] space-y-4 text-jct-charcoal dark:text-jct-offwhite max-h-[92vh] overflow-y-auto scrollbar-thin"
       >
         {/* Header */}
         <div className="flex items-start justify-between gap-3">
