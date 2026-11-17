@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "../../../lib/prisma";
+import { sanitizeOptionalString, sanitizeString, validateAmount } from "../../../lib/sanitize";
 
 export const dynamic = "force-dynamic";
 
@@ -7,8 +8,7 @@ export const dynamic = "force-dynamic";
  * Normalizes party names for consistent indexing and deduplication.
  */
 function normalizePartyName(raw: string): string {
-  return raw
-    .trim()
+  return sanitizeString(raw, 160)
     .replace(/\s+/g, " ")
     .toUpperCase();
 }
@@ -110,6 +110,54 @@ async function autoBootstrapPartiesIfNeeded() {
       }
     }
 
+    // 6. Harvest from historical DailyRegisterLock snapshots
+    const archives = await prisma.dailyRegisterLock.findMany({
+      orderBy: { lockedAt: "desc" },
+      take: 30,
+    });
+    for (const arc of archives) {
+      if (!arc.dataJson) continue;
+      try {
+        const parsed = JSON.parse(arc.dataJson) as {
+          erpInvoices?: Array<{ customer?: string; customerName?: string; amount?: number; invoiceNo?: string }>;
+          expenses?: Array<{ title?: string; supplierName?: string; amount?: number }>;
+        };
+        if (Array.isArray(parsed.erpInvoices)) {
+          for (const inv of parsed.erpInvoices) {
+            const norm = normalizePartyName(inv.customerName || inv.customer || "");
+            if (!norm || norm.length < 2) continue;
+            const key = `${norm}|CUSTOMER`;
+            if (!recordsToInsert.has(key)) {
+              recordsToInsert.set(key, {
+                name: norm,
+                partyType: "CUSTOMER",
+                branch: arc.branch,
+                lastAmount: Number(inv.amount) || undefined,
+                lastInvoiceNo: inv.invoiceNo || undefined,
+              });
+            }
+          }
+        }
+        if (Array.isArray(parsed.expenses)) {
+          for (const exp of parsed.expenses) {
+            const norm = normalizePartyName(exp.supplierName || "");
+            if (!norm || norm.length < 2) continue;
+            const key = `${norm}|SUPPLIER`;
+            if (!recordsToInsert.has(key)) {
+              recordsToInsert.set(key, {
+                name: norm,
+                partyType: "SUPPLIER",
+                branch: arc.branch,
+                lastAmount: Number(exp.amount) || undefined,
+              });
+            }
+          }
+        }
+      } catch {
+        /* ignore malformed snapshot */
+      }
+    }
+
     // Upsert in batches
     for (const item of Array.from(recordsToInsert.values())) {
       await prisma.partyDirectory.upsert({
@@ -141,9 +189,10 @@ async function autoBootstrapPartiesIfNeeded() {
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
-  const q = (searchParams.get("q") || "").trim();
+  const q = sanitizeString(searchParams.get("q") || "", 120);
   const partyType = searchParams.get("type"); // "SUPPLIER" | "CUSTOMER" | "CREDITOR" | "BOTH"
   const branch = searchParams.get("branch");
+  const limit = Math.min(Math.max(1, Number(searchParams.get("limit")) || 200), 400);
 
   try {
     await autoBootstrapPartiesIfNeeded();
@@ -172,7 +221,7 @@ export async function GET(req: Request) {
     const parties = await prisma.partyDirectory.findMany({
       where: whereClause,
       orderBy: { updatedAt: "desc" },
-      take: 150,
+      take: limit,
     });
 
     return NextResponse.json({ parties });
@@ -207,10 +256,10 @@ export async function POST(req: Request) {
           ? item.partyType
           : "CUSTOMER";
 
-      const branch = typeof item.branch === "string" ? item.branch : "ALL";
-      const phone = typeof item.phone === "string" ? item.phone : null;
-      const lastAmount = typeof item.lastAmount === "number" ? item.lastAmount : null;
-      const lastInvoiceNo = typeof item.lastInvoiceNo === "string" ? item.lastInvoiceNo : null;
+      const branch = typeof item.branch === "string" ? sanitizeString(item.branch, 48) || "ALL" : "ALL";
+      const phone = sanitizeOptionalString(item.phone, 48);
+      const lastAmount = validateAmount(item.lastAmount, true);
+      const lastInvoiceNo = sanitizeOptionalString(item.lastInvoiceNo, 64);
 
       const row = await prisma.partyDirectory.upsert({
         where: {

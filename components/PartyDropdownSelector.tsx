@@ -11,6 +11,7 @@ export interface PartyItem {
   phone?: string;
   lastAmount?: number;
   lastInvoiceNo?: string;
+  sourceTag?: "Today's Sale" | "Today's Entry" | "History";
 }
 
 interface PartyDropdownSelectorProps {
@@ -22,6 +23,7 @@ interface PartyDropdownSelectorProps {
   label?: string;
   required?: boolean;
   extraParties?: string[]; // e.g., today's uploaded CSV customer list
+  liveParties?: PartyItem[]; // Instant in-memory merge from Bank/POS Match & active entries
   className?: string;
   id?: string;
 }
@@ -35,6 +37,7 @@ export function PartyDropdownSelector({
   label,
   required = false,
   extraParties = [],
+  liveParties = [],
   className = "",
   id = "party-dropdown",
 }: PartyDropdownSelectorProps) {
@@ -45,7 +48,14 @@ export function PartyDropdownSelector({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch directory from /api/parties
+  // Sync searchTerm when parent resets value to ""
+  useEffect(() => {
+    if (!value) {
+      setSearchTerm("");
+    }
+  }, [value]);
+
+  // Fetch full directory from /api/parties once per partyType/branch so client filtering is 0ms
   useEffect(() => {
     let ignore = false;
     const fetchParties = async () => {
@@ -53,11 +63,16 @@ export function PartyDropdownSelector({
       try {
         const typeParam = partyType && partyType !== "ALL" ? `&type=${partyType}` : "";
         const branchParam = branch && branch !== "ALL" ? `&branch=${branch}` : "";
-        const res = await fetch(`/api/parties?q=${encodeURIComponent(searchTerm)}${typeParam}${branchParam}`);
+        const res = await fetch(`/api/parties?limit=300${typeParam}${branchParam}`);
         if (!res.ok) throw new Error("Failed to load parties");
         const data = await res.json();
         if (!ignore && Array.isArray(data?.parties)) {
-          setDbParties(data.parties);
+          setDbParties(
+            data.parties.map((p: PartyItem) => ({
+              ...p,
+              sourceTag: p.sourceTag || "History",
+            }))
+          );
         }
       } catch (err) {
         console.error("Party fetch error:", err);
@@ -66,12 +81,11 @@ export function PartyDropdownSelector({
       }
     };
 
-    const timer = setTimeout(fetchParties, searchTerm ? 200 : 0);
+    void fetchParties();
     return () => {
       ignore = true;
-      clearTimeout(timer);
     };
-  }, [searchTerm, partyType, branch]);
+  }, [partyType, branch]);
 
   // Close on outside click
   useEffect(() => {
@@ -84,30 +98,54 @@ export function PartyDropdownSelector({
     return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, []);
 
-  // Merge db parties with any runtime extra parties (e.g. today's uploaded PDF customers)
+  // Instant 0ms in-memory merge: Today's Live Bank/POS Match + Today's Entries + Extra + DB History
   const combinedParties = useMemo(() => {
-    const list: PartyItem[] = [...dbParties];
-    const seen = new Set(list.map((p) => p.name.toUpperCase().trim()));
+    const list: PartyItem[] = [];
+    const seen = new Set<string>();
 
-    for (const raw of extraParties) {
-      const clean = (raw || "").trim();
-      if (!clean || clean.length < 2) continue;
+    const pushUnique = (item: PartyItem) => {
+      const clean = (item.name || "").trim();
+      if (!clean || clean.length < 2) return;
       const upper = clean.toUpperCase();
-      if (!seen.has(upper)) {
-        seen.add(upper);
-        list.push({
-          name: clean,
-          partyType: partyType === "SUPPLIER" ? "SUPPLIER" : "CUSTOMER",
-        });
-      }
+      if (seen.has(upper)) return;
+      seen.add(upper);
+      list.push({
+        ...item,
+        name: clean,
+      });
+    };
+
+    // 1. Today's Live Parties (Bank/POS Match PDF/CSV + active register entries)
+    for (const lp of liveParties) {
+      pushUnique(lp);
     }
 
-    if (searchTerm) {
-      const q = searchTerm.toLowerCase();
-      return list.filter((p) => p.name.toLowerCase().includes(q));
+    // 2. Legacy extraParties strings
+    for (const raw of extraParties) {
+      pushUnique({
+        name: raw,
+        partyType: partyType === "SUPPLIER" ? "SUPPLIER" : "CUSTOMER",
+      });
+    }
+
+    // 3. Historical Database Parties
+    for (const dp of dbParties) {
+      pushUnique({
+        ...dp,
+        sourceTag: dp.sourceTag || "History",
+      });
+    }
+
+    const activeQuery = (searchTerm || "").trim().toLowerCase();
+    if (activeQuery) {
+      const tokens = activeQuery.split(/\s+/).filter(Boolean);
+      return list.filter((p) => {
+        const hay = p.name.toLowerCase();
+        return tokens.every((tok) => hay.includes(tok));
+      });
     }
     return list;
-  }, [dbParties, extraParties, searchTerm, partyType]);
+  }, [dbParties, extraParties, liveParties, searchTerm, partyType]);
 
   const handleSelect = (party: PartyItem) => {
     onChange(party.name, party);
@@ -118,34 +156,37 @@ export function PartyDropdownSelector({
   const handleDirectInput = (text: string) => {
     onChange(text);
     setSearchTerm(text);
+    if (text.trim().length > 0) {
+      setIsOpen(true);
+    }
   };
 
   const renderBadge = (type: string) => {
     switch (type) {
       case "SUPPLIER":
         return (
-          <span className="inline-flex items-center gap-1 rounded bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/40 px-1.5 py-0.5 text-[9px] font-extrabold uppercase">
+          <span className="inline-flex items-center gap-1 rounded bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/40 px-1.5 py-0.5 text-[9px] font-extrabold uppercase shrink-0">
             <Building2 size={10} />
             <span>Supplier</span>
           </span>
         );
       case "CUSTOMER":
         return (
-          <span className="inline-flex items-center gap-1 rounded bg-jct-turquoise/20 text-jct-charcoal dark:text-jct-turquoise border border-jct-turquoise/40 px-1.5 py-0.5 text-[9px] font-extrabold uppercase">
+          <span className="inline-flex items-center gap-1 rounded bg-jct-turquoise/20 text-jct-charcoal dark:text-jct-turquoise border border-jct-turquoise/40 px-1.5 py-0.5 text-[9px] font-extrabold uppercase shrink-0">
             <User size={10} />
             <span>Customer</span>
           </span>
         );
       case "CREDITOR":
         return (
-          <span className="inline-flex items-center gap-1 rounded bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-500/40 px-1.5 py-0.5 text-[9px] font-extrabold uppercase">
+          <span className="inline-flex items-center gap-1 rounded bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-500/40 px-1.5 py-0.5 text-[9px] font-extrabold uppercase shrink-0">
             <CreditCard size={10} />
             <span>Creditor</span>
           </span>
         );
       case "BOTH":
         return (
-          <span className="inline-flex items-center gap-1 rounded bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/40 px-1.5 py-0.5 text-[9px] font-extrabold uppercase">
+          <span className="inline-flex items-center gap-1 rounded bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/40 px-1.5 py-0.5 text-[9px] font-extrabold uppercase shrink-0">
             <Sparkles size={10} />
             <span>Both</span>
           </span>
@@ -153,6 +194,29 @@ export function PartyDropdownSelector({
       default:
         return null;
     }
+  };
+
+  const renderSourceTag = (tag?: PartyItem["sourceTag"]) => {
+    if (!tag) return null;
+    if (tag === "Today's Sale") {
+      return (
+        <span className="rounded bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/40 px-1.5 py-0.5 text-[9px] font-black uppercase shrink-0">
+          Today&apos;s Sale
+        </span>
+      );
+    }
+    if (tag === "Today's Entry") {
+      return (
+        <span className="rounded bg-cyan-500/20 text-cyan-700 dark:text-cyan-300 border border-cyan-500/40 px-1.5 py-0.5 text-[9px] font-black uppercase shrink-0">
+          Today&apos;s Entry
+        </span>
+      );
+    }
+    return (
+      <span className="rounded bg-slate-500/15 text-slate-600 dark:text-slate-400 border border-slate-500/30 px-1.5 py-0.5 text-[9px] font-bold uppercase shrink-0">
+        History
+      </span>
+    );
   };
 
   return (
@@ -174,6 +238,7 @@ export function PartyDropdownSelector({
           onFocus={() => setIsOpen(true)}
           placeholder={placeholder}
           required={required}
+          autoComplete="off"
           className="w-full rounded-lg border border-slate-300 dark:border-[#222222] bg-white dark:bg-[#0E0E0E] text-jct-charcoal dark:text-white px-3 py-2 text-xs font-semibold focus:border-jct-turquoise focus:outline-none focus:ring-1 focus:ring-jct-turquoise transition-all pr-8"
         />
         <button
@@ -193,7 +258,7 @@ export function PartyDropdownSelector({
 
       {/* Dropdown Menu */}
       {isOpen && (
-        <div className="absolute z-50 mt-1 w-full max-h-64 overflow-y-auto rounded-xl border border-slate-200 dark:border-[#2A2A2A] bg-white dark:bg-[#111111] shadow-xl p-1.5 text-xs divide-y divide-slate-100 dark:divide-[#1C1C1C]">
+        <div className="absolute z-50 mt-1 w-full max-h-64 overflow-y-auto scrollbar-thin rounded-xl border border-slate-200 dark:border-[#2A2A2A] bg-white dark:bg-[#111111] shadow-xl p-1.5 text-xs divide-y divide-slate-100 dark:divide-[#1C1C1C] animate-fade-slide-up">
           {/* Quick Search Header */}
           <div className="flex items-center gap-1.5 px-2.5 py-1.5 mb-1 bg-slate-50 dark:bg-[#181818] rounded-lg">
             <Search size={12} className="text-slate-400 shrink-0" />
@@ -201,12 +266,11 @@ export function PartyDropdownSelector({
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Filter by name..."
+              placeholder="Filter by name (0ms instant)..."
               className="w-full bg-transparent text-[11px] font-medium text-jct-charcoal dark:text-white placeholder-slate-400 focus:outline-none"
-              autoFocus
             />
             {isLoading && (
-              <span className="text-[10px] text-slate-400 animate-pulse shrink-0">Loading...</span>
+              <span className="text-[10px] text-slate-400 animate-pulse shrink-0">Syncing...</span>
             )}
           </div>
 
@@ -229,7 +293,7 @@ export function PartyDropdownSelector({
                 )}
               </div>
             ) : (
-              combinedParties.map((party, idx) => {
+              combinedParties.slice(0, 80).map((party, idx) => {
                 const isSelected = value.trim().toUpperCase() === party.name.trim().toUpperCase();
                 return (
                   <button
@@ -242,8 +306,9 @@ export function PartyDropdownSelector({
                         : "hover:bg-slate-100 dark:hover:bg-[#1A1A1A] text-jct-charcoal dark:text-slate-200"
                     }`}
                   >
-                    <div className="min-w-0 flex-1 flex items-center gap-2">
+                    <div className="min-w-0 flex-1 flex items-center gap-1.5 flex-wrap">
                       <span className="truncate font-semibold">{party.name}</span>
+                      {renderSourceTag(party.sourceTag)}
                       {renderBadge(party.partyType)}
                     </div>
                     {isSelected && (

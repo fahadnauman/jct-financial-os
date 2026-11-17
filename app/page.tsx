@@ -23,7 +23,7 @@ import MonthlyAuditsView from "./monthly-audits-view";
 import { calcSessionPosBreakdown, type PosSessionBreakdown } from "../lib/pos-breakdown";
 import { useActiveSessionSync, type ActiveSessionSyncStatus } from "../lib/active-session-sync";
 import { RapidPosModal, type RapidPosSubmitPayload, type RapidPosBatchEntry } from "../components/RapidPosModal";
-import { PartyDropdownSelector } from "../components/PartyDropdownSelector";
+import { PartyDropdownSelector, type PartyItem } from "../components/PartyDropdownSelector";
 import { ReturnBillModal } from "../components/ReturnBillModal";
 import { SaudiLiveClock } from "../components/SaudiLiveClock";
 import { SalesReturnModal, type SalesReturnSubmitPayload } from "../components/SalesReturnModal";
@@ -3597,6 +3597,63 @@ function DailyRegisterView({
     });
   };
 
+  // Instant Live Merge: Today's Bank & POS Match (erpInvoices) + Today's Entries + Credit Customers + Default Suppliers
+  const unifiedPartyDirectory = useMemo<PartyItem[]>(() => {
+    const list: PartyItem[] = [];
+    const seen = new Set<string>();
+    const addParty = (item: PartyItem) => {
+      const clean = (item.name || "").trim();
+      if (!clean || clean.length < 2) return;
+      const upper = clean.toUpperCase();
+      if (seen.has(upper)) return;
+      seen.add(upper);
+      list.push({ ...item, name: clean });
+    };
+
+    for (const inv of erpInvoices) {
+      const cName = (inv.customerName || inv.customer || "").trim();
+      if (cName && cName.toLowerCase() !== "walk-in customer") {
+        addParty({
+          name: cName,
+          partyType: "CUSTOMER",
+          branch: branchId,
+          lastAmount: inv.amount,
+          lastInvoiceNo: inv.branchInvNo || inv.invoiceNo,
+          sourceTag: "Today's Sale",
+        });
+      }
+    }
+
+    for (const entry of preLoggedEntries) {
+      const pName = (entry.supplierName || entry.customerName || "").trim();
+      if (pName) {
+        addParty({
+          name: pName,
+          partyType: entry.supplierName ? "SUPPLIER" : "CUSTOMER",
+          branch: branchId,
+          lastAmount: entry.amount,
+          sourceTag: "Today's Entry",
+        });
+      }
+    }
+
+    for (const cc of creditCustomers) {
+      addParty({
+        name: cc.name,
+        partyType: "CUSTOMER",
+        branch: branchId,
+        lastAmount: cc.outstanding,
+        sourceTag: "History",
+      });
+    }
+
+    for (const defSup of ["Jotun", "Hempel", "Sigma"]) {
+      addParty({ name: defSup, partyType: "SUPPLIER" });
+    }
+
+    return list;
+  }, [erpInvoices, preLoggedEntries, creditCustomers, branchId]);
+
   // Auto-Lookup helper for ERP invoices (searches loaded erpInvoices across branchInvNo, invoiceNo, seqInvoiceNo, referenceId)
   const findErpInvoiceMatch = (rawInput: string): ErpInvoiceItem | undefined => {
     const cleaned = cleanErpInvNo(rawInput).toLowerCase();
@@ -4052,6 +4109,36 @@ function DailyRegisterView({
       const matched = applyPreLoggedMatchesToImported(extracted);
       setErpInvoices(matched);
       setCsvLoadedBanner(true);
+
+      // Background auto-harvesting of all uploaded PDF/CSV customer names into PartyDirectory
+      const uniqueUploadedParties = Array.from(
+        new Map(
+          matched
+            .map((inv) => {
+              const name = (inv.customerName || inv.customer || "").trim();
+              return name && name.length >= 2 && name.toLowerCase() !== "walk-in customer"
+                ? [
+                    name.toUpperCase(),
+                    {
+                      name,
+                      partyType: "CUSTOMER" as const,
+                      branch: branchId || "JCT_HARDWARE_JOTUN",
+                      lastAmount: inv.amount,
+                      lastInvoiceNo: inv.branchInvNo || inv.invoiceNo,
+                    },
+                  ]
+                : null;
+            })
+            .filter((x): x is [string, { name: string; partyType: "CUSTOMER"; branch: string; lastAmount: number; lastInvoiceNo: string }] => Boolean(x))
+        ).values()
+      );
+      if (uniqueUploadedParties.length > 0) {
+        void fetch("/api/parties", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ parties: uniqueUploadedParties }),
+        }).catch(() => {});
+      }
 
       // Seamless handoff to Step 2 of the tracking procedure
       if (trackingMode === "wizard") {
@@ -5114,6 +5201,17 @@ function DailyRegisterView({
         step4SupplierInvoiceNum.trim() || undefined,
         step4BillPdfUrl || undefined
       );
+      void fetch("/api/parties", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: cleanSupplier,
+          partyType: "SUPPLIER",
+          branch: branchId || "JCT_HARDWARE_JOTUN",
+          lastAmount: val,
+          lastInvoiceNo: step4SupplierInvoiceNum.trim() || undefined,
+        }),
+      }).catch(() => {});
       // Persist to Neon PostgreSQL /api/pocket and attach sourcePocketId so 5s poll never duplicates
       fetch("/api/pocket", {
         method: "POST",
@@ -7319,10 +7417,11 @@ function DailyRegisterView({
                             id="hub-supplier-party"
                             value={hubSupplierName}
                             onChange={(val) => setHubSupplierName(val)}
-                            partyType="SUPPLIER"
+                            partyType="ALL"
                             branch={branchId}
-                            placeholder="Supplier (e.g. Jotun)..."
+                            placeholder="Supplier / Party (e.g. Jotun)..."
                             className="flex-1 min-w-[150px]"
+                            liveParties={unifiedPartyDirectory}
                             extraParties={["Jotun", "Hempel", "Sigma"]}
                           />
                         )}
@@ -9318,16 +9417,14 @@ function DailyRegisterView({
                         }
                         value={step3Title}
                         onChange={(name) => setStep3Title(name)}
-                        partyType="CUSTOMER"
+                        partyType="ALL"
                         branch={branchId}
                         placeholder={
                           step3Kind === "CREDIT_RECD" || step3Kind === "CREDIT_SALE" || step3Kind === "CUSTOMER_ADVANCE" || step3SplitEnabled
                             ? "Select or search Customer / Contractor..."
                             : "Source or Note"
                         }
-                        extraParties={erpInvoices
-                          .map((i) => i.customer || i.customerName)
-                          .filter((c): c is string => Boolean(c))}
+                        liveParties={unifiedPartyDirectory}
                       />
                     </div>
 
@@ -9811,12 +9908,13 @@ function DailyRegisterView({
                         <div>
                           <PartyDropdownSelector
                             id="step4-supplier-party"
-                            label="Supplier Name (Syncs to Suppliers & Payables)"
+                            label="Supplier / Party Name (Instant Live Search)"
                             value={step4SupplierName}
                             onChange={(val) => setStep4SupplierName(val)}
-                            partyType="SUPPLIER"
+                            partyType="ALL"
                             branch={branchId}
-                            placeholder="Select or type Supplier (e.g. Jotun, Hempel)..."
+                            placeholder="Search Supplier or Today's Customer (e.g. Jotun, Space Top)..."
+                            liveParties={unifiedPartyDirectory}
                             extraParties={["Jotun", "Hempel", "Sigma"]}
                           />
                         </div>
@@ -21101,6 +21199,25 @@ export default function Page() {
                 isOwner={Boolean(profile?.isOwner)}
                 currentUserRole={profile?.isOwner ? "OWNER" : "STAFF"}
                 activeSessionDate={activeSessionDate}
+                liveParties={[
+                  ...erpInvoices
+                    .map((i) => ({
+                      name: (i.customerName || i.customer || "").trim(),
+                      partyType: "CUSTOMER" as const,
+                      lastAmount: i.amount,
+                      lastInvoiceNo: i.branchInvNo || i.invoiceNo,
+                      sourceTag: "Today's Sale" as const,
+                    }))
+                    .filter((p) => p.name.length >= 2 && p.name.toLowerCase() !== "walk-in customer"),
+                  ...preLoggedEntries
+                    .map((e) => ({
+                      name: (e.supplierName || e.customerName || "").trim(),
+                      partyType: (e.supplierName ? "SUPPLIER" : "CUSTOMER") as "SUPPLIER" | "CUSTOMER",
+                      lastAmount: e.amount,
+                      sourceTag: "Today's Entry" as const,
+                    }))
+                    .filter((p) => p.name.length >= 2),
+                ]}
                 onSyncWithRegister={handleExpressQuickLogSync}
               />
             ) : safeTab === "archive" ? (

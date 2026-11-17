@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   Zap,
   Receipt,
@@ -22,7 +22,7 @@ import {
   RefreshCw,
   Search,
 } from "lucide-react";
-import { PartyDropdownSelector } from "./PartyDropdownSelector";
+import { PartyDropdownSelector, type PartyItem } from "./PartyDropdownSelector";
 import { saudiTodayIso, saudiParts, addSaudiDays, saudiTime12 } from "../lib/saudi-time";
 import type { BranchId, PocketTransaction, PocketType } from "../lib/pocket-bridge";
 
@@ -34,6 +34,7 @@ interface ExpressQuickLogViewProps {
   isOwner?: boolean;
   currentUserRole?: string;
   activeSessionDate?: string;
+  liveParties?: PartyItem[];
   onSyncWithRegister?: (entry: {
     type: QuickLogType;
     payload: Record<string, unknown>;
@@ -89,6 +90,7 @@ export function ExpressQuickLogView({
   isOwner = false,
   currentUserRole = "STAFF",
   activeSessionDate,
+  liveParties = [],
   onSyncWithRegister,
   onPreviewBill,
 }: ExpressQuickLogViewProps) {
@@ -141,6 +143,36 @@ export function ExpressQuickLogView({
   const [activityFeed, setActivityFeed] = useState<PocketTransaction[]>([]);
   const [feedLoading, setFeedLoading] = useState(false);
   const amountInputRef = useRef<HTMLInputElement>(null);
+
+  // Instant Live Merge: Today's Bank/POS Match + Today's Pocket Activity
+  const unifiedPartyDirectory = useMemo<PartyItem[]>(() => {
+    const merged: PartyItem[] = [];
+    const seen = new Set<string>();
+    const addParty = (item: PartyItem) => {
+      const clean = (item.name || "").trim();
+      if (!clean || clean.length < 2) return;
+      const upper = clean.toUpperCase();
+      if (seen.has(upper)) return;
+      seen.add(upper);
+      merged.push({ ...item, name: clean });
+    };
+
+    for (const lp of liveParties) {
+      addParty(lp);
+    }
+    for (const tx of activityFeed) {
+      if (tx.recipientName && tx.recipientName !== "Express Logger" && tx.recipientName !== "Manual POS Entry") {
+        addParty({
+          name: tx.recipientName,
+          partyType: tx.type === "PURCHASE" || tx.type === "SUPPLIER_ADVANCE" ? "SUPPLIER" : "CUSTOMER",
+          branch: tx.branch,
+          lastAmount: tx.amount,
+          sourceTag: "Today's Entry",
+        });
+      }
+    }
+    return merged;
+  }, [liveParties, activityFeed]);
 
   const effectiveDate = activeSessionDate && /^\d{4}-\d{2}-\d{2}$/.test(activeSessionDate)
     ? activeSessionDate
@@ -360,6 +392,24 @@ export function ExpressQuickLogView({
           date: effectiveDate,
         }),
       });
+
+      // Background upsert to persistent PartyDirectory in Neon PostgreSQL
+      if (
+        (activeType === "PURCHASE" && purchaseSupplier.trim()) ||
+        (activeType === "SALES_BILL" && salesCustomer.trim())
+      ) {
+        void fetch("/api/parties", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: activeType === "PURCHASE" ? purchaseSupplier.trim() : salesCustomer.trim(),
+            partyType: activeType === "PURCHASE" ? "SUPPLIER" : "CUSTOMER",
+            branch: branchId,
+            lastAmount: numAmt,
+            lastInvoiceNo: supplierInvoiceNum || undefined,
+          }),
+        }).catch(() => {});
+      }
 
       if (res.ok) {
         showToast(`⚡ Logged ${activeType.replace("_", " ")}: SAR ${fmt(numAmt)}`);
@@ -681,11 +731,13 @@ export function ExpressQuickLogView({
               <div className="space-y-3 animate-in fade-in">
                 <PartyDropdownSelector
                   label="Supplier / Creditor *"
-                  partyType="SUPPLIER"
+                  partyType="ALL"
                   branch={branchId}
                   value={purchaseSupplier}
                   onChange={(val) => setPurchaseSupplier(val)}
-                  placeholder="Select or enter supplier name..."
+                  liveParties={unifiedPartyDirectory}
+                  extraParties={["Jotun", "Hempel", "Sigma"]}
+                  placeholder="Select or enter supplier / party name..."
                 />
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -796,10 +848,11 @@ export function ExpressQuickLogView({
 
                 <PartyDropdownSelector
                   label="Customer / Buyer"
-                  partyType="CUSTOMER"
+                  partyType="ALL"
                   branch={branchId}
                   value={salesCustomer}
                   onChange={(val) => setSalesCustomer(val)}
+                  liveParties={unifiedPartyDirectory}
                   placeholder="Select or enter customer name..."
                 />
 
