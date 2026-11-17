@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "../../../lib/prisma";
-import { checkIsOwner, normalizeBranch, normalizePaymentMode, VALID_BRANCHES } from "../../../lib/auth-audit";
+import { checkIsOwner, checkStaffBranchAccess, normalizeBranch, normalizePaymentMode, VALID_BRANCHES } from "../../../lib/auth-audit";
+import { sanitizeOptionalString, validateAmount } from "../../../lib/sanitize";
 
 export const dynamic = "force-dynamic";
 
@@ -60,15 +61,19 @@ export async function POST(req: Request) {
   }
 
   const rawBranch = body.branch || body.branchId || req.headers.get("x-branch-id");
+  const branchErr = checkStaffBranchAccess(req, rawBranch);
+  if (branchErr) {
+    return NextResponse.json({ error: branchErr }, { status: 403 });
+  }
   const branch = normalizeBranch(rawBranch);
-  const amount = Number(body.amount);
+  const amount = validateAmount(body.amount, false);
   const paymentSource = String(body.paymentSource);
 
   if (
     !VALID_BRANCHES.includes(branch) ||
     !TYPES.includes(String(body.type)) ||
     !SOURCES.includes(paymentSource) ||
-    !(amount > 0) ||
+    amount === null ||
     !/^\d{4}-\d{2}-\d{2}$/.test(String(body.date))
   ) {
     return NextResponse.json({ error: "Invalid transaction parameters or branch" }, { status: 400 });
@@ -79,7 +84,7 @@ export async function POST(req: Request) {
     paymentSource === "BANK_TRANSFER" ? "SAB" : paymentSource === "SUPPLIER_CREDIT" ? "CREDIT" : "CASH"
   );
 
-  const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim().slice(0, 300) : null);
+  const str = (v: unknown) => sanitizeOptionalString(v, 300);
   const urlStr = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
   const resolvedReceiptUrl = urlStr(body.receiptUrl) || urlStr(body.billPdfUrl);
   const resolvedBillPdfUrl = urlStr(body.billPdfUrl) || urlStr(body.receiptUrl);

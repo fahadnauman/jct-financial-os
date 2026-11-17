@@ -119,7 +119,7 @@ function Pills<T extends string>({
             key={o}
             type="button"
             onClick={() => onChange(o)}
-            className={`rounded-xl border px-3 py-2 text-xs font-bold transition flex items-center gap-1.5 ${
+            className={`rounded-xl border px-3 py-2 text-xs font-bold transition-all duration-150 active:scale-[0.97] flex items-center gap-1.5 ${
               isSelected
                 ? isComm
                   ? "border-amber-300 bg-amber-500 text-slate-950 font-black ring-2 ring-amber-300 shadow-lg shadow-amber-500/30"
@@ -142,63 +142,51 @@ const labelCls = "mb-1.5 block text-[11px] font-bold uppercase tracking-wider te
 
 function PinGate({ onUnlock }: { onUnlock: () => void }) {
   const [pin, setPin] = useState("");
-  const [error, setError] = useState(false);
-  const [expectedOwnerPin, setExpectedOwnerPin] = useState(DEFAULT_OWNER_PIN);
+  const [error, setError] = useState<string | null>(null);
+  const [verifying, setVerifying] = useState(false);
 
-  useEffect(() => {
-    let ignore = false;
-    try {
-      const cached = window.localStorage.getItem("jct_cached_profile_pins");
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (parsed?.OWNER) setExpectedOwnerPin(String(parsed.OWNER));
-      }
-    } catch {
-      /* ignore */
-    }
-    fetch("/api/settings?branch=ALL", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((data) => {
-        if (!ignore && data?.profilePins?.OWNER) {
-          setExpectedOwnerPin(String(data.profilePins.OWNER));
-          window.localStorage.setItem("jct_cached_profile_pins", JSON.stringify(data.profilePins));
-        }
-      })
-      .catch(() => {});
-    return () => {
-      ignore = true;
-    };
-  }, []);
-
-  const verifyCandidate = (candidate: string) => {
+  const verifyCandidate = async (candidate: string): Promise<boolean> => {
     const clean = candidate.trim();
-    if (clean === expectedOwnerPin || clean === DEFAULT_OWNER_PIN) {
-      if (typeof window !== "undefined") {
-        window.sessionStorage.setItem(POCKET_UNLOCK_SESSION_KEY, "1");
+    if (!clean || verifying) return false;
+    setVerifying(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profileId: "OWNER", pin: clean }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data?.ok) {
+        if (typeof window !== "undefined") {
+          window.sessionStorage.setItem(POCKET_UNLOCK_SESSION_KEY, "1");
+        }
+        onUnlock();
+        return true;
       }
-      onUnlock();
-      return true;
+      setError(data?.error || "Incorrect Owner PIN");
+      setTimeout(() => setPin(""), 350);
+      return false;
+    } catch {
+      setError("Authentication server unreachable.");
+      return false;
+    } finally {
+      setVerifying(false);
     }
-    return false;
   };
 
   const press = (d: string) => {
-    const maxLen = Math.max(4, expectedOwnerPin.length);
-    if (pin.length >= maxLen) return;
+    if (verifying || pin.length >= 12) return;
     const next = pin + d;
     setPin(next);
-    setError(false);
-    if (next.length >= expectedOwnerPin.length || next.length === 4) {
-      if (verifyCandidate(next)) return;
-      if (next.length >= maxLen) {
-        setError(true);
-        setTimeout(() => setPin(""), 350);
-      }
+    setError(null);
+    if (next.length === 4) {
+      void verifyCandidate(next);
     }
   };
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center bg-[#070e24] p-6">
+    <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center bg-[#070e24] p-6 animate-modal-scale-in">
       <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-[#FFD200] to-[#FACC15] text-xl font-black text-black shadow-[0_0_25px_rgba(255,210,0,0.35)]">
         JCT
       </div>
@@ -220,10 +208,7 @@ function PinGate({ onUnlock }: { onUnlock: () => void }) {
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          if (!verifyCandidate(pin)) {
-            setError(true);
-            setTimeout(() => setPin(""), 350);
-          }
+          void verifyCandidate(pin);
         }}
         className="mt-4 w-full max-w-[260px]"
       >
@@ -233,16 +218,13 @@ function PinGate({ onUnlock }: { onUnlock: () => void }) {
           onChange={(e) => {
             const val = e.target.value;
             setPin(val);
-            setError(false);
-            if (val.length >= expectedOwnerPin.length && verifyCandidate(val)) {
-              return;
-            }
+            setError(null);
           }}
           placeholder="Tap keypad or type PIN..."
           className="w-full rounded-xl border border-white/15 bg-[#0B1E21] px-3 py-2 text-center font-mono text-sm tracking-widest text-white outline-none focus:border-[#00BAC7]"
         />
       </form>
-      {error && <p className="mt-3 text-xs font-bold text-rose-400">❌ Incorrect Owner PIN</p>}
+      {error && <p className="mt-3 text-xs font-bold text-rose-400">❌ {error}</p>}
       <div className="mt-6 grid w-full max-w-[260px] grid-cols-3 gap-3">
         {["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "⌫"].map((k, i) =>
           k === "" ? (
@@ -1180,7 +1162,7 @@ export default function OwnerPocketPage() {
     <div className="mx-auto flex min-h-screen max-w-md flex-col justify-between bg-[#040D0E] p-4 text-white">
       <div className="space-y-4">
         {/* Header */}
-        <header className="flex items-center justify-between gap-2">
+        <header className="sticky top-0 z-20 -mx-4 -mt-4 mb-2 flex items-center justify-between gap-2 backdrop-blur-xl bg-[#070e24]/85 border-b border-slate-800/80 px-4 py-3 shadow-sm">
           <div>
             <h1 className="text-lg font-extrabold flex items-center gap-2">
               👑 BONGSI Pocket
@@ -1189,7 +1171,7 @@ export default function OwnerPocketPage() {
               </span>
             </h1>
             <p className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-400">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" /> Neon Live Sync Active
+              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-subtle-pulse-glow" /> Neon Live Sync Active
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -1200,6 +1182,7 @@ export default function OwnerPocketPage() {
                 if (typeof window !== "undefined") {
                   window.sessionStorage.removeItem(POCKET_UNLOCK_SESSION_KEY);
                 }
+                void fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
                 setUnlocked(false);
               }}
               className="flex items-center gap-1 rounded-xl border border-white/15 bg-[#0B1E21] px-2.5 py-1.5 text-xs font-bold text-slate-300 hover:text-white active:scale-95 transition"
@@ -1256,7 +1239,7 @@ export default function OwnerPocketPage() {
             VIEW 1: QUICK LEDGER ACTIONS
            ══════════════════════════════════════════════════════════════ */}
         {activeTab === "actions" && (
-          <>
+          <div key="actions" className="space-y-4 animate-fade-slide-up">
             <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
               {POCKET_BRANCHES.map((b) => (
                 <button
@@ -2231,14 +2214,14 @@ export default function OwnerPocketPage() {
                 })
               )}
             </section>
-          </>
+          </div>
         )}
 
         {/* ══════════════════════════════════════════════════════════════
             VIEW 2: MOBILE STAFF & PAYROLL PORTAL
            ══════════════════════════════════════════════════════════════ */}
         {activeTab === "payroll" && (
-          <div className="space-y-4">
+          <div key="payroll" className="space-y-4 animate-fade-slide-up">
             {/* Top Month & Branch Selectors */}
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-1.5 rounded-xl border border-[#00BAC7]/30 bg-[#0B1E21] px-3 py-1.5 text-xs text-[#22D3EE] font-bold">
@@ -2292,33 +2275,33 @@ export default function OwnerPocketPage() {
 
             {/* 4 Mini KPI Cards */}
             <div className="grid grid-cols-2 gap-2.5">
-              <div className="rounded-2xl border border-white/10 bg-[#061113] p-3">
+              <div className="rounded-2xl border border-white/10 border-t-white/15 bg-gradient-to-b from-slate-900/90 to-slate-950/95 p-3 transition-all duration-200 hover:-translate-y-0.5 hover:border-cyan-500/40 hover:shadow-lg hover:shadow-cyan-950/30">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Active Staff</span>
-                <span className="text-xl font-black text-white block mt-1 font-mono">
+                <span className="text-xl font-black text-white block mt-1 font-mono tabular-nums tracking-tight">
                   {activeStaffList.length}
                 </span>
                 <span className="text-[10px] text-slate-500">Employees</span>
               </div>
 
-              <div className="rounded-2xl border border-[#00BAC7]/25 bg-[#061113] p-3">
+              <div className="rounded-2xl border border-[#00BAC7]/25 border-t-white/15 bg-gradient-to-b from-slate-900/90 to-slate-950/95 p-3 transition-all duration-200 hover:-translate-y-0.5 hover:border-cyan-500/40 hover:shadow-lg hover:shadow-cyan-950/30">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-[#22D3EE]">Monthly Payroll</span>
-                <span className="text-base font-black text-white block mt-1 font-mono">
+                <span className="text-base font-black text-white block mt-1 font-mono tabular-nums tracking-tight">
                   SAR {fmt(totalBasePayroll)}
                 </span>
                 <span className="text-[10px] text-slate-500">Gross contractual</span>
               </div>
 
-              <div className="rounded-2xl border border-rose-500/25 bg-[#061113] p-3">
+              <div className="rounded-2xl border border-rose-500/25 border-t-white/15 bg-gradient-to-b from-slate-900/90 to-slate-950/95 p-3 transition-all duration-200 hover:-translate-y-0.5 hover:border-rose-500/40 hover:shadow-lg hover:shadow-rose-950/30">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-rose-300">Advances Taken</span>
-                <span className="text-base font-black text-rose-400 block mt-1 font-mono">
+                <span className="text-base font-black text-rose-400 block mt-1 font-mono tabular-nums tracking-tight">
                   -SAR {fmt(totalAdvancesThisMonth)}
                 </span>
                 <span className="text-[10px] text-slate-500">This month</span>
               </div>
 
-              <div className="rounded-2xl border border-[#FFD200]/30 bg-gradient-to-br from-[#0B2023] to-[#040E10] p-3">
+              <div className="rounded-2xl border border-[#FFD200]/30 border-t-white/15 bg-gradient-to-b from-slate-900/90 to-slate-950/95 p-3 transition-all duration-200 hover:-translate-y-0.5 hover:border-amber-400/50 hover:shadow-lg hover:shadow-amber-950/30">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-[#FFD200]">Net Due to Pay</span>
-                <span className="text-base font-black text-[#FFD200] block mt-1 font-mono">
+                <span className="text-base font-black text-[#FFD200] block mt-1 font-mono tabular-nums tracking-tight">
                   SAR {fmt(totalNetDue)}
                 </span>
                 <span className="text-[10px] text-amber-200/60">After advances</span>
@@ -2461,8 +2444,8 @@ export default function OwnerPocketPage() {
           MODAL A: ADD NEW STAFF FROM MOBILE
          ────────────────────────────────────────────────────────────── */}
       {showAddStaffModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-2xl border border-[#FFD200]/40 bg-[#081517] p-5 shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-md transition-opacity duration-200">
+          <div className="w-full max-w-sm rounded-2xl border border-[#FFD200]/40 bg-[#081517] p-5 shadow-2xl space-y-4 animate-modal-scale-in">
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <h3 className="font-extrabold text-base text-white flex items-center gap-2">
                 <Users size={16} className="text-[#FFD200]" /> Add New Employee
@@ -2552,8 +2535,8 @@ export default function OwnerPocketPage() {
           MODAL B: INDIVIDUAL STAFF LEDGER & DISBURSEMENT
          ────────────────────────────────────────────────────────────── */}
       {selectedStaffForLedger && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/85 p-2 sm:p-4 backdrop-blur-md">
-          <div className="w-full max-w-md max-h-[92vh] overflow-hidden rounded-3xl border border-[#00BAC7]/30 bg-[#061113] shadow-2xl flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-950/75 p-2 sm:p-4 backdrop-blur-md transition-opacity duration-200">
+          <div className="w-full max-w-md max-h-[92vh] overflow-hidden rounded-3xl border border-[#00BAC7]/30 bg-[#061113] shadow-2xl flex flex-col animate-modal-scale-in">
             {/* Header */}
             <div className="p-4 bg-[#0B1E21] border-b border-white/10 flex items-start justify-between">
               <div>
@@ -2999,11 +2982,11 @@ export default function OwnerPocketPage() {
       {/* Bill / Receipt Preview Modal */}
       {previewBillUrl && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-md transition-opacity duration-200"
           onClick={() => setPreviewBillUrl(null)}
         >
           <div
-            className="w-full max-w-lg rounded-2xl border border-[#00BAC7]/40 bg-[#071517] p-4 shadow-2xl space-y-3"
+            className="w-full max-w-lg rounded-2xl border border-[#00BAC7]/40 bg-[#071517] p-4 shadow-2xl space-y-3 animate-modal-scale-in"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-white/10 pb-2">

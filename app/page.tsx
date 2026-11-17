@@ -2449,7 +2449,7 @@ function LiveSyncPill({ status }: { status?: ActiveSessionSyncStatus }) {
       ? { dot: "bg-jct-yellow animate-pulse", text: "Syncing…", cls: "border-jct-yellow/50 text-amber-700 dark:text-jct-yellow" }
       : status.state === "connecting"
       ? { dot: "bg-slate-400 animate-pulse", text: "Connecting…", cls: "border-slate-300 dark:border-[#1F1F1F] text-slate-500 dark:text-slate-400" }
-      : { dot: "bg-emerald-500", text: "Live Sync", cls: "border-emerald-500/40 text-emerald-700 dark:text-emerald-400" };
+      : { dot: "bg-emerald-500 animate-subtle-pulse-glow", text: "Live Sync", cls: "border-emerald-500/40 text-emerald-700 dark:text-emerald-400" };
   const syncedTime = status.lastSyncedAt
     ? saudiTime12(status.lastSyncedAt, true)
     : null;
@@ -6935,7 +6935,7 @@ function DailyRegisterView({
           MODE 1: WIDESCREEN HOME HUB (trackingMode === 'hub')
          ════════════════════════════════════════════════════════════════════ */}
       {trackingMode === "hub" && (
-        <div className="relative z-10 w-full animate-in fade-in duration-300 ease-out max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8 flex flex-col gap-6">
+        <div key="mode-hub" className="relative z-10 w-full animate-fade-slide-up max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8 flex flex-col gap-6">
           {justCompletedToast && (
             <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 dark:border-[#1F1F1F] bg-white dark:bg-[#0A0A0A] px-5 py-3.5 text-sm font-semibold text-jct-charcoal dark:text-jct-offwhite shadow-sm print:hidden">
               <div className="flex items-center gap-2.5">
@@ -6990,7 +6990,7 @@ function DailyRegisterView({
               <button
                 type="button"
                 onClick={() => setRapidPosOpen(true)}
-                className="inline-flex items-center gap-1.5 rounded-full bg-jct-yellow hover:brightness-95 px-4 py-1.5 text-xs font-black text-jct-charcoal shadow-[0_0_16px_rgba(255,222,89,0.3)] transition whitespace-nowrap"
+                className="inline-flex items-center gap-1.5 rounded-full bg-jct-yellow hover:brightness-95 px-4 py-1.5 text-xs font-black text-jct-charcoal shadow-[0_0_16px_rgba(255,222,89,0.3)] transition-all duration-150 active:scale-[0.97] whitespace-nowrap"
               >
                 <Zap size={13} className="fill-current" />
                 <span>⚡ Rapid Manual POS Entry</span>
@@ -7047,7 +7047,7 @@ function DailyRegisterView({
 
           {/* Top Dashboard Metrics (3 Values) */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 sm:gap-4 w-full">
-            <div className="flex-1 min-w-[260px] w-full bg-white dark:bg-[#0A0A0A] border border-white/80 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-shadow duration-300 rounded-2xl p-5 sm:p-6">
+            <div className="flex-1 min-w-[260px] w-full bg-white dark:bg-gradient-to-b dark:from-slate-900/90 dark:to-slate-950/95 border border-slate-200/80 dark:border-white/10 dark:border-t-white/15 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-cyan-500/40 hover:shadow-lg hover:shadow-cyan-950/30 rounded-2xl p-5 sm:p-6">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
                   Prev Day Received Amount
@@ -7056,7 +7056,7 @@ function DailyRegisterView({
                   <ArrowDownLeft size={14} />
                 </span>
               </div>
-              <span className="text-xl sm:text-2xl font-black mt-2 block font-mono bg-clip-text text-transparent bg-gradient-to-br from-slate-800 to-slate-500 dark:from-white dark:to-slate-400">
+              <span className="text-xl sm:text-2xl font-black mt-2 block font-mono tabular-nums tracking-tight bg-clip-text text-transparent bg-gradient-to-br from-slate-800 to-slate-500 dark:from-white dark:to-slate-400">
                 SAR {fmt(prevDayReceivedAmount)}
               </span>
               <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 block">
@@ -7064,7 +7064,7 @@ function DailyRegisterView({
               </span>
             </div>
 
-            <div className="flex-1 min-w-[260px] w-full bg-white dark:bg-[#0A0A0A] border border-white/80 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-shadow duration-300 rounded-2xl p-5 sm:p-6">
+            <div className="flex-1 min-w-[260px] w-full bg-white dark:bg-gradient-to-b dark:from-slate-900/90 dark:to-slate-950/95 border border-slate-200/80 dark:border-white/10 dark:border-t-white/15 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-cyan-500/40 hover:shadow-lg hover:shadow-cyan-950/30 rounded-2xl p-5 sm:p-6">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
                   Opening Balance
@@ -7073,18 +7073,18 @@ function DailyRegisterView({
                   <Wallet size={14} />
                 </span>
               </div>
-              <span className="text-xl sm:text-2xl font-black mt-2 block font-mono bg-clip-text text-transparent bg-gradient-to-br from-slate-800 to-slate-500 dark:from-white dark:to-slate-400">
+              <span className="text-xl sm:text-2xl font-black mt-2 block font-mono tabular-nums tracking-tight bg-clip-text text-transparent bg-gradient-to-br from-slate-800 to-slate-500 dark:from-white dark:to-slate-400">
                 SAR {fmt(yesterdayClosingBalance)}
               </span>
               <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 block">
                 {completedDaysLog[0] ? "Yesterday's closing cash drawer balance" : "Opening cash baseline (Settings → Initial Setup)"}
               </span>
-              <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5 block">
+              <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5 block tabular-nums">
                 Opening Bank Balance: SAR {fmt(openingBaselineBank)}
               </span>
             </div>
 
-            <div className="flex-1 min-w-[260px] w-full bg-white dark:bg-[#0A0A0A] border border-white/80 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-shadow duration-300 rounded-2xl p-5 sm:p-6">
+            <div className="flex-1 min-w-[260px] w-full bg-white dark:bg-gradient-to-b dark:from-slate-900/90 dark:to-slate-950/95 border border-slate-200/80 dark:border-white/10 dark:border-t-white/15 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-cyan-500/40 hover:shadow-lg hover:shadow-cyan-950/30 rounded-2xl p-5 sm:p-6">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
                   Cash Drawer Amount
@@ -7093,13 +7093,13 @@ function DailyRegisterView({
                   <Coins size={14} />
                 </span>
               </div>
-              <span className="text-xl sm:text-2xl font-black mt-2 block font-mono bg-clip-text text-transparent bg-gradient-to-br from-slate-800 to-slate-500 dark:from-white dark:to-slate-400">
+              <span className="text-xl sm:text-2xl font-black mt-2 block font-mono tabular-nums tracking-tight bg-clip-text text-transparent bg-gradient-to-br from-slate-800 to-slate-500 dark:from-white dark:to-slate-400">
                 SAR {fmt(calculatedClosingBalance)}
               </span>
               <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 block">
                 Opening balance + today&apos;s inflows - cash expenses
               </span>
-              <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5 block">
+              <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5 block tabular-nums">
                 Bank balance: SAR {fmt(r2(openingBaselineBank + activeBankSettlementTotal))} (baseline + today&apos;s bank settlements)
               </span>
             </div>
@@ -7934,7 +7934,7 @@ function DailyRegisterView({
               STEP 1: IMPORT TODAY'S ERP SALES (CALM & CENTERED)
              ────────────────────────────────────────────────────────────── */}
           {wizardStep === 1 && (
-            <div className="animate-in fade-in duration-300 ease-out mx-auto my-6 flex w-full max-w-2xl flex-col items-center justify-center bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 sm:p-10 md:p-14 text-center transition-all duration-300">
+            <div key="step-1" className="animate-fade-slide-up mx-auto my-6 flex w-full max-w-2xl flex-col items-center justify-center bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 sm:p-10 md:p-14 text-center transition-all duration-300">
               <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-xl bg-jct-turquoise/20 border border-jct-turquoise/40 text-jct-charcoal dark:text-jct-turquoise">
                 <UploadCloud size={28} />
               </div>
@@ -8024,7 +8024,7 @@ function DailyRegisterView({
               STEP 2: VERIFY BANK SWIPES (SAB / AL RAJHI), SPLIT TENDERS & CASH SALES
              ────────────────────────────────────────────────────────────── */}
           {wizardStep === 2 && (
-            <div className="animate-in fade-in duration-300 ease-out flex flex-col gap-5 bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 sm:p-8 transition-all duration-300">
+            <div key="step-2" className="animate-fade-slide-up flex flex-col gap-5 bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 sm:p-8 transition-all duration-300">
               {/* Header + Optional MDR Toggle + Summary Cards */}
               <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 pb-5 border-b border-slate-200 dark:border-[#1F1F1F]">
                 <div className="space-y-2">
@@ -8076,11 +8076,11 @@ function DailyRegisterView({
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 shrink-0">
-                  <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 transition-all duration-300">
+                  <div className="bg-white dark:bg-gradient-to-b dark:from-slate-900/90 dark:to-slate-950/95 shadow-sm border border-jct-turquoise/20 dark:border-white/10 dark:border-t-white/15 hover:border-cyan-500/40 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-cyan-950/30 rounded-xl p-6 transition-all duration-200">
                     <span className="block text-xs font-medium text-slate-500 dark:text-slate-400">
                       Cash Drawer Sales ({cashSaleInvoices.length})
                     </span>
-                    <span className="mt-1 block font-display text-xl font-bold text-emerald-600 dark:text-jct-turquoise whitespace-nowrap">
+                    <span className="mt-1 block font-display text-xl font-bold tabular-nums tracking-tight text-emerald-600 dark:text-jct-turquoise whitespace-nowrap">
                       SAR {fmt(cashSalesTotal)}
                     </span>
                     <span className="mt-0.5 block text-[11px] text-slate-500 dark:text-slate-400">
@@ -8088,18 +8088,18 @@ function DailyRegisterView({
                     </span>
                   </div>
 
-                  <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-yellow/20 dark:border-jct-yellow/30 hover:border-jct-yellow/80 hover:shadow-[0_0_15px_rgba(255,222,89,0.1)] rounded-xl p-6 transition-all duration-300">
+                  <div className="bg-white dark:bg-gradient-to-b dark:from-slate-900/90 dark:to-slate-950/95 shadow-sm border border-jct-yellow/20 dark:border-white/10 dark:border-t-white/15 hover:border-cyan-500/40 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-cyan-950/30 rounded-xl p-6 transition-all duration-200">
                     <span className="block text-xs font-medium text-slate-500 dark:text-slate-400">
                       Bank / POS Swipes (To Bank) ({bankSwipeInvoices.length})
                     </span>
-                    <span className="mt-1 block font-display text-xl font-bold text-jct-charcoal dark:text-jct-yellow whitespace-nowrap">
+                    <span className="mt-1 block font-display text-xl font-bold tabular-nums tracking-tight text-jct-charcoal dark:text-jct-yellow whitespace-nowrap">
                       SAR {fmt(bankSwipeGrossTotal)}
                     </span>
                     <span className="mt-0.5 block text-[11px] text-slate-500 dark:text-slate-400">
                       100% Gross Face Value Settlement
                     </span>
                     {trackPosFees && (
-                      <span className="mt-0.5 block text-[11px] text-slate-500 dark:text-slate-400">
+                      <span className="mt-0.5 block text-[11px] tabular-nums text-slate-500 dark:text-slate-400">
                         Est. MDR fee (audit only): SAR {fmt(totalPosFees)}
                       </span>
                     )}
@@ -8501,7 +8501,7 @@ function DailyRegisterView({
 
                       {/* ── Cross-Tender "💵 Cash Comm." Inline Adjustment Bar ── */}
                       {!inv.isReturned && cashCommRowKey === rowKey && (
-                        <div className="mt-2.5 flex flex-wrap items-center gap-2.5 rounded-xl border-2 border-amber-400/70 bg-amber-500/10 px-3.5 py-2.5 text-xs shadow-sm animate-in fade-in duration-200">
+                        <div className="mt-2.5 flex flex-wrap items-center gap-2.5 rounded-xl border-2 border-amber-400/70 bg-amber-500/10 px-3.5 py-2.5 text-xs shadow-sm transition-all duration-200 ease-out animate-fade-slide-up">
                           <span className="font-extrabold text-amber-800 dark:text-amber-300 whitespace-nowrap flex items-center gap-1">
                             💵 Cash Comm. (SAR):
                           </span>
@@ -8652,7 +8652,7 @@ function DailyRegisterView({
 
                       {/* Automatic Inline Edit Detection: Amber Box when edited and unconfirmed */}
                       {isAmountEdited && !inv.adjustmentsApplied && (
-                        <div className="mt-2.5 flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs w-fit">
+                        <div className="mt-2.5 flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs w-fit transition-all duration-200 ease-out animate-fade-slide-up">
                           <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 whitespace-nowrap">
                             REASON *:
                           </span>
@@ -8747,7 +8747,7 @@ function DailyRegisterView({
 
                       {/* Progressive Disclosure Sub-Row: Split/Partial Allocation & Card Method */}
                       {isSplitMode && (
-                        <div className="bg-slate-50 dark:bg-[#111111] rounded-lg mt-2 p-3 border border-jct-turquoise/40 dark:border-jct-turquoise/30 flex flex-col xl:flex-row xl:items-center justify-between gap-2.5 text-xs">
+                        <div className="bg-slate-50 dark:bg-[#111111] rounded-lg mt-2 p-3 border border-jct-turquoise/40 dark:border-jct-turquoise/30 flex flex-col xl:flex-row xl:items-center justify-between gap-2.5 text-xs transition-all duration-200 ease-out animate-fade-slide-up">
                           <div className="flex flex-wrap items-center gap-2.5">
                             <span className="rounded-full bg-jct-turquoise/20 text-jct-charcoal dark:text-jct-turquoise border border-jct-turquoise/50 px-2 py-0.5 text-[10px] font-black shrink-0">
                               ⚡ Split / Multi Bill
@@ -8884,7 +8884,7 @@ function DailyRegisterView({
 
                       {/* Progressive Disclosure Sub-Row for Card: Terminal -> Card Network Hierarchy */}
                       {isPosSwipe && (
-                        <div className="bg-slate-50 dark:bg-[#111111] rounded-lg mt-2 p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+                        <div className="bg-slate-50 dark:bg-[#111111] rounded-lg mt-2 p-3 flex flex-wrap items-center justify-between gap-3 text-xs transition-all duration-200 ease-out animate-fade-slide-up">
                           <div className="flex flex-wrap items-center gap-4">
                             {/* Level 2: Terminal Selection */}
                             <div className="flex items-center gap-1.5">
@@ -9104,7 +9104,7 @@ function DailyRegisterView({
               STEP 3: CREDIT & CASH INFLOWS + MANUAL SPLIT PAYMENT ENTRY
              ────────────────────────────────────────────────────────────── */}
           {wizardStep === 3 && (
-            <div className="animate-in fade-in duration-300 ease-out flex flex-col gap-6 bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 sm:p-8 transition-all duration-300">
+            <div key="step-3" className="animate-fade-slide-up flex flex-col gap-6 bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 sm:p-8 transition-all duration-300">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-[#1F1F1F] pb-5">
                 <div>
                   <div className="flex items-center gap-1.5">
@@ -10253,7 +10253,7 @@ function DailyRegisterView({
               STEP 5: FULL-WIDESCREEN EDITABLE AUDIT WORKBENCH WITH [⤢ EXPAND] ON ALL 3 BOXES
              ────────────────────────────────────────────────────────────── */}
           {wizardStep === 5 && (
-            <div className="animate-in fade-in duration-300 ease-out flex flex-col gap-6 pb-8 print:hidden">
+            <div key="step-5" className="animate-fade-slide-up flex flex-col gap-6 pb-8 print:hidden">
               {/* ──────────────────────────────────────────────────────────
                   PAGE 1: AUDIT SUMMARY (EXECUTIVE OVERVIEW)
                  ────────────────────────────────────────────────────────── */}
@@ -10310,7 +10310,7 @@ function DailyRegisterView({
                   </div>
 
                 {/* 2. Streamlined Hero Drawer Closing Card */}
-                <div className="w-full bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-yellow/20 dark:border-jct-yellow/30 hover:border-jct-yellow/80 hover:shadow-[0_0_15px_rgba(255,222,89,0.1)] rounded-xl p-6 mb-2 transition-all duration-300 print:shadow-none print:border print:border-black print:rounded-none print:bg-white print:text-black print:p-6 print:mb-4 print:break-inside-avoid">
+                <div className="w-full bg-white dark:bg-gradient-to-b dark:from-slate-900/90 dark:to-slate-950/95 shadow-sm border border-jct-yellow/20 dark:border-white/10 dark:border-t-white/15 hover:border-cyan-500/40 hover:shadow-lg hover:shadow-cyan-950/30 rounded-xl p-6 mb-2 transition-all duration-200 print:shadow-none print:border print:border-black print:rounded-none print:bg-white print:text-black print:p-6 print:mb-4 print:break-inside-avoid">
                   <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-4">
                     <div>
                       <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-jct-yellow text-jct-charcoal text-xs font-bold uppercase tracking-wider print:border print:border-black print:bg-white print:text-black print:text-xs print:font-bold print:uppercase">
@@ -10321,7 +10321,7 @@ function DailyRegisterView({
                         Count physical cash in register before locking.
                       </p>
                     </div>
-                    <div className="text-3xl md:text-4xl font-black text-jct-charcoal dark:text-jct-offwhite tracking-tight print:text-black print:text-2xl print:font-bold">
+                    <div className="text-3xl md:text-4xl font-black text-jct-charcoal dark:text-jct-offwhite font-mono tabular-nums tracking-tight print:text-black print:text-2xl print:font-bold">
                       SAR {fmt(calculatedClosingBalance)}
                     </div>
                   </div>
@@ -10349,12 +10349,12 @@ function DailyRegisterView({
                 {/* 3. The 3 Financial Pillars Grid (Inflows · Bank/Swipes · Outflows) */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-2 print:grid-cols-3 print:gap-4 print:mb-6 print:break-inside-avoid">
                   {/* Card 1: Cash Inflows */}
-                  <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 flex flex-col justify-between gap-3 transition-all duration-300 print:shadow-none print:border print:border-black print:rounded-none print:bg-white print:text-black">
+                  <div className="bg-white dark:bg-gradient-to-b dark:from-slate-900/90 dark:to-slate-950/95 shadow-sm border border-jct-turquoise/20 dark:border-white/10 dark:border-t-white/15 hover:border-cyan-500/40 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-cyan-950/30 rounded-xl p-6 flex flex-col justify-between gap-3 transition-all duration-200 print:shadow-none print:border print:border-black print:rounded-none print:bg-white print:text-black">
                     <div>
                       <span className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider print:text-black print:text-xs print:font-bold print:uppercase">
                         Cash Inflows (Sales &amp; Receipts)
                       </span>
-                      <span className="mt-2 block font-mono text-2xl font-black text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap print:text-black print:text-2xl print:font-bold">
+                      <span className="mt-2 block font-mono tabular-nums tracking-tight text-2xl font-black text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap print:text-black print:text-2xl print:font-bold">
                         SAR {fmt(totalCashInSalesAndReceipts)}
                       </span>
                       {cashCommissionAdjustmentsTotal > 0 && (
@@ -10371,7 +10371,7 @@ function DailyRegisterView({
                   </div>
 
                   {/* Card 2: Bank / Card Swipes */}
-                  <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-yellow/20 dark:border-jct-yellow/30 hover:border-jct-yellow/80 hover:shadow-[0_0_15px_rgba(255,222,89,0.1)] rounded-xl p-6 flex flex-col justify-between gap-3 transition-all duration-300 print:shadow-none print:border print:border-black print:rounded-none print:bg-white print:text-black">
+                  <div className="bg-white dark:bg-gradient-to-b dark:from-slate-900/90 dark:to-slate-950/95 shadow-sm border border-jct-yellow/20 dark:border-white/10 dark:border-t-white/15 hover:border-cyan-500/40 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-cyan-950/30 rounded-xl p-6 flex flex-col justify-between gap-3 transition-all duration-200 print:shadow-none print:border print:border-black print:rounded-none print:bg-white print:text-black">
                     <div>
                       <div className="flex items-center justify-between gap-2">
                         <span className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider print:text-black print:text-xs print:font-bold print:uppercase">
@@ -10387,7 +10387,7 @@ function DailyRegisterView({
                           {expandedAuditBox === "BANK_POS" ? "[Collapse]" : "[View Details]"}
                         </button>
                       </div>
-                      <span className="mt-2 block font-mono text-2xl font-black text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap print:text-black print:text-2xl print:font-bold">
+                      <span className="mt-2 block font-mono tabular-nums tracking-tight text-2xl font-black text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap print:text-black print:text-2xl print:font-bold">
                         SAR {fmt(activeBankSettlementTotal)}
                       </span>
                     </div>
@@ -10402,12 +10402,12 @@ function DailyRegisterView({
                   </div>
 
                   {/* Card 3: Cash Outflows */}
-                  <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 flex flex-col justify-between gap-3 transition-all duration-300 print:shadow-none print:border print:border-black print:rounded-none print:bg-white print:text-black">
+                  <div className="bg-white dark:bg-gradient-to-b dark:from-slate-900/90 dark:to-slate-950/95 shadow-sm border border-jct-turquoise/20 dark:border-white/10 dark:border-t-white/15 hover:border-cyan-500/40 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-cyan-950/30 rounded-xl p-6 flex flex-col justify-between gap-3 transition-all duration-200 print:shadow-none print:border print:border-black print:rounded-none print:bg-white print:text-black">
                     <div>
                       <span className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider print:text-black print:text-xs print:font-bold print:uppercase">
                         Cash Outflows (Deducted from Drawer)
                       </span>
-                      <span className="mt-2 block font-mono text-2xl font-black text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap print:text-black print:text-2xl print:font-bold">
+                      <span className="mt-2 block font-mono tabular-nums tracking-tight text-2xl font-black text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap print:text-black print:text-2xl print:font-bold">
                         SAR {fmt(totalMoneyOutDrawer)}
                       </span>
                     </div>
@@ -12256,7 +12256,7 @@ function DailyRegisterView({
           MODE 3: CLASSIC JUBAIL CORP DIGITAL DATA SHEET (trackingMode === 'datasheet')
          ════════════════════════════════════════════════════════════════════ */}
       {trackingMode === "datasheet" && (
-        <div className="relative z-10 w-full animate-in fade-in duration-300 ease-out px-4 sm:px-6 py-6 flex flex-col gap-5">
+        <div key="mode-datasheet" className="relative z-10 w-full animate-fade-slide-up px-4 sm:px-6 py-6 flex flex-col gap-5">
           {/* 1. Official Sheet Header Bar */}
           <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6">
             <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
@@ -12930,11 +12930,11 @@ function DailyRegisterView({
       {previewBillUrl && (
         <ModalPortal isOpen={Boolean(previewBillUrl)}>
           <div
-            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/75 backdrop-blur-md transition-opacity duration-200 p-4"
             onClick={() => setPreviewBillUrl(null)}
           >
             <div
-              className="relative w-full max-w-2xl max-h-[88vh] flex flex-col rounded-2xl border border-slate-200 dark:border-[#1F1F1F] bg-white dark:bg-[#0A0A0A] shadow-2xl overflow-hidden text-jct-charcoal dark:text-jct-offwhite"
+              className="relative w-full max-w-2xl max-h-[88vh] flex flex-col rounded-2xl border border-slate-200 dark:border-[#1F1F1F] bg-white dark:bg-[#0A0A0A] shadow-2xl overflow-hidden text-jct-charcoal dark:text-jct-offwhite animate-modal-scale-in"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-200 dark:border-[#1F1F1F]">
@@ -17351,27 +17351,27 @@ function AuditLibraryView({
 
       {/* KPI Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 transition-all duration-300">
+        <div className="bg-white dark:bg-gradient-to-b dark:from-slate-900/90 dark:to-slate-950/95 shadow-sm border border-jct-turquoise/20 dark:border-white/10 dark:border-t-white/15 hover:border-cyan-500/40 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-cyan-950/30 rounded-xl p-6 transition-all duration-200">
           <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Total Audits</span>
-          <span className="text-xl sm:text-2xl font-black text-jct-charcoal dark:text-jct-offwhite mt-1 block font-mono">{totalAudits} Days</span>
+          <span className="text-xl sm:text-2xl font-black text-jct-charcoal dark:text-jct-offwhite mt-1 block font-mono tabular-nums tracking-tight">{totalAudits} Days</span>
           <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 block">Recorded in database</span>
         </div>
 
-        <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-yellow/20 dark:border-jct-yellow/30 hover:border-jct-yellow/80 hover:shadow-[0_0_15px_rgba(255,222,89,0.1)] rounded-xl p-6 transition-all duration-300">
+        <div className="bg-white dark:bg-gradient-to-b dark:from-slate-900/90 dark:to-slate-950/95 shadow-sm border border-jct-yellow/20 dark:border-white/10 dark:border-t-white/15 hover:border-cyan-500/40 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-cyan-950/30 rounded-xl p-6 transition-all duration-200">
           <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Total Closing Cash</span>
-          <span className="text-xl sm:text-2xl font-black text-jct-charcoal dark:text-jct-offwhite mt-1 block font-mono">SAR {fmt(totalReconciledCash)}</span>
+          <span className="text-xl sm:text-2xl font-black text-jct-charcoal dark:text-jct-offwhite mt-1 block font-mono tabular-nums tracking-tight">SAR {fmt(totalReconciledCash)}</span>
           <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 block">Reconciled drawer cash</span>
         </div>
 
-        <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 transition-all duration-300">
+        <div className="bg-white dark:bg-gradient-to-b dark:from-slate-900/90 dark:to-slate-950/95 shadow-sm border border-jct-turquoise/20 dark:border-white/10 dark:border-t-white/15 hover:border-cyan-500/40 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-cyan-950/30 rounded-xl p-6 transition-all duration-200">
           <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Total Bank Swipes</span>
-          <span className="text-xl sm:text-2xl font-black text-jct-charcoal dark:text-jct-offwhite mt-1 block font-mono">SAR {fmt(totalBankSettled)}</span>
+          <span className="text-xl sm:text-2xl font-black text-jct-charcoal dark:text-jct-offwhite mt-1 block font-mono tabular-nums tracking-tight">SAR {fmt(totalBankSettled)}</span>
           <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 block">Settled to bank accounts</span>
         </div>
 
-        <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-yellow/20 dark:border-jct-yellow/30 hover:border-jct-yellow/80 hover:shadow-[0_0_15px_rgba(255,222,89,0.1)] rounded-xl p-6 transition-all duration-300">
+        <div className="bg-white dark:bg-gradient-to-b dark:from-slate-900/90 dark:to-slate-950/95 shadow-sm border border-jct-yellow/20 dark:border-white/10 dark:border-t-white/15 hover:border-cyan-500/40 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-cyan-950/30 rounded-xl p-6 transition-all duration-200">
           <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Latest Lock</span>
-          <span className="text-xl sm:text-2xl font-black text-jct-charcoal dark:text-jct-offwhite mt-1 block font-mono">{latestRecordDate}</span>
+          <span className="text-xl sm:text-2xl font-black text-jct-charcoal dark:text-jct-offwhite mt-1 block font-mono tabular-nums tracking-tight">{latestRecordDate}</span>
           <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 block">● Real-time sync live</span>
         </div>
       </div>
@@ -18315,7 +18315,7 @@ function StaffPayrollView({
             </p>
           </div>
         ) : (
-          <div className="w-full overflow-x-auto pb-3">
+          <div className="w-full overflow-x-auto pb-3 scrollbar-thin">
             <table className="w-full min-w-[950px] text-left text-xs whitespace-nowrap">
               <thead className="border-b border-slate-200 dark:border-[#1F1F1F] text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-[#111111] font-bold">
                 <tr>
@@ -19619,41 +19619,7 @@ function ProfileGate({ onSelect }: { onSelect: (p: UserProfile) => void }) {
   const [selectedForPin, setSelectedForPin] = useState<UserProfile | null>(null);
   const [pinInput, setPinInput] = useState("");
   const [pinError, setPinError] = useState<string | null>(null);
-  const [profilePins, setProfilePins] = useState<Record<string, string>>(FALLBACK_PROFILE_PINS);
-
-  useEffect(() => {
-    let ignore = false;
-    try {
-      const cached = window.localStorage.getItem("jct_cached_profile_pins");
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (parsed && typeof parsed === "object") {
-          setProfilePins({ ...FALLBACK_PROFILE_PINS, ...parsed });
-        }
-      }
-    } catch {
-      /* ignore */
-    }
-    fetch("/api/settings?branch=ALL", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((data) => {
-        if (!ignore && data?.profilePins && typeof data.profilePins === "object") {
-          setProfilePins({ ...FALLBACK_PROFILE_PINS, ...data.profilePins });
-          window.localStorage.setItem("jct_cached_profile_pins", JSON.stringify(data.profilePins));
-        }
-      })
-      .catch(() => {});
-    return () => {
-      ignore = true;
-    };
-  }, []);
-
-  const getExpectedPin = (p: UserProfile): string => {
-    if (p.isOwner || p.id === "BONGSI") {
-      return profilePins.OWNER || profilePins.BONGSI || "2026";
-    }
-    return profilePins[p.id] || FALLBACK_PROFILE_PINS[p.id] || "1111";
-  };
+  const [isVerifyingPin, setIsVerifyingPin] = useState(false);
 
   const completeProfileSignIn = async (p: UserProfile) => {
     setSigningInId(p.id);
@@ -19692,38 +19658,48 @@ function ProfileGate({ onSelect }: { onSelect: (p: UserProfile) => void }) {
     setPinError(null);
   };
 
-  const verifyAndSignIn = (candidatePin: string, targetProfile = selectedForPin) => {
-    if (!targetProfile) return false;
+  const verifyAndSignIn = async (candidatePin: string, targetProfile = selectedForPin): Promise<boolean> => {
+    if (!targetProfile || isVerifyingPin) return false;
     const clean = candidatePin.trim();
-    const expected = getExpectedPin(targetProfile);
-    const ownerMasterPin = profilePins.OWNER || profilePins.BONGSI || "2026";
-    // Target profile's PIN or Owner Master PIN unlocks branch profiles; Owner strictly requires Owner PIN
-    const matches = targetProfile.isOwner
-      ? clean === expected
-      : clean === expected || clean === ownerMasterPin;
-
-    if (matches) {
-      setPinError(null);
-      void completeProfileSignIn(targetProfile);
-      return true;
+    if (!clean) return false;
+    setIsVerifyingPin(true);
+    setPinError(null);
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          profileId: targetProfile.id,
+          branch: targetProfile.branch,
+          pin: clean,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data?.ok) {
+        await completeProfileSignIn(targetProfile);
+        return true;
+      }
+      setPinError(data?.error || `Incorrect PIN for ${targetProfile.name}`);
+      if (res.status === 401 || res.status === 429) {
+        setTimeout(() => setPinInput(""), 350);
+      }
+      return false;
+    } catch {
+      setPinError("Unable to reach authentication server.");
+      return false;
+    } finally {
+      setIsVerifyingPin(false);
     }
-    return false;
   };
 
   const handleKeypadPress = (digit: string) => {
-    if (!selectedForPin) return;
-    const expected = getExpectedPin(selectedForPin);
-    const maxLen = Math.max(4, expected.length);
-    if (pinInput.length >= maxLen) return;
+    if (!selectedForPin || isVerifyingPin) return;
+    if (pinInput.length >= 12) return;
     const next = pinInput + digit;
     setPinInput(next);
     setPinError(null);
-    if (next.length >= expected.length || next.length === 4) {
-      if (verifyAndSignIn(next, selectedForPin)) return;
-      if (next.length >= maxLen) {
-        setPinError(`Incorrect PIN for ${selectedForPin.name}`);
-        setTimeout(() => setPinInput(""), 350);
-      }
+    if (next.length === 4) {
+      void verifyAndSignIn(next, selectedForPin);
     }
   };
 
@@ -19740,7 +19716,7 @@ function ProfileGate({ onSelect }: { onSelect: (p: UserProfile) => void }) {
         </div>
 
         {selectedForPin ? (
-          <div className="mt-8 w-full max-w-sm rounded-3xl border border-white/15 bg-[#0B1633] p-6 sm:p-8 shadow-2xl flex flex-col items-center text-center animate-in fade-in zoom-in-95 duration-200">
+          <div className="mt-8 w-full max-w-sm rounded-3xl border border-white/15 bg-[#0B1633] p-6 sm:p-8 shadow-2xl flex flex-col items-center text-center animate-modal-scale-in">
             <div
               className={`flex h-16 w-16 items-center justify-center rounded-2xl border ${
                 selectedForPin.isOwner
@@ -19781,10 +19757,7 @@ function ProfileGate({ onSelect }: { onSelect: (p: UserProfile) => void }) {
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                if (!verifyAndSignIn(pinInput, selectedForPin)) {
-                  setPinError(`Incorrect PIN for ${selectedForPin.name}`);
-                  setTimeout(() => setPinInput(""), 350);
-                }
+                void verifyAndSignIn(pinInput, selectedForPin);
               }}
               className="mt-4 w-full"
             >
@@ -19796,10 +19769,6 @@ function ProfileGate({ onSelect }: { onSelect: (p: UserProfile) => void }) {
                   const val = e.target.value;
                   setPinInput(val);
                   setPinError(null);
-                  const expected = getExpectedPin(selectedForPin);
-                  if (val.length >= expected.length && verifyAndSignIn(val, selectedForPin)) {
-                    return;
-                  }
                 }}
                 placeholder="Type PIN or tap keypad..."
                 className="w-full rounded-xl border border-white/15 bg-[#070e24] px-3.5 py-2.5 text-center font-mono text-base font-bold tracking-widest text-white outline-none focus:border-jct-turquoise"
@@ -20045,6 +20014,19 @@ export default function Page() {
 
     const matched = USER_PROFILES.find((p) => p.id === verifiedProfileId) || null;
     if (matched) {
+      let cancelled = false;
+      fetch("/api/auth/session", { cache: "no-store" })
+        .then((r) => r.json())
+        .then((data) => {
+          if (cancelled) return;
+          if (!data?.authenticated) {
+            window.sessionStorage.removeItem(VERIFIED_SESSION_KEY);
+            setProfile(null);
+            setProfileLoaded(true);
+          }
+        })
+        .catch(() => {});
+
       setProfile(matched);
       window.localStorage.setItem(PROFILE_STORAGE_KEY, matched.id);
       setProfileLoaded(true);
@@ -20072,7 +20054,9 @@ export default function Page() {
       } else {
         setTab(resolveInitialTabFromPath(pathname));
       }
-      return;
+      return () => {
+        cancelled = true;
+      };
     }
 
     setProfile(null);
@@ -20513,7 +20497,10 @@ export default function Page() {
     resetLocalSessionState();
     setCompletedDaysLog([]);
     setProfile(null);
-    await signOut({ redirect: false });
+    await Promise.all([
+      fetch("/api/auth/logout", { method: "POST" }).catch(() => {}),
+      signOut({ redirect: false }),
+    ]);
   };
 
   const handleClearActiveSession = (finalStatus: "CLEARED" | "COMPLETED" = "CLEARED") => {

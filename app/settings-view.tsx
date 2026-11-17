@@ -76,6 +76,17 @@ export default function SettingsView({
     DAMMAM_JOTUN: "3333",
     SIGMA: "4444",
   });
+  const [securityLogs, setSecurityLogs] = useState<
+    Array<{
+      id: string;
+      event: string;
+      profileId: string | null;
+      branch: string | null;
+      ipAddress: string | null;
+      details: string | null;
+      createdAt: string;
+    }>
+  >([]);
   const [showPins, setShowPins] = useState(false);
   const [savingPins, setSavingPins] = useState(false);
   const [pinMessage, setPinMessage] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
@@ -83,7 +94,9 @@ export default function SettingsView({
   const load = useCallback(async (b: string) => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/settings?branch=${b}`, { cache: "no-store" });
+      const res = await fetch(`/api/settings?branch=${b}${isOwner ? "&includeSecurity=1" : ""}`, {
+        cache: "no-store",
+      });
       const json = await res.json();
       const s = json.settings;
       setCash(s && s.configured ? String(s.openingCashBalance) : "");
@@ -91,6 +104,9 @@ export default function SettingsView({
       setUpdatedAt(s?.updatedAt ?? null);
       if (Array.isArray(json.capitalDeposits)) {
         setDeposits(json.capitalDeposits);
+      }
+      if (Array.isArray(json.securityLogs)) {
+        setSecurityLogs(json.securityLogs);
       }
       if (json.profilePins && typeof json.profilePins === "object") {
         setProfilePins({
@@ -106,7 +122,7 @@ export default function SettingsView({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isOwner]);
 
   const handleSavePins = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -794,6 +810,65 @@ export default function SettingsView({
             >
               <Save size={15} /> {savingPins ? "Saving PINs…" : "Save Security PINs"}
             </button>
+          </div>
+        )}
+
+        {/* Recent Security & Login Audit Events (Last 10) */}
+        {isOwner && (
+          <div className="mt-2 pt-4 border-t border-slate-200 dark:border-[#1F1F1F] space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                🛡️ Recent Security &amp; Login Events (Last 10)
+              </span>
+              <span className="text-[10px] font-mono text-slate-400">
+                HMAC-SHA256 HttpOnly Session · 5-Try Lockout Active
+              </span>
+            </div>
+            {securityLogs.length === 0 ? (
+              <p className="text-xs text-slate-500 dark:text-slate-400 rounded-lg border border-slate-200 dark:border-[#1F1F1F] bg-slate-50 dark:bg-[#111111] px-3 py-2.5">
+                No security events recorded yet. Logins, failed PINs, lockouts, and PIN updates appear here automatically.
+              </p>
+            ) : (
+              <div className="divide-y divide-slate-200 dark:divide-[#1F1F1F] rounded-xl border border-slate-200 dark:border-[#1F1F1F] bg-slate-50/70 dark:bg-[#111111] overflow-hidden">
+                {securityLogs.map((log) => {
+                  const isAlert = log.event === "LOGIN_FAILED" || log.event === "BRUTE_FORCE_LOCKOUT";
+                  const isPinChange = log.event === "PIN_CHANGED";
+                  return (
+                    <div
+                      key={log.id}
+                      className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2 text-xs"
+                    >
+                      <div className="flex flex-wrap items-center gap-2 min-w-0">
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wider ${
+                            isAlert
+                              ? "bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30"
+                              : isPinChange
+                              ? "bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30"
+                              : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30"
+                          }`}
+                        >
+                          {log.event}
+                        </span>
+                        <span className="font-bold text-jct-charcoal dark:text-white">
+                          {log.profileId || "SYSTEM"}
+                        </span>
+                        {log.details && (
+                          <span className="text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-[260px]">
+                            {log.details}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 font-mono text-[10px] text-slate-500 dark:text-slate-400 shrink-0">
+                        {log.ipAddress && <span>{log.ipAddress}</span>}
+                        <span>·</span>
+                        <span>{saudiDateTimeString(new Date(log.createdAt))}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
       </form>

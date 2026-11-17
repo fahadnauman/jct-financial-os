@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "../../../lib/prisma";
-import { checkIsOwner, normalizeBranch } from "../../../lib/auth-audit";
+import { checkIsOwner, checkStaffBranchAccess, normalizeBranch } from "../../../lib/auth-audit";
+import { sanitizeOptionalString, sanitizeString, validateAmount } from "../../../lib/sanitize";
 import { saudiTodayIso, saudiParts } from "../../../lib/saudi-time";
 
 export const dynamic = "force-dynamic";
@@ -46,12 +47,16 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
     const rawBranch = body.branch || body.branchId || req.headers.get("x-branch-id");
+    const branchErr = checkStaffBranchAccess(req, rawBranch);
+    if (branchErr) {
+      return NextResponse.json({ error: branchErr }, { status: 403 });
+    }
     const branch = normalizeBranch(rawBranch || "JCT_HARDWARE_JOTUN");
 
-    const invoiceNo = String(body.invoiceNo || "").trim();
-    const returnedAmount = Number(body.returnedAmount ?? body.amount ?? 0);
+    const invoiceNo = sanitizeString(body.invoiceNo || "", 64);
+    const returnedAmount = validateAmount(body.returnedAmount ?? body.amount ?? 0, false);
 
-    if (!invoiceNo || returnedAmount <= 0) {
+    if (!invoiceNo || returnedAmount === null) {
       return NextResponse.json(
         { error: "Invoice number and a valid returned amount (> 0) are required." },
         { status: 400 }
@@ -82,14 +87,14 @@ export async function POST(req: Request) {
         returnDate,
         returnTime,
         invoiceNo,
-        salesNo: body.salesNo ? String(body.salesNo).trim() : null,
-        customerName: body.customerName ? String(body.customerName).trim() : null,
+        salesNo: sanitizeOptionalString(body.salesNo, 64),
+        customerName: sanitizeOptionalString(body.customerName, 160),
         returnedAmount,
-        originalAmount: body.originalAmount !== undefined ? Number(body.originalAmount) : returnedAmount,
-        refundMode: String(body.refundMode || "CASH_REFUND"),
-        reason: String(body.reason || "Customer Cancelled"),
-        notes: body.notes ? String(body.notes).trim() : null,
-        loggedBy: String(body.loggedBy || "Staff"),
+        originalAmount: validateAmount(body.originalAmount, true) ?? returnedAmount,
+        refundMode: sanitizeString(body.refundMode || "CASH_REFUND", 48),
+        reason: sanitizeString(body.reason || "Customer Cancelled", 120),
+        notes: sanitizeOptionalString(body.notes, 300),
+        loggedBy: sanitizeString(body.loggedBy || "Staff", 64),
         isPastDayReturn: Boolean(body.isPastDayReturn),
         pastDayDate: body.pastDayDate ? String(body.pastDayDate).trim() : null,
       },

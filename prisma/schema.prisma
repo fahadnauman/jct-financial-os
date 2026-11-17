@@ -354,5 +354,21 @@ model SalesReturnRecord {
   @@index([clientTxnId])
 }
 
+// Enterprise Security Audit Log (Logins, Failed PINs, Lockouts, PIN Changes)
+model SecurityAuditLog {
+  id        String   @id @default(cuid())
+  event     String   // LOGIN_SUCCESS | LOGIN_FAILED | BRUTE_FORCE_LOCKOUT | PIN_CHANGED | LOGOUT
+  profileId String?
+  branch    String?
+  ipAddress String?
+  userAgent String?
+  details   String?
+  createdAt DateTime @default(now())
+
+  @@index([event, createdAt])
+  @@index([profileId, createdAt])
+}
+
+
 
 

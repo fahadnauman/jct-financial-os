@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "../../../lib/prisma";
 import { checkIsOwner, normalizeBranch } from "../../../lib/auth-audit";
+import { getClientIp } from "../../../lib/rate-limit";
+import { sanitizeString } from "../../../lib/sanitize";
 import { saudiTodayIso } from "../../../lib/saudi-time";
 
 export const dynamic = "force-dynamic";
@@ -100,8 +102,11 @@ const serialize = (
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const rawBranch = searchParams.get("branch") || req.headers.get("x-branch-id");
+  const includeSecurity = searchParams.get("includeSecurity") === "1";
+  const isOwner = checkIsOwner(req);
+
   try {
-    const [rows, allDeposits] = await Promise.all([
+    const [rows, allDeposits, securityLogs] = await Promise.all([
       prisma.branchSettings.findMany(),
       rawBranch === "ALL"
         ? prisma.capitalDeposit.findMany({ orderBy: { createdAt: "desc" }, take: 200 })
@@ -110,9 +115,30 @@ export async function GET(req: Request) {
             orderBy: { createdAt: "desc" },
             take: 100,
           }),
+      includeSecurity && isOwner
+        ? prisma.securityAuditLog.findMany({
+            orderBy: { createdAt: "desc" },
+            take: 10,
+          })
+        : Promise.resolve([]),
     ]);
-    const profilePins = buildProfilePins(rows);
     const serializedDeposits = allDeposits.map(serializeDeposit);
+    const securityPayload =
+      includeSecurity && isOwner
+        ? {
+            profilePins: buildProfilePins(rows),
+            securityLogs: securityLogs.map((l) => ({
+              id: l.id,
+              event: l.event,
+              profileId: l.profileId,
+              branch: l.branch,
+              ipAddress: l.ipAddress,
+              userAgent: l.userAgent,
+              details: l.details,
+              createdAt: l.createdAt.toISOString(),
+            })),
+          }
+        : {};
 
     if (rawBranch === "ALL") {
       const branches = ["JCT_HARDWARE_JOTUN", "HEMPEL", "DAMMAM_JOTUN", "SIGMA"];
@@ -125,7 +151,7 @@ export async function GET(req: Request) {
         {
           settings: settingsList,
           capitalDeposits: serializedDeposits,
-          profilePins,
+          ...securityPayload,
         },
         { headers: { "Cache-Control": "no-store" } }
       );
@@ -137,7 +163,7 @@ export async function GET(req: Request) {
       {
         settings: serialize(branch, row, serializedDeposits),
         capitalDeposits: serializedDeposits,
-        profilePins,
+        ...securityPayload,
       },
       { headers: { "Cache-Control": "no-store" } }
     );
@@ -146,7 +172,6 @@ export async function GET(req: Request) {
     return NextResponse.json({
       settings: serialize(normalizeBranch(rawBranch), null, []),
       capitalDeposits: [],
-      profilePins: { ...DEFAULT_PROFILE_PINS },
     });
   }
 }
@@ -164,19 +189,19 @@ export async function PUT(req: Request) {
 
     if (body.action === "UPDATE_PINS" && body.profilePins && typeof body.profilePins === "object") {
       const incoming = body.profilePins as Record<string, string>;
-      const ownerPinVal = (incoming.OWNER || incoming.BONGSI || DEFAULT_PROFILE_PINS.OWNER).trim();
+      const ownerPinVal = sanitizeString(incoming.OWNER || incoming.BONGSI || DEFAULT_PROFILE_PINS.OWNER, 32);
       const targets: Array<{ key: string; pin: string }> = [
         { key: "OWNER", pin: ownerPinVal },
         {
           key: "JCT_HARDWARE_JOTUN",
-          pin: (incoming.JCT_HARDWARE_JOTUN || DEFAULT_PROFILE_PINS.JCT_HARDWARE_JOTUN).trim(),
+          pin: sanitizeString(incoming.JCT_HARDWARE_JOTUN || DEFAULT_PROFILE_PINS.JCT_HARDWARE_JOTUN, 32),
         },
-        { key: "HEMPEL", pin: (incoming.HEMPEL || DEFAULT_PROFILE_PINS.HEMPEL).trim() },
+        { key: "HEMPEL", pin: sanitizeString(incoming.HEMPEL || DEFAULT_PROFILE_PINS.HEMPEL, 32) },
         {
           key: "DAMMAM_JOTUN",
-          pin: (incoming.DAMMAM_JOTUN || DEFAULT_PROFILE_PINS.DAMMAM_JOTUN).trim(),
+          pin: sanitizeString(incoming.DAMMAM_JOTUN || DEFAULT_PROFILE_PINS.DAMMAM_JOTUN, 32),
         },
-        { key: "SIGMA", pin: (incoming.SIGMA || DEFAULT_PROFILE_PINS.SIGMA).trim() },
+        { key: "SIGMA", pin: sanitizeString(incoming.SIGMA || DEFAULT_PROFILE_PINS.SIGMA, 32) },
       ];
 
       await Promise.all(
@@ -199,6 +224,19 @@ export async function PUT(req: Request) {
           })
         )
       );
+
+      await prisma.securityAuditLog
+        .create({
+          data: {
+            event: "PIN_CHANGED",
+            profileId: "OWNER",
+            branch: "ALL",
+            ipAddress: getClientIp(req),
+            userAgent: (req.headers.get("user-agent") || "").slice(0, 240),
+            details: "Owner updated profile security access PINs",
+          },
+        })
+        .catch(() => {});
 
       const allRows = await prisma.branchSettings.findMany();
       return NextResponse.json({

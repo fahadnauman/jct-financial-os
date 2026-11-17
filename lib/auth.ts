@@ -1,6 +1,8 @@
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 
+export * from "./session-auth";
+
 export type UserRole = "OWNER" | "STAFF";
 
 export interface AuthAccount {

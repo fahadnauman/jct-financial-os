@@ -35,9 +35,14 @@ export type ValidPaymentMode = (typeof VALID_PAYMENT_MODES)[number];
 
 /**
  * Universal check for Owner permissions.
- * Inspects headers (x-user-is-owner, x-user-role), URL searchParams, and optional request body.
+ * Prefers the cryptographically verified `x-verified-role` header injected by Edge Middleware
+ * from the signed `jct_session` cookie so Staff cannot spoof `x-user-is-owner`.
  */
 export function checkIsOwner(req: Request, body?: Record<string, unknown> | null): boolean {
+  const verifiedRole = req.headers.get("x-verified-role")?.toUpperCase();
+  if (verifiedRole === "OWNER") return true;
+  if (verifiedRole === "STAFF") return false;
+
   const headerOwner = req.headers.get("x-user-is-owner");
   if (headerOwner === "true" || headerOwner === "1") return true;
 
@@ -60,6 +65,26 @@ export function checkIsOwner(req: Request, body?: Record<string, unknown> | null
   }
 
   return false;
+}
+
+/**
+ * Enforces Staff branch isolation for JSON body payloads.
+ * Returns null if allowed, or an error string if forbidden.
+ */
+export function checkStaffBranchAccess(req: Request, targetBranch?: unknown): string | null {
+  const verifiedRole = req.headers.get("x-verified-role")?.toUpperCase();
+  if (verifiedRole !== "STAFF") return null;
+  const verifiedBranch = req.headers.get("x-verified-branch");
+  if (!verifiedBranch) return "Staff branch session missing";
+  if (typeof targetBranch === "string" && targetBranch.trim()) {
+    if (
+      targetBranch.trim().toUpperCase() === "ALL" ||
+      normalizeBranch(targetBranch) !== normalizeBranch(verifiedBranch)
+    ) {
+      return `Forbidden: Staff session (${verifiedBranch}) cannot access branch (${targetBranch})`;
+    }
+  }
+  return null;
 }
 
 /**

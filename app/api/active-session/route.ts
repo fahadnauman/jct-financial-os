@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "../../../lib/prisma";
-import { normalizeBranch } from "../../../lib/auth-audit";
+import { checkStaffBranchAccess, normalizeBranch } from "../../../lib/auth-audit";
 
 export const dynamic = "force-dynamic";
 
@@ -83,7 +83,12 @@ export async function GET(req: Request) {
 export async function PUT(req: Request) {
   try {
     const body = await req.json();
-    const branch = normalizeBranch(body.branch || req.headers.get("x-branch-id"));
+    const rawBranch = body.branch || req.headers.get("x-branch-id");
+    const branchErr = checkStaffBranchAccess(req, rawBranch);
+    if (branchErr) {
+      return NextResponse.json({ error: branchErr }, { status: 403 });
+    }
+    const branch = normalizeBranch(rawBranch);
     const status =
       typeof body.status === "string" && ALLOWED_STATUSES.has(body.status) ? body.status : "IN_PROGRESS";
     const reportDate =

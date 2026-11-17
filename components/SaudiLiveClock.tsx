@@ -102,14 +102,14 @@ export function SaudiLiveClock({
     return (
       <div className={`flex items-center gap-1.5 flex-wrap ${className}`}>
         <div
-          className="flex items-center gap-1.5 rounded-lg bg-black/40 border border-jct-turquoise/30 px-2 py-1 text-[11px] font-mono font-bold text-white shadow-sm"
+          className="flex items-center gap-1.5 rounded-lg bg-black/40 border border-jct-turquoise/30 px-2 py-1 text-[11px] font-mono tabular-nums tracking-tight font-bold text-white shadow-sm"
           title={`Authoritative Saudi AST (${isServerSynced ? "Server Synced ✓" : "Local Sync"})`}
         >
           <span className="relative flex h-2 w-2">
             <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping" />
             <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
           </span>
-          <span className="text-jct-turquoise">{timeFormatted}</span>
+          <span className="text-jct-turquoise tabular-nums tracking-tight">{timeFormatted}</span>
           <span className="text-[9px] text-slate-400 uppercase font-sans">AST</span>
         </div>
         {showFridayBadge && isFriday && (
@@ -125,24 +125,24 @@ export function SaudiLiveClock({
     <div className={`flex items-center gap-2 flex-wrap ${className}`}>
       {/* Date Pill */}
       <div
-        className="hidden md:flex items-center gap-1.5 rounded-lg bg-slate-50 dark:bg-[#111111] border border-slate-200 dark:border-[#1F1F1F] px-2.5 py-1 text-xs font-semibold text-slate-700 dark:text-slate-300"
+        className="hidden md:flex items-center gap-1.5 rounded-lg bg-slate-50 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800/80 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:text-slate-300 tabular-nums tracking-tight"
         title="Official Saudi Arabian Standard Date"
       >
         <Calendar size={13} className="text-jct-turquoise" />
-        <span>{dateFormatted}</span>
+        <span className="tabular-nums tracking-tight">{dateFormatted}</span>
         <span className="text-[10px] text-slate-400 font-normal">AST</span>
       </div>
 
       {/* Clock Pill with Live Pulsing Green Dot */}
       <div
-        className="flex items-center gap-2 bg-slate-50 dark:bg-[#111111] border border-slate-200 dark:border-[#1F1F1F] hover:border-jct-turquoise/40 text-jct-charcoal dark:text-jct-offwhite text-xs font-bold px-2.5 py-1 rounded-lg font-mono tabular-nums transition shadow-sm"
+        className="flex items-center gap-2 bg-slate-50 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800/80 hover:border-jct-turquoise/40 text-jct-charcoal dark:text-jct-offwhite text-xs font-bold px-2.5 py-1 rounded-lg font-mono tabular-nums tracking-tight transition shadow-sm"
         title={`Live Saudi Time (Asia/Riyadh, UTC+3) — ${isServerSynced ? "Authoritative Network Server Clock" : "Local Clock"}`}
       >
         <span className="relative flex h-2 w-2">
           <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping" />
           <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
         </span>
-        <span className="text-jct-turquoise">{timeFormatted}</span>
+        <span className="text-jct-turquoise tabular-nums tracking-tight">{timeFormatted}</span>
         <span className="text-[10px] font-sans font-medium text-slate-400">AST</span>
       </div>
 

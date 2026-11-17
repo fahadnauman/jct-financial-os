@@ -105,11 +105,11 @@ export function PwaInstallButton({ compact = false }: { compact?: boolean }) {
 
       {showGuideModal && (
         <div
-          className="fixed inset-0 z-[250] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4"
+          className="fixed inset-0 z-[250] flex items-center justify-center bg-slate-950/75 backdrop-blur-md transition-opacity duration-200 p-4"
           onClick={() => setShowGuideModal(false)}
         >
           <div
-            className="w-full max-w-md rounded-2xl border border-jct-turquoise/40 bg-[#070e24] p-6 text-white shadow-2xl space-y-4"
+            className="w-full max-w-md rounded-2xl border border-jct-turquoise/40 bg-[#070e24] p-6 text-white shadow-2xl space-y-4 animate-modal-scale-in"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
