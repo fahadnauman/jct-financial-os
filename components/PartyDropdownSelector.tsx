@@ -283,12 +283,24 @@ export function PartyDropdownSelector({
                   <button
                     type="button"
                     onClick={() => {
-                      onChange(searchTerm);
+                      const cleanNew = searchTerm.trim();
+                      onChange(cleanNew);
                       setIsOpen(false);
+                      if (cleanNew.length >= 2) {
+                        void fetch("/api/parties", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            name: cleanNew,
+                            partyType: partyType === "SUPPLIER" ? "SUPPLIER" : "CUSTOMER",
+                            branch: branch || "ALL",
+                          }),
+                        }).catch(() => {});
+                      }
                     }}
                     className="mt-1.5 block w-full text-center text-jct-turquoise font-bold hover:underline"
                   >
-                    + Use &quot;{searchTerm}&quot; as new party
+                    + Add &amp; Register &quot;{searchTerm}&quot; as New Party
                   </button>
                 )}
               </div>

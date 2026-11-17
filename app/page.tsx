@@ -7588,19 +7588,25 @@ function DailyRegisterView({
                       />
                     )}
 
-                    <select
-                      value={hubPaymentMode}
-                      onChange={(e) => setHubPaymentMode(e.target.value as UniversalPaymentMode)}
-                      required
-                      className="bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md text-xs font-semibold px-3 py-2 outline-none transition"
-                      title="Mode of Payment"
-                    >
-                      {UNIVERSAL_PAYMENT_MODES.map((pm) => (
-                        <option key={pm.value} value={pm.value} className="bg-white dark:bg-[#0A0A0A]">
-                          {pm.badge} · {pm.label}
-                        </option>
-                      ))}
-                    </select>
+                    {entryType === "CREDIT_SALE" || (entryType === "EXPENSE" && hubExpenseCat === "Credit Purchase") ? (
+                      <span className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] font-bold text-amber-700 dark:text-amber-300 whitespace-nowrap">
+                        ⏳ Unpaid Credit Entry — Payment Mode will be recorded when settled
+                      </span>
+                    ) : (
+                      <select
+                        value={hubPaymentMode}
+                        onChange={(e) => setHubPaymentMode(e.target.value as UniversalPaymentMode)}
+                        required
+                        className="bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md text-xs font-semibold px-3 py-2 outline-none transition"
+                        title="Mode of Payment"
+                      >
+                        {UNIVERSAL_PAYMENT_MODES.map((pm) => (
+                          <option key={pm.value} value={pm.value} className="bg-white dark:bg-[#0A0A0A]">
+                            {pm.badge} · {pm.label}
+                          </option>
+                        ))}
+                      </select>
+                    )}
 
                     <input
                       type="number"
@@ -9453,7 +9459,12 @@ function DailyRegisterView({
                     )}
 
                     {/* 5. Cascading Mode of Payment (Step 3 Inflows) */}
-                    {!step3SplitEnabled && (
+                    {!step3SplitEnabled && step3Kind === "CREDIT_SALE" && (
+                      <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3.5 py-2.5 text-xs font-bold text-amber-700 dark:text-amber-300">
+                        ⏳ Unpaid Credit Entry — Payment Mode will be recorded when settled
+                      </div>
+                    )}
+                    {!step3SplitEnabled && step3Kind !== "CREDIT_SALE" && (
                       <div className="space-y-2">
                         <CascadingPaymentSelector
                           idPrefix="step3"
@@ -9852,7 +9863,10 @@ function DailyRegisterView({
                             if (category === "Cash Purchase") {
                               setStep4PaymentMode("CASH");
                             }
+                            setStep4SupplierName("");
                             setStep4Amount("");
+                            setStep4Note("");
+                            setStep4SupplierInvoiceNum("");
                           }}
                           className={`rounded-lg px-3 py-1.5 text-xs transition-all ${
                             active
@@ -9874,31 +9888,37 @@ function DailyRegisterView({
                   </div>
 
                   <form onSubmit={handleAddStep4Expense} className="space-y-3 pt-2">
-                    {/* Cascading Mode of Payment (Step 4 Outflows/Purchases) */}
-                    <div className="space-y-2">
-                      <CascadingPaymentSelector
-                        idPrefix="step4"
-                        mode={step4PaymentMode}
-                        onModeChange={(m) => setStep4PaymentMode(m as UniversalPaymentMode)}
-                        bank={step4Terminal}
-                        onBankChange={setStep4Terminal}
-                        network={step4Network}
-                        onNetworkChange={setStep4Network}
-                        layout="stacked"
-                        showLabels
-                      />
-                      {step4PaymentMode === "CARD" && parseFloat(step4Amount) > 0 && (
-                        <div className="text-[11px] font-mono text-slate-600 dark:text-slate-400 flex items-center justify-between border-t border-slate-200 dark:border-[#1F1F1F] pt-1.5">
-                          <span>Est. Card MDR Fee:</span>
-                          <span className="font-bold text-amber-600 dark:text-amber-400">
-                            {(() => {
-                              const fb = calcAmountPosFeeBreakdown(parseFloat(step4Amount) || 0, step4Terminal, step4Network);
-                              return `-SAR ${fmt(fb.totalFee)} (MDR: SAR ${fmt(fb.mdrBase)} + VAT: SAR ${fmt(fb.vatOnFee)})`;
-                            })()}
-                          </span>
-                        </div>
-                      )}
-                    </div>
+                    {/* Cascading Mode of Payment (Step 4 Outflows/Purchases) — Hidden for unpaid Credit Purchase */}
+                    {step4Category === "Credit Purchase" ? (
+                      <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3.5 py-2.5 text-xs font-bold text-amber-700 dark:text-amber-300">
+                        ⏳ Unpaid Credit Entry — Payment Mode will be recorded when settled
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <CascadingPaymentSelector
+                          idPrefix="step4"
+                          mode={step4PaymentMode}
+                          onModeChange={(m) => setStep4PaymentMode(m as UniversalPaymentMode)}
+                          bank={step4Terminal}
+                          onBankChange={setStep4Terminal}
+                          network={step4Network}
+                          onNetworkChange={setStep4Network}
+                          layout="stacked"
+                          showLabels
+                        />
+                        {step4PaymentMode === "CARD" && parseFloat(step4Amount) > 0 && (
+                          <div className="text-[11px] font-mono text-slate-600 dark:text-slate-400 flex items-center justify-between border-t border-slate-200 dark:border-[#1F1F1F] pt-1.5">
+                            <span>Est. Card MDR Fee:</span>
+                            <span className="font-bold text-amber-600 dark:text-amber-400">
+                              {(() => {
+                                const fb = calcAmountPosFeeBreakdown(parseFloat(step4Amount) || 0, step4Terminal, step4Network);
+                                return `-SAR ${fmt(fb.totalFee)} (MDR: SAR ${fmt(fb.mdrBase)} + VAT: SAR ${fmt(fb.vatOnFee)})`;
+                              })()}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {/* Show Supplier Name when Credit Purchase, Cash Purchase, or Supplier Advance is selected */}
                     {(step4Category === "Credit Purchase" ||
@@ -13102,6 +13122,8 @@ function CreditRadarView({
   isOwner = false,
   onUpdateCustomer,
   onDeleteCustomer,
+  onSettleCredit,
+  liveParties = [],
   advances = [],
   onRefreshAdvances,
 }: {
@@ -13116,6 +13138,12 @@ function CreditRadarView({
   isOwner?: boolean;
   onUpdateCustomer?: (updated: ContractorAccount) => void;
   onDeleteCustomer?: (id: string) => void;
+  onSettleCredit?: (
+    customer: ContractorAccount,
+    amount: number,
+    mode: "CASH" | "BANK_TRANSFER" | "CARD"
+  ) => void;
+  liveParties?: PartyItem[];
   advances?: AdvanceRecordItem[];
   onRefreshAdvances?: () => void;
 }) {
@@ -13131,6 +13159,9 @@ function CreditRadarView({
   const [adjustingAdvId, setAdjustingAdvId] = useState<string | null>(null);
   const [adjustAmountInput, setAdjustAmountInput] = useState("");
   const [adjustTargetCustomer, setAdjustTargetCustomer] = useState("");
+  const [settlingCustomerId, setSettlingCustomerId] = useState<string | null>(null);
+  const [settleCreditAmt, setSettleCreditAmt] = useState("");
+  const [settleCreditMode, setSettleCreditMode] = useState<"CASH" | "BANK_TRANSFER" | "CARD">("CASH");
 
   const customerAdvances = advances.filter(
     (a) => a.direction === "CUSTOMER_ADVANCE_IN" && a.remainingBalance > 0
@@ -13373,7 +13404,8 @@ function CreditRadarView({
                   id="credit-radar-party"
                   value={contractorInput}
                   onChange={(val) => setContractorInput(val)}
-                  partyType="CUSTOMER"
+                  partyType="ALL"
+                  liveParties={liveParties}
                   placeholder="Select or type Customer / Contractor Name..."
                 />
               </div>
@@ -13582,7 +13614,26 @@ function CreditRadarView({
                           On Track
                         </span>
                       )}
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex flex-wrap items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                        {c.outstanding > 0 && onSettleCredit && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSettlingCustomerId(settlingCustomerId === c.id ? null : c.id);
+                              setSettleCreditAmt(String(c.outstanding));
+                              setSettleCreditMode("CASH");
+                            }}
+                            className="rounded-lg bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black px-2.5 py-1 text-[10px] shadow-sm transition active:scale-[0.97]"
+                            title="Mark Customer Payment Received"
+                          >
+                            ✓ Mark Payment Received
+                          </button>
+                        )}
+                        {c.outstanding <= 0 && (
+                          <span className="rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border border-emerald-500/40 px-2.5 py-0.5 text-[10px] font-black">
+                            ✓ PAID / CLOSED
+                          </span>
+                        )}
                         <button
                           type="button"
                           onClick={(e) => handleOpenEditCustomer(c, e)}
@@ -13606,6 +13657,65 @@ function CreditRadarView({
                         )}
                       </div>
                     </div>
+                    {settlingCustomerId === c.id && onSettleCredit && (
+                      <div
+                        onClick={(e) => e.stopPropagation()}
+                        className="mt-2 w-full rounded-xl border border-emerald-500/50 bg-emerald-500/10 p-3 flex flex-wrap items-center gap-2 text-xs animate-fade-slide-up"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-emerald-700 dark:text-emerald-300">Received (SAR):</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={settleCreditAmt}
+                            onChange={(e) => setSettleCreditAmt(e.target.value)}
+                            className="w-24 rounded-lg border border-emerald-500/40 bg-white dark:bg-black px-2 py-1 font-mono text-xs font-black text-right outline-none"
+                          />
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1">
+                          {(
+                            [
+                              ["CASH", "💵 Cash (Add to Drawer)"],
+                              ["BANK_TRANSFER", "🏦 Bank Transfer"],
+                              ["CARD", "💳 Card / POS"],
+                            ] as const
+                          ).map(([m, lbl]) => (
+                            <button
+                              key={m}
+                              type="button"
+                              onClick={() => setSettleCreditMode(m)}
+                              className={`rounded-lg px-2.5 py-1 text-[10px] font-bold border transition active:scale-[0.97] ${
+                                settleCreditMode === m
+                                  ? "bg-emerald-500 text-slate-950 border-emerald-400 font-black"
+                                  : "bg-white/60 dark:bg-black/60 border-slate-300 dark:border-white/15 text-slate-600 dark:text-slate-300"
+                              }`}
+                            >
+                              {lbl}
+                            </button>
+                          ))}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const amt = parseFloat(settleCreditAmt);
+                            if (Number.isFinite(amt) && amt > 0) {
+                              onSettleCredit(c, amt, settleCreditMode);
+                              setSettlingCustomerId(null);
+                            }
+                          }}
+                          className="rounded-lg bg-jct-turquoise text-jct-charcoal font-black px-3 py-1 text-[11px] hover:brightness-95 transition active:scale-[0.97]"
+                        >
+                          ✓ Confirm &amp; Close Credit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSettlingCustomerId(null)}
+                          className="rounded-lg border border-slate-300 dark:border-white/15 px-2 py-1 text-[10px] font-bold text-slate-500 dark:text-slate-300"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -13774,6 +13884,8 @@ function SupplierHubView({
   isOwner = false,
   onUpdateBill,
   onDeleteBill,
+  onSettleSupplierBill,
+  liveParties = [],
   advances = [],
   onRefreshAdvances,
 }: {
@@ -13791,6 +13903,12 @@ function SupplierHubView({
   isOwner?: boolean;
   onUpdateBill?: (updated: SupplierBillItem) => void;
   onDeleteBill?: (id: string) => void;
+  onSettleSupplierBill?: (
+    bill: SupplierBillItem,
+    amount: number,
+    mode: "CASH" | "BANK_TRANSFER" | "CARD"
+  ) => void;
+  liveParties?: PartyItem[];
   advances?: AdvanceRecordItem[];
   onRefreshAdvances?: () => void;
 }) {
@@ -13800,6 +13918,9 @@ function SupplierHubView({
   const [adjustingAdvId, setAdjustingAdvId] = useState<string | null>(null);
   const [adjustAmountInput, setAdjustAmountInput] = useState("");
   const [adjustInvoiceInput, setAdjustInvoiceInput] = useState("");
+  const [settlingBillId, setSettlingBillId] = useState<string | null>(null);
+  const [settleBillAmt, setSettleBillAmt] = useState("");
+  const [settleBillMode, setSettleBillMode] = useState<"CASH" | "BANK_TRANSFER" | "CARD">("CASH");
 
   const supplierAdvances = advances.filter(
     (a) => a.direction === "SUPPLIER_ADVANCE_OUT" && a.remainingBalance > 0
@@ -14359,9 +14480,10 @@ function SupplierHubView({
                 id="suppliers-hub-party"
                 value={supplierSearch}
                 onChange={(val) => setSupplierSearch(val)}
-                partyType="SUPPLIER"
+                partyType="ALL"
                 placeholder="Search or Select Supplier (Jotun, Hempel, Sigma...)"
                 className="flex-[2] min-w-[200px]"
+                liveParties={liveParties}
                 extraParties={["Jotun", "Hempel", "Sigma"]}
               />
               <input
@@ -14585,7 +14707,26 @@ function SupplierHubView({
                       <span className="font-display font-extrabold text-jct-charcoal dark:text-jct-offwhite">
                         SAR {fmt(bill.amount)}
                       </span>
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {bill.category === "Credit Purchase" && bill.amount > 0 && bill.paymentMode !== "SETTLED" && onSettleSupplierBill && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSettlingBillId(settlingBillId === bill.id ? null : bill.id);
+                              setSettleBillAmt(String(bill.amount));
+                              setSettleBillMode("CASH");
+                            }}
+                            className="rounded-lg bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black px-2.5 py-1 text-xs shadow-sm transition active:scale-[0.97]"
+                            title="Complete / Pay Supplier Payable"
+                          >
+                            ✓ Complete / Pay Supplier
+                          </button>
+                        )}
+                        {(bill.paymentMode === "SETTLED" || bill.amount <= 0) && (
+                          <span className="rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border border-emerald-500/40 px-2.5 py-0.5 text-[10px] font-black">
+                            ✓ PAID / CLOSED
+                          </span>
+                        )}
                         <button
                           type="button"
                           onClick={() => handleOpenEditBill(bill)}
@@ -14604,6 +14745,62 @@ function SupplierHubView({
                         )}
                       </div>
                     </div>
+                    {settlingBillId === bill.id && onSettleSupplierBill && (
+                      <div className="w-full mt-2 rounded-xl border border-emerald-500/50 bg-emerald-500/10 p-3 flex flex-wrap items-center gap-2 text-xs animate-fade-slide-up">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-emerald-700 dark:text-emerald-300">Paid (SAR):</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={settleBillAmt}
+                            onChange={(e) => setSettleBillAmt(e.target.value)}
+                            className="w-24 rounded-lg border border-emerald-500/40 bg-white dark:bg-black px-2 py-1 font-mono text-xs font-black text-right outline-none"
+                          />
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1">
+                          {(
+                            [
+                              ["CASH", "💵 Cash Drawer"],
+                              ["BANK_TRANSFER", "🏦 Bank Transfer"],
+                              ["CARD", "💳 Card"],
+                            ] as const
+                          ).map(([m, lbl]) => (
+                            <button
+                              key={m}
+                              type="button"
+                              onClick={() => setSettleBillMode(m)}
+                              className={`rounded-lg px-2.5 py-1 text-[10px] font-bold border transition active:scale-[0.97] ${
+                                settleBillMode === m
+                                  ? "bg-emerald-500 text-slate-950 border-emerald-400 font-black"
+                                  : "bg-white/60 dark:bg-black/60 border-slate-300 dark:border-white/15 text-slate-600 dark:text-slate-300"
+                              }`}
+                            >
+                              {lbl}
+                            </button>
+                          ))}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const amt = parseFloat(settleBillAmt);
+                            if (Number.isFinite(amt) && amt > 0) {
+                              onSettleSupplierBill(bill, amt, settleBillMode);
+                              setSettlingBillId(null);
+                            }
+                          }}
+                          className="rounded-lg bg-jct-turquoise text-jct-charcoal font-black px-3 py-1 text-[11px] hover:brightness-95 transition active:scale-[0.97]"
+                        >
+                          ✓ Confirm Supplier Payment
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSettlingBillId(null)}
+                          className="rounded-lg border border-slate-300 dark:border-white/15 px-2 py-1 text-[10px] font-bold text-slate-500 dark:text-slate-300"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -20991,6 +21188,35 @@ export default function Page() {
         },
         ...prev,
       ]);
+    } else if (type === "CREDIT_SUPPLIER") {
+      const supName = supplierName || customerName || "Supplier";
+      const dueDate = typeof payload.dueDate === "string" ? payload.dueDate : addSaudiDays(7);
+      handleSyncCreditPurchase(
+        supName,
+        amount,
+        dueDate,
+        "Credit Purchase",
+        "CREDIT",
+        invoiceNo,
+        receiptUrl
+      );
+      const creditEntry: PreLoggedEntry = {
+        id: clientTxnId || `sup-cr-${Date.now()}`,
+        clientTxnId,
+        type: "EXPENSE",
+        expenseCategory: "Credit Purchase",
+        supplierName: supName,
+        dueDate,
+        followUpDate: dueDate,
+        supplierInvoiceNum: invoiceNo,
+        title: `Credit Purchase — ${supName}${invoiceNo ? ` (#${invoiceNo})` : ""}`,
+        paymentMode: "CREDIT",
+        amount,
+        receiptUrl,
+        hasBill: Boolean(receiptUrl),
+        time: nowHHMM(),
+      };
+      setPreLoggedEntries((prev) => deduplicatePreLoggedEntries([creditEntry, ...prev]));
     } else if (type === "EXPENSE" || type === "PURCHASE" || type === "SALES_RETURN") {
       const isBusComm = category === "Business Commission";
       const entry: PreLoggedEntry = {
@@ -21285,6 +21511,44 @@ export default function Page() {
                 isOwner={Boolean(profile?.isOwner)}
                 onUpdateCustomer={handleUpdateCreditCustomer}
                 onDeleteCustomer={handleDeleteCreditCustomer}
+                onSettleCredit={(customer, amt, mode) => {
+                  const cleanAmt = Math.min(amt, customer.outstanding);
+                  const remaining = Math.max(0, r2(customer.outstanding - cleanAmt));
+                  setCreditCustomers((prev) =>
+                    prev.map((c) =>
+                      c.id === customer.id
+                        ? {
+                            ...c,
+                            outstanding: remaining,
+                            status: remaining <= 0 ? "on_track" : c.status,
+                            clearedInvoices: remaining <= 0 ? c.clearedInvoices + 1 : c.clearedInvoices,
+                          }
+                        : c
+                    )
+                  );
+                  const settleTxnId = `settle-cr-${customer.id}-${Date.now()}`;
+                  const settleEntry: PreLoggedEntry = {
+                    id: settleTxnId,
+                    clientTxnId: settleTxnId,
+                    type: "CREDIT_RECD",
+                    customerName: customer.name,
+                    receiptNo: customer.latestInvoiceNo || undefined,
+                    title: `Credit Settled — ${customer.name}`,
+                    paymentMode: mode === "BANK_TRANSFER" ? "BANK" : mode,
+                    amount: cleanAmt,
+                    time: nowHHMM(),
+                  };
+                  setPreLoggedEntries((prev) => deduplicatePreLoggedEntries([settleEntry, ...prev]));
+                }}
+                liveParties={[
+                  ...erpInvoices
+                    .map((i) => ({
+                      name: (i.customerName || i.customer || "").trim(),
+                      partyType: "CUSTOMER" as const,
+                      sourceTag: "Today's Sale" as const,
+                    }))
+                    .filter((p) => p.name.length >= 2 && p.name.toLowerCase() !== "walk-in customer"),
+                ]}
                 advances={branchAdvances}
                 onRefreshAdvances={() => setAdvancesRefresh((n) => n + 1)}
               />
@@ -21296,6 +21560,56 @@ export default function Page() {
                 isOwner={Boolean(profile?.isOwner)}
                 onUpdateBill={handleUpdateSupplierBill}
                 onDeleteBill={handleDeleteSupplierBill}
+                onSettleSupplierBill={(bill, amt, mode) => {
+                  const cleanAmt = Math.min(amt, bill.amount);
+                  const remaining = Math.max(0, r2(bill.amount - cleanAmt));
+                  setSupplierBills((prev) =>
+                    prev.map((b) =>
+                      b.id === bill.id
+                        ? {
+                            ...b,
+                            amount: remaining,
+                            paymentMode: remaining <= 0 ? "SETTLED" : b.paymentMode,
+                          }
+                        : b
+                    )
+                  );
+                  setSupplierBrands((prev) =>
+                    prev.map((br) =>
+                      bill.supplierName.toLowerCase().includes(br.brand.toLowerCase()) ||
+                      br.brand.toLowerCase().includes(bill.supplierName.toLowerCase())
+                        ? {
+                            ...br,
+                            pendingBills: Math.max(0, r2(br.pendingBills - cleanAmt)),
+                            amountPaid: r2(br.amountPaid + cleanAmt),
+                          }
+                        : br
+                    )
+                  );
+                  const settleTxnId = `settle-sup-${bill.id}-${Date.now()}`;
+                  const settleExp: PreLoggedEntry = {
+                    id: settleTxnId,
+                    clientTxnId: settleTxnId,
+                    type: "EXPENSE",
+                    expenseCategory: "Cash Purchase",
+                    supplierName: bill.supplierName,
+                    supplierInvoiceNum: bill.supplierInvoiceNum,
+                    title: `Supplier Payment — ${bill.supplierName}${bill.supplierInvoiceNum ? ` (#${bill.supplierInvoiceNum})` : ""}`,
+                    paymentMode: mode === "BANK_TRANSFER" ? "BANK" : mode,
+                    amount: cleanAmt,
+                    time: nowHHMM(),
+                  };
+                  setPreLoggedEntries((prev) => deduplicatePreLoggedEntries([settleExp, ...prev]));
+                }}
+                liveParties={[
+                  ...erpInvoices
+                    .map((i) => ({
+                      name: (i.customerName || i.customer || "").trim(),
+                      partyType: "CUSTOMER" as const,
+                      sourceTag: "Today's Sale" as const,
+                    }))
+                    .filter((p) => p.name.length >= 2 && p.name.toLowerCase() !== "walk-in customer"),
+                ]}
                 advances={branchAdvances}
                 onRefreshAdvances={() => setAdvancesRefresh((n) => n + 1)}
               />

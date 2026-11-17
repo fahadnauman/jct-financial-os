@@ -26,7 +26,7 @@ import { PartyDropdownSelector, type PartyItem } from "./PartyDropdownSelector";
 import { saudiTodayIso, saudiParts, addSaudiDays, saudiTime12 } from "../lib/saudi-time";
 import type { BranchId, PocketTransaction, PocketType } from "../lib/pocket-bridge";
 
-export type QuickLogType = "EXPENSE" | "PURCHASE" | "SALES_BILL" | "POS_SWIPE" | "SALES_RETURN";
+export type QuickLogType = "EXPENSE" | "PURCHASE" | "SALES_BILL" | "POS_SWIPE" | "CREDIT_SUPPLIER" | "SALES_RETURN";
 
 interface ExpressQuickLogViewProps {
   branchId: string;
@@ -138,6 +138,11 @@ export function ExpressQuickLogView({
   const [returnCustomer, setReturnCustomer] = useState("");
   const [returnRefundMode, setReturnRefundMode] = useState<"CASH_REFUND" | "CARD_BANK_REVERSAL" | "CREDIT_NOTE">("CASH_REFUND");
   const [returnReason, setReturnReason] = useState(RETURN_REASONS[0]);
+
+  // Credit Supplier specific
+  const [creditSupplier, setCreditSupplier] = useState("");
+  const [creditDueDate, setCreditDueDate] = useState<string>(() => addSaudiDays(7));
+  const [creditInvoiceRef, setCreditInvoiceRef] = useState("");
 
   // Live Activity Feed
   const [activityFeed, setActivityFeed] = useState<PocketTransaction[]>([]);
@@ -309,6 +314,19 @@ export function ExpressQuickLogView({
             expenseCommRecipient.trim() ? ` (${expenseCommRecipient.trim()})` : ""
           }${finalNote ? ` · ${finalNote}` : ""}`;
         }
+      } else if (activeType === "CREDIT_SUPPLIER") {
+        if (!creditSupplier.trim()) {
+          setErrorMsg("Supplier / Company Name is required for Credit Supplier.");
+          setSubmitting(false);
+          return;
+        }
+        pocketType = "PURCHASE";
+        category = "Credit Purchase";
+        recipientName = creditSupplier.trim();
+        paymentSource = "SUPPLIER_CREDIT";
+        paymentMode = "CREDIT";
+        supplierInvoiceNum = creditInvoiceRef.trim() || null;
+        finalNote = `Credit Supplier Payable (Due: ${creditDueDate})${finalNote ? ` · ${finalNote}` : ""}`;
       } else if (activeType === "PURCHASE") {
         pocketType = "PURCHASE";
         category = purchasePaymentMode === "CREDIT" ? "Credit Purchase" : "Cash Purchase";
@@ -387,7 +405,7 @@ export function ExpressQuickLogView({
           hasBill,
           billPdfUrl,
           billFileName: billFile?.name,
-          followUpDate: purchaseFollowUpDate,
+          followUpDate: activeType === "CREDIT_SUPPLIER" ? creditDueDate : purchaseFollowUpDate,
           note: `[Desktop Express] ${finalNote}`,
           date: effectiveDate,
         }),
@@ -396,14 +414,20 @@ export function ExpressQuickLogView({
       // Background upsert to persistent PartyDirectory in Neon PostgreSQL
       if (
         (activeType === "PURCHASE" && purchaseSupplier.trim()) ||
+        (activeType === "CREDIT_SUPPLIER" && creditSupplier.trim()) ||
         (activeType === "SALES_BILL" && salesCustomer.trim())
       ) {
         void fetch("/api/parties", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            name: activeType === "PURCHASE" ? purchaseSupplier.trim() : salesCustomer.trim(),
-            partyType: activeType === "PURCHASE" ? "SUPPLIER" : "CUSTOMER",
+            name:
+              activeType === "CREDIT_SUPPLIER"
+                ? creditSupplier.trim()
+                : activeType === "PURCHASE"
+                ? purchaseSupplier.trim()
+                : salesCustomer.trim(),
+            partyType: activeType === "SALES_BILL" ? "CUSTOMER" : "SUPPLIER",
             branch: branchId,
             lastAmount: numAmt,
             lastInvoiceNo: supplierInvoiceNum || undefined,
@@ -437,6 +461,8 @@ export function ExpressQuickLogView({
                     }`
                   : finalNote || category,
               salesNo: activeType === "SALES_BILL" ? salesSeqNo : activeType === "SALES_RETURN" ? returnSalesNo : undefined,
+              dueDate: activeType === "CREDIT_SUPPLIER" ? creditDueDate : purchaseFollowUpDate || undefined,
+              supplierName: activeType === "CREDIT_SUPPLIER" ? creditSupplier.trim() : activeType === "PURCHASE" ? purchaseSupplier.trim() : undefined,
               time: nowTime,
               hasBill,
               billPdfUrl,
@@ -445,11 +471,18 @@ export function ExpressQuickLogView({
           });
         }
 
-        // Reset fields
+        // Reset ALL fields cleanly (never carry over stale party names)
         setAmount("");
         setNotes("");
         setExpenseCommInvNo("");
         setExpenseCommRecipient("");
+        setPurchaseSupplier("");
+        setPurchaseInvoiceRef("");
+        setPurchaseFollowUpDate(null);
+        setSalesCustomer("");
+        setCreditSupplier("");
+        setCreditInvoiceRef("");
+        setCreditDueDate(addSaudiDays(7));
         setHasBill(false);
         setBillFile(null);
         setBillPdfUrl(null);
@@ -600,15 +633,15 @@ export function ExpressQuickLogView({
 
               <button
                 type="button"
-                onClick={() => setActiveType("SALES_RETURN")}
-                className={`col-span-2 sm:col-span-1 flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-bold transition-all ${
-                  activeType === "SALES_RETURN"
-                    ? "bg-rose-600 text-white border-rose-600 shadow-sm"
-                    : "bg-slate-50 dark:bg-[#121212] border-slate-200 dark:border-[#222] text-slate-600 dark:text-slate-300 hover:border-rose-400"
+                onClick={() => setActiveType("CREDIT_SUPPLIER")}
+                className={`col-span-2 sm:col-span-1 flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-bold transition-all active:scale-[0.97] ${
+                  activeType === "CREDIT_SUPPLIER"
+                    ? "bg-purple-600 text-white border-purple-500 shadow-sm font-extrabold"
+                    : "bg-slate-50 dark:bg-[#121212] border-slate-200 dark:border-[#222] text-slate-600 dark:text-slate-300 hover:border-purple-400"
                 }`}
               >
-                <span className="text-sm">↩</span>
-                <span className="mt-1">Return</span>
+                <span className="text-sm">🏢</span>
+                <span className="mt-1">Credit Supplier</span>
               </button>
             </div>
           </div>
@@ -773,6 +806,9 @@ export function ExpressQuickLogView({
 
                 {purchasePaymentMode === "CREDIT" && (
                   <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 space-y-2">
+                    <div className="rounded-lg border border-amber-500/40 bg-amber-500/15 px-3 py-1.5 text-[11px] font-bold text-amber-700 dark:text-amber-300">
+                      ⏳ Unpaid Credit Entry — Payment Mode will be recorded when settled
+                    </div>
                     <span className="text-[10px] font-bold uppercase tracking-wider text-amber-500 block">
                       Quick Follow-Up Due Date:
                     </span>
@@ -866,7 +902,7 @@ export function ExpressQuickLogView({
                         key={mode}
                         type="button"
                         onClick={() => setSalesPaymentMode(mode)}
-                        className={`py-2 rounded-xl text-xs font-bold border text-center transition ${
+                        className={`py-2 rounded-xl text-xs font-bold border text-center transition active:scale-[0.97] ${
                           salesPaymentMode === mode
                             ? "bg-jct-turquoise text-jct-charcoal border-jct-turquoise font-black"
                             : "bg-slate-50 dark:bg-[#111] border-slate-200 dark:border-[#222] text-slate-400"
@@ -876,6 +912,83 @@ export function ExpressQuickLogView({
                       </button>
                     ))}
                   </div>
+                  {salesPaymentMode === "CREDIT_SALE" && (
+                    <div className="mt-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] font-bold text-amber-700 dark:text-amber-300">
+                      ⏳ Unpaid Credit Entry — Payment Mode will be recorded when settled
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* 3B. Contextual Fields: CREDIT SUPPLIER (Deferred Supplier Payable) */}
+            {activeType === "CREDIT_SUPPLIER" && (
+              <div className="space-y-3 animate-fade-slide-up">
+                <div className="rounded-lg border border-purple-500/40 bg-purple-500/10 px-3 py-2 text-[11px] font-bold text-purple-700 dark:text-purple-300">
+                  ⏳ Unpaid Credit Entry — Payment Mode will be recorded when settled
+                </div>
+
+                <PartyDropdownSelector
+                  label="Supplier / Company Name *"
+                  partyType="ALL"
+                  branch={branchId}
+                  value={creditSupplier}
+                  onChange={(val) => setCreditSupplier(val)}
+                  liveParties={unifiedPartyDirectory}
+                  extraParties={["Jotun", "Hempel", "Sigma"]}
+                  placeholder="Select or type Supplier / Company name..."
+                  required
+                />
+
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+                    Payment Due Date *
+                  </label>
+                  <div className="flex flex-wrap items-center gap-2 mb-2">
+                    {[
+                      { label: "+3 Days", days: 3 },
+                      { label: "+7 Days", days: 7 },
+                      { label: "+15 Days", days: 15 },
+                      { label: "+30 Days", days: 30 },
+                    ].map((opt) => {
+                      const target = addSaudiDays(opt.days);
+                      const isSel = creditDueDate === target;
+                      return (
+                        <button
+                          key={opt.label}
+                          type="button"
+                          onClick={() => setCreditDueDate(target)}
+                          className={`rounded-lg px-2.5 py-1 text-xs font-bold border transition active:scale-[0.97] ${
+                            isSel
+                              ? "bg-purple-500 text-white border-purple-400 shadow-sm"
+                              : "bg-slate-50 dark:bg-black/40 border-purple-500/40 text-purple-600 dark:text-purple-300"
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <input
+                    type="date"
+                    required
+                    value={creditDueDate}
+                    onChange={(e) => setCreditDueDate(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 dark:border-[#222] bg-slate-50 dark:bg-black px-3.5 py-2 text-xs font-mono font-bold text-jct-charcoal dark:text-white outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+                    Invoice / Bill Ref No. (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={creditInvoiceRef}
+                    onChange={(e) => setCreditInvoiceRef(e.target.value)}
+                    placeholder="e.g. INV-0992"
+                    className="w-full rounded-xl border border-slate-300 dark:border-[#222] bg-slate-50 dark:bg-black px-3.5 py-2 text-xs font-mono font-bold text-jct-charcoal dark:text-white outline-none focus:border-purple-500"
+                  />
                 </div>
               </div>
             )}
