@@ -123,10 +123,15 @@ export async function GET(req: Request) {
         : Promise.resolve([]),
     ]);
     const serializedDeposits = allDeposits.map(serializeDeposit);
-    const securityPayload =
-      includeSecurity && isOwner
+    const verifiedBranchHeader = req.headers.get("x-verified-branch");
+    const allPins = buildProfilePins(rows);
+    const staffOwnBranch = verifiedBranchHeader
+      ? normalizeBranch(verifiedBranchHeader)
+      : normalizeBranch(rawBranch);
+    const securityPayload = includeSecurity
+      ? isOwner
         ? {
-            profilePins: buildProfilePins(rows),
+            profilePins: allPins,
             securityLogs: securityLogs.map((l) => ({
               id: l.id,
               event: l.event,
@@ -138,7 +143,12 @@ export async function GET(req: Request) {
               createdAt: l.createdAt.toISOString(),
             })),
           }
-        : {};
+        : {
+            profilePins: {
+              [staffOwnBranch]: allPins[staffOwnBranch] || DEFAULT_PROFILE_PINS[staffOwnBranch] || "1111",
+            },
+          }
+      : {};
 
     if (rawBranch === "ALL") {
       const branches = ["JCT_HARDWARE_JOTUN", "HEMPEL", "DAMMAM_JOTUN", "SIGMA"];
@@ -177,18 +187,62 @@ export async function GET(req: Request) {
 }
 
 /**
- * PUT /api/settings  (Owner only)
+ * PUT /api/settings  (Owner: all branches & PINs; Staff: own verified branch & own branch PIN only)
  * Body: { branch, openingCashBalance, openingBankBalance } OR { action: "UPDATE_PINS", profilePins }
  */
 export async function PUT(req: Request) {
   try {
     const body = await req.json();
-    if (!checkIsOwner(req, body)) {
-      return NextResponse.json({ error: "Only the Owner can change settings" }, { status: 403 });
-    }
+    const isOwner = checkIsOwner(req, body);
+    const verifiedBranchHeader = req.headers.get("x-verified-branch");
+    const staffVerifiedBranch = verifiedBranchHeader ? normalizeBranch(verifiedBranchHeader) : null;
 
     if (body.action === "UPDATE_PINS" && body.profilePins && typeof body.profilePins === "object") {
       const incoming = body.profilePins as Record<string, string>;
+
+      if (!isOwner) {
+        // Staff can ONLY update their own branch's PIN — never OWNER master PIN or other branches
+        const targetBranch = staffVerifiedBranch || normalizeBranch(body.branch || req.headers.get("x-branch-id"));
+        if (!targetBranch || (targetBranch as string) === "OWNER") {
+          return NextResponse.json({ error: "Forbidden: Invalid branch for PIN update" }, { status: 403 });
+        }
+        const rawPin = incoming[targetBranch];
+        const branchPin = sanitizeString(rawPin || "", 32);
+        if (!branchPin || branchPin.length < 4) {
+          return NextResponse.json({ error: "Branch PIN must be at least 4 characters" }, { status: 400 });
+        }
+        await prisma.branchSettings.upsert({
+          where: { branch: targetBranch },
+          create: {
+            branch: targetBranch,
+            openingCashBalance: 0,
+            openingBankBalance: 0,
+            accessPin: branchPin,
+            updatedBy: "STAFF",
+          },
+          update: {
+            accessPin: branchPin,
+            updatedBy: "STAFF",
+          },
+        });
+        await prisma.securityAuditLog
+          .create({
+            data: {
+              event: "PIN_CHANGED",
+              profileId: targetBranch,
+              branch: targetBranch,
+              ipAddress: getClientIp(req),
+              userAgent: (req.headers.get("user-agent") || "").slice(0, 240),
+              details: `Branch staff updated access PIN for ${targetBranch}`,
+            },
+          })
+          .catch(() => {});
+        return NextResponse.json({
+          ok: true,
+          profilePins: { [targetBranch]: branchPin },
+        });
+      }
+
       const ownerPinVal = sanitizeString(incoming.OWNER || incoming.BONGSI || DEFAULT_PROFILE_PINS.OWNER, 32);
       const targets: Array<{ key: string; pin: string }> = [
         { key: "OWNER", pin: ownerPinVal },
@@ -245,7 +299,14 @@ export async function PUT(req: Request) {
       });
     }
 
-    const branch = normalizeBranch(body.branch || req.headers.get("x-branch-id"));
+    const requestedBranch = normalizeBranch(body.branch || req.headers.get("x-branch-id"));
+    if (!isOwner && staffVerifiedBranch && requestedBranch !== staffVerifiedBranch) {
+      return NextResponse.json(
+        { error: "Forbidden: Staff can only update settings for their own branch" },
+        { status: 403 }
+      );
+    }
+    const branch = !isOwner && staffVerifiedBranch ? staffVerifiedBranch : requestedBranch;
     const cash = Number(body.openingCashBalance);
     const bank = Number(body.openingBankBalance);
     if (!Number.isFinite(cash) || !Number.isFinite(bank)) {
@@ -259,12 +320,12 @@ export async function PUT(req: Request) {
           branch,
           openingCashBalance: round(cash),
           openingBankBalance: round(bank),
-          updatedBy: "OWNER",
+          updatedBy: isOwner ? "OWNER" : "STAFF",
         },
         update: {
           openingCashBalance: round(cash),
           openingBankBalance: round(bank),
-          updatedBy: "OWNER",
+          updatedBy: isOwner ? "OWNER" : "STAFF",
         },
       }),
       prisma.capitalDeposit.findMany({
@@ -272,19 +333,21 @@ export async function PUT(req: Request) {
         orderBy: { createdAt: "desc" },
         take: 100,
       }),
-      prisma.branchSettings.findMany(),
+      isOwner ? prisma.branchSettings.findMany() : Promise.resolve([]),
     ]);
     const serializedDeposits = deposits.map(serializeDeposit);
     return NextResponse.json({
       settings: serialize(branch, row, serializedDeposits),
       capitalDeposits: serializedDeposits,
-      profilePins: buildProfilePins(allRows),
+      ...(isOwner ? { profilePins: buildProfilePins(allRows) } : {}),
     });
   } catch (err) {
     console.error("PUT /api/settings error:", err);
     return NextResponse.json({ error: "Failed to save settings" }, { status: 500 });
   }
 }
+
+export const PATCH = PUT;
 
 /**
  * POST /api/settings
@@ -310,10 +373,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ verified, profileId: normalizedKey });
     }
 
-    if (!checkIsOwner(req, body)) {
-      return NextResponse.json({ error: "Only the Owner can add manual deposits" }, { status: 403 });
+    const isOwner = checkIsOwner(req, body);
+    const verifiedBranchHeader = req.headers.get("x-verified-branch");
+    const staffVerifiedBranch = verifiedBranchHeader ? normalizeBranch(verifiedBranchHeader) : null;
+    const requestedBranch = normalizeBranch(body.branch || req.headers.get("x-branch-id"));
+    if (!isOwner && staffVerifiedBranch && requestedBranch !== staffVerifiedBranch) {
+      return NextResponse.json(
+        { error: "Forbidden: Staff can only add manual entries for their own branch" },
+        { status: 403 }
+      );
     }
-    const branch = normalizeBranch(body.branch || req.headers.get("x-branch-id"));
+    const branch = !isOwner && staffVerifiedBranch ? staffVerifiedBranch : requestedBranch;
     const targetAccount: "CASH" | "BANK" = body.targetAccount === "BANK" ? "BANK" : "CASH";
     const amount = Number(body.amount);
     if (!Number.isFinite(amount) || amount <= 0) {
@@ -329,8 +399,8 @@ export async function POST(req: Request) {
         targetAccount,
         amount: round(amount),
         date,
-        notes: notes || (targetAccount === "CASH" ? "Owner Cash Injection" : "Manual Bank Deposit"),
-        createdBy: "OWNER",
+        notes: notes || (targetAccount === "CASH" ? "Branch Cash Injection" : "Manual Bank Deposit"),
+        createdBy: isOwner ? "OWNER" : "STAFF",
       },
     });
 
@@ -363,10 +433,9 @@ export async function DELETE(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const depositId = searchParams.get("depositId");
-    const isOwnerHeader = checkIsOwner(req, { isOwner: searchParams.get("isOwner") === "true" });
-    if (!isOwnerHeader) {
-      return NextResponse.json({ error: "Only the Owner can delete manual deposits" }, { status: 403 });
-    }
+    const isOwner = checkIsOwner(req, { isOwner: searchParams.get("isOwner") === "true" });
+    const verifiedBranchHeader = req.headers.get("x-verified-branch");
+    const staffVerifiedBranch = verifiedBranchHeader ? normalizeBranch(verifiedBranchHeader) : null;
     if (!depositId) {
       return NextResponse.json({ error: "depositId is required" }, { status: 400 });
     }
@@ -374,6 +443,12 @@ export async function DELETE(req: Request) {
     const existing = await prisma.capitalDeposit.findUnique({ where: { id: depositId } });
     if (!existing) {
       return NextResponse.json({ error: "Deposit not found" }, { status: 404 });
+    }
+    if (!isOwner && staffVerifiedBranch && existing.branch !== staffVerifiedBranch) {
+      return NextResponse.json(
+        { error: "Forbidden: Staff can only delete manual entries for their own branch" },
+        { status: 403 }
+      );
     }
 
     await prisma.capitalDeposit.delete({ where: { id: depositId } });

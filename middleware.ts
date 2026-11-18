@@ -11,7 +11,6 @@ const NEXTAUTH_FALLBACK_SECRET =
 const OWNER_ONLY_PATHS = [
   "/pulse",
   "/monthly-audits",
-  "/settings",
   "/suppliers",
   "/audit-library",
   "/nauman-ai",
@@ -96,14 +95,7 @@ export async function middleware(req: NextRequest) {
       const method = req.method.toUpperCase();
       const isMutation = method === "POST" || method === "PUT" || method === "PATCH" || method === "DELETE";
 
-      // Protect Owner-only endpoints
-      if (pathname.startsWith("/api/settings") && isMutation) {
-        return NextResponse.json(
-          { error: "Forbidden: Only the Owner can modify settings or PINs" },
-          { status: 403 }
-        );
-      }
-
+      // Protect Owner-only endpoints (STAFF can read/update /api/settings for their own verified branch only)
       if (pathname.startsWith("/api/ai")) {
         return NextResponse.json(
           { error: "Forbidden: Nauman AI is restricted to Owner" },
@@ -175,10 +167,12 @@ export async function middleware(req: NextRequest) {
       (route) => pathname === route || pathname.startsWith(`${route}/`)
     );
     const requestedTab = searchParams.get("tab");
+    const allowedStaffTabs = new Set(["register", "daily-register", "settings", "quick-log", "archive"]);
     const isRestrictedTab =
-      requestedTab && requestedTab !== "register" && requestedTab !== "daily-register";
+      requestedTab && !allowedStaffTabs.has(requestedTab);
+    const allowedStaffPaths = new Set(["/daily-register", "/settings"]);
 
-    if (isRestrictedPath || isRestrictedTab || pathname !== "/daily-register") {
+    if (isRestrictedPath || isRestrictedTab || !allowedStaffPaths.has(pathname)) {
       return NextResponse.redirect(new URL("/daily-register", req.url));
     }
   }

@@ -91,10 +91,40 @@ export default function SettingsView({
   const [savingPins, setSavingPins] = useState(false);
   const [pinMessage, setPinMessage] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
+  // Branch Operational & POS Preferences (stored per branch)
+  const [defaultPosTerminal, setDefaultPosTerminal] = useState<"SAB" | "AL_RAJHI" | "SNB">("SAB");
+  const [receiptHeaderNote, setReceiptHeaderNote] = useState("");
+  const [autoDeductPosDefault, setAutoDeductPosDefault] = useState(true);
+  const [prefsSavedMsg, setPrefsSavedMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    setBranch(defaultBranch);
+    setDepositBranch(defaultBranch);
+  }, [defaultBranch]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.localStorage.getItem(`jct_branch_prefs_${branch}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        setDefaultPosTerminal(parsed.defaultPosTerminal || "SAB");
+        setReceiptHeaderNote(parsed.receiptHeaderNote || "");
+        setAutoDeductPosDefault(parsed.autoDeductPosDefault !== false);
+      } else {
+        setDefaultPosTerminal("SAB");
+        setReceiptHeaderNote("");
+        setAutoDeductPosDefault(true);
+      }
+    } catch {
+      // ignore
+    }
+  }, [branch]);
+
   const load = useCallback(async (b: string) => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/settings?branch=${b}${isOwner ? "&includeSecurity=1" : ""}`, {
+      const res = await fetch(`/api/settings?branch=${b}&includeSecurity=1`, {
         cache: "no-store",
       });
       const json = await res.json();
@@ -109,13 +139,20 @@ export default function SettingsView({
         setSecurityLogs(json.securityLogs);
       }
       if (json.profilePins && typeof json.profilePins === "object") {
-        setProfilePins({
-          OWNER: json.profilePins.OWNER || json.profilePins.BONGSI || "2026",
-          JCT_HARDWARE_JOTUN: json.profilePins.JCT_HARDWARE_JOTUN || "1111",
-          HEMPEL: json.profilePins.HEMPEL || "2222",
-          DAMMAM_JOTUN: json.profilePins.DAMMAM_JOTUN || "3333",
-          SIGMA: json.profilePins.SIGMA || "4444",
-        });
+        setProfilePins((prev) => ({
+          ...prev,
+          ...(isOwner
+            ? {
+                OWNER: json.profilePins.OWNER || json.profilePins.BONGSI || "2026",
+                JCT_HARDWARE_JOTUN: json.profilePins.JCT_HARDWARE_JOTUN || "1111",
+                HEMPEL: json.profilePins.HEMPEL || "2222",
+                DAMMAM_JOTUN: json.profilePins.DAMMAM_JOTUN || "3333",
+                SIGMA: json.profilePins.SIGMA || "4444",
+              }
+            : {
+                [b]: json.profilePins[b] || prev[b] || "1111",
+              }),
+        }));
       }
     } catch {
       setMessage({ kind: "err", text: "Could not load saved settings." });
@@ -127,8 +164,10 @@ export default function SettingsView({
   const handleSavePins = async (e: React.FormEvent) => {
     e.preventDefault();
     setPinMessage(null);
-    const entries = Object.entries(profilePins);
-    for (const [k, v] of entries) {
+    const targetEntries = isOwner
+      ? Object.entries(profilePins)
+      : [[branch, profilePins[branch] || ""]];
+    for (const [k, v] of targetEntries) {
       if (!v || v.trim().length < 4) {
         setPinMessage({
           kind: "err",
@@ -139,36 +178,40 @@ export default function SettingsView({
     }
     setSavingPins(true);
     try {
+      const payloadPins = isOwner
+        ? profilePins
+        : { [branch]: profilePins[branch] };
       const res = await fetch("/api/settings", {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
+          "x-branch-id": branch,
           "x-user-is-owner": String(isOwner),
           "x-user-role": isOwner ? "OWNER" : "STAFF",
         },
         body: JSON.stringify({
           action: "UPDATE_PINS",
-          profilePins,
+          branch,
+          profilePins: payloadPins,
           isOwner,
         }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Failed to update security PINs");
       if (json.profilePins) {
-        setProfilePins({
-          OWNER: json.profilePins.OWNER || "2026",
-          JCT_HARDWARE_JOTUN: json.profilePins.JCT_HARDWARE_JOTUN || "1111",
-          HEMPEL: json.profilePins.HEMPEL || "2222",
-          DAMMAM_JOTUN: json.profilePins.DAMMAM_JOTUN || "3333",
-          SIGMA: json.profilePins.SIGMA || "4444",
-        });
+        setProfilePins((prev) => ({
+          ...prev,
+          ...json.profilePins,
+        }));
         if (typeof window !== "undefined") {
           window.localStorage.setItem("jct_cached_profile_pins", JSON.stringify(json.profilePins));
         }
       }
       setPinMessage({
         kind: "ok",
-        text: "Security PINs & Passwords updated across Desktop & Mobile PWA!",
+        text: isOwner
+          ? "Security PINs & Passwords updated across Desktop & Mobile PWA!"
+          : `Access PIN updated for ${BRANCH_CHOICES.find((b) => b.id === branch)?.label || branch}!`,
       });
     } catch (err) {
       setPinMessage({
@@ -371,8 +414,9 @@ export default function SettingsView({
         </div>
 
         {!isOwner && (
-          <div className="flex items-center gap-2 rounded-lg bg-jct-yellow/20 text-jct-charcoal dark:text-jct-yellow px-3 py-2 text-xs font-bold">
-            <Lock size={13} /> Only the Owner can change these values.
+          <div className="flex items-center gap-2 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-cyan-700 dark:text-cyan-300 px-3 py-2 text-xs font-bold">
+            <SettingsIcon size={13} /> Branch-Scoped Settings: Changes apply directly to{" "}
+            {BRANCH_CHOICES.find((b) => b.id === branch)?.label || branch}.
           </div>
         )}
 
@@ -399,33 +443,43 @@ export default function SettingsView({
             <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">
               <Wallet size={13} className="text-jct-yellow" /> Opening Cash Balance (SAR)
             </label>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              inputMode="decimal"
-              placeholder="0.00"
-              value={cash}
-              onChange={(e) => setCash(e.target.value)}
-              disabled={!isOwner || loading}
-              className={inputCls}
-            />
+            <div className="flex items-center overflow-hidden rounded-xl border-2 border-cyan-400/70 focus-within:border-cyan-300 focus-within:ring-4 focus-within:ring-cyan-500/25 bg-slate-950/95 shadow-inner">
+              <span className="px-3 py-2.5 bg-cyan-500/15 border-r border-cyan-400/30 text-xs font-black tracking-wider text-cyan-300 shrink-0">
+                SAR
+              </span>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                inputMode="decimal"
+                placeholder="0.00"
+                value={cash}
+                onChange={(e) => setCash(e.target.value)}
+                disabled={loading}
+                className="w-full bg-transparent px-3 py-2 text-xl font-bold tabular-nums text-white placeholder:text-slate-500 focus:outline-none"
+              />
+            </div>
           </div>
           <div>
             <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">
               <Landmark size={13} className="text-jct-turquoise" /> Opening Bank Balance (SAR)
             </label>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              inputMode="decimal"
-              placeholder="0.00"
-              value={bank}
-              onChange={(e) => setBank(e.target.value)}
-              disabled={!isOwner || loading}
-              className={inputCls}
-            />
+            <div className="flex items-center overflow-hidden rounded-xl border-2 border-cyan-400/70 focus-within:border-cyan-300 focus-within:ring-4 focus-within:ring-cyan-500/25 bg-slate-950/95 shadow-inner">
+              <span className="px-3 py-2.5 bg-cyan-500/15 border-r border-cyan-400/30 text-xs font-black tracking-wider text-cyan-300 shrink-0">
+                SAR
+              </span>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                inputMode="decimal"
+                placeholder="0.00"
+                value={bank}
+                onChange={(e) => setBank(e.target.value)}
+                disabled={loading}
+                className="w-full bg-transparent px-3 py-2 text-xl font-bold tabular-nums text-white placeholder:text-slate-500 focus:outline-none"
+              />
+            </div>
           </div>
         </div>
 
@@ -446,15 +500,13 @@ export default function SettingsView({
           <span className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold">
             {updatedAt ? `Last saved ${saudiDateTimeString(updatedAt)}` : "Not configured yet (using SAR 0.00)"}
           </span>
-          {isOwner && (
-            <button
-              type="submit"
-              disabled={saving || loading}
-              className="flex items-center gap-2 bg-jct-turquoise text-jct-charcoal font-bold hover:brightness-95 disabled:opacity-60 transition-all shadow-sm rounded-lg px-5 py-2.5 text-sm"
-            >
-              <Save size={15} /> {saving ? "Saving…" : "Save Opening Balances"}
-            </button>
-          )}
+          <button
+            type="submit"
+            disabled={saving || loading}
+            className="flex items-center gap-2 bg-jct-turquoise text-jct-charcoal font-bold hover:brightness-95 disabled:opacity-60 transition-all shadow-sm rounded-lg px-5 py-2.5 text-sm"
+          >
+            <Save size={15} /> {saving ? "Saving…" : "Save Opening Balances"}
+          </button>
         </div>
       </form>
 
@@ -521,7 +573,6 @@ export default function SettingsView({
               <select
                 value={depositTarget}
                 onChange={(e) => setDepositTarget(e.target.value === "BANK" ? "BANK" : "CASH")}
-                disabled={!isOwner}
                 className={inputCls}
               >
                 <option value="CASH">💵 Cash in Business Drawer (CASH)</option>
@@ -535,17 +586,22 @@ export default function SettingsView({
               <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">
                 Amount (SAR)
               </label>
-              <input
-                type="number"
-                step="0.01"
-                min="0.01"
-                inputMode="decimal"
-                placeholder="e.g. 5000.00"
-                value={depositAmount}
-                onChange={(e) => setDepositAmount(e.target.value)}
-                disabled={!isOwner || addingDeposit}
-                className={inputCls}
-              />
+              <div className="flex items-center overflow-hidden rounded-xl border-2 border-cyan-400/70 focus-within:border-cyan-300 focus-within:ring-4 focus-within:ring-cyan-500/25 bg-slate-950/95 shadow-inner">
+                <span className="px-2.5 py-2.5 bg-cyan-500/15 border-r border-cyan-400/30 text-[11px] font-black tracking-wider text-cyan-300 shrink-0">
+                  SAR
+                </span>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  value={depositAmount}
+                  onChange={(e) => setDepositAmount(e.target.value)}
+                  disabled={addingDeposit}
+                  className="w-full bg-transparent px-3 py-2 text-lg font-bold tabular-nums text-white placeholder:text-slate-500 focus:outline-none"
+                />
+              </div>
             </div>
 
             <div>
@@ -556,7 +612,7 @@ export default function SettingsView({
                 type="date"
                 value={depositDate}
                 onChange={(e) => setDepositDate(e.target.value)}
-                disabled={!isOwner || addingDeposit}
+                disabled={addingDeposit}
                 className={inputCls}
               />
             </div>
@@ -569,12 +625,12 @@ export default function SettingsView({
                 type="text"
                 placeholder={
                   depositTarget === "CASH"
-                    ? "e.g. Owner Cash Injection"
+                    ? "e.g. Opening Cash Injection"
                     : "e.g. Nov 5 Manual Bank Deposit"
                 }
                 value={depositNotes}
                 onChange={(e) => setDepositNotes(e.target.value)}
-                disabled={!isOwner || addingDeposit}
+                disabled={addingDeposit}
                 className={inputCls}
               />
             </div>
@@ -593,17 +649,15 @@ export default function SettingsView({
             </div>
           )}
 
-          {isOwner && (
-            <div className="flex justify-end">
-              <button
-                type="submit"
-                disabled={addingDeposit || loading}
-                className="flex items-center gap-2 bg-emerald-500 text-black font-bold hover:brightness-95 disabled:opacity-60 transition-all shadow-sm rounded-lg px-5 py-2.5 text-sm"
-              >
-                <PlusCircle size={15} /> {addingDeposit ? "Adding Deposit…" : "Add Deposit"}
-              </button>
-            </div>
-          )}
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              disabled={addingDeposit || loading}
+              className="flex items-center gap-2 bg-emerald-500 text-black font-bold hover:brightness-95 disabled:opacity-60 transition-all shadow-sm rounded-lg px-5 py-2.5 text-sm"
+            >
+              <PlusCircle size={15} /> {addingDeposit ? "Adding Entry…" : "Add Manual Entry / Deposit"}
+            </button>
+          </div>
         </form>
 
         {/* Mini History Table of Recent Manual Deposits */}
@@ -624,7 +678,7 @@ export default function SettingsView({
                     <th className="px-3 py-2">Target Account</th>
                     <th className="px-3 py-2">Reason / Reference Note</th>
                     <th className="px-3 py-2 text-right">Amount</th>
-                    {isOwner && <th className="px-3 py-2 text-right">Action</th>}
+                    <th className="px-3 py-2 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-[#1A1A1A]">
@@ -650,26 +704,101 @@ export default function SettingsView({
                       <td className="px-3 py-2.5 text-right font-mono font-extrabold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
                         +SAR {Number(d.amount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
-                      {isOwner && (
-                        <td className="px-3 py-2.5 text-right whitespace-nowrap">
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteDeposit(d.id)}
-                            disabled={deletingDepositId === d.id}
-                            title="Delete accidental deposit entry"
-                            className="inline-flex items-center gap-1 rounded-md border border-rose-500/30 bg-rose-500/10 px-2 py-1 text-[10px] font-bold text-rose-600 dark:text-rose-300 hover:bg-rose-500/20 disabled:opacity-50"
-                          >
-                            <Trash2 size={12} />
-                            {deletingDepositId === d.id ? "…" : "Delete"}
-                          </button>
-                        </td>
-                      )}
+                      <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteDeposit(d.id)}
+                          disabled={deletingDepositId === d.id}
+                          title="Delete accidental deposit entry"
+                          className="inline-flex items-center gap-1 rounded-md border border-rose-500/30 bg-rose-500/10 px-2 py-1 text-[10px] font-bold text-rose-600 dark:text-rose-300 hover:bg-rose-500/20 disabled:opacity-50"
+                        >
+                          <Trash2 size={12} />
+                          {deletingDepositId === d.id ? "…" : "Delete"}
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* CARD 2B: Branch Operational & POS Preferences */}
+      <div className="max-w-3xl bg-white dark:bg-[#0A0A0A] shadow-sm border border-slate-200 dark:border-[#1F1F1F] rounded-xl p-6 flex flex-col gap-4">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <h3 className="font-display font-extrabold text-lg text-jct-charcoal dark:text-jct-offwhite flex items-center gap-2">
+              <SettingsIcon size={18} className="text-jct-turquoise" />
+              Branch Operational &amp; POS Preferences ({BRANCH_CHOICES.find((b) => b.id === branch)?.label || branch})
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold mt-1">
+              Configure default POS terminal, receipt footer note, and branch-specific POS offset rules.
+            </p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">
+              Default POS Terminal
+            </label>
+            <select
+              value={defaultPosTerminal}
+              onChange={(e) => setDefaultPosTerminal(e.target.value as "SAB" | "AL_RAJHI" | "SNB")}
+              className={inputCls}
+            >
+              <option value="SAB">SAB Terminal</option>
+              <option value="AL_RAJHI">Al Rajhi Terminal</option>
+              <option value="SNB">SNB Terminal</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">
+              Receipt / Report Header Note
+            </label>
+            <input
+              type="text"
+              value={receiptHeaderNote}
+              onChange={(e) => setReceiptHeaderNote(e.target.value)}
+              placeholder="e.g. Jubail Main Branch · VAT #..."
+              className={inputCls}
+            />
+          </div>
+        </div>
+        {branch === "JCT_HARDWARE_JOTUN" && (
+          <label className="inline-flex items-center gap-2 text-xs font-bold text-amber-700 dark:text-amber-300 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={autoDeductPosDefault}
+              onChange={(e) => setAutoDeductPosDefault(e.target.checked)}
+            />
+            <span>Auto-Deduct Manual POS Swipes from Uploaded Cash-Billed ERP Summary (Default ON)</span>
+          </label>
+        )}
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs font-bold text-emerald-600 dark:text-emerald-300">
+            {prefsSavedMsg || ""}
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof window !== "undefined") {
+                window.localStorage.setItem(
+                  `jct_branch_prefs_${branch}`,
+                  JSON.stringify({
+                    defaultPosTerminal,
+                    receiptHeaderNote,
+                    autoDeductPosDefault,
+                  })
+                );
+              }
+              setPrefsSavedMsg(`✓ Operational preferences saved for ${BRANCH_CHOICES.find((b) => b.id === branch)?.label || branch}`);
+            }}
+            className="flex items-center gap-2 bg-jct-turquoise text-jct-charcoal font-bold hover:brightness-95 transition-all shadow-sm rounded-lg px-4 py-2 text-xs"
+          >
+            <Save size={14} /> Save Branch Preferences
+          </button>
         </div>
       </div>
 
@@ -682,11 +811,12 @@ export default function SettingsView({
           <div>
             <h3 className="font-display font-extrabold text-lg text-jct-charcoal dark:text-jct-offwhite flex items-center gap-2">
               <Lock size={18} className="text-jct-yellow" />
-              Profile Security &amp; Access PINs
+              {isOwner ? "Profile Security & Access PINs" : "Branch Access PIN"}
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold mt-1">
-              Protect the Owner portal, Mobile PWA (/owner-pocket), and all 4 Branch Staff profiles with a mandatory
-              PIN or password when signing in or switching profiles.
+              {isOwner
+                ? "Protect the Owner portal, Mobile PWA (/owner-pocket), and all 4 Branch Staff profiles with a mandatory PIN or password."
+                : `Manage the access PIN for ${BRANCH_CHOICES.find((b) => b.id === branch)?.label || branch}. Other branches and Owner Master PIN remain protected.`}
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -697,22 +827,23 @@ export default function SettingsView({
             >
               {showPins ? "🙈 Hide PINs" : "👁️ Show PINs"}
             </button>
-            <button
-              type="button"
-              onClick={() =>
-                setProfilePins({
-                  OWNER: "2026",
-                  JCT_HARDWARE_JOTUN: "1111",
-                  HEMPEL: "2222",
-                  DAMMAM_JOTUN: "3333",
-                  SIGMA: "4444",
-                })
-              }
-              disabled={!isOwner}
-              className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-bold text-amber-700 dark:text-amber-300 hover:bg-amber-500/20 disabled:opacity-50 transition"
-            >
-              ↺ Reset Defaults
-            </button>
+            {isOwner && (
+              <button
+                type="button"
+                onClick={() =>
+                  setProfilePins({
+                    OWNER: "2026",
+                    JCT_HARDWARE_JOTUN: "1111",
+                    HEMPEL: "2222",
+                    DAMMAM_JOTUN: "3333",
+                    SIGMA: "4444",
+                  })
+                }
+                className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-bold text-amber-700 dark:text-amber-300 hover:bg-amber-500/20 transition"
+              >
+                ↺ Reset Defaults
+              </button>
+            )}
           </div>
         </div>
 
@@ -728,28 +859,30 @@ export default function SettingsView({
             {
               key: "JCT_HARDWARE_JOTUN",
               title: "🏪 JCT Hardware + Jotun Staff",
-              sub: "Branch Daily Register, Quick-Log & Archives",
+              sub: "Branch Daily Register, Quick-Log, Settings & Archives",
               defaultPin: "1111",
             },
             {
               key: "HEMPEL",
               title: "🎨 Hempel Staff",
-              sub: "Branch Daily Register, Quick-Log & Archives",
+              sub: "Branch Daily Register, Quick-Log, Settings & Archives",
               defaultPin: "2222",
             },
             {
               key: "DAMMAM_JOTUN",
               title: "🌊 Dammam Jotun Staff",
-              sub: "Branch Daily Register, Quick-Log & Archives",
+              sub: "Branch Daily Register, Quick-Log, Settings & Archives",
               defaultPin: "3333",
             },
             {
               key: "SIGMA",
               title: "⚡ Sigma Staff",
-              sub: "Branch Daily Register, Quick-Log & Archives",
+              sub: "Branch Daily Register, Quick-Log, Settings & Archives",
               defaultPin: "4444",
             },
-          ].map((item) => (
+          ]
+            .filter((item) => isOwner || item.key === branch)
+            .map((item) => (
             <div
               key={item.key}
               className={`rounded-xl border p-3.5 flex flex-col gap-2 ${
@@ -780,7 +913,7 @@ export default function SettingsView({
                     [item.key]: e.target.value,
                   }))
                 }
-                disabled={!isOwner || savingPins}
+                disabled={savingPins}
                 placeholder={`Enter PIN (default ${item.defaultPin})`}
                 className={`${inputCls} tracking-widest`}
               />
@@ -801,17 +934,15 @@ export default function SettingsView({
           </div>
         )}
 
-        {isOwner && (
-          <div className="flex justify-end">
-            <button
-              type="submit"
-              disabled={savingPins || loading}
-              className="flex items-center gap-2 bg-jct-yellow text-jct-charcoal font-extrabold hover:brightness-95 disabled:opacity-60 transition-all shadow-sm rounded-lg px-5 py-2.5 text-sm"
-            >
-              <Save size={15} /> {savingPins ? "Saving PINs…" : "Save Security PINs"}
-            </button>
-          </div>
-        )}
+        <div className="flex justify-end">
+          <button
+            type="submit"
+            disabled={savingPins || loading}
+            className="flex items-center gap-2 bg-jct-yellow text-jct-charcoal font-extrabold hover:brightness-95 disabled:opacity-60 transition-all shadow-sm rounded-lg px-5 py-2.5 text-sm"
+          >
+            <Save size={15} /> {savingPins ? "Saving PINs…" : isOwner ? "Save Security PINs" : "Save Branch PIN"}
+          </button>
+        </div>
 
         {/* Recent Security & Login Audit Events (Last 10) */}
         {isOwner && (

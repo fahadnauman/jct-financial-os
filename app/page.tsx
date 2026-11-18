@@ -21108,8 +21108,8 @@ const USER_PROFILES: UserProfile[] = [
 ];
 
 const OWNER_TABS: TabId[] = ["register", "quick-log", "archive", "radar", "suppliers", "supplier-advances", "payroll", "pulse", "consolidation", "ai", "settings", "monthly-audits"];
-// RBAC: STAFF accounts have full operational access to Daily Register, Express Quick-Log & their branch Archive
-const STAFF_TABS: TabId[] = ["register", "quick-log", "archive"];
+// RBAC: STAFF accounts have full operational access to Daily Register, Express Quick-Log, Audit Library & Branch-Scoped Settings
+const STAFF_TABS: TabId[] = ["register", "quick-log", "archive", "settings"];
 
 const OWNER_BRANCH_OPTIONS = [
   "All Branches (Combined)",
@@ -21553,7 +21553,6 @@ export default function Page() {
           pathname &&
           (pathname.startsWith("/pulse") ||
             pathname.startsWith("/monthly-audits") ||
-            pathname.startsWith("/settings") ||
             pathname.startsWith("/suppliers") ||
             pathname.startsWith("/credit-radar") ||
             pathname.startsWith("/payroll") ||
