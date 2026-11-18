@@ -12,6 +12,7 @@ export interface AdvanceRecordDTO {
   partyName: string;
   phoneOrRef: string | null;
   branchInvNo: string | null;
+  totalOrderAmount: number | null;
   totalAdvanceAmount: number;
   utilizedAmount: number;
   remainingBalance: number;
@@ -32,6 +33,7 @@ const serializeAdvance = (row: {
   partyName: string;
   phoneOrRef: string | null;
   branchInvNo: string | null;
+  totalOrderAmount: number | null;
   totalAdvanceAmount: number;
   utilizedAmount: number;
   remainingBalance: number;
@@ -51,6 +53,7 @@ const serializeAdvance = (row: {
   partyName: row.partyName,
   phoneOrRef: row.phoneOrRef,
   branchInvNo: row.branchInvNo,
+  totalOrderAmount: row.totalOrderAmount ?? null,
   totalAdvanceAmount: row.totalAdvanceAmount,
   utilizedAmount: row.utilizedAmount,
   remainingBalance: row.remainingBalance,
@@ -135,6 +138,13 @@ export async function POST(req: Request) {
     }
     const round = (n: number) => Math.round(n * 100) / 100;
     const totalAdvanceAmount = round(rawAmount);
+    const rawOrderAmount = Number(body.totalOrderAmount ?? 0);
+    const totalOrderAmount =
+      Number.isFinite(rawOrderAmount) && rawOrderAmount > 0 ? round(rawOrderAmount) : null;
+    const remainingBalance =
+      totalOrderAmount !== null
+        ? round(Math.max(0, totalOrderAmount - totalAdvanceAmount))
+        : totalAdvanceAmount;
     const paymentMode = typeof body.paymentMode === "string" && body.paymentMode ? body.paymentMode : "CASH";
     const date = typeof body.date === "string" && body.date.trim() ? body.date.trim() : saudiTodayIso();
     const followUpDate =
@@ -152,9 +162,10 @@ export async function POST(req: Request) {
         partyName,
         phoneOrRef,
         branchInvNo,
+        totalOrderAmount,
         totalAdvanceAmount,
         utilizedAmount: 0,
-        remainingBalance: totalAdvanceAmount,
+        remainingBalance,
         paymentMode,
         date,
         followUpDate,

@@ -294,6 +294,7 @@ model AdvanceRecord {
   partyName          String
   phoneOrRef         String?
   branchInvNo        String?
+  totalOrderAmount   Float?
   totalAdvanceAmount Float
   utilizedAmount     Float    @default(0)
   remainingBalance   Float

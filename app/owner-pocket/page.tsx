@@ -1366,13 +1366,18 @@ export default function OwnerPocketPage() {
                 </div>
                 <div>
                   <label className={labelCls}>Advance Amount (SAR) *</label>
-                  <input
-                    inputMode="decimal"
-                    value={saAmount}
-                    onChange={(e) => setSaAmount(e.target.value.replace(/[^0-9.]/g, ""))}
-                    placeholder="0.00"
-                    className={`${inputCls} text-3xl font-black`}
-                  />
+                  <div className="flex items-center overflow-hidden rounded-xl border-2 border-cyan-400/70 focus-within:border-cyan-300 focus-within:ring-4 focus-within:ring-cyan-500/25 bg-slate-950/95 shadow-inner">
+                    <span className="px-3 py-2.5 bg-cyan-500/15 border-r border-cyan-400/30 text-xs font-black tracking-wider text-cyan-300 shrink-0">
+                      SAR
+                    </span>
+                    <input
+                      inputMode="decimal"
+                      value={saAmount}
+                      onChange={(e) => setSaAmount(e.target.value.replace(/[^0-9.]/g, ""))}
+                      placeholder="0.00"
+                      className="w-full bg-transparent px-3 py-2 text-2xl font-bold tabular-nums text-white placeholder:text-slate-500 focus:outline-none"
+                    />
+                  </div>
                 </div>
                 <div>
                   <span className={labelCls}>Mode of Payment *</span>

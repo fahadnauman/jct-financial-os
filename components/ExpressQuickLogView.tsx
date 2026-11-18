@@ -48,7 +48,6 @@ const EXPENSE_CATEGORIES = [
   "Water",
   "Salary",
   "Staff Advance",
-  "Supplier Advance",
   "Medical Expenses",
   "Staff Expenses",
   "Business Commission",
@@ -318,7 +317,7 @@ export function ExpressQuickLogView({
         }
       } else if (activeType === "CREDIT_SUPPLIER") {
         if (!creditSupplier.trim()) {
-          setErrorMsg("Supplier / Company Name is required for Credit Supplier.");
+          setErrorMsg("Supplier / Company Name is required for Credit Purchase Payment.");
           setSubmitting(false);
           return;
         }
@@ -328,7 +327,7 @@ export function ExpressQuickLogView({
         paymentSource = "SUPPLIER_CREDIT";
         paymentMode = "CREDIT";
         supplierInvoiceNum = creditInvoiceRef.trim() || null;
-        finalNote = `Credit Supplier Payable (Due: ${creditDueDate})${finalNote ? ` · ${finalNote}` : ""}`;
+        finalNote = `Credit Purchase Payment (Due: ${creditDueDate})${finalNote ? ` · ${finalNote}` : ""}`;
       } else if (activeType === "PURCHASE") {
         pocketType = "PURCHASE";
         category = purchasePaymentMode === "CREDIT" ? "Credit Purchase" : "Cash Purchase";
@@ -645,13 +644,13 @@ export function ExpressQuickLogView({
                 }`}
               >
                 <span className="text-sm">🏢</span>
-                <span className="mt-1">Credit Supplier</span>
+                <span className="mt-1">Credit Purchase Payment</span>
               </button>
             </div>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Amount Input with Large Display */}
+            {/* Amount Input with High-Contrast Highlighted Display */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
@@ -667,8 +666,10 @@ export function ExpressQuickLogView({
                   </button>
                 )}
               </div>
-              <div className="flex items-center gap-2 rounded-2xl border-2 border-jct-turquoise/60 focus-within:border-jct-turquoise bg-slate-50 dark:bg-black px-4 py-3 transition">
-                <span className="text-base font-black text-slate-400">SAR</span>
+              <div className="flex items-center overflow-hidden rounded-xl border-2 border-cyan-400/70 focus-within:border-cyan-300 focus-within:ring-4 focus-within:ring-cyan-500/25 bg-slate-950/95 shadow-inner transition">
+                <span className="px-3.5 py-3 bg-cyan-500/15 border-r border-cyan-400/30 text-sm font-black tracking-wider text-cyan-300 shrink-0">
+                  SAR
+                </span>
                 <input
                   ref={amountInputRef}
                   type="number"
@@ -680,7 +681,7 @@ export function ExpressQuickLogView({
                     if (errorMsg) setErrorMsg(null);
                   }}
                   placeholder="0.00"
-                  className="w-full bg-transparent font-mono text-3xl sm:text-4xl font-black text-jct-charcoal dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-700 outline-none"
+                  className="w-full bg-transparent px-3.5 py-2.5 font-mono text-2xl sm:text-3xl font-bold tabular-nums text-white placeholder:text-slate-500 focus:outline-none"
                 />
               </div>
             </div>
@@ -925,7 +926,7 @@ export function ExpressQuickLogView({
               </div>
             )}
 
-            {/* 3B. Contextual Fields: CREDIT SUPPLIER (Deferred Supplier Payable) */}
+            {/* 3B. Contextual Fields: CREDIT PURCHASE PAYMENT (Deferred Supplier Payable) */}
             {activeType === "CREDIT_SUPPLIER" && (
               <div className="space-y-3 animate-fade-slide-up">
                 <div className="rounded-lg border border-purple-500/40 bg-purple-500/10 px-3 py-2 text-[11px] font-bold text-purple-700 dark:text-purple-300">

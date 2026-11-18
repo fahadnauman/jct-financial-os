@@ -77,7 +77,7 @@ function ModalPortal({
    TYPES & CONSTANTS
    ════════════════════════════════════════════════════════════════════════ */
 
-type TabId = "register" | "quick-log" | "archive" | "radar" | "suppliers" | "payroll" | "pulse" | "consolidation" | "ai" | "settings" | "monthly-audits";
+type TabId = "register" | "quick-log" | "archive" | "radar" | "suppliers" | "supplier-advances" | "payroll" | "pulse" | "consolidation" | "ai" | "settings" | "monthly-audits";
 type Kind = "cash_sale" | "credit_received" | "bank_in" | "jotun" | "hempel" | "sigma" | "other" | "salaries" | "tax" | "misc_expense";
 
 interface Txn {
@@ -189,6 +189,7 @@ export interface SupplierBillItem {
   id: string;
   supplierName: string;
   amount: number;
+  originalAmount?: number;
   dueDate: string;
   followUpDate?: string;
   followUpStatus?: string;
@@ -207,6 +208,7 @@ export interface AdvanceRecordItem {
   partyName: string;
   phoneOrRef: string | null;
   branchInvNo: string | null;
+  totalOrderAmount?: number | null;
   totalAdvanceAmount: number;
   utilizedAmount: number;
   remainingBalance: number;
@@ -469,6 +471,7 @@ function Sidebar({ tab, setTab, allowedTabs }: { tab: TabId; setTab: (t: TabId) 
     { id: "archive" as TabId, label: "Audit Library", icon: Archive },
     { id: "radar" as TabId, label: "Credit Radar", icon: Target },
     { id: "suppliers" as TabId, label: "Suppliers & Payables", icon: Package },
+    { id: "supplier-advances" as TabId, label: "💳 Supplier Advances", icon: CreditCard },
     { id: "payroll" as TabId, label: "Staff & Payroll", icon: Users },
     { id: "pulse" as TabId, label: "Financial Pulse", icon: Activity },
     { id: "monthly-audits" as TabId, label: "Monthly Audits", icon: Calendar },
@@ -544,6 +547,7 @@ function MobileSidebarDrawer({
     { id: "archive" as TabId, label: "Audit Library", icon: Archive },
     { id: "radar" as TabId, label: "Credit Radar", icon: Target },
     { id: "suppliers" as TabId, label: "Suppliers & Payables", icon: Package },
+    { id: "supplier-advances" as TabId, label: "💳 Supplier Advances", icon: CreditCard },
     { id: "payroll" as TabId, label: "Staff & Payroll", icon: Users },
     { id: "pulse" as TabId, label: "Financial Pulse", icon: Activity },
     { id: "consolidation" as TabId, label: "Branch Consolidation", icon: Building2 },
@@ -673,7 +677,6 @@ export const STRICT_EXPENSE_CATEGORIES = [
   "Water",
   "Salary",
   "Staff Advance",
-  "Supplier Advance",
   "Credit Purchase",
   "Cash Purchase",
   "Medical Expenses",
@@ -682,7 +685,7 @@ export const STRICT_EXPENSE_CATEGORIES = [
   "Business Commission",
 ] as const;
 
-export type StrictExpenseCategory = (typeof STRICT_EXPENSE_CATEGORIES)[number];
+export type StrictExpenseCategory = (typeof STRICT_EXPENSE_CATEGORIES)[number] | "Supplier Advance";
 
 export const POS_TERMINAL_META: Record<
   PosTerminalBank,
@@ -3336,6 +3339,10 @@ function DailyRegisterView({
   const [step4BillType, setStep4BillType] = useState<"WITHOUT_BILL" | "WITH_BILL">("WITHOUT_BILL");
   const [step4Note, setStep4Note] = useState("");
   const [step4Amount, setStep4Amount] = useState("");
+  const [step4IsSalesReturn, setStep4IsSalesReturn] = useState(false);
+  const [step4ReturnInvNo, setStep4ReturnInvNo] = useState("");
+  const [step4ReturnReason, setStep4ReturnReason] = useState("");
+  const [step4ReturnRefundMode, setStep4ReturnRefundMode] = useState<"CASH" | "BANK_TRANSFER">("CASH");
 
   const handleStep4FileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -5261,17 +5268,64 @@ function DailyRegisterView({
     e.preventDefault();
     const val = parseFloat(step4Amount);
     if (Number.isNaN(val) || val <= 0) return;
+
+    if (step4IsSalesReturn) {
+      const cleanInv = step4ReturnInvNo.trim().replace(/^#/i, "");
+      const cleanReason = step4ReturnReason.trim();
+      if (!cleanInv || !cleanReason) {
+        alert("Original Invoice Number and Return Reason are required for Sales Return.");
+        return;
+      }
+      const clientTxnId = typeof crypto !== "undefined" ? crypto.randomUUID() : `sr-${Date.now()}`;
+      const matchedInv = activeErpList.find(
+        (i) => cleanErpInvNo(i.branchInvNo || i.invoiceNo) === cleanErpInvNo(cleanInv)
+      );
+      upsertEntry({
+        id: `ple-sales-return-${cleanInv}-${Date.now().toString().slice(-4)}`,
+        clientTxnId,
+        type: "EXPENSE",
+        expenseCategory: "Other Expenses",
+        linkedInvoiceNo: cleanInv,
+        linkedInvoiceNum: cleanInv,
+        customerName: matchedInv?.customerName || matchedInv?.customer || undefined,
+        paymentMode: step4ReturnRefundMode,
+        note: cleanReason,
+        title: `↩ Sales Return — Inv #${cleanInv} (${cleanReason})`,
+        amount: val,
+        time: nowHHMM(),
+      });
+      void fetch("/api/sales-returns", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientTxnId,
+          branch: branchId || "JCT_HARDWARE_JOTUN",
+          returnDate: activeSessionDate,
+          invoiceNo: cleanInv,
+          customerName: matchedInv?.customerName || matchedInv?.customer || undefined,
+          returnedAmount: val,
+          originalAmount: matchedInv?.amount || val,
+          refundMode: step4ReturnRefundMode === "CASH" ? "CASH_REFUND" : "BANK_REVERSAL",
+          reason: cleanReason,
+          loggedBy: isOwner ? "Owner" : "Staff",
+        }),
+      }).catch((err) => console.warn("Failed to save sales return audit record:", err));
+
+      setStep4ReturnInvNo("");
+      setStep4ReturnReason("");
+      setStep4Amount("");
+      return;
+    }
+
     if (step4BillType === "WITH_BILL" && !step4BillPdfUrl) {
       alert("Please upload a receipt photo or PDF when 'With Bill' is selected.");
       return;
     }
 
     const isCreditPurchase = step4Category === "Credit Purchase";
-    const isSupplierAdvance = step4Category === "Supplier Advance";
     const isSupplierPurchase =
       step4Category === "Credit Purchase" ||
-      step4Category === "Cash Purchase" ||
-      isSupplierAdvance;
+      step4Category === "Cash Purchase";
     const isStaffExpense = step4Category === "Staff Advance" || step4Category === "Salary";
     const selectedStaff = staffList.find((s) => s.id === step4StaffId);
     const staffName = selectedStaff?.name || "";
@@ -5304,8 +5358,8 @@ function DailyRegisterView({
       type: "EXPENSE",
       expenseCategory: step4Category,
       supplierName: isSupplierPurchase ? cleanSupplier : undefined,
-      dueDate: isCreditPurchase || isSupplierAdvance ? step4DueDate : undefined,
-      followUpDate: isCreditPurchase || isSupplierAdvance ? step4DueDate : undefined,
+      dueDate: isCreditPurchase ? step4DueDate : undefined,
+      followUpDate: isCreditPurchase ? step4DueDate : undefined,
       supplierInvoiceNum: step4SupplierInvoiceNum.trim() || undefined,
       hasBill: step4BillType === "WITH_BILL" && Boolean(step4BillPdfUrl),
       billFileName: step4PdfFileName || undefined,
@@ -5321,25 +5375,6 @@ function DailyRegisterView({
       amount: val,
       time: nowHHMM(),
     });
-
-    if (isSupplierAdvance) {
-      fetch("/api/advances", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          branch: branchId || "JCT_HARDWARE_JOTUN",
-          direction: "SUPPLIER_ADVANCE_OUT",
-          partyName: cleanSupplier,
-          branchInvNo: step4SupplierInvoiceNum.trim() || null,
-          totalAdvanceAmount: val,
-          paymentMode: effectiveStep4Mode,
-          notes: step4Note.trim() || "Supplier Advance logged in Step 4",
-          followUpDate: step4DueDate || addSaudiDays(7),
-        }),
-      })
-        .then(() => onRefreshAdvances?.())
-        .catch((e) => console.warn("Failed to create Supplier Advance record:", e));
-    }
 
     if (isSupplierPurchase) {
       onSyncCreditPurchase(
@@ -10081,7 +10116,7 @@ function DailyRegisterView({
 
                   <div className="flex flex-wrap gap-2">
                     {STRICT_EXPENSE_CATEGORIES.map((category) => {
-                      const active = step4Category === category;
+                      const active = !step4IsSalesReturn && step4Category === category;
                       const existing = expenseEntries.find(
                         (e) =>
                           e.expenseCategory === category ||
@@ -10092,6 +10127,7 @@ function DailyRegisterView({
                           key={category}
                           type="button"
                           onClick={() => {
+                            setStep4IsSalesReturn(false);
                             setStep4Category(category);
                             if (category === "Cash Purchase") {
                               setStep4PaymentMode("CASH");
@@ -10118,9 +10154,125 @@ function DailyRegisterView({
                         </button>
                       );
                     })}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStep4IsSalesReturn(true);
+                        setStep4Amount("");
+                        setStep4ReturnInvNo("");
+                        setStep4ReturnReason("");
+                      }}
+                      className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all flex items-center gap-1.5 ${
+                        step4IsSalesReturn
+                          ? "bg-rose-500 text-white shadow-sm ring-2 ring-rose-300"
+                          : "border border-rose-500/40 bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20"
+                      }`}
+                    >
+                      <span>↩ Sales Return</span>
+                    </button>
                   </div>
 
                   <form onSubmit={handleAddStep4Expense} className="space-y-3 pt-2">
+                    {step4IsSalesReturn ? (
+                      <div className="space-y-3 rounded-xl border border-rose-500/30 bg-rose-500/5 p-4">
+                        <div className="text-xs font-extrabold uppercase tracking-wider text-rose-600 dark:text-rose-400">
+                          ↩ Log Sales Return (Syncs to Cash Drawer &amp; Sales Return Bills Archive)
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                            Original Invoice Number *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            list="step4-sales-return-inv-list"
+                            value={step4ReturnInvNo}
+                            onChange={(e) => setStep4ReturnInvNo(e.target.value)}
+                            placeholder="e.g. W#JB 409 or 30072"
+                            className="w-full bg-white dark:bg-black border border-slate-300 dark:border-[#1F1F1F] focus:border-rose-400 rounded-lg px-3 py-2 text-xs font-mono font-bold text-jct-charcoal dark:text-white outline-none"
+                          />
+                          <datalist id="step4-sales-return-inv-list">
+                            {activeErpList.map((inv, i) => (
+                              <option
+                                key={inv.internalId || inv.id || i}
+                                value={inv.branchInvNo || inv.invoiceNo}
+                              >
+                                {inv.customerName || inv.customer} — SAR {fmt(inv.amount)}
+                              </option>
+                            ))}
+                          </datalist>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                            Description / Return Reason *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={step4ReturnReason}
+                            onChange={(e) => setStep4ReturnReason(e.target.value)}
+                            placeholder='e.g. "Damaged paint tin" or "Wrong shade returned"'
+                            className="w-full bg-white dark:bg-black border border-slate-300 dark:border-[#1F1F1F] focus:border-rose-400 rounded-lg px-3 py-2 text-xs font-medium text-jct-charcoal dark:text-white outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                            Refund Mode *
+                          </label>
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setStep4ReturnRefundMode("CASH")}
+                              className={`rounded-lg px-3 py-2 text-xs font-bold border transition ${
+                                step4ReturnRefundMode === "CASH"
+                                  ? "bg-emerald-500 text-slate-950 border-emerald-400"
+                                  : "bg-white dark:bg-[#111] border-slate-300 dark:border-[#1F1F1F] text-slate-500 dark:text-slate-300"
+                              }`}
+                            >
+                              💵 Cash Drawer Refund
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setStep4ReturnRefundMode("BANK_TRANSFER")}
+                              className={`rounded-lg px-3 py-2 text-xs font-bold border transition ${
+                                step4ReturnRefundMode === "BANK_TRANSFER"
+                                  ? "bg-cyan-500 text-slate-950 border-cyan-400"
+                                  : "bg-white dark:bg-[#111] border-slate-300 dark:border-[#1F1F1F] text-slate-500 dark:text-slate-300"
+                              }`}
+                            >
+                              🏦 Bank / Card Reversal
+                            </button>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                            Refund Amount (SAR) *
+                          </label>
+                          <div className="flex items-center overflow-hidden rounded-xl border-2 border-cyan-400/70 focus-within:border-cyan-300 focus-within:ring-4 focus-within:ring-cyan-500/25 bg-slate-950/95 shadow-inner">
+                            <span className="px-3 py-2.5 bg-cyan-500/15 border-r border-cyan-400/30 text-xs font-black tracking-wider text-cyan-300 shrink-0">
+                              SAR
+                            </span>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0.01"
+                              required
+                              value={step4Amount}
+                              onChange={(e) => setStep4Amount(e.target.value)}
+                              placeholder="0.00"
+                              className="w-full bg-transparent px-3 py-2 text-xl font-bold tabular-nums text-white placeholder:text-slate-500 focus:outline-none"
+                            />
+                          </div>
+                        </div>
+                        <button
+                          type="submit"
+                          className="w-full rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-black py-2.5 text-sm shadow-sm transition"
+                        >
+                          ↩ Save Sales Return &amp; Sync Archive
+                        </button>
+                      </div>
+                    ) : (
+                    <>
                     {/* Cascading Mode of Payment (Step 4 Outflows/Purchases) — Hidden for unpaid Credit Purchase */}
                     {step4Category === "Credit Purchase" ? (
                       <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3.5 py-2.5 text-xs font-bold text-amber-700 dark:text-amber-300">
@@ -10357,22 +10509,29 @@ function DailyRegisterView({
                       </div>
                     )}
 
-                    <div className="flex gap-3">
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={step4Amount}
-                        onChange={(e) => setStep4Amount(e.target.value)}
-                        placeholder="Amount (SAR)"
-                        className="flex-1 bg-transparent border border-slate-300 dark:border-[#1F1F1F] focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-3.5 py-2.5 font-display text-base font-semibold placeholder:text-slate-400 outline-none"
-                      />
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <div className="flex-1 flex items-center overflow-hidden rounded-xl border-2 border-cyan-400/70 focus-within:border-cyan-300 focus-within:ring-4 focus-within:ring-cyan-500/25 bg-slate-950/95 shadow-inner">
+                        <span className="px-3 py-2.5 bg-cyan-500/15 border-r border-cyan-400/30 text-xs font-black tracking-wider text-cyan-300 shrink-0">
+                          SAR
+                        </span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={step4Amount}
+                          onChange={(e) => setStep4Amount(e.target.value)}
+                          placeholder="0.00"
+                          className="w-full bg-transparent px-3 py-2 text-xl font-bold tabular-nums text-white placeholder:text-slate-500 focus:outline-none"
+                        />
+                      </div>
                       <button
                         type="submit"
-                        className="bg-jct-turquoise text-jct-charcoal font-bold hover:brightness-95 transition-all shadow-sm rounded-lg px-4 py-2 text-sm shrink-0"
+                        className="bg-jct-turquoise text-jct-charcoal font-bold hover:brightness-95 transition-all shadow-sm rounded-xl px-4 py-2.5 text-sm shrink-0"
                       >
                         + Save {step4Category === "Credit Purchase" ? "& Sync Bill" : "Expense"}
                       </button>
                     </div>
+                    </>
+                    )}
                   </form>
                 </div>
 
@@ -13373,6 +13532,7 @@ function CreditRadarView({
   liveParties = [],
   advances = [],
   onRefreshAdvances,
+  supplierBills = [],
 }: {
   customers: ContractorAccount[];
   onIssueCredit: (
@@ -13393,6 +13553,7 @@ function CreditRadarView({
   liveParties?: PartyItem[];
   advances?: AdvanceRecordItem[];
   onRefreshAdvances?: () => void;
+  supplierBills?: SupplierBillItem[];
 }) {
   const [activeId, setActiveId] = useState(customers[0]?.id || "c1");
   const [contractorInput, setContractorInput] = useState("");
@@ -13967,6 +14128,45 @@ function CreditRadarView({
                 </div>
               );
             })}
+
+            {/* Unified Credit Purchase Payments (Supplier Obligations) */}
+            {supplierBills.filter((b) => b.category === "Credit Purchase" && b.amount > 0 && b.paymentMode !== "SETTLED").length > 0 && (
+              <div className="pt-4 mt-4 border-t border-slate-200 dark:border-[#1F1F1F] space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-display font-extrabold text-sm text-purple-600 dark:text-purple-400 uppercase tracking-wider">
+                    🏢 Credit Purchase Payments (Supplier Payables)
+                  </h3>
+                  <span className="text-[11px] font-mono font-bold text-purple-500">
+                    SAR {fmt(supplierBills.filter((b) => b.category === "Credit Purchase" && b.amount > 0 && b.paymentMode !== "SETTLED").reduce((s, b) => s + b.amount, 0))}
+                  </span>
+                </div>
+                {supplierBills
+                  .filter((b) => b.category === "Credit Purchase" && b.amount > 0 && b.paymentMode !== "SETTLED")
+                  .map((b) => (
+                    <div
+                      key={b.id}
+                      className="rounded-xl border border-purple-500/30 bg-purple-500/5 p-3.5 flex items-center justify-between gap-3 text-xs"
+                    >
+                      <div className="min-w-0">
+                        <div className="font-bold text-jct-charcoal dark:text-white truncate">
+                          {b.supplierName}
+                          {b.supplierInvoiceNum ? (
+                            <span className="ml-2 font-mono text-[11px] text-jct-turquoise">
+                              #{b.supplierInvoiceNum}
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                          Due: {b.dueDate}
+                        </div>
+                      </div>
+                      <span className="font-mono font-black text-purple-600 dark:text-purple-300 whitespace-nowrap">
+                        SAR {fmt(b.amount)}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -14135,6 +14335,7 @@ function SupplierHubView({
   liveParties = [],
   advances = [],
   onRefreshAdvances,
+  onOpenSupplierAdvances,
 }: {
   supplierBrands: SupplierPayableBrand[];
   supplierBills: SupplierBillItem[];
@@ -14158,6 +14359,7 @@ function SupplierHubView({
   liveParties?: PartyItem[];
   advances?: AdvanceRecordItem[];
   onRefreshAdvances?: () => void;
+  onOpenSupplierAdvances?: () => void;
 }) {
   const [supplierHubTab, setSupplierHubTab] = useState<"vault" | "payables">("vault");
   const [unlocked, setUnlocked] = useState(false);
@@ -14168,6 +14370,7 @@ function SupplierHubView({
   const [settlingBillId, setSettlingBillId] = useState<string | null>(null);
   const [settleBillAmt, setSettleBillAmt] = useState("");
   const [settleBillMode, setSettleBillMode] = useState<"CASH" | "BANK_TRANSFER" | "CARD">("CASH");
+  const [allowOverpayOverride, setAllowOverpayOverride] = useState(false);
 
   const supplierAdvances = advances.filter(
     (a) => a.direction === "SUPPLIER_ADVANCE_OUT" && a.remainingBalance > 0
@@ -14951,9 +15154,16 @@ function SupplierHubView({
                         }}
                         compact
                       />
-                      <span className="font-display font-extrabold text-jct-charcoal dark:text-jct-offwhite">
-                        SAR {fmt(bill.amount)}
-                      </span>
+                      <div className="flex flex-col items-end">
+                        <span className="font-display font-extrabold text-jct-charcoal dark:text-jct-offwhite">
+                          SAR {fmt(bill.amount)}
+                        </span>
+                        {bill.originalAmount !== undefined && bill.originalAmount > bill.amount && (
+                          <span className="text-[10px] font-mono font-bold text-amber-600 dark:text-amber-300">
+                            Original Bill: SAR {fmt(bill.originalAmount)} · Advance Paid: -SAR {fmt(r2(bill.originalAmount - bill.amount))} · Net Remaining: SAR {fmt(bill.amount)}
+                          </span>
+                        )}
+                      </div>
                       <div className="flex flex-wrap items-center gap-1.5">
                         {bill.category === "Credit Purchase" && bill.amount > 0 && bill.paymentMode !== "SETTLED" && onSettleSupplierBill && (
                           <button
@@ -14962,6 +15172,7 @@ function SupplierHubView({
                               setSettlingBillId(settlingBillId === bill.id ? null : bill.id);
                               setSettleBillAmt(String(bill.amount));
                               setSettleBillMode("CASH");
+                              setAllowOverpayOverride(false);
                             }}
                             className="rounded-lg bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black px-2.5 py-1 text-xs shadow-sm transition active:scale-[0.97]"
                             title="Complete / Pay Supplier Payable"
@@ -14993,15 +15204,23 @@ function SupplierHubView({
                       </div>
                     </div>
                     {settlingBillId === bill.id && onSettleSupplierBill && (
-                      <div className="w-full mt-2 rounded-xl border border-emerald-500/50 bg-emerald-500/10 p-3 flex flex-wrap items-center gap-2 text-xs animate-fade-slide-up">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-bold text-emerald-700 dark:text-emerald-300">Paid (SAR):</span>
+                      <div className="w-full mt-2 rounded-xl border border-emerald-500/50 bg-emerald-500/10 p-3 flex flex-col gap-2 text-xs animate-fade-slide-up">
+                        {bill.originalAmount !== undefined && bill.originalAmount > bill.amount && (
+                          <div className="text-[11px] font-bold text-amber-700 dark:text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg px-2.5 py-1.5">
+                            Original Bill: SAR {fmt(bill.originalAmount)} | Advance Already Paid: -SAR {fmt(r2(bill.originalAmount - bill.amount))} | Net Remaining Payable: SAR {fmt(bill.amount)}
+                          </div>
+                        )}
+                        <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex items-center overflow-hidden rounded-xl border-2 border-cyan-400/70 focus-within:border-cyan-300 focus-within:ring-4 focus-within:ring-cyan-500/25 bg-slate-950/95 shadow-inner">
+                          <span className="px-2.5 py-1.5 bg-cyan-500/15 border-r border-cyan-400/30 text-[11px] font-black tracking-wider text-cyan-300 shrink-0">
+                            SAR
+                          </span>
                           <input
                             type="number"
                             step="0.01"
                             value={settleBillAmt}
                             onChange={(e) => setSettleBillAmt(e.target.value)}
-                            className="w-24 rounded-lg border border-emerald-500/40 bg-white dark:bg-black px-2 py-1 font-mono text-xs font-black text-right outline-none"
+                            className="w-28 bg-transparent px-2.5 py-1.5 text-base font-bold tabular-nums text-white focus:outline-none"
                           />
                         </div>
                         <div className="flex flex-wrap items-center gap-1">
@@ -15026,26 +15245,39 @@ function SupplierHubView({
                             </button>
                           ))}
                         </div>
+                        <label className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-600 dark:text-slate-300 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={allowOverpayOverride}
+                            onChange={(e) => setAllowOverpayOverride(e.target.checked)}
+                          />
+                          <span>Override Remaining Cap</span>
+                        </label>
                         <button
                           type="button"
                           onClick={() => {
                             const amt = parseFloat(settleBillAmt);
-                            if (Number.isFinite(amt) && amt > 0) {
-                              onSettleSupplierBill(bill, amt, settleBillMode);
-                              setSettlingBillId(null);
+                            if (!Number.isFinite(amt) || amt <= 0) return;
+                            if (!allowOverpayOverride && amt > bill.amount + 0.01) {
+                              alert(`Double-payment protection: Payment (SAR ${fmt(amt)}) cannot exceed Net Remaining Payable (SAR ${fmt(bill.amount)}). Enable 'Override Remaining Cap' if intentional.`);
+                              return;
                             }
+                            onSettleSupplierBill(bill, amt, settleBillMode);
+                            setSettlingBillId(null);
+                            setAllowOverpayOverride(false);
                           }}
-                          className="rounded-lg bg-jct-turquoise text-jct-charcoal font-black px-3 py-1 text-[11px] hover:brightness-95 transition active:scale-[0.97]"
+                          className="rounded-lg bg-jct-turquoise text-jct-charcoal font-black px-3 py-1.5 text-[11px] hover:brightness-95 transition active:scale-[0.97]"
                         >
                           ✓ Confirm Supplier Payment
                         </button>
                         <button
                           type="button"
-                          onClick={() => setSettlingBillId(null)}
+                          onClick={() => { setSettlingBillId(null); setAllowOverpayOverride(false); }}
                           className="rounded-lg border border-slate-300 dark:border-white/15 px-2 py-1 text-[10px] font-bold text-slate-500 dark:text-slate-300"
                         >
                           Cancel
                         </button>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -15137,6 +15369,335 @@ function SupplierHubView({
   );
 }
 
+function SupplierAdvancesView({
+  branchId,
+  advances = [],
+  liveParties = [],
+  onRefreshAdvances,
+  onSyncAdvancePayable,
+}: {
+  branchId: string;
+  advances?: AdvanceRecordItem[];
+  liveParties?: PartyItem[];
+  onRefreshAdvances?: () => void;
+  onSyncAdvancePayable: (payload: {
+    supplierName: string;
+    totalOrderAmount: number;
+    advancePaidNow: number;
+    remainingPending: number;
+    paymentMode: "CASH" | "BANK_TRANSFER" | "CARD";
+    invoiceRef?: string;
+    dueDate: string;
+    notes?: string;
+  }) => void;
+}) {
+  const [supplierName, setSupplierName] = useState("");
+  const [totalOrderInput, setTotalOrderInput] = useState("");
+  const [advancePaidInput, setAdvancePaidInput] = useState("");
+  const [paymentMode, setPaymentMode] = useState<"CASH" | "BANK_TRANSFER" | "CARD">("CASH");
+  const [invoiceRef, setInvoiceRef] = useState("");
+  const [dueDate, setDueDate] = useState(() => addSaudiDays(7));
+  const [notes, setNotes] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const totalOrder = Math.max(0, parseFloat(totalOrderInput) || 0);
+  const advancePaid = Math.max(0, parseFloat(advancePaidInput) || 0);
+  const remainingPending = r2(Math.max(0, totalOrder - advancePaid));
+
+  const supplierAdvances = advances.filter((a) => a.direction === "SUPPLIER_ADVANCE_OUT");
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanSup = supplierName.trim();
+    if (!cleanSup) {
+      setMsg("Supplier / Company Name is required.");
+      return;
+    }
+    if (totalOrder <= 0 || advancePaid <= 0) {
+      setMsg("Both Total Bill / Order Amount and Advance Paid Now must be greater than 0.");
+      return;
+    }
+    if (advancePaid > totalOrder) {
+      setMsg("Advance Paid Now cannot exceed Total Bill / Order Amount.");
+      return;
+    }
+    setSubmitting(true);
+    setMsg(null);
+    try {
+      const res = await fetch("/api/advances", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          branch: branchId || "JCT_HARDWARE_JOTUN",
+          direction: "SUPPLIER_ADVANCE_OUT",
+          partyName: cleanSup,
+          branchInvNo: invoiceRef.trim() || null,
+          totalOrderAmount: totalOrder,
+          totalAdvanceAmount: advancePaid,
+          paymentMode,
+          followUpDate: dueDate || addSaudiDays(7),
+          notes: notes.trim() || `Order SAR ${fmt(totalOrder)} · Advance SAR ${fmt(advancePaid)}`,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setMsg(err?.error || "Failed to save supplier advance.");
+        setSubmitting(false);
+        return;
+      }
+      void fetch("/api/parties", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: cleanSup,
+          partyType: "SUPPLIER",
+          branch: branchId || "JCT_HARDWARE_JOTUN",
+          lastAmount: totalOrder,
+          lastInvoiceNo: invoiceRef.trim() || undefined,
+        }),
+      }).catch(() => {});
+
+      onSyncAdvancePayable({
+        supplierName: cleanSup,
+        totalOrderAmount: totalOrder,
+        advancePaidNow: advancePaid,
+        remainingPending,
+        paymentMode,
+        invoiceRef: invoiceRef.trim() || undefined,
+        dueDate: dueDate || addSaudiDays(7),
+        notes: notes.trim() || undefined,
+      });
+
+      setSupplierName("");
+      setTotalOrderInput("");
+      setAdvancePaidInput("");
+      setInvoiceRef("");
+      setNotes("");
+      setMsg(`✓ Saved! Advance SAR ${fmt(advancePaid)} logged (${paymentMode}) · Remaining Payable SAR ${fmt(remainingPending)} synced to Suppliers & Payables.`);
+      onRefreshAdvances?.();
+    } catch {
+      setMsg("Network error saving supplier advance.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-6 p-4 md:p-6 lg:p-8 h-full overflow-y-auto w-full">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h2 className="font-display font-extrabold text-2xl text-jct-charcoal dark:text-white tracking-tight flex items-center gap-2">
+            💳 Supplier Advances (Zero Double-Payment Engine)
+          </h2>
+          <p className="text-slate-500 dark:text-slate-400 font-semibold text-sm">
+            Record partial upfront supplier advances. Only the advance paid today deducts from your drawer, and only the Net Remaining Payable syncs to Suppliers &amp; Payables.
+          </p>
+        </div>
+        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-xs font-mono font-black text-amber-600 dark:text-amber-300">
+          Active Unadjusted: SAR {fmt(supplierAdvances.filter((a) => a.status === "ACTIVE").reduce((s, a) => s + a.remainingBalance, 0))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <form onSubmit={handleSubmit} className="lg:col-span-5 bg-white dark:bg-[#0A0A0A] border border-slate-200 dark:border-[#1F1F1F] rounded-2xl p-6 space-y-4 shadow-sm">
+          <h3 className="font-display font-extrabold text-base text-jct-charcoal dark:text-white">
+            Record New Supplier Advance
+          </h3>
+
+          <PartyDropdownSelector
+            label="Supplier / Company Name *"
+            partyType="SUPPLIER"
+            branch={branchId}
+            value={supplierName}
+            onChange={(val) => setSupplierName(val)}
+            liveParties={liveParties}
+            extraParties={["Jotun", "Hempel", "Sigma"]}
+            placeholder="Search or type Supplier / Company name..."
+            required
+          />
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+                Total Bill / Order Amount (SAR) *
+              </label>
+              <div className="flex items-center overflow-hidden rounded-xl border-2 border-cyan-400/70 focus-within:border-cyan-300 focus-within:ring-4 focus-within:ring-cyan-500/25 bg-slate-950/95 shadow-inner">
+                <span className="px-2.5 py-2.5 bg-cyan-500/15 border-r border-cyan-400/30 text-[11px] font-black tracking-wider text-cyan-300 shrink-0">
+                  SAR
+                </span>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  required
+                  value={totalOrderInput}
+                  onChange={(e) => setTotalOrderInput(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full bg-transparent px-3 py-2 text-xl font-bold tabular-nums text-white placeholder:text-slate-500 focus:outline-none"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+                Advance Paid Now (SAR) *
+              </label>
+              <div className="flex items-center overflow-hidden rounded-xl border-2 border-cyan-400/70 focus-within:border-cyan-300 focus-within:ring-4 focus-within:ring-cyan-500/25 bg-slate-950/95 shadow-inner">
+                <span className="px-2.5 py-2.5 bg-cyan-500/15 border-r border-cyan-400/30 text-[11px] font-black tracking-wider text-cyan-300 shrink-0">
+                  SAR
+                </span>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  required
+                  value={advancePaidInput}
+                  onChange={(e) => setAdvancePaidInput(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full bg-transparent px-3 py-2 text-xl font-bold tabular-nums text-white placeholder:text-slate-500 focus:outline-none"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 flex items-center justify-between">
+            <span className="text-xs font-bold text-amber-700 dark:text-amber-300">
+              Remaining Pending Balance (Auto-Synced Payable):
+            </span>
+            <span className="font-mono text-lg font-black text-amber-600 dark:text-amber-300">
+              Remaining Pending: SAR {fmt(remainingPending)}
+            </span>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+              Mode of Payment for Advance *
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              {(
+                [
+                  ["CASH", "💵 Cash Drawer"],
+                  ["BANK_TRANSFER", "🏦 Bank Transfer"],
+                  ["CARD", "💳 Card"],
+                ] as const
+              ).map(([m, lbl]) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setPaymentMode(m)}
+                  className={`rounded-xl px-2.5 py-2 text-xs font-bold border transition ${
+                    paymentMode === m
+                      ? "bg-jct-turquoise text-jct-charcoal border-jct-turquoise shadow-sm"
+                      : "bg-slate-50 dark:bg-[#111] border-slate-200 dark:border-[#1F1F1F] text-slate-600 dark:text-slate-300"
+                  }`}
+                >
+                  {lbl}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+                Invoice / PO Ref #
+              </label>
+              <input
+                type="text"
+                value={invoiceRef}
+                onChange={(e) => setInvoiceRef(e.target.value)}
+                placeholder="e.g. PO-2041"
+                className="w-full rounded-lg border border-slate-300 dark:border-[#1F1F1F] bg-transparent px-3 py-2 text-xs font-mono font-bold text-jct-charcoal dark:text-white outline-none focus:border-jct-turquoise"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+                Expected Delivery / Due Date
+              </label>
+              <input
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 dark:border-[#1F1F1F] bg-transparent px-3 py-2 text-xs font-mono font-bold text-jct-charcoal dark:text-white outline-none focus:border-jct-turquoise"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+              Notes
+            </label>
+            <input
+              type="text"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Optional order details or remarks..."
+              className="w-full rounded-lg border border-slate-300 dark:border-[#1F1F1F] bg-transparent px-3 py-2 text-xs text-jct-charcoal dark:text-white outline-none focus:border-jct-turquoise"
+            />
+          </div>
+
+          {msg && (
+            <div className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 py-2 text-xs font-bold text-cyan-700 dark:text-cyan-300">
+              {msg}
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={submitting}
+            className="w-full rounded-xl bg-jct-turquoise text-jct-charcoal font-black py-3 text-sm shadow-sm hover:brightness-95 transition disabled:opacity-50"
+          >
+            {submitting ? "Saving Advance..." : "💳 Save Supplier Advance & Sync Payable"}
+          </button>
+        </form>
+
+        <div className="lg:col-span-7 bg-white dark:bg-[#0A0A0A] border border-slate-200 dark:border-[#1F1F1F] rounded-2xl p-6 shadow-sm flex flex-col gap-4">
+          <h3 className="font-display font-extrabold text-base text-jct-charcoal dark:text-white">
+            Supplier Advance Ledger ({supplierAdvances.length})
+          </h3>
+          {supplierAdvances.length === 0 ? (
+            <div className="text-sm text-slate-400 py-10 text-center border border-dashed border-slate-200 dark:border-[#1F1F1F] rounded-xl">
+              No supplier advances recorded yet.
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-200 dark:divide-[#1F1F1F]">
+              {supplierAdvances.map((adv) => (
+                <div key={adv.id} className="py-3.5 flex flex-wrap items-center justify-between gap-3 text-xs">
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-extrabold text-sm text-jct-charcoal dark:text-white">
+                        {adv.partyName}
+                      </span>
+                      {adv.branchInvNo && (
+                        <span className="font-mono font-bold text-jct-turquoise">#{adv.branchInvNo}</span>
+                      )}
+                      <span className="rounded-full bg-slate-100 dark:bg-[#111] border border-slate-200 dark:border-[#1F1F1F] px-2 py-0.5 text-[10px] font-bold">
+                        {adv.paymentMode}
+                      </span>
+                      <span className="text-[11px] text-slate-500">Due: {adv.followUpDate || "—"}</span>
+                    </div>
+                    {adv.notes && <p className="text-[11px] text-slate-500 dark:text-slate-400">{adv.notes}</p>}
+                  </div>
+                  <div className="text-right font-mono space-y-0.5">
+                    {adv.totalOrderAmount ? (
+                      <div className="text-[11px] text-slate-500">
+                        Bill: SAR {fmt(adv.totalOrderAmount)} · Paid: SAR {fmt(adv.totalAdvanceAmount)}
+                      </div>
+                    ) : null}
+                    <div className="font-black text-amber-600 dark:text-amber-300">
+                      Remaining: SAR {fmt(adv.remainingBalance)}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface LiveCrossModuleMetrics {
   todayCashSales: number;
   todayBankNet: number;
@@ -15154,6 +15715,10 @@ function FinancialPulseView({
   onOpenAuditLibrary,
   onOpenMonthlyAudits,
   activePosBreakdown,
+  erpInvoices = [],
+  preLoggedEntries = [],
+  supplierAdvances = [],
+  activeSessionDate = "",
 }: {
   metrics: LiveCrossModuleMetrics;
   completedDaysLog?: CompletedDaySummary[];
@@ -15161,6 +15726,10 @@ function FinancialPulseView({
   onOpenAuditLibrary?: () => void;
   onOpenMonthlyAudits?: () => void;
   activePosBreakdown?: PosSessionBreakdown;
+  erpInvoices?: ErpInvoiceItem[];
+  preLoggedEntries?: PreLoggedEntry[];
+  supplierAdvances?: AdvanceRecordItem[];
+  activeSessionDate?: string;
 }) {
   const [pulseArchiveRecords, setPulseArchiveRecords] = useState<ArchiveRecord[]>([]);
 
@@ -15177,7 +15746,30 @@ function FinancialPulseView({
     return () => {
       ignore = true;
     };
-  }, []);
+  }, [completedDaysLog.length, activeSessionDate]);
+
+  const liveCreditSalesToday = r2(
+    erpInvoices
+      .filter((i) => !i.isReturned && i.paymentMode === "CREDIT_SALE")
+      .reduce((s, i) => s + (Number(i.amount) || 0), 0)
+  );
+  const liveGrossSalesToday = r2(metrics.todayCashSales + metrics.todayBankNet + liveCreditSalesToday);
+  const liveAllExpensesToday = r2(
+    preLoggedEntries
+      .filter((e) => !e.isReturned && e.type === "EXPENSE")
+      .reduce((s, e) => s + (Number(e.amount) || 0), 0)
+  );
+  const liveSalesReturnsToday = r2(
+    preLoggedEntries
+      .filter((e) => !e.isReturned && e.type === "EXPENSE" && e.title?.includes("Sales Return"))
+      .reduce((s, e) => s + (Number(e.amount) || 0), 0)
+  );
+  const liveSupplierAdvancesTotal = r2(
+    supplierAdvances
+      .filter((a) => a.direction === "SUPPLIER_ADVANCE_OUT" && a.status === "ACTIVE")
+      .reduce((s, a) => s + (Number(a.totalAdvanceAmount) || 0), 0)
+  );
+  const liveNetOperatingToday = r2(liveGrossSalesToday - liveAllExpensesToday);
 
   const archivedInflowsAndSwipes = r2(
     pulseArchiveRecords.reduce(
@@ -15330,6 +15922,54 @@ function FinancialPulseView({
             })}
           </div>
         )}
+      </div>
+
+      {/* Live Track-Sale Session Breakdown (Instant Real-Time Sync) */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 p-4">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-cyan-700 dark:text-cyan-300">
+            Today&apos;s Live Gross Sales
+          </div>
+          <div className="mt-1 font-mono text-lg font-black text-jct-charcoal dark:text-white">
+            SAR {fmt(liveGrossSalesToday)}
+          </div>
+          <div className="text-[11px] text-slate-500 dark:text-slate-400">
+            Cash: {fmt(metrics.todayCashSales)} · Bank/POS: {fmt(metrics.todayBankNet)} · Credit: {fmt(liveCreditSalesToday)}
+          </div>
+        </div>
+        <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-4">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-rose-700 dark:text-rose-300">
+            Today&apos;s Outflows &amp; Returns
+          </div>
+          <div className="mt-1 font-mono text-lg font-black text-jct-charcoal dark:text-white">
+            SAR {fmt(liveAllExpensesToday)}
+          </div>
+          <div className="text-[11px] text-slate-500 dark:text-slate-400">
+            Sales Returns Today: SAR {fmt(liveSalesReturnsToday)}
+          </div>
+        </div>
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300">
+            Supplier Advances Active
+          </div>
+          <div className="mt-1 font-mono text-lg font-black text-jct-charcoal dark:text-white">
+            SAR {fmt(liveSupplierAdvancesTotal)}
+          </div>
+          <div className="text-[11px] text-slate-500 dark:text-slate-400">
+            Pre-paid to suppliers (deducted from payables)
+          </div>
+        </div>
+        <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
+            Today&apos;s Net Operating Flow
+          </div>
+          <div className="mt-1 font-mono text-lg font-black text-jct-charcoal dark:text-white">
+            SAR {fmt(liveNetOperatingToday)}
+          </div>
+          <div className="text-[11px] text-slate-500 dark:text-slate-400">
+            Updates live on every Track Sale edit
+          </div>
+        </div>
       </div>
 
       {/* 1. Top Row: Primary Sales & Cash KPIs */}
@@ -20134,7 +20774,7 @@ const USER_PROFILES: UserProfile[] = [
   },
 ];
 
-const OWNER_TABS: TabId[] = ["register", "quick-log", "archive", "radar", "suppliers", "payroll", "pulse", "consolidation", "ai", "settings", "monthly-audits"];
+const OWNER_TABS: TabId[] = ["register", "quick-log", "archive", "radar", "suppliers", "supplier-advances", "payroll", "pulse", "consolidation", "ai", "settings", "monthly-audits"];
 // RBAC: STAFF accounts have full operational access to Daily Register, Express Quick-Log & their branch Archive
 const STAFF_TABS: TabId[] = ["register", "quick-log", "archive"];
 
@@ -21423,6 +22063,15 @@ export default function Page() {
         time: nowHHMM(),
       };
       setErpInvoices((prev) => [...prev, newInv]);
+      if (paymentMode === "CREDIT") {
+        handleSyncCreditCustomer(
+          customerName || "Credit Customer",
+          amount,
+          addSaudiDays(14),
+          invNo,
+          "CREDIT_SALE"
+        );
+      }
     } else if (type === "POS_SWIPE") {
       const posNo = invoiceNo || `POS-${Date.now().toString().slice(-4)}`;
       const newPos: ErpInvoiceItem = {
@@ -21849,6 +22498,7 @@ export default function Page() {
                 ]}
                 advances={branchAdvances}
                 onRefreshAdvances={() => setAdvancesRefresh((n) => n + 1)}
+                supplierBills={supplierBills}
               />
             ) : safeTab === "suppliers" ? (
               <SupplierHubView
@@ -21910,6 +22560,96 @@ export default function Page() {
                 ]}
                 advances={branchAdvances}
                 onRefreshAdvances={() => setAdvancesRefresh((n) => n + 1)}
+                onOpenSupplierAdvances={() => setTab("supplier-advances")}
+              />
+            ) : safeTab === "supplier-advances" ? (
+              <SupplierAdvancesView
+                branchId={activePocketBranch === "ALL" ? "JCT_HARDWARE_JOTUN" : activePocketBranch}
+                advances={branchAdvances}
+                onRefreshAdvances={() => setAdvancesRefresh((n) => n + 1)}
+                liveParties={[
+                  ...erpInvoices
+                    .map((i) => ({
+                      name: (i.customerName || i.customer || "").trim(),
+                      partyType: "CUSTOMER" as const,
+                      sourceTag: "Today's Sale" as const,
+                    }))
+                    .filter((p) => p.name.length >= 2 && p.name.toLowerCase() !== "walk-in customer"),
+                ]}
+                onSyncAdvancePayable={({
+                  supplierName,
+                  totalOrderAmount,
+                  advancePaidNow,
+                  remainingPending,
+                  paymentMode,
+                  invoiceRef,
+                  dueDate,
+                  notes,
+                }) => {
+                  const advTxnId = `sup-adv-${Date.now()}`;
+                  const advEntry: PreLoggedEntry = {
+                    id: advTxnId,
+                    clientTxnId: advTxnId,
+                    type: "EXPENSE",
+                    expenseCategory: "Supplier Advance",
+                    supplierName,
+                    supplierInvoiceNum: invoiceRef,
+                    title: `Supplier Advance Paid — ${supplierName}${invoiceRef ? ` (#${invoiceRef})` : ""}${notes ? ` (${notes})` : ""}`,
+                    paymentMode: paymentMode === "BANK_TRANSFER" ? "BANK" : paymentMode,
+                    amount: advancePaidNow,
+                    time: nowHHMM(),
+                  };
+                  setPreLoggedEntries((prev) => deduplicatePreLoggedEntries([advEntry, ...prev]));
+                  if (remainingPending > 0) {
+                    const newBillId = `sup-bill-adv-${Date.now()}`;
+                    setSupplierBills((prev) => [
+                      {
+                        id: newBillId,
+                        supplierName,
+                        amount: remainingPending,
+                        originalAmount: totalOrderAmount,
+                        dueDate,
+                        followUpDate: dueDate,
+                        followUpStatus: "SCHEDULED",
+                        category: "Credit Purchase",
+                        paymentMode: "CREDIT",
+                        source: "Supplier Hub",
+                        supplierInvoiceNum: invoiceRef,
+                        createdAt: saudiSessionDate(),
+                      },
+                      ...prev,
+                    ]);
+                    setSupplierBrands((prev) => {
+                      const idx = prev.findIndex(
+                        (br) =>
+                          supplierName.toLowerCase().includes(br.brand.toLowerCase()) ||
+                          br.brand.toLowerCase().includes(supplierName.toLowerCase())
+                      );
+                      if (idx >= 0) {
+                        return prev.map((br, i) =>
+                          i === idx
+                            ? {
+                                ...br,
+                                pendingBills: r2(br.pendingBills + remainingPending),
+                                amountPaid: r2(br.amountPaid + advancePaidNow),
+                              }
+                            : br
+                        );
+                      }
+                      return [
+                        ...prev,
+                        {
+                          id: Date.now(),
+                          color: "bg-amber-500",
+                          brand: supplierName,
+                          pendingBills: remainingPending,
+                          amountPaid: advancePaidNow,
+                          lastPaymentDate: saudiSessionDate(),
+                        },
+                      ];
+                    });
+                  }
+                }}
               />
             ) : safeTab === "payroll" ? (
               <StaffPayrollView
@@ -21949,6 +22689,10 @@ export default function Page() {
                 metrics={liveMetrics}
                 completedDaysLog={completedDaysLog}
                 activePosBreakdown={calcSessionPosBreakdown(erpInvoices, preLoggedBankInvoices, preLoggedEntries)}
+                erpInvoices={erpInvoices}
+                preLoggedEntries={preLoggedEntries}
+                supplierAdvances={branchAdvances}
+                activeSessionDate={activeSessionDate}
                 onOpenMonthlyAudits={() => setTab("monthly-audits")}
                 onOpenAuditLibrary={() => setTab("archive")}
                 onReopenDraft={(record) => {
