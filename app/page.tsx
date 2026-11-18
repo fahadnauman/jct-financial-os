@@ -3302,6 +3302,7 @@ function DailyRegisterView({
   // Intelligent Drawer Closing & Cash Handover Sequence
   const [showHandover, setShowHandover] = useState(false);
   const [isSavingDrawerLock, setIsSavingDrawerLock] = useState(false);
+  const [expandedTopicBlocks, setExpandedTopicBlocks] = useState<Record<string, boolean>>({});
 
   // Step 3 (Credit & Cash Inflows & Split Payments) 2-Panel State
   const [step3Kind, setStep3Kind] = useState<
@@ -6674,16 +6675,25 @@ function DailyRegisterView({
     printPosSwipeInvoices.reduce((sum, inv) => sum + calcInvoiceBankGrossPortion(inv), 0)
   );
 
+  const isManualPosInv = (inv: ErpInvoiceItem): boolean => {
+    if (inv.isManualPos) return true;
+    const mode = (inv.paymentMode || "").toUpperCase();
+    const no = (inv.invoiceNo || inv.branchInvNo || "").toUpperCase();
+    return (
+      (mode === "POS_SWIPE" || mode === "CARD") &&
+      (Boolean(inv.isManual) || no.startsWith("POS-") || (inv as { source?: string }).source === "MANUAL_POS")
+    );
+  };
   const isJctHqProfile = normalizeBranch(branchId) === "JCT_HARDWARE_JOTUN";
   const uploadedCashSalesPool = r2(
     activeErpList.reduce((sum, inv) => sum + calcInvoiceCashPortion(inv), 0)
   );
   const hasUploadedErpSummary = activeErpList.some(
-    (inv) => !inv.isReturned && !inv.isManualPos
+    (inv) => !inv.isReturned && !isManualPosInv(inv)
   );
   const manualPosReclassifiedTotal = r2(
     activeErpList.reduce(
-      (sum, inv) => (!inv.isReturned && inv.isManualPos ? sum + (Number(inv.amount) || 0) : sum),
+      (sum, inv) => (!inv.isReturned && isManualPosInv(inv) ? sum + (Number(inv.amount) || 0) : sum),
       0
     )
   );
@@ -8468,11 +8478,28 @@ function DailyRegisterView({
                     <span className="mt-1 block font-display text-xl font-bold tabular-nums tracking-tight text-jct-charcoal dark:text-jct-yellow whitespace-nowrap">
                       SAR {fmt(bankSwipeGrossTotal)}
                     </span>
-                    <span className="mt-0.5 block text-[11px] text-slate-500 dark:text-slate-400">
-                      100% Gross Face Value Settlement
-                    </span>
+                    <div className="mt-2 space-y-1 text-[11px] tabular-nums">
+                      <div className="flex items-center justify-between gap-2 text-cyan-600 dark:text-cyan-300 font-bold">
+                        <span>💳 POS Card Swipes ({sessionPosBreakdown.posSwipesCount}):</span>
+                        <span>SAR {fmt(sessionPosBreakdown.posSwipesTotal)}</span>
+                      </div>
+                      {sessionPosBreakdown.posTerminalList.length > 0 && (
+                        <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                          {sessionPosBreakdown.posTerminalList.map((t) => `${t.terminalName}: ${fmt(t.totalAmount)}`).join(" · ")}
+                        </div>
+                      )}
+                      {sessionPosBreakdown.posCardList.length > 0 && (
+                        <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                          {sessionPosBreakdown.posCardList.map((c) => `${c.cardType}: ${fmt(c.amount)}`).join(" · ")}
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between gap-2 text-emerald-600 dark:text-emerald-300 font-bold pt-0.5">
+                        <span>🏦 Direct Bank Transfers ({sessionPosBreakdown.bankTransferCount}):</span>
+                        <span>SAR {fmt(sessionPosBreakdown.bankTransferTotal)}</span>
+                      </div>
+                    </div>
                     {trackPosFees && (
-                      <span className="mt-0.5 block text-[11px] tabular-nums text-slate-500 dark:text-slate-400">
+                      <span className="mt-1 block text-[11px] tabular-nums text-slate-500 dark:text-slate-400">
                         Est. MDR fee (audit only): SAR {fmt(totalPosFees)}
                       </span>
                     )}
@@ -10914,6 +10941,26 @@ function DailyRegisterView({
                       <span className="mt-2 block font-mono tabular-nums tracking-tight text-2xl font-black text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap print:text-black print:text-2xl print:font-bold">
                         SAR {fmt(activeBankSettlementTotal)}
                       </span>
+                      <div className="mt-2 space-y-1 text-[11px] tabular-nums print:text-black">
+                        <div className="flex items-center justify-between gap-2 text-cyan-700 dark:text-cyan-300 font-bold print:text-black">
+                          <span>💳 POS Card Swipes ({sessionPosBreakdown.posSwipesCount}):</span>
+                          <span>SAR {fmt(sessionPosBreakdown.posSwipesTotal)}</span>
+                        </div>
+                        {sessionPosBreakdown.posTerminalList.length > 0 && (
+                          <div className="text-[10px] text-slate-500 dark:text-slate-400 print:text-black">
+                            {sessionPosBreakdown.posTerminalList.map((t) => `${t.terminalName}: SAR ${fmt(t.totalAmount)}`).join(" · ")}
+                          </div>
+                        )}
+                        {sessionPosBreakdown.posCardList.length > 0 && (
+                          <div className="text-[10px] text-slate-500 dark:text-slate-400 print:text-black">
+                            {sessionPosBreakdown.posCardList.map((c) => `${c.cardType}: SAR ${fmt(c.amount)}`).join(" · ")}
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between gap-2 text-emerald-700 dark:text-emerald-300 font-bold print:text-black">
+                          <span>🏦 Direct Bank Transfers ({sessionPosBreakdown.bankTransferCount}):</span>
+                          <span>SAR {fmt(sessionPosBreakdown.bankTransferTotal)}</span>
+                        </div>
+                      </div>
                     </div>
                     <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 border-t border-slate-200 dark:border-[#1F1F1F] pt-2 print:text-black print:border-black">
                       <span className="print:text-black">
@@ -10947,6 +10994,252 @@ function DailyRegisterView({
                 {/* Print-Only Signature Footer at bottom of Page 1 Audit Summary */}
                 <PrintReportFooter />
               </div>
+
+              {/* 4. Topic-Wise Expandable Audit Summary Blocks (8 Categories) */}
+              {(() => {
+                const topicConfigs = [
+                  {
+                    key: "commissions",
+                    title: "🤝 Business Commission",
+                    items: expenseEntries
+                      .filter(
+                        (e) =>
+                          !e.isReturned &&
+                          (e.expenseCategory === "Business Commission" ||
+                            e.overrideReason === "BUSINESS_COMMISSION")
+                      )
+                      .map((e) => ({
+                        id: e.id,
+                        label: e.title,
+                        sub: e.paymentMode || "CASH",
+                        amount: e.amount,
+                      })),
+                  },
+                  {
+                    key: "food",
+                    title: "🍽️ Food & Refreshments",
+                    items: expenseEntries
+                      .filter(
+                        (e) =>
+                          !e.isReturned &&
+                          (e.expenseCategory === "Food" || e.expenseCategory === "Water")
+                      )
+                      .map((e) => ({
+                        id: e.id,
+                        label: e.title,
+                        sub: e.paymentMode || "CASH",
+                        amount: e.amount,
+                      })),
+                  },
+                  {
+                    key: "credit_suppliers",
+                    title: "🏢 Credit Suppliers (Unpaid Payables)",
+                    items: expenseEntries
+                      .filter(
+                        (e) =>
+                          !e.isReturned &&
+                          e.expenseCategory === "Credit Purchase"
+                      )
+                      .map((e) => ({
+                        id: e.id,
+                        label: e.title,
+                        sub: e.dueDate ? `Due ${e.dueDate}` : "Pay Later",
+                        amount: e.amount,
+                      })),
+                  },
+                  {
+                    key: "credit_payments",
+                    title: "💳 Credit Payments (Collections Recd)",
+                    items: inflowEntries
+                      .filter((e) => !e.isReturned && e.type === "CREDIT_RECD")
+                      .map((e) => ({
+                        id: e.id,
+                        label: e.title,
+                        sub: e.paymentMode || "CASH",
+                        amount: e.amount,
+                      })),
+                  },
+                  {
+                    key: "credit_sales",
+                    title: "🧾 Credit Sales / Credit Invoices",
+                    items: [
+                      ...activeErpList
+                        .filter((i) => !i.isReturned && i.paymentMode === "CREDIT_SALE")
+                        .map((i, idx) => ({
+                          id: i.internalId || i.id || `cs-${idx}`,
+                          label: `#${i.branchInvNo || i.invoiceNo} · ${i.customerName || i.customer}`,
+                          sub: "Credit Invoice",
+                          amount: i.amount,
+                        })),
+                      ...creditSaleEntries
+                        .filter((e) => !e.isReturned)
+                        .map((e) => ({
+                          id: e.id,
+                          label: e.title,
+                          sub: "Credit Entry",
+                          amount: e.amount,
+                        })),
+                    ],
+                  },
+                  {
+                    key: "supplier_payments",
+                    title: "💸 Supplier Payments & Advances Paid",
+                    items: expenseEntries
+                      .filter(
+                        (e) =>
+                          !e.isReturned &&
+                          (e.expenseCategory === "Supplier Advance" ||
+                            e.title?.startsWith("Supplier Payment"))
+                      )
+                      .map((e) => ({
+                        id: e.id,
+                        label: e.title,
+                        sub: e.paymentMode || "CASH",
+                        amount: e.amount,
+                      })),
+                  },
+                  {
+                    key: "all_purchases",
+                    title: "🛒 All Purchases Done",
+                    items: expenseEntries
+                      .filter(
+                        (e) =>
+                          !e.isReturned &&
+                          (e.expenseCategory === "Cash Purchase" ||
+                            e.expenseCategory === "Credit Purchase") &&
+                          !e.title?.startsWith("Supplier Payment")
+                      )
+                      .map((e) => ({
+                        id: e.id,
+                        label: e.title,
+                        sub:
+                          e.expenseCategory === "Credit Purchase"
+                            ? "CREDIT (Pay Later)"
+                            : e.paymentMode || "CASH",
+                        amount: e.amount,
+                      })),
+                  },
+                  {
+                    key: "other_expenses",
+                    title: "📦 Other Operating Expenses & Sales Returns",
+                    items: expenseEntries
+                      .filter(
+                        (e) =>
+                          !e.isReturned &&
+                          e.expenseCategory !== "Business Commission" &&
+                          e.overrideReason !== "BUSINESS_COMMISSION" &&
+                          e.expenseCategory !== "Food" &&
+                          e.expenseCategory !== "Water" &&
+                          e.expenseCategory !== "Credit Purchase" &&
+                          e.expenseCategory !== "Cash Purchase" &&
+                          e.expenseCategory !== "Supplier Advance" &&
+                          !e.title?.startsWith("Supplier Payment")
+                      )
+                      .map((e) => ({
+                        id: e.id,
+                        label: e.title,
+                        sub: e.paymentMode || "CASH",
+                        amount: e.amount,
+                      })),
+                  },
+                ];
+                const allOpen = topicConfigs.every((t) => expandedTopicBlocks[t.key]);
+                return (
+                  <div className="bg-white dark:bg-[#0A0A0A] border border-slate-200 dark:border-[#1F1F1F] rounded-2xl p-5 space-y-3 shadow-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-200 dark:border-[#1F1F1F]">
+                      <div>
+                        <h3 className="font-display font-extrabold text-sm sm:text-base text-jct-charcoal dark:text-white uppercase tracking-wide">
+                          Topic-Wise Final Audit Breakdown
+                        </h3>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                          Expand any category to verify every line item before locking the register.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next: Record<string, boolean> = {};
+                          topicConfigs.forEach((t) => {
+                            next[t.key] = !allOpen;
+                          });
+                          setExpandedTopicBlocks(next);
+                        }}
+                        className="rounded-lg border border-jct-turquoise/50 bg-jct-turquoise/10 hover:bg-jct-turquoise/20 px-3 py-1.5 text-xs font-bold text-jct-charcoal dark:text-jct-turquoise transition print:hidden"
+                      >
+                        {allOpen ? "▲ Collapse All" : "▼ Expand All"}
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {topicConfigs.map((topic) => {
+                        const isOpen = Boolean(expandedTopicBlocks[topic.key]);
+                        const topicTotal = r2(topic.items.reduce((s, it) => s + (Number(it.amount) || 0), 0));
+                        return (
+                          <div
+                            key={topic.key}
+                            className="rounded-xl border border-slate-200 dark:border-[#1F1F1F] bg-slate-50/70 dark:bg-[#111111] overflow-hidden"
+                          >
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedTopicBlocks((prev) => ({
+                                  ...prev,
+                                  [topic.key]: !prev[topic.key],
+                                }))
+                              }
+                              className="w-full px-4 py-3 flex items-center justify-between gap-2 text-left hover:bg-slate-100 dark:hover:bg-white/5 transition"
+                            >
+                              <div className="min-w-0">
+                                <div className="text-xs font-extrabold text-jct-charcoal dark:text-white truncate">
+                                  {topic.title}
+                                </div>
+                                <div className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
+                                  {topic.items.length} {topic.items.length === 1 ? "entry" : "entries"}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className="font-mono text-xs font-black text-jct-charcoal dark:text-jct-turquoise">
+                                  SAR {fmt(topicTotal)}
+                                </span>
+                                <span className="rounded bg-slate-200 dark:bg-white/10 px-2 py-0.5 text-[10px] font-bold text-slate-600 dark:text-slate-300 print:hidden">
+                                  {isOpen ? "Collapse ▲" : "Expand ▼"}
+                                </span>
+                              </div>
+                            </button>
+                            {isOpen && (
+                              <div className="border-t border-slate-200 dark:border-[#1F1F1F] px-4 py-2.5 space-y-1.5 bg-white dark:bg-black/60 max-h-56 overflow-y-auto">
+                                {topic.items.length === 0 ? (
+                                  <div className="text-[11px] text-slate-400 py-1">
+                                    No entries in this category today.
+                                  </div>
+                                ) : (
+                                  topic.items.map((it) => (
+                                    <div
+                                      key={it.id}
+                                      className="flex items-center justify-between gap-2 text-[11px] py-1 border-b border-slate-100 dark:border-white/5 last:border-0"
+                                    >
+                                      <div className="min-w-0 truncate">
+                                        <span className="font-semibold text-jct-charcoal dark:text-slate-200">
+                                          {it.label}
+                                        </span>
+                                        <span className="ml-1.5 text-[10px] font-mono text-slate-400">
+                                          ({it.sub})
+                                        </span>
+                                      </div>
+                                      <span className="font-mono font-bold text-jct-charcoal dark:text-white shrink-0">
+                                        SAR {fmt(it.amount)}
+                                      </span>
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Expanded Mode Banner if a Box is Expanded */}
               {expandedAuditBox !== "NONE" && (
@@ -16117,8 +16410,8 @@ function FinancialPulseView({
           </div>
         </div>
 
-        {/* Terminals & Cards Grid */}
-        {(!activePosBreakdown || activePosBreakdown.terminalList.length === 0) ? (
+        {/* Section A (POS Card Swipes) & Section B (Direct Bank Transfers) */}
+        {(!activePosBreakdown || (activePosBreakdown.posTerminalList.length === 0 && activePosBreakdown.bankTransferTotal <= 0)) ? (
           <div className="rounded-xl border border-dashed border-slate-200 dark:border-white/10 p-8 text-center flex flex-col items-center justify-center gap-2">
             <CreditCard size={28} className="text-slate-400" />
             <p className="text-sm font-bold text-slate-600 dark:text-slate-300">
@@ -16129,77 +16422,117 @@ function FinancialPulseView({
             </p>
           </div>
         ) : (
-          <div className="flex flex-col gap-4">
-            {/* Overall Card Type Summary Bar */}
-            <div className="flex flex-wrap items-center gap-2 p-3 rounded-xl bg-slate-50 dark:bg-[#121212] border border-slate-200 dark:border-white/5 text-xs">
-              <span className="font-bold text-slate-400 text-[11px] uppercase tracking-wider mr-1">
-                Network Split:
-              </span>
-              {activePosBreakdown.cardList.map((c) => {
-                const pct =
-                  activePosBreakdown.totalNonCashAmount > 0
-                    ? Math.round((c.amount / activePosBreakdown.totalNonCashAmount) * 100)
-                    : 0;
-                return (
-                  <div
-                    key={c.cardType}
-                    className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-white dark:bg-[#1A1A1A] border border-slate-200 dark:border-white/10"
-                  >
-                    <span className="font-bold text-jct-charcoal dark:text-white">{c.cardType}</span>
-                    <span className="font-mono font-black text-jct-turquoise">SAR {fmt(c.amount)}</span>
-                    <span className="text-[10px] text-slate-400">({pct}%, {c.count} slips)</span>
-                  </div>
-                );
-              })}
-            </div>
+          <div className="flex flex-col gap-5">
+            {/* Section A — POS Card Swipes */}
+            <div className="rounded-xl border border-cyan-500/30 bg-cyan-500/5 p-4 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-xs font-black uppercase tracking-wider text-cyan-700 dark:text-cyan-300">
+                  Section A — 💳 POS Card Swipes ({activePosBreakdown.posSwipesCount} slips)
+                </span>
+                <span className="font-mono text-base font-black text-cyan-700 dark:text-cyan-300">
+                  SAR {fmt(activePosBreakdown.posSwipesTotal)}
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-[#121212] border border-slate-200 dark:border-white/5 text-xs">
+                <span className="font-bold text-slate-400 text-[11px] uppercase tracking-wider mr-1">
+                  By Card Network:
+                </span>
+                {activePosBreakdown.posCardList.map((c) => {
+                  const pct =
+                    activePosBreakdown.posSwipesTotal > 0
+                      ? Math.round((c.amount / activePosBreakdown.posSwipesTotal) * 100)
+                      : 0;
+                  return (
+                    <div
+                      key={c.cardType}
+                      className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-white dark:bg-[#1A1A1A] border border-slate-200 dark:border-white/10"
+                    >
+                      <span className="font-bold text-jct-charcoal dark:text-white">{c.cardType}</span>
+                      <span className="font-mono font-black text-jct-turquoise">SAR {fmt(c.amount)}</span>
+                      <span className="text-[10px] text-slate-400">({pct}%, {c.count} slips)</span>
+                    </div>
+                  );
+                })}
+              </div>
 
-            {/* Individual Terminal Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {activePosBreakdown.terminalList.map((term) => (
-                <div
-                  key={term.terminalKey}
-                  className="rounded-xl bg-slate-50 dark:bg-[#121212] border border-slate-200 dark:border-white/10 p-4 flex flex-col gap-3 shadow-sm hover:border-jct-turquoise/40 transition"
-                >
-                  <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-2">
-                    <div className="flex items-center gap-2">
-                      <div className="h-7 w-7 rounded-lg bg-jct-turquoise/20 text-jct-turquoise flex items-center justify-center font-bold text-xs">
-                        {term.terminalKey === "BANK_TRANSFER" ? "WT" : "POS"}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {activePosBreakdown.posTerminalList.map((term) => (
+                  <div
+                    key={term.terminalKey}
+                    className="rounded-xl bg-slate-50 dark:bg-[#121212] border border-slate-200 dark:border-white/10 p-4 flex flex-col gap-3 shadow-sm hover:border-jct-turquoise/40 transition"
+                  >
+                    <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="h-7 w-7 rounded-lg bg-jct-turquoise/20 text-jct-turquoise flex items-center justify-center font-bold text-xs">
+                          POS
+                        </div>
+                        <span className="font-display font-extrabold text-sm text-jct-charcoal dark:text-white">
+                          {term.terminalName}
+                        </span>
                       </div>
-                      <span className="font-display font-extrabold text-sm text-jct-charcoal dark:text-white">
-                        {term.terminalName}
+                      <span className="text-[10px] font-mono font-bold text-slate-400">
+                        {term.transactionCount} slip{term.transactionCount === 1 ? "" : "s"}
                       </span>
                     </div>
-                    <span className="text-[10px] font-mono font-bold text-slate-400">
-                      {term.transactionCount} txn{term.transactionCount === 1 ? "" : "s"}
-                    </span>
-                  </div>
 
-                  <div className="font-mono text-2xl font-black text-jct-charcoal dark:text-jct-turquoise">
-                    SAR {fmt(term.totalAmount)}
-                  </div>
-
-                  <div className="flex flex-col gap-1.5 pt-1 border-t border-slate-200 dark:border-white/5">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      Card Breakdown:
-                    </span>
-                    <div className="flex flex-col gap-1">
-                      {term.cardList.map((card) => (
-                        <div
-                          key={card.cardType}
-                          className="flex items-center justify-between text-xs font-mono"
-                        >
-                          <span className="text-slate-600 dark:text-slate-400">
-                            {card.cardType} ({card.count})
-                          </span>
-                          <span className="font-bold text-jct-charcoal dark:text-white">
-                            SAR {fmt(card.amount)}
-                          </span>
-                        </div>
-                      ))}
+                    <div className="font-mono text-2xl font-black text-jct-charcoal dark:text-jct-turquoise">
+                      SAR {fmt(term.totalAmount)}
                     </div>
+                    {term.cardList.length > 0 && (
+                      <div className="space-y-1 text-[11px] border-t border-slate-200 dark:border-white/10 pt-2">
+                        {term.cardList.map((cl) => (
+                          <div key={cl.cardType} className="flex items-center justify-between">
+                            <span className="text-slate-500 dark:text-slate-400">{cl.cardType} ({cl.count})</span>
+                            <span className="font-mono font-bold text-jct-charcoal dark:text-white">SAR {fmt(cl.amount)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Section B — Direct Bank Transfers */}
+            <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-xs font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
+                  Section B — 🏦 Direct Bank Transfers ({activePosBreakdown.bankTransferCount} transfers)
+                </span>
+                <span className="font-mono text-base font-black text-emerald-700 dark:text-emerald-300">
+                  SAR {fmt(activePosBreakdown.bankTransferTotal)}
+                </span>
+              </div>
+              {activePosBreakdown.bankTransferBanks.length === 0 ? (
+                <div className="text-xs text-slate-500 dark:text-slate-400">
+                  No direct bank transfers recorded in this session.
                 </div>
-              ))}
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {activePosBreakdown.bankTransferBanks.map((b) => (
+                    <div
+                      key={b.bankName}
+                      className="rounded-xl bg-white dark:bg-[#121212] border border-emerald-500/20 p-3 flex items-center justify-between"
+                    >
+                      <div>
+                        <div className="text-xs font-extrabold text-jct-charcoal dark:text-white">{b.bankName}</div>
+                        <div className="text-[10px] text-slate-400">{b.count} transfer{b.count === 1 ? "" : "s"}</div>
+                      </div>
+                      <div className="font-mono text-sm font-black text-emerald-600 dark:text-emerald-300">
+                        SAR {fmt(b.amount)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="pt-2 border-t border-emerald-500/20 flex items-center justify-between text-xs font-bold">
+                <span className="text-slate-600 dark:text-slate-300">
+                  Combined Non-Cash Settlements (POS Card Swipes + Direct Bank Transfers):
+                </span>
+                <span className="font-mono font-black text-jct-charcoal dark:text-jct-turquoise">
+                  SAR {fmt(activePosBreakdown.totalNonCashAmount)}
+                </span>
+              </div>
             </div>
           </div>
         )}
@@ -21490,16 +21823,25 @@ export default function Page() {
       ? "SIGMA"
       : "JCT_HARDWARE_JOTUN"
     : profile?.id || "JCT_HARDWARE_JOTUN";
+  const isManualPosForMetrics = (inv: ErpInvoiceItem): boolean => {
+    if (inv.isManualPos) return true;
+    const mode = (inv.paymentMode || "").toUpperCase();
+    const no = (inv.invoiceNo || inv.branchInvNo || "").toUpperCase();
+    return (
+      (mode === "POS_SWIPE" || mode === "CARD") &&
+      (Boolean(inv.isManual) || no.startsWith("POS-") || (inv as { source?: string }).source === "MANUAL_POS")
+    );
+  };
   const isJctHqMetrics = normalizeBranch(metricsBranchId) === "JCT_HARDWARE_JOTUN";
   const hasUploadedErpForMetrics = activeErpForMetrics.some(
-    (inv) => !inv.isReturned && !inv.isManualPos
+    (inv) => !inv.isReturned && !isManualPosForMetrics(inv)
   );
   const uploadedCashPoolForMetrics = r2(
     activeErpForMetrics.reduce((sum, inv) => sum + calcInvoiceCashPortion(inv), 0)
   );
   const manualPosTotalForMetrics = r2(
     activeErpForMetrics.reduce(
-      (sum, inv) => (!inv.isReturned && inv.isManualPos ? sum + (Number(inv.amount) || 0) : sum),
+      (sum, inv) => (!inv.isReturned && isManualPosForMetrics(inv) ? sum + (Number(inv.amount) || 0) : sum),
       0
     )
   );
@@ -21639,6 +21981,119 @@ export default function Page() {
   }, [syncBranch, settingsRefresh]);
   const pocketSyncedRef = useRef<Set<string>>(new Set());
   const [remoteClearSignal, setRemoteClearSignal] = useState(0);
+  const hydrateManualPosTwins = (
+    rawErp: ErpInvoiceItem[],
+    rawBank: PreLoggedBankInvoice[],
+    rawEntries: PreLoggedEntry[]
+  ): ErpInvoiceItem[] => {
+    const normInv = (s?: string) => (s || "").replace(/^#/i, "").trim().toUpperCase();
+    const existingIds = new Set<string>();
+    const existingInvNos = new Set<string>();
+    const existingSigs = new Set<string>();
+    for (const inv of rawErp) {
+      if (inv.id) existingIds.add(inv.id);
+      if (inv.internalId) existingIds.add(inv.internalId);
+      if (inv.clientTxnId) existingIds.add(inv.clientTxnId);
+      const clean = normInv(inv.branchInvNo || inv.invoiceNo);
+      if (clean) existingInvNos.add(clean);
+      existingSigs.add(`${r2(inv.amount)}::${inv.time || ""}`);
+    }
+    const recovered: ErpInvoiceItem[] = [];
+    for (const e of rawEntries) {
+      if (e.isReturned) continue;
+      const mode = (e.paymentMode || "").toUpperCase();
+      const entryTypeStr = String(e.type || "").toUpperCase();
+      const isPosTwin =
+        entryTypeStr === "POS_SWIPE" ||
+        ((mode === "POS_SWIPE" || mode === "CARD") &&
+          e.type !== "EXPENSE" &&
+          e.type !== "CREDIT_SALE" &&
+          e.type !== "SPLIT_SALE" &&
+          e.type !== "CREDIT_RECD" &&
+          e.type !== "CUSTOMER_ADVANCE");
+      if (!isPosTwin) continue;
+      if (
+        existingIds.has(e.id) ||
+        (e.clientTxnId && existingIds.has(e.clientTxnId)) ||
+        (e.sourcePocketId && existingIds.has(e.sourcePocketId)) ||
+        existingSigs.has(`${r2(e.amount)}::${e.time || ""}`)
+      ) {
+        continue;
+      }
+      const posNo = e.invoiceNumber || e.receiptNo || `POS-${String(e.id).slice(-4)}`;
+      existingIds.add(e.id);
+      recovered.push({
+        internalId: e.clientTxnId || e.sourcePocketId || e.id,
+        id: e.id,
+        clientTxnId: e.clientTxnId,
+        invoiceNo: posNo,
+        branchInvNo: posNo,
+        customer: "Manual POS Entry",
+        customerName: "Manual POS Entry",
+        amount: Number(e.amount) || 0,
+        originalAmount: Number(e.amount) || 0,
+        paymentMode: "POS_SWIPE",
+        posTerminal: ((e.terminal as PosTerminalBank) || "SAB"),
+        posTerminalDevice: e.terminal || "SAB",
+        terminal: e.terminal || "SAB",
+        cardNetwork: e.network || "mada",
+        network: e.network || "mada",
+        splitCashAmount: 0,
+        splitBankAmount: 0,
+        splitBankMethod: "POS_SWIPE",
+        isManual: true,
+        isManualPos: true,
+        isConfirmed: true,
+        autoMatched: true,
+        time: e.time || "12:00",
+      });
+    }
+    for (const b of rawBank) {
+      const mode = (b.paymentMode || "").toUpperCase();
+      const cleanNo = normInv(b.invoiceNo);
+      const isManualBankPos =
+        (mode === "POS_SWIPE" || mode === "CARD") &&
+        (String(b.id || "").startsWith("bank-pos-") || String(b.invoiceNo || "").toUpperCase().startsWith("POS-"));
+      if (!isManualBankPos) continue;
+      if (
+        (b.clientTxnId && existingIds.has(b.clientTxnId)) ||
+        (cleanNo && existingInvNos.has(cleanNo)) ||
+        existingSigs.has(`${r2(b.amount || 0)}::${b.time || ""}`)
+      ) {
+        continue;
+      }
+      const safeDevice = (
+        b.posTerminal && b.posTerminal !== "VISA_MC" ? b.posTerminal : "SAB"
+      ) as "SAB" | "AL_RAJHI" | "SNB" | "BANK_TRANSFER";
+      recovered.push({
+        internalId: b.clientTxnId || b.id || `pos-${b.invoiceNo}`,
+        id: b.id || `POS-${b.invoiceNo}`,
+        clientTxnId: b.clientTxnId,
+        invoiceNo: b.invoiceNo,
+        branchInvNo: b.invoiceNo,
+        customer: "Manual POS Entry",
+        customerName: "Manual POS Entry",
+        amount: Number(b.amount) || 0,
+        originalAmount: Number(b.amount) || 0,
+        paymentMode: "POS_SWIPE",
+        posTerminal: ((b.posTerminal as PosTerminalBank) || "SAB"),
+        posTerminalDevice: safeDevice,
+        terminal: safeDevice,
+        cardNetwork: b.cardNetwork || "mada",
+        network: b.cardNetwork || "mada",
+        splitCashAmount: 0,
+        splitBankAmount: 0,
+        splitBankMethod: "POS_SWIPE",
+        isManual: true,
+        isManualPos: true,
+        isConfirmed: true,
+        autoMatched: true,
+        time: b.time || "12:00",
+      });
+    }
+    return recovered.length > 0 ? [...rawErp, ...recovered] : rawErp;
+  };
+
   const { syncStatus, clearRemoteSession } = useActiveSessionSync<
     ErpInvoiceItem,
     PreLoggedBankInvoice,
@@ -21654,13 +22109,62 @@ export default function Page() {
       reportDate: activeSessionDate,
     },
     onRemoteSnapshot: (snap, meta) => {
-      setErpInvoices(snap.erpInvoices);
-      setPreLoggedBankInvoices(snap.preLoggedBankInvoices);
-      setPreLoggedEntries(deduplicatePreLoggedEntries(snap.preLoggedEntries));
-      if (meta.isEmpty) {
-        setRemoteClearSignal((n) => n + 1);
-        if (trackingMode === "wizard") setWizardStep(1);
+      if (!meta.isEmpty) {
+        const hydratedErp = hydrateManualPosTwins(
+          snap.erpInvoices,
+          snap.preLoggedBankInvoices,
+          snap.preLoggedEntries
+        );
+        setErpInvoices(hydratedErp);
+        setPreLoggedBankInvoices(snap.preLoggedBankInvoices);
+        setPreLoggedEntries(deduplicatePreLoggedEntries(snap.preLoggedEntries));
+        return;
       }
+
+      // If active session for this date is empty (e.g. yesterday's register was already locked/archived),
+      // recover non-destructively from ArchiveRecord (DailyRegisterLock) for that date.
+      fetch(`/api/archive?branch=${encodeURIComponent(syncBranch)}`, { cache: "no-store" })
+        .then((r) => r.json())
+        .then((data) => {
+          const recs = Array.isArray(data?.records) ? data.records : [];
+          const match = recs.find(
+            (r: { date?: string; dataJson?: string | null }) =>
+              r.date === activeSessionDate ||
+              (typeof r.date === "string" && r.date.startsWith(activeSessionDate))
+          );
+          if (match?.dataJson) {
+            try {
+              const parsed = JSON.parse(match.dataJson);
+              const archErp: ErpInvoiceItem[] = Array.isArray(parsed.erpInvoices) ? parsed.erpInvoices : [];
+              const archBank: PreLoggedBankInvoice[] = Array.isArray(parsed.preLoggedBankInvoices)
+                ? parsed.preLoggedBankInvoices
+                : [];
+              const archEntries: PreLoggedEntry[] = Array.isArray(parsed.preLoggedEntries)
+                ? parsed.preLoggedEntries
+                : [];
+              const hydratedErp = hydrateManualPosTwins(archErp, archBank, archEntries);
+              setErpInvoices(hydratedErp);
+              setPreLoggedBankInvoices(archBank);
+              setPreLoggedEntries(deduplicatePreLoggedEntries(archEntries));
+              if (match.openingCash !== undefined && match.openingCash !== null) {
+                setOpeningBalance(Number(match.openingCash) || 0);
+              }
+              return;
+            } catch {
+              // ignore parse error
+            }
+          }
+          setErpInvoices(snap.erpInvoices);
+          setPreLoggedBankInvoices(snap.preLoggedBankInvoices);
+          setPreLoggedEntries(deduplicatePreLoggedEntries(snap.preLoggedEntries));
+          setRemoteClearSignal((n) => n + 1);
+          if (trackingMode === "wizard") setWizardStep(1);
+        })
+        .catch(() => {
+          setErpInvoices(snap.erpInvoices);
+          setPreLoggedBankInvoices(snap.preLoggedBankInvoices);
+          setPreLoggedEntries(deduplicatePreLoggedEntries(snap.preLoggedEntries));
+        });
     },
   });
 

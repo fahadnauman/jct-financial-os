@@ -20,9 +20,22 @@ export interface TerminalBreakdownItem {
   cardList: CardBreakdownItem[];
 }
 
+export interface BankTransferGroupItem {
+  bankName: string;
+  amount: number;
+  count: number;
+}
+
 export interface PosSessionBreakdown {
   totalNonCashAmount: number;
   totalTransactions: number;
+  posSwipesTotal: number;
+  posSwipesCount: number;
+  posTerminalList: TerminalBreakdownItem[];
+  posCardList: CardBreakdownItem[];
+  bankTransferTotal: number;
+  bankTransferCount: number;
+  bankTransferBanks: BankTransferGroupItem[];
   terminals: Record<string, TerminalBreakdownItem>;
   terminalList: TerminalBreakdownItem[];
   cardsOverall: Record<string, CardBreakdownItem>;
@@ -35,23 +48,42 @@ export const TERMINAL_NAMES: Record<string, string> = {
   SAB: "SAB",
   AL_RAJHI: "Al Rajhi",
   SNB: "SNB",
+  ALINMA: "Alinma Bank",
+  RIYAD_BANK: "Riyad Bank",
+  UNSPECIFIED_POS: "Unspecified POS",
   BANK_TRANSFER: "Bank Transfer",
 };
 
 export const normalizeTerminalKey = (raw?: string | null): string => {
-  if (!raw) return "SAB";
-  const upper = raw.toUpperCase().replace(/\s+/g, "_");
+  if (!raw || !raw.trim()) return "UNSPECIFIED_POS";
+  const upper = raw.trim().toUpperCase().replace(/\s+/g, "_");
   if (upper.includes("RAJHI")) return "AL_RAJHI";
   if (upper.includes("SNB") || upper.includes("NCB") || upper.includes("AHLI")) return "SNB";
-  if (upper.includes("TRANSFER") || upper.includes("WIRE")) return "BANK_TRANSFER";
+  if (upper.includes("ALINMA")) return "ALINMA";
+  if (upper.includes("RIYAD")) return "RIYAD_BANK";
+  if (upper.includes("TRANSFER") || upper.includes("WIRE") || upper.includes("IBAN")) return "BANK_TRANSFER";
   if (upper.includes("VISA") || upper.includes("MC")) return "SAB";
   if (upper.includes("SAB") || upper.includes("AWWAL") || upper.includes("BRITISH")) return "SAB";
+  if (upper === "UNSPECIFIED_POS" || upper === "POS" || upper === "CARD") return "UNSPECIFIED_POS";
   return upper;
+};
+
+export const normalizeBankDisplayName = (raw?: string | null): string => {
+  if (!raw || !raw.trim()) return "Direct Bank Transfer";
+  const upper = raw.trim().toUpperCase();
+  if (upper.includes("RAJHI")) return "Al Rajhi Bank";
+  if (upper.includes("SNB") || upper.includes("NCB") || upper.includes("AHLI")) return "SNB (Saudi National Bank)";
+  if (upper.includes("ALINMA")) return "Alinma Bank";
+  if (upper.includes("RIYAD")) return "Riyad Bank";
+  if (upper.includes("SAB") || upper.includes("AWWAL") || upper.includes("BRITISH")) return "SAB (Saudi Awwal Bank)";
+  if (upper === "BANK_TRANSFER" || upper === "BANK" || upper === "TRANSFER") return "Direct Bank Transfer";
+  return raw.trim();
 };
 
 export const normalizeCardType = (raw?: string | null): string => {
   if (!raw) return "mada";
   const lower = raw.toLowerCase().trim();
+  if (lower.includes("amex") || lower.includes("american")) return "AMEX";
   if (lower.includes("master")) return "Mastercard";
   if (lower.includes("visa")) return "Visa";
   if (lower.includes("transfer") || lower.includes("wire")) return "Direct Transfer";
@@ -59,6 +91,9 @@ export const normalizeCardType = (raw?: string | null): string => {
 };
 
 export interface GenericInvoiceLike {
+  id?: string;
+  internalId?: string;
+  clientTxnId?: string;
   invoiceNo?: string;
   branchInvNo?: string;
   referenceId?: string;
@@ -71,7 +106,9 @@ export interface GenericInvoiceLike {
   cashCommissionRecipient?: string;
   netPayableAmount?: number;
   isReturned?: boolean;
+  isManual?: boolean;
   isManualPos?: boolean;
+  source?: string;
   paymentMode?: string;
   posTerminal?: string;
   posTerminalDevice?: string;
@@ -91,6 +128,8 @@ export interface GenericInvoiceLike {
 }
 
 export interface GenericPreLoggedBankLike {
+  id?: string;
+  clientTxnId?: string;
   invoiceNo: string;
   amount?: number;
   paymentMode?: string;
@@ -100,6 +139,8 @@ export interface GenericPreLoggedBankLike {
 
 export interface GenericPreLoggedEntryLike {
   id: string;
+  clientTxnId?: string;
+  sourcePocketId?: string;
   type: string;
   amount: number;
   receiptNo?: string;
@@ -125,8 +166,14 @@ export function calcSessionPosBreakdown(
 ): PosSessionBreakdown {
   const terminals: Record<string, TerminalBreakdownItem> = {};
   const cardsOverall: Record<string, CardBreakdownItem> = {};
+  const posCardsOverall: Record<string, CardBreakdownItem> = {};
+  const bankTransferMap: Record<string, BankTransferGroupItem> = {};
   let totalNonCashAmount = 0;
   let totalTransactions = 0;
+  let posSwipesTotal = 0;
+  let posSwipesCount = 0;
+  let bankTransferTotal = 0;
+  let bankTransferCount = 0;
 
   const ensureTerminal = (key: string): TerminalBreakdownItem => {
     if (!terminals[key]) {
@@ -142,12 +189,36 @@ export function calcSessionPosBreakdown(
     return terminals[key];
   };
 
-  const addRecord = (terminalKey: string, cardType: string, amount: number) => {
+  const addRecord = (
+    terminalKey: string,
+    cardType: string,
+    amount: number,
+    explicitBankName?: string | null
+  ) => {
     const validAmount = r2(Number(amount) || 0);
     if (validAmount <= 0) return;
 
     totalNonCashAmount = r2(totalNonCashAmount + validAmount);
     totalTransactions += 1;
+
+    if (terminalKey === "BANK_TRANSFER" || cardType === "Direct Transfer") {
+      bankTransferTotal = r2(bankTransferTotal + validAmount);
+      bankTransferCount += 1;
+      const bName = normalizeBankDisplayName(explicitBankName);
+      if (!bankTransferMap[bName]) {
+        bankTransferMap[bName] = { bankName: bName, amount: 0, count: 0 };
+      }
+      bankTransferMap[bName].amount = r2(bankTransferMap[bName].amount + validAmount);
+      bankTransferMap[bName].count += 1;
+    } else {
+      posSwipesTotal = r2(posSwipesTotal + validAmount);
+      posSwipesCount += 1;
+      if (!posCardsOverall[cardType]) {
+        posCardsOverall[cardType] = { cardType, amount: 0, count: 0 };
+      }
+      posCardsOverall[cardType].amount = r2(posCardsOverall[cardType].amount + validAmount);
+      posCardsOverall[cardType].count += 1;
+    }
 
     const term = ensureTerminal(terminalKey);
     term.totalAmount = r2(term.totalAmount + validAmount);
@@ -168,12 +239,16 @@ export function calcSessionPosBreakdown(
   };
 
   const processedInvoices = new Set<string>();
+  const processedClientIds = new Set<string>();
 
-  // 1. Process active ERP invoices
+  // 1. Process active ERP invoices (including legacy and new Manual POS entries)
   for (const inv of erpInvoices) {
     if (inv.isReturned) continue;
     if (inv.invoiceNo) processedInvoices.add(inv.invoiceNo.trim().replace(/^#/, ""));
     if (inv.branchInvNo) processedInvoices.add(inv.branchInvNo.trim().replace(/^#/, ""));
+    if (inv.clientTxnId) processedClientIds.add(inv.clientTxnId);
+    if (inv.id) processedClientIds.add(inv.id);
+    if (inv.internalId) processedClientIds.add(inv.internalId);
 
     // When Cross-Tender Cash Commission is logged (inv.cashCommissionAmount > 0),
     // keep the Card/Bank gross settlement 100% intact (only net of any roundOff or discount)
@@ -202,16 +277,17 @@ export function calcSessionPosBreakdown(
           : inv.posTerminal === "VISA_MC" && inv.cardNetwork !== "mada"
           ? "Visa"
           : normalizeCardType(inv.splitCardBrand || inv.cardNetwork || inv.network);
-      addRecord(termKey, cardType, effectiveInvAmount);
+      addRecord(termKey, cardType, effectiveInvAmount, rawTerm);
     } else if (mode === "BANK_TRANSFER" || mode === "BANK") {
-      addRecord("BANK_TRANSFER", "Direct Transfer", effectiveInvAmount);
+      const rawBank = inv.posTerminalDevice || inv.terminal || inv.posTerminal;
+      addRecord("BANK_TRANSFER", "Direct Transfer", effectiveInvAmount, rawBank);
     } else if (mode === "SPLIT") {
       const bankPortion = Number(inv.splitBankAmount) || 0;
       if (bankPortion > 0) {
         const isTransfer =
           inv.splitBankMethod === "BANK_TRANSFER" || inv.splitBankChoice === "BANK_TRANSFER";
         if (isTransfer) {
-          addRecord("BANK_TRANSFER", "Direct Transfer", bankPortion);
+          addRecord("BANK_TRANSFER", "Direct Transfer", bankPortion, inv.splitPosTerminal || inv.terminal);
         } else {
           const termKey = normalizeTerminalKey(
             inv.splitBankChoice || inv.posTerminalDevice || inv.terminal || inv.splitPosTerminal
@@ -233,6 +309,8 @@ export function calcSessionPosBreakdown(
 
   // 2. Process any unmatched pre-logged bank invoices
   for (const b of preLoggedBankInvoices) {
+    if (b.clientTxnId && processedClientIds.has(b.clientTxnId)) continue;
+    if (b.id && processedClientIds.has(b.id)) continue;
     const cleanNo = (b.invoiceNo || "").trim().replace(/^#/, "");
     if (cleanNo && processedInvoices.has(cleanNo)) continue;
     const amt = Number(b.amount) || 0;
@@ -240,7 +318,7 @@ export function calcSessionPosBreakdown(
 
     const mode = (b.paymentMode || "").toUpperCase();
     if (mode === "BANK_TRANSFER") {
-      addRecord("BANK_TRANSFER", "Direct Transfer", amt);
+      addRecord("BANK_TRANSFER", "Direct Transfer", amt, b.posTerminal);
     } else {
       const termKey = normalizeTerminalKey(b.posTerminal);
       const cardType = normalizeCardType(b.cardNetwork);
@@ -248,12 +326,15 @@ export function calcSessionPosBreakdown(
     }
   }
 
-  // 3. Process any non-cash pre-logged inflow entries (e.g. OTHER_IN, CREDIT_RECD, CUSTOMER_ADVANCE via card/bank)
+  // 3. Process any non-cash pre-logged inflow entries (including legacy/unlinked POS_SWIPE entries)
   for (const entry of preLoggedEntries) {
     if (entry.isReturned) continue;
     if (entry.type === "EXPENSE" || entry.type === "CREDIT_SALE") continue;
+    if (entry.clientTxnId && processedClientIds.has(entry.clientTxnId)) continue;
+    if (entry.sourcePocketId && processedClientIds.has(entry.sourcePocketId)) continue;
+    if (entry.id && processedClientIds.has(entry.id)) continue;
     const cleanEntryInv = (entry.invoiceNumber || entry.receiptNo || "").trim().replace(/^#/, "");
-    if (entry.type === "SPLIT_SALE" && cleanEntryInv && processedInvoices.has(cleanEntryInv)) {
+    if ((entry.type === "SPLIT_SALE" || entry.type === "POS_SWIPE") && cleanEntryInv && processedInvoices.has(cleanEntryInv)) {
       continue;
     }
     const mode = (entry.paymentMode || "").toUpperCase();
@@ -263,15 +344,16 @@ export function calcSessionPosBreakdown(
       const bankAmt = Number(entry.splitBankAmount) || 0;
       const isTransfer = entry.splitBankMethod === "BANK_TRANSFER";
       if (isTransfer) {
-        addRecord("BANK_TRANSFER", "Direct Transfer", bankAmt);
+        addRecord("BANK_TRANSFER", "Direct Transfer", bankAmt, entry.splitPosTerminal || entry.terminal);
       } else {
         const termKey = normalizeTerminalKey(entry.splitPosTerminal || entry.terminal);
         const cardType = normalizeCardType(entry.network);
         addRecord(termKey, cardType, bankAmt);
       }
     } else if (mode === "BANK_TRANSFER" || mode === "BANK") {
-      addRecord("BANK_TRANSFER", "Direct Transfer", amt);
+      addRecord("BANK_TRANSFER", "Direct Transfer", amt, entry.terminal);
     } else if (
+      entry.type === "POS_SWIPE" ||
       mode === "POS_SWIPE" ||
       mode === "CARD" ||
       mode === "MADA" ||
@@ -292,11 +374,21 @@ export function calcSessionPosBreakdown(
     cardList: Object.values(t.cards).sort((a, b) => b.amount - a.amount),
   })).sort((a, b) => b.totalAmount - a.totalAmount);
 
+  const posTerminalList = terminalList.filter((t) => t.terminalKey !== "BANK_TRANSFER");
+  const posCardList = Object.values(posCardsOverall).sort((a, b) => b.amount - a.amount);
   const cardList = Object.values(cardsOverall).sort((a, b) => b.amount - a.amount);
+  const bankTransferBanks = Object.values(bankTransferMap).sort((a, b) => b.amount - a.amount);
 
   return {
     totalNonCashAmount,
     totalTransactions,
+    posSwipesTotal,
+    posSwipesCount,
+    posTerminalList,
+    posCardList,
+    bankTransferTotal,
+    bankTransferCount,
+    bankTransferBanks,
     terminals,
     terminalList,
     cardsOverall,
