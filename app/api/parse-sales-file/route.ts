@@ -66,6 +66,9 @@ const cleanNum = (val: unknown): number => {
   return Number.isFinite(n) ? n : 0;
 };
 
+const isStrictMultiPayType = (rawPayType: string): boolean =>
+  /^(multi|multi[\s-]?bill|multi[\s-]?pay|multi[\s-]?payment)$/i.test(rawPayType.trim());
+
 const mapJctPayTypeToMode = (rawPayType: string): {
   mode: InvoicePaymentMode;
   isSplit: boolean;
@@ -82,14 +85,7 @@ const mapJctPayTypeToMode = (rawPayType: string): {
       ? "SNB"
       : "SAB";
 
-  const isSplit =
-    /\b(SPLIT|PARTIAL|MULTI|MULTI[- ]?BILL|MULTI[- ]?PAY|MULTI[- ]?PAYMENT|CASH\/BANK|CASH\+BANK|CASH\/CARD)\b/i.test(upper) ||
-    upper.includes("SPLIT") ||
-    upper.includes("MULTI") ||
-    upper.includes("PARTIAL") ||
-    upper.includes("CASH/BANK") ||
-    upper.includes("CASH+BANK") ||
-    upper.includes("CASH/CARD");
+  const isSplit = isStrictMultiPayType(rawPayType);
 
   if (isSplit) {
     return {
@@ -100,7 +96,12 @@ const mapJctPayTypeToMode = (rawPayType: string): {
     };
   }
 
-  if (upper.includes("BANK") || upper.includes("TRANSFER") || upper.includes("IBAN")) {
+  if (
+    upper.includes("BANK") ||
+    upper.includes("TRANSFER") ||
+    upper.includes("WIRE") ||
+    upper.includes("IBAN")
+  ) {
     return {
       mode: "BANK_TRANSFER",
       isSplit: false,
@@ -115,7 +116,10 @@ const mapJctPayTypeToMode = (rawPayType: string): {
     upper.includes("SWIPE") ||
     upper.includes("MADA") ||
     upper.includes("VISA") ||
-    upper.includes("MASTER")
+    upper.includes("MASTER") ||
+    upper.includes("SNB") ||
+    upper.includes("RAJHI") ||
+    upper.includes("SAB")
   ) {
     return {
       mode: "POS_SWIPE",
@@ -194,12 +198,10 @@ const buildInvoiceItem = (
 ): ParsedErpInvoiceItem => {
   const cleanId = invoiceNo.replace(/^#/i, "").trim();
   const cleanCustomer = (customer || "Walk-in Customer").trim();
-  const { mode, isSplit, terminal, splitBankMethod } = mapJctPayTypeToMode(
-    `${rawPayType} ${extraContextText}`
-  );
+  const { mode, isSplit, terminal, splitBankMethod } = mapJctPayTypeToMode(rawPayType);
   let resolvedCashCol = cashCol;
   let resolvedBankCol = bankCol;
-  if (!(resolvedCashCol > 0 && resolvedBankCol > 0) && (isSplit || extraContextText)) {
+  if (isSplit && !(resolvedCashCol > 0 && resolvedBankCol > 0)) {
     const inlineSplit = extractInlineSplitAmounts(
       `${rawPayType} ${extraContextText}`,
       grossAmt
@@ -210,7 +212,7 @@ const buildInvoiceItem = (
     }
   }
   const hasDualTenderValues = resolvedCashCol > 0 && resolvedBankCol > 0;
-  const finalIsSplit = isSplit || hasDualTenderValues;
+  const finalIsSplit = isSplit;
   const branchInv = branchInvNo ? branchInvNo.replace(/^#/i, "").trim() : cleanId;
   const seqInv = seqInvoiceNo ? seqInvoiceNo.replace(/^#/i, "").trim() : undefined;
 

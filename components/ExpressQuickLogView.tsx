@@ -39,6 +39,7 @@ interface ExpressQuickLogViewProps {
     type: QuickLogType;
     payload: Record<string, unknown>;
   }) => void;
+  onDeleteSyncedEntry?: (id: string, clientTxnId?: string) => void;
   onPreviewBill?: (url: string) => void;
 }
 
@@ -92,6 +93,7 @@ export function ExpressQuickLogView({
   activeSessionDate,
   liveParties = [],
   onSyncWithRegister,
+  onDeleteSyncedEntry,
   onPreviewBill,
 }: ExpressQuickLogViewProps) {
   const [activeType, setActiveType] = useState<QuickLogType>("EXPENSE");
@@ -517,6 +519,7 @@ export function ExpressQuickLogView({
 
   // Undo / Delete entry
   const handleDeleteFeedItem = async (id: string) => {
+    const targetItem = activityFeed.find((item) => item.id === id);
     try {
       const res = await fetch(`/api/pocket?id=${encodeURIComponent(id)}`, {
         method: "DELETE",
@@ -527,6 +530,7 @@ export function ExpressQuickLogView({
       });
       if (res.ok) {
         setActivityFeed((prev) => prev.filter((item) => item.id !== id));
+        onDeleteSyncedEntry?.(id, (targetItem as { clientTxnId?: string } | undefined)?.clientTxnId);
         showToast("↩ Entry undone and removed from register.");
       }
     } catch (err) {

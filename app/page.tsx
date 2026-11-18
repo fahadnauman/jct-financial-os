@@ -1883,17 +1883,8 @@ export const parseErpCsvText = (
 
     if (!invoiceNo || grossAmt <= 0) continue;
 
-    const hasDualTenderValues =
-      !Number.isNaN(cashCol) && cashCol > 0 && !Number.isNaN(bankCol) && bankCol > 0;
     const isSplitType =
-      /\b(SPLIT|PARTIAL|MULTI|MULTI[- ]?BILL|MULTI[- ]?PAY|MULTI[- ]?PAYMENT|CASH\/BANK|CASH\+BANK|CASH\/CARD)\b/i.test(rawType) ||
-      rawType.includes("SPLIT") ||
-      rawType.includes("MULTI") ||
-      rawType.includes("PARTIAL") ||
-      rawType.includes("CASH/BANK") ||
-      rawType.includes("CASH+BANK") ||
-      rawType.includes("CASH/CARD") ||
-      hasDualTenderValues;
+      /^(multi|multi[\s-]?bill|multi[\s-]?pay|multi[\s-]?payment)$/i.test(rawType.trim());
 
     const terminal: PosTerminalBank =
       terminalCol.includes("VISA") ||
@@ -1903,6 +1894,8 @@ export const parseErpCsvText = (
         ? "VISA_MC"
         : terminalCol.includes("RAJHI")
         ? "AL_RAJHI"
+        : terminalCol.includes("SNB") || terminalCol.includes("AHLI")
+        ? "SNB"
         : "SAB";
 
     if (isSplitType) {
@@ -1951,13 +1944,22 @@ export const parseErpCsvText = (
         time: nowHHMM(),
       });
     } else {
-      const mode: InvoicePaymentMode = rawType.includes("TRANSFER")
-        ? "BANK_TRANSFER"
-        : rawType.includes("CARD") || rawType.includes("SWIPE") || rawType.includes("POS")
-        ? "POS_SWIPE"
-        : rawType.includes("CREDIT")
-        ? "CREDIT_SALE"
-        : "CASH";
+      const mode: InvoicePaymentMode =
+        rawType.includes("BANK") || rawType.includes("TRANSFER") || rawType.includes("WIRE") || rawType.includes("IBAN")
+          ? "BANK_TRANSFER"
+          : rawType.includes("CARD") ||
+            rawType.includes("SWIPE") ||
+            rawType.includes("POS") ||
+            rawType.includes("MADA") ||
+            rawType.includes("VISA") ||
+            rawType.includes("MASTER") ||
+            rawType.includes("SNB") ||
+            rawType.includes("RAJHI") ||
+            rawType.includes("SAB")
+          ? "POS_SWIPE"
+          : rawType.includes("CREDIT")
+          ? "CREDIT_SALE"
+          : "CASH";
       parsedRows.push({
         invoiceNo,
         customer,
@@ -2221,6 +2223,8 @@ interface DailyRegisterViewProps {
   onClearActiveSession?: (finalStatus?: "CLEARED" | "COMPLETED") => void;
   syncStatus?: ActiveSessionSyncStatus;
   remoteClearSignal?: number;
+  autoDeductManualPos?: boolean;
+  setAutoDeductManualPos?: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 export interface CascadingPaymentSelectorProps {
@@ -3118,7 +3122,12 @@ function DailyRegisterView({
   onClearActiveSession,
   syncStatus,
   remoteClearSignal = 0,
+  autoDeductManualPos: propAutoDeductManualPos,
+  setAutoDeductManualPos: propSetAutoDeductManualPos,
 }: DailyRegisterViewProps) {
+  const [localAutoDeductManualPos, setLocalAutoDeductManualPos] = useState<boolean>(true);
+  const autoDeductManualPos = propAutoDeductManualPos ?? localAutoDeductManualPos;
+  const setAutoDeductManualPos = propSetAutoDeductManualPos ?? setLocalAutoDeductManualPos;
   const [localSessionDate, setLocalSessionDate] = useState<string>(() => {
     return saudiSessionDate();
   });
@@ -3172,7 +3181,7 @@ function DailyRegisterView({
       splitBankMethod: payload.terminal === "BANK_TRANSFER" ? "BANK_TRANSFER" : "POS_SWIPE",
       time: payload.time || nowHHMM(),
     };
-    setErpInvoices((prev) => [newPosInvoice, ...prev]);
+    setErpInvoices((prev) => [...prev, newPosInvoice]);
     setSyncBannerMsg({
       text: `⚡ Manual POS ${payload.invoiceNo}: SAR ${fmt(payload.amount)} (${
         payload.terminal === "BANK_TRANSFER"
@@ -4560,7 +4569,32 @@ function DailyRegisterView({
   };
 
   const handleRemoveBankInvoice = (invoiceNo: string) => {
-    setPreLoggedBankInvoices((prev) => prev.filter((item) => item.invoiceNo !== invoiceNo));
+    const cleanTarget = cleanErpInvNo(invoiceNo);
+    const matchedBank = preLoggedBankInvoices.filter(
+      (item) => item.invoiceNo === invoiceNo || (cleanTarget && cleanErpInvNo(item.invoiceNo) === cleanTarget)
+    );
+    const clientIds = new Set(matchedBank.map((b) => b.clientTxnId).filter(Boolean) as string[]);
+    setPreLoggedBankInvoices((prev) =>
+      prev.filter(
+        (item) => item.invoiceNo !== invoiceNo && !(cleanTarget && cleanErpInvNo(item.invoiceNo) === cleanTarget)
+      )
+    );
+    if (clientIds.size > 0 || cleanTarget) {
+      setErpInvoices((prev) =>
+        prev.filter((inv) => {
+          if (inv.clientTxnId && clientIds.has(inv.clientTxnId)) return false;
+          if (inv.isManualPos && cleanTarget && cleanErpInvNo(inv.branchInvNo || inv.invoiceNo) === cleanTarget) {
+            return false;
+          }
+          return true;
+        })
+      );
+      if (clientIds.size > 0) {
+        setPreLoggedEntries((prev) =>
+          prev.filter((e) => !(e.clientTxnId && clientIds.has(e.clientTxnId)))
+        );
+      }
+    }
   };
 
   const handleQuickRecord = (e: React.FormEvent) => {
@@ -4888,19 +4922,135 @@ function DailyRegisterView({
   };
 
   const handleRemoveEntry = (id: string) => {
-    setPreLoggedEntries((prev) => prev.filter((item) => item.id !== id));
+    const target = preLoggedEntries.find((item) => item.id === id);
+    const targetClientTxnId = target?.clientTxnId;
+    const targetSourcePocketId = target?.sourcePocketId;
+    const targetInvNo = cleanErpInvNo(target?.linkedInvoiceNo || target?.linkedInvoiceNum || "");
+
+    setPreLoggedEntries((prev) =>
+      prev.filter((item) => {
+        if (item.id === id) return false;
+        if (targetClientTxnId && item.clientTxnId === targetClientTxnId) return false;
+        if (targetSourcePocketId && item.sourcePocketId === targetSourcePocketId) return false;
+        return true;
+      })
+    );
+
+    if (target) {
+      setErpInvoices((prev) =>
+        prev.filter((inv) => {
+          if (targetClientTxnId && inv.clientTxnId === targetClientTxnId) return false;
+          if (targetSourcePocketId && (inv.id === targetSourcePocketId || inv.internalId === targetSourcePocketId)) {
+            return false;
+          }
+          if (
+            target.type === "SPLIT_SALE" &&
+            targetInvNo &&
+            cleanErpInvNo(inv.branchInvNo || inv.invoiceNo) === targetInvNo
+          ) {
+            return false;
+          }
+          if (
+            (target.paymentMode === "POS_SWIPE" || target.paymentMode === "CARD") &&
+            inv.isManualPos &&
+            r2(inv.amount) === r2(target.amount) &&
+            inv.time === target.time
+          ) {
+            return false;
+          }
+          return true;
+        })
+      );
+      if (targetClientTxnId || targetInvNo) {
+        setPreLoggedBankInvoices((prev) =>
+          prev.filter((b) => {
+            if (targetClientTxnId && b.clientTxnId === targetClientTxnId) return false;
+            if (targetInvNo && cleanErpInvNo(b.invoiceNo) === targetInvNo) return false;
+            return true;
+          })
+        );
+      }
+    }
   };
 
   const handleRemoveErpInvoice = (identifier: string) => {
-    setErpInvoices((prev) => {
-      const base = prev;
-      return base.filter(
+    const target = erpInvoices.find(
+      (inv) =>
+        inv.invoiceNo === identifier ||
+        inv.id === identifier ||
+        inv.internalId === identifier
+    );
+    const targetInvNo = target ? cleanErpInvNo(target.branchInvNo || target.invoiceNo) : cleanErpInvNo(identifier);
+    const targetRawInvNo = target ? cleanErpInvNo(target.invoiceNo) : "";
+    const targetClientTxnId = target?.clientTxnId;
+    const targetId = target?.id;
+    const targetInternalId = target?.internalId;
+
+    setErpInvoices((prev) =>
+      prev.filter(
         (inv) =>
           inv.invoiceNo !== identifier &&
           (!inv.id || inv.id !== identifier) &&
-          (!inv.internalId || inv.internalId !== identifier)
-      );
-    });
+          (!inv.internalId || inv.internalId !== identifier) &&
+          !(targetClientTxnId && inv.clientTxnId === targetClientTxnId)
+      )
+    );
+
+    setPreLoggedEntries((prev) =>
+      prev.filter((item) => {
+        if (targetId && item.id === targetId) return false;
+        if (targetInternalId && item.id === targetInternalId) return false;
+        if (targetClientTxnId && item.clientTxnId === targetClientTxnId) return false;
+        if (targetInvNo && item.id === `ple-split-${targetInvNo}`) return false;
+        if (
+          (targetInvNo && item.id === `comm-${targetInvNo}`) ||
+          (targetRawInvNo && item.id === `comm-${targetRawInvNo}`) ||
+          (targetInternalId && item.id === `comm-${targetInternalId}`)
+        ) {
+          return false;
+        }
+        if (
+          targetInvNo &&
+          ((item.linkedInvoiceNum && cleanErpInvNo(item.linkedInvoiceNum) === targetInvNo) ||
+            (item.linkedInvoiceNo && cleanErpInvNo(item.linkedInvoiceNo) === targetInvNo))
+        ) {
+          return false;
+        }
+        if (
+          item.sourcePocketId &&
+          ((targetId && item.sourcePocketId === targetId) ||
+            (targetInternalId && item.sourcePocketId === targetInternalId))
+        ) {
+          return false;
+        }
+        if (
+          target?.isManualPos &&
+          (item.paymentMode === "POS_SWIPE" || item.paymentMode === "CARD") &&
+          r2(item.amount) === r2(target.amount) &&
+          item.time === target.time
+        ) {
+          return false;
+        }
+        return true;
+      })
+    );
+
+    setPreLoggedBankInvoices((prev) =>
+      prev.filter((b) => {
+        if (targetClientTxnId && b.clientTxnId === targetClientTxnId) return false;
+        if (targetId && b.id === targetId) return false;
+        if (targetInternalId && b.id === targetInternalId) return false;
+        if (targetInvNo && cleanErpInvNo(b.invoiceNo) === targetInvNo) return false;
+        if (
+          target?.isManualPos &&
+          r2(b.amount || 0) === r2(target.amount) &&
+          b.time === target.time
+        ) {
+          return false;
+        }
+        return true;
+      })
+    );
   };
 
   const handleAddStep3Receipt = (e: React.FormEvent) => {
@@ -6284,7 +6434,7 @@ function DailyRegisterView({
       autoMatched: false,
       time: nowHHMM(),
     };
-    setErpInvoices((prev) => [newRow, ...prev]);
+    setErpInvoices((prev) => [...prev, newRow]);
   };
 
   const handleAddManualErpInvoice = () => {
@@ -6315,7 +6465,7 @@ function DailyRegisterView({
       autoMatched: false,
       time: nowHHMM(),
     };
-    setErpInvoices((prev) => [newRow, ...prev]);
+    setErpInvoices((prev) => [...prev, newRow]);
   };
 
   const handleAddMissingInflow = (e: React.FormEvent) => {
@@ -6388,7 +6538,33 @@ function DailyRegisterView({
   };
 
   // Live Derived Totals (with Full Split / Partial Tender Support)
-  const activeErpList = erpInvoices;
+  // Strict Sequential Ordering: Group A (Uploaded ERP) ascending numeric sequence, Group B (Manual / Manual POS) at bottom in insertion order
+  const activeErpList = useMemo(() => {
+    const uploaded: ErpInvoiceItem[] = [];
+    const manual: ErpInvoiceItem[] = [];
+    for (const inv of erpInvoices) {
+      if (inv.isManual || inv.isManualPos) {
+        manual.push(inv);
+      } else {
+        uploaded.push(inv);
+      }
+    }
+    const extractSeq = (inv: ErpInvoiceItem): number => {
+      const raw = (inv.branchInvNo || inv.invoiceNo || inv.seqInvoiceNo || "").trim();
+      const matches = raw.match(/\d+/g);
+      if (!matches || matches.length === 0) return Number.MAX_SAFE_INTEGER;
+      return parseInt(matches[matches.length - 1], 10);
+    };
+    uploaded.sort((a, b) => {
+      const na = extractSeq(a);
+      const nb = extractSeq(b);
+      if (na !== nb) return na - nb;
+      const sa = (a.branchInvNo || a.invoiceNo || "").trim();
+      const sb = (b.branchInvNo || b.invoiceNo || "").trim();
+      return sa.localeCompare(sb, undefined, { numeric: true, sensitivity: "base" });
+    });
+    return [...uploaded, ...manual];
+  }, [erpInvoices]);
   // Cash Drawer Sales include "CASH", "OTHER_RECD", and the Cash Share of "SPLIT" invoices
   const cashSaleInvoices = activeErpList.filter(
     (i) =>
@@ -6463,9 +6639,28 @@ function DailyRegisterView({
     printPosSwipeInvoices.reduce((sum, inv) => sum + calcInvoiceBankGrossPortion(inv), 0)
   );
 
-  const cashSalesTotal = r2(
+  const isJctHqProfile = normalizeBranch(branchId) === "JCT_HARDWARE_JOTUN";
+  const uploadedCashSalesPool = r2(
     activeErpList.reduce((sum, inv) => sum + calcInvoiceCashPortion(inv), 0)
   );
+  const hasUploadedErpSummary = activeErpList.some(
+    (inv) => !inv.isReturned && !inv.isManualPos
+  );
+  const manualPosReclassifiedTotal = r2(
+    activeErpList.reduce(
+      (sum, inv) => (!inv.isReturned && inv.isManualPos ? sum + (Number(inv.amount) || 0) : sum),
+      0
+    )
+  );
+  const isManualPosReclassificationActive =
+    isJctHqProfile &&
+    autoDeductManualPos &&
+    hasUploadedErpSummary &&
+    manualPosReclassifiedTotal > 0;
+  const cashSalesTotal =
+    isJctHqProfile && autoDeductManualPos && hasUploadedErpSummary
+      ? r2(Math.max(0, uploadedCashSalesPool - manualPosReclassifiedTotal))
+      : uploadedCashSalesPool;
   const sessionPosBreakdown = useMemo(
     () => calcSessionPosBreakdown(activeErpList, preLoggedBankInvoices, preLoggedEntries),
     [activeErpList, preLoggedBankInvoices, preLoggedEntries]
@@ -8143,8 +8338,8 @@ function DailyRegisterView({
                       <span>Report Date: {activeSessionDate}</span>
                     </span>
                   </div>
-                  {/* Optional Toggle Switch: Estimate POS Merchant Fees (MDR) */}
-                  <div className="pt-0.5 flex flex-wrap items-center">
+                  {/* Optional Toggle Switch: Estimate POS Merchant Fees (MDR) + JCT HQ Cash-to-Card Reclassification */}
+                  <div className="pt-0.5 flex flex-wrap items-center gap-2.5">
                     <button
                       type="button"
                       role="switch"
@@ -8172,8 +8367,38 @@ function DailyRegisterView({
                         {trackPosFees ? "ON" : "OFF"}
                       </span>
                     </button>
+                    {isJctHqProfile && (
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={autoDeductManualPos}
+                        onClick={() => setAutoDeductManualPos((prev) => !prev)}
+                        title="JCT HQ Rush-Hour Mode: Deduct manual POS card swipes from the uploaded ERP Cash-Billed summary so sales and drawer cash are never double-counted."
+                        className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-bold transition-colors shadow-sm ${
+                          autoDeductManualPos
+                            ? "border-amber-500/60 bg-amber-500/15 text-amber-800 dark:text-amber-300"
+                            : "border-slate-200 dark:border-[#1F1F1F] bg-white dark:bg-black text-slate-500 dark:text-slate-400 hover:text-jct-charcoal dark:hover:text-jct-offwhite"
+                        }`}
+                      >
+                        <span>🔄 Auto-Deduct Manual POS from Cash-Billed Summary</span>
+                        <span
+                          className={`inline-flex h-4 w-7 items-center rounded-full p-0.5 transition-colors ${
+                            autoDeductManualPos ? "bg-amber-500" : "bg-slate-300 dark:bg-slate-600"
+                          }`}
+                        >
+                          <span
+                            className={`h-3 w-3 rounded-full bg-white transition-transform ${
+                              autoDeductManualPos ? "translate-x-3" : "translate-x-0"
+                            }`}
+                          />
+                        </span>
+                        <span className="text-[10px] font-bold uppercase tracking-wider">
+                          {autoDeductManualPos ? "ON" : "OFF"}
+                        </span>
+                      </button>
+                    )}
                     {trackPosFees && (
-                      <span className="text-sm text-slate-400 ml-4">
+                      <span className="text-sm text-slate-400">
                         Rates: mada (0.8%, Cap SAR 40) | Visa/MC (2.2%)
                       </span>
                     )}
@@ -8188,9 +8413,17 @@ function DailyRegisterView({
                     <span className="mt-1 block font-display text-xl font-bold tabular-nums tracking-tight text-emerald-600 dark:text-jct-turquoise whitespace-nowrap">
                       SAR {fmt(cashSalesTotal)}
                     </span>
-                    <span className="mt-0.5 block text-[11px] text-slate-500 dark:text-slate-400">
-                      Includes Cash Share of Split Sales
-                    </span>
+                    {isManualPosReclassificationActive ? (
+                      <div className="mt-2 space-y-0.5 rounded-lg border border-amber-500/25 bg-amber-500/10 px-2.5 py-1.5 text-[11px] tabular-nums text-amber-800 dark:text-amber-300">
+                        <div>ERP Cash-Billed Sales Pool: <strong>SAR {fmt(uploadedCashSalesPool)}</strong></div>
+                        <div>Less: Manual POS Swipes Reclassified to Card: <strong>-SAR {fmt(manualPosReclassifiedTotal)}</strong></div>
+                        <div>Net Cash Sales Entering Drawer: <strong>SAR {fmt(cashSalesTotal)}</strong></div>
+                      </div>
+                    ) : (
+                      <span className="mt-0.5 block text-[11px] text-slate-500 dark:text-slate-400">
+                        Includes Cash Share of Split Sales
+                      </span>
+                    )}
                   </div>
 
                   <div className="bg-white dark:bg-gradient-to-b dark:from-slate-900/90 dark:to-slate-950/95 shadow-sm border border-jct-yellow/20 dark:border-white/10 dark:border-t-white/15 hover:border-cyan-500/40 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-cyan-950/30 rounded-xl p-6 transition-all duration-200">
@@ -10454,6 +10687,13 @@ function DailyRegisterView({
                     <span className="text-jct-yellow font-bold print:text-black">=</span>
                     <span>Closing Cash: <strong className="text-jct-charcoal dark:text-jct-offwhite print:text-black">SAR {fmt(calculatedClosingBalance)}</strong></span>
                   </div>
+                  {isManualPosReclassificationActive && (
+                    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-amber-800 dark:text-amber-300 bg-amber-500/10 border border-amber-500/25 rounded-lg px-3 py-1.5 print:border-black print:bg-white print:text-black">
+                      <span>ERP Cash-Billed Sales Pool: <strong>SAR {fmt(uploadedCashSalesPool)}</strong></span>
+                      <span>Less: Manual POS Swipes Reclassified to Card: <strong>-SAR {fmt(manualPosReclassifiedTotal)}</strong></span>
+                      <span>Net Cash Sales Entering Drawer: <strong>SAR {fmt(cashSalesTotal)}</strong></span>
+                    </div>
+                  )}
                   {cashCommissionAdjustmentsTotal > 0 && (
                     <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-indigo-700 dark:text-indigo-300 bg-indigo-500/10 border border-indigo-500/25 rounded-lg px-3 py-1.5 print:border-black print:bg-white print:text-black">
                       <span>Gross Cash Sales: <strong>SAR {fmt(cashGrossSalesBeforeCommissions)}</strong></span>
@@ -10475,6 +10715,13 @@ function DailyRegisterView({
                       <span className="mt-2 block font-mono tabular-nums tracking-tight text-2xl font-black text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap print:text-black print:text-2xl print:font-bold">
                         SAR {fmt(totalCashInSalesAndReceipts)}
                       </span>
+                      {isManualPosReclassificationActive && (
+                        <div className="mt-2 space-y-0.5 text-[11px] text-amber-700 dark:text-amber-300 print:text-black">
+                          <div>ERP Cash-Billed Sales Pool: <strong className="text-jct-charcoal dark:text-jct-offwhite print:text-black">SAR {fmt(uploadedCashSalesPool)}</strong></div>
+                          <div>Less: Manual POS Swipes Reclassified: <strong className="text-amber-600 dark:text-amber-400 print:text-black">-SAR {fmt(manualPosReclassifiedTotal)}</strong></div>
+                          <div>Net Cash Sales Entering Drawer: <strong className="text-emerald-600 dark:text-emerald-400 print:text-black">SAR {fmt(cashSalesTotal)}</strong></div>
+                        </div>
+                      )}
                       {cashCommissionAdjustmentsTotal > 0 && (
                         <div className="mt-2 space-y-0.5 text-[11px] text-slate-500 dark:text-slate-400 print:text-black">
                           <div>Gross Cash Sales: <strong className="text-jct-charcoal dark:text-jct-offwhite print:text-black">SAR {fmt(cashGrossSalesBeforeCommissions)}</strong></div>
@@ -20591,11 +20838,35 @@ export default function Page() {
   };
 
   // Compute Live Cross-Module Totals for Financial Pulse, Branch Consolidation & Nauman AI
+  const [autoDeductManualPos, setAutoDeductManualPos] = useState<boolean>(true);
   const activeErpForMetrics: ErpInvoiceItem[] = erpInvoices;
 
-  const todayCashSales = r2(
+  const metricsBranchId: string = profile?.isOwner
+    ? ownerBranch === "Hempel" || ownerBranch === "Hempel - Jubail"
+      ? "HEMPEL"
+      : ownerBranch === "Dammam Jotun" || ownerBranch === "Jotun - Dammam" || ownerBranch === "Jotun Dammam"
+      ? "DAMMAM_JOTUN"
+      : ownerBranch === "Sigma" || ownerBranch === "Sigma Paints - Jubail" || ownerBranch === "Sigma Jubail"
+      ? "SIGMA"
+      : "JCT_HARDWARE_JOTUN"
+    : profile?.id || "JCT_HARDWARE_JOTUN";
+  const isJctHqMetrics = normalizeBranch(metricsBranchId) === "JCT_HARDWARE_JOTUN";
+  const hasUploadedErpForMetrics = activeErpForMetrics.some(
+    (inv) => !inv.isReturned && !inv.isManualPos
+  );
+  const uploadedCashPoolForMetrics = r2(
     activeErpForMetrics.reduce((sum, inv) => sum + calcInvoiceCashPortion(inv), 0)
   );
+  const manualPosTotalForMetrics = r2(
+    activeErpForMetrics.reduce(
+      (sum, inv) => (!inv.isReturned && inv.isManualPos ? sum + (Number(inv.amount) || 0) : sum),
+      0
+    )
+  );
+  const todayCashSales =
+    isJctHqMetrics && autoDeductManualPos && hasUploadedErpForMetrics
+      ? r2(Math.max(0, uploadedCashPoolForMetrics - manualPosTotalForMetrics))
+      : uploadedCashPoolForMetrics;
   const activeSessionPosBreakdown = useMemo(
     () => calcSessionPosBreakdown(activeErpForMetrics, preLoggedBankInvoices, preLoggedEntries),
     [activeErpForMetrics, preLoggedBankInvoices, preLoggedEntries]
@@ -21151,7 +21422,7 @@ export default function Page() {
         receiptUrl,
         time: nowHHMM(),
       };
-      setErpInvoices((prev) => [newInv, ...prev]);
+      setErpInvoices((prev) => [...prev, newInv]);
     } else if (type === "POS_SWIPE") {
       const posNo = invoiceNo || `POS-${Date.now().toString().slice(-4)}`;
       const newPos: ErpInvoiceItem = {
@@ -21174,7 +21445,7 @@ export default function Page() {
         autoMatched: true,
         time: nowHHMM(),
       };
-      setErpInvoices((prev) => [newPos, ...prev]);
+      setErpInvoices((prev) => [...prev, newPos]);
       setPreLoggedBankInvoices((prev) => [
         {
           id: `bank-pos-${Date.now()}`,
@@ -21417,6 +21688,8 @@ export default function Page() {
                 onClearActiveSession={handleClearActiveSession}
                 syncStatus={syncStatus}
                 remoteClearSignal={remoteClearSignal}
+                autoDeductManualPos={autoDeductManualPos}
+                setAutoDeductManualPos={setAutoDeductManualPos}
               />
             ) : safeTab === "quick-log" ? (
               <ExpressQuickLogView
@@ -21445,6 +21718,31 @@ export default function Page() {
                     .filter((p) => p.name.length >= 2),
                 ]}
                 onSyncWithRegister={handleExpressQuickLogSync}
+                onDeleteSyncedEntry={(id, clientTxnId) => {
+                  setErpInvoices((prev) =>
+                    prev.filter(
+                      (inv) =>
+                        inv.id !== id &&
+                        inv.internalId !== id &&
+                        !(clientTxnId && inv.clientTxnId === clientTxnId)
+                    )
+                  );
+                  setPreLoggedEntries((prev) =>
+                    prev.filter(
+                      (e) =>
+                        e.id !== id &&
+                        e.sourcePocketId !== id &&
+                        !(clientTxnId && e.clientTxnId === clientTxnId)
+                    )
+                  );
+                  setPreLoggedBankInvoices((prev) =>
+                    prev.filter(
+                      (b) =>
+                        b.id !== id &&
+                        !(clientTxnId && b.clientTxnId === clientTxnId)
+                    )
+                  );
+                }}
               />
             ) : safeTab === "archive" ? (
               <AuditLibraryView
