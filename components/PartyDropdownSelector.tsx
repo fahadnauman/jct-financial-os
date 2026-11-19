@@ -18,6 +18,7 @@ interface PartyDropdownSelectorProps {
   value: string;
   onChange: (partyName: string, party?: PartyItem) => void;
   partyType?: "SUPPLIER" | "CUSTOMER" | "CREDITOR" | "ALL";
+  filterRole?: "SUPPLIER" | "CUSTOMER" | "CREDITOR" | "ALL";
   branch?: string;
   placeholder?: string;
   label?: string;
@@ -32,6 +33,7 @@ export function PartyDropdownSelector({
   value,
   onChange,
   partyType = "ALL",
+  filterRole,
   branch,
   placeholder = "Select or type party name...",
   label,
@@ -55,13 +57,15 @@ export function PartyDropdownSelector({
     }
   }, [value]);
 
-  // Fetch full directory from /api/parties once per partyType/branch so client filtering is 0ms
+  const effectiveRole = filterRole || partyType;
+
+  // Fetch full directory from /api/parties once per effectiveRole/branch so client filtering is 0ms
   useEffect(() => {
     let ignore = false;
     const fetchParties = async () => {
       setIsLoading(true);
       try {
-        const typeParam = partyType && partyType !== "ALL" ? `&type=${partyType}` : "";
+        const typeParam = effectiveRole && effectiveRole !== "ALL" ? `&type=${effectiveRole}` : "";
         const branchParam = branch && branch !== "ALL" ? `&branch=${branch}` : "";
         const res = await fetch(`/api/parties?limit=300${typeParam}${branchParam}`);
         if (!res.ok) throw new Error("Failed to load parties");
@@ -85,7 +89,7 @@ export function PartyDropdownSelector({
     return () => {
       ignore = true;
     };
-  }, [partyType, branch]);
+  }, [effectiveRole, branch]);
 
   // Close on outside click
   useEffect(() => {
@@ -103,9 +107,17 @@ export function PartyDropdownSelector({
     const list: PartyItem[] = [];
     const seen = new Set<string>();
 
+    const matchesRole = (pType: PartyItem["partyType"]) => {
+      if (!effectiveRole || effectiveRole === "ALL") return true;
+      if (effectiveRole === "SUPPLIER") return pType === "SUPPLIER" || pType === "BOTH";
+      if (effectiveRole === "CUSTOMER") return pType === "CUSTOMER" || pType === "BOTH";
+      return pType === effectiveRole;
+    };
+
     const pushUnique = (item: PartyItem) => {
       const clean = (item.name || "").trim();
       if (!clean || clean.length < 2) return;
+      if (!matchesRole(item.partyType)) return;
       const upper = clean.toUpperCase();
       if (seen.has(upper)) return;
       seen.add(upper);
@@ -124,7 +136,7 @@ export function PartyDropdownSelector({
     for (const raw of extraParties) {
       pushUnique({
         name: raw,
-        partyType: partyType === "SUPPLIER" ? "SUPPLIER" : "CUSTOMER",
+        partyType: effectiveRole === "SUPPLIER" ? "SUPPLIER" : "CUSTOMER",
       });
     }
 
@@ -145,7 +157,7 @@ export function PartyDropdownSelector({
       });
     }
     return list;
-  }, [dbParties, extraParties, liveParties, searchTerm, partyType]);
+  }, [dbParties, extraParties, liveParties, searchTerm, effectiveRole]);
 
   const handleSelect = (party: PartyItem) => {
     onChange(party.name, party);
@@ -292,7 +304,7 @@ export function PartyDropdownSelector({
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({
                             name: cleanNew,
-                            partyType: partyType === "SUPPLIER" ? "SUPPLIER" : "CUSTOMER",
+                            partyType: effectiveRole === "SUPPLIER" ? "SUPPLIER" : "CUSTOMER",
                             branch: branch || "ALL",
                           }),
                         }).catch(() => {});
@@ -300,7 +312,12 @@ export function PartyDropdownSelector({
                     }}
                     className="mt-1.5 block w-full text-center text-jct-turquoise font-bold hover:underline"
                   >
-                    + Add &amp; Register &quot;{searchTerm}&quot; as New Party
+                    + Add &amp; Register &quot;{searchTerm}&quot; as{" "}
+                    {effectiveRole === "SUPPLIER"
+                      ? "New Supplier"
+                      : effectiveRole === "CUSTOMER"
+                      ? "New Customer"
+                      : "New Party"}
                   </button>
                 )}
               </div>

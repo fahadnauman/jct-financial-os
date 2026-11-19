@@ -7657,7 +7657,8 @@ function DailyRegisterView({
                             id="hub-supplier-party"
                             value={hubSupplierName}
                             onChange={(val) => setHubSupplierName(val)}
-                            partyType="ALL"
+                            partyType="SUPPLIER"
+                            filterRole="SUPPLIER"
                             branch={branchId}
                             placeholder="Supplier / Party (e.g. Jotun)..."
                             className="flex-1 min-w-[150px]"
@@ -9718,7 +9719,8 @@ function DailyRegisterView({
                         }
                         value={step3Title}
                         onChange={(name) => setStep3Title(name)}
-                        partyType="ALL"
+                        partyType="CUSTOMER"
+                        filterRole="CUSTOMER"
                         branch={branchId}
                         placeholder={
                           step3Kind === "CREDIT_RECD" || step3Kind === "CREDIT_SALE" || step3Kind === "CUSTOMER_ADVANCE" || step3SplitEnabled
@@ -10343,9 +10345,10 @@ function DailyRegisterView({
                             label="Supplier / Party Name (Instant Live Search)"
                             value={step4SupplierName}
                             onChange={(val) => setStep4SupplierName(val)}
-                            partyType="ALL"
+                            partyType="SUPPLIER"
+                            filterRole="SUPPLIER"
                             branch={branchId}
-                            placeholder="Search Supplier or Today's Customer (e.g. Jotun, Space Top)..."
+                            placeholder="Search or select Supplier (e.g. Jotun, Hempel, Sigma)..."
                             liveParties={unifiedPartyDirectory}
                             extraParties={["Jotun", "Hempel", "Sigma"]}
                           />
@@ -10479,19 +10482,27 @@ function DailyRegisterView({
                     {step4BillType === "WITHOUT_BILL" ? (
                       <div>
                         <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
-                          Basic Details / Description *
+                          {step4Category === "Cash Purchase" || step4Category === "Credit Purchase"
+                            ? "DESCRIPTION / AUDIT NOTES (Optional)"
+                            : "Basic Details / Description *"}
                         </label>
                         <input
                           type="text"
-                          required
+                          required={step4Category !== "Cash Purchase" && step4Category !== "Credit Purchase"}
                           value={step4Note}
                           onChange={(e) => setStep4Note(e.target.value)}
-                          placeholder="Required: State purpose or description..."
+                          placeholder={
+                            step4Category === "Cash Purchase" || step4Category === "Credit Purchase"
+                              ? "Optional: Remarks / item details..."
+                              : "Required: State purpose or description..."
+                          }
                           className="w-full bg-transparent border border-amber-400/50 dark:border-amber-400/40 focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-3.5 py-2.5 text-sm font-medium placeholder:text-slate-400 outline-none"
                         />
-                        <p className="text-[10px] text-amber-500 dark:text-amber-400 mt-1">
-                          Basic details are mandatory when logging expenses without a bill.
-                        </p>
+                        {step4Category !== "Cash Purchase" && step4Category !== "Credit Purchase" && (
+                          <p className="text-[10px] text-amber-500 dark:text-amber-400 mt-1">
+                            Basic details are mandatory when logging expenses without a bill.
+                          </p>
+                        )}
                       </div>
                     ) : (
                       <div className="space-y-2">
@@ -14105,7 +14116,8 @@ function CreditRadarView({
                   id="credit-radar-party"
                   value={contractorInput}
                   onChange={(val) => setContractorInput(val)}
-                  partyType="ALL"
+                  partyType="CUSTOMER"
+                  filterRole="CUSTOMER"
                   liveParties={liveParties}
                   placeholder="Select or type Customer / Contractor Name..."
                 />
@@ -15223,7 +15235,8 @@ function SupplierHubView({
                 id="suppliers-hub-party"
                 value={supplierSearch}
                 onChange={(val) => setSupplierSearch(val)}
-                partyType="ALL"
+                partyType="SUPPLIER"
+                filterRole="SUPPLIER"
                 placeholder="Search or Select Supplier (Jotun, Hempel, Sigma...)"
                 className="flex-[2] min-w-[200px]"
                 liveParties={liveParties}

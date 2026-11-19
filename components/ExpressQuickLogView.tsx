@@ -812,7 +812,8 @@ export function ExpressQuickLogView({
               <div className="space-y-3 animate-in fade-in">
                 <PartyDropdownSelector
                   label="Supplier / Creditor *"
-                  partyType="ALL"
+                  partyType="SUPPLIER"
+                  filterRole="SUPPLIER"
                   branch={branchId}
                   value={purchaseSupplier}
                   onChange={(val) => setPurchaseSupplier(val)}
@@ -932,7 +933,8 @@ export function ExpressQuickLogView({
 
                 <PartyDropdownSelector
                   label="Customer / Buyer"
-                  partyType="ALL"
+                  partyType="CUSTOMER"
+                  filterRole="CUSTOMER"
                   branch={branchId}
                   value={salesCustomer}
                   onChange={(val) => setSalesCustomer(val)}
@@ -979,6 +981,7 @@ export function ExpressQuickLogView({
                 <PartyDropdownSelector
                   label="Supplier / Creditor *"
                   partyType="SUPPLIER"
+                  filterRole="SUPPLIER"
                   branch={branchId}
                   value={creditSupplier}
                   onChange={(val) => setCreditSupplier(val)}
@@ -1264,7 +1267,7 @@ export function ExpressQuickLogView({
             <div className="space-y-2 pt-1 border-t border-slate-200 dark:border-[#1F1F1F]">
               <div className="flex items-center justify-between">
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  Description / Audit Notes
+                  DESCRIPTION / AUDIT NOTES (Optional)
                 </label>
                 <label className="cursor-pointer text-[11px] font-bold text-jct-turquoise hover:underline flex items-center gap-1">
                   <Upload size={12} />

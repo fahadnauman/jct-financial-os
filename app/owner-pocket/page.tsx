@@ -558,12 +558,13 @@ export default function OwnerPocketPage() {
 
   const savePurchase = async () => {
     const amount = parseFloat(pAmount);
-    if (!(amount > 0) || !pDescription.trim() || saving) return;
+    if (!(amount > 0) || saving) return;
     if (pBillType === "WITH_BILL" && !pReceiptUrl) {
       setToast("Please snap a photo or upload a bill when 'With Bill' is selected");
       setTimeout(() => setToast(null), 3500);
       return;
     }
+    const cleanNote = pDescription.trim();
     const paymentSource = pPaymentMode === "CREDIT" ? "SUPPLIER_CREDIT" : (pPaymentMode === "CARD" ? "BANK_TRANSFER" : "DRAWER_CASH");
     const ok = await finish(
       {
@@ -578,10 +579,10 @@ export default function OwnerPocketPage() {
         billFileName: pReceiptFileName,
         receiptUrl: pReceiptUrl,
         billPdfUrl: pReceiptUrl,
-        note: pDescription.trim(),
+        note: cleanNote,
         date: todayIso(),
       },
-      `Purchase SAR ${fmt(amount)} (${pDescription.trim()}) saved · ${branchShort(pBranch)}`
+      `Purchase SAR ${fmt(amount)}${cleanNote ? ` (${cleanNote})` : ""} saved · ${branchShort(pBranch)}`
     );
     if (ok) {
       setPAmount("");
@@ -1595,11 +1596,11 @@ export default function OwnerPocketPage() {
                   <BranchPicker value={pBranch} onChange={setPBranch} />
                 </div>
                 <div>
-                  <label className={labelCls}>Description / Material *</label>
+                  <label className={labelCls}>DESCRIPTION / AUDIT NOTES (Optional)</label>
                   <input
                     value={pDescription}
                     onChange={(e) => setPDescription(e.target.value)}
-                    placeholder="e.g. Paint thinner, Brushes, Jotun Primer"
+                    placeholder="Optional: Paint thinner, Brushes, Jotun Primer"
                     className={inputCls}
                   />
                 </div>
@@ -1723,7 +1724,6 @@ export default function OwnerPocketPage() {
                     onClick={savePurchase}
                     disabled={
                       !(parseFloat(pAmount) > 0) ||
-                      !pDescription.trim() ||
                       (pBillType === "WITH_BILL" && !pReceiptUrl) ||
                       uploadingPurchaseReceipt ||
                       saving
