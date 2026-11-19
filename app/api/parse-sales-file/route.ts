@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { PDFParse } from "pdf-parse";
 import { getData as getPdfWorkerData } from "pdf-parse/worker";
+import { GoogleGenAI } from "@google/genai";
 import { prisma } from "../../../lib/prisma";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 // Ensure pdfjs worker is configured inline so serverless / Edge-like Node environments never fail to locate pdf.worker.mjs
 try {
@@ -771,30 +773,90 @@ export async function POST(req: NextRequest) {
     let reportDate: string | null = null;
 
     if (fileName.endsWith(".pdf") || file.type === "application/pdf") {
-      const parser = new PDFParse({ data: new Uint8Array(buffer) });
+      let pdfParseError: string | null = null;
       try {
-        // Extract raw text (with pipe cellSeparator to match JCT PDF layout) and run the multi-line token state machine
-        const textResult = await parser.getText({ cellSeparator: " | " });
-        const fullText = textResult?.text || "";
-        if (fullText) {
-          reportDate = extractJctReportDate(fullText);
-          invoices = parseJctPdfTextToInvoices(fullText);
-        }
+        const parser = new PDFParse({ data: new Uint8Array(buffer) });
+        try {
+          // Extract raw text (with pipe cellSeparator to match JCT PDF layout) and run the multi-line token state machine
+          const textResult = await parser.getText({ cellSeparator: " | " });
+          const fullText = textResult?.text || "";
+          if (fullText) {
+            reportDate = extractJctReportDate(fullText);
+            invoices = parseJctPdfTextToInvoices(fullText);
+          }
 
-        // Fallback: if 0 rows matched or reportDate not yet extracted, also try default getText()
-        if (invoices.length === 0 || !reportDate) {
-          const fallbackTextResult = await parser.getText();
-          if (fallbackTextResult?.text) {
-            if (!reportDate) {
-              reportDate = extractJctReportDate(fallbackTextResult.text);
-            }
-            if (invoices.length === 0) {
-              invoices = parseJctPdfTextToInvoices(fallbackTextResult.text);
+          // Fallback: if 0 rows matched or reportDate not yet extracted, also try default getText()
+          if (invoices.length === 0 || !reportDate) {
+            const fallbackTextResult = await parser.getText();
+            if (fallbackTextResult?.text) {
+              if (!reportDate) {
+                reportDate = extractJctReportDate(fallbackTextResult.text);
+              }
+              if (invoices.length === 0) {
+                invoices = parseJctPdfTextToInvoices(fallbackTextResult.text);
+              }
             }
           }
+        } finally {
+          await parser.destroy().catch(() => {});
         }
-      } finally {
-        await parser.destroy().catch(() => {});
+      } catch (pdfErr) {
+        pdfParseError = pdfErr instanceof Error ? pdfErr.message : "PDF text extraction failed";
+        console.warn("pdf-parse error, attempting Gemini fallback:", pdfParseError);
+      }
+
+      // Gemini AI PDF document fallback (handles scanned PDFs or serverless worker issues)
+      if (invoices.length === 0 && process.env.GEMINI_API_KEY) {
+        try {
+          const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+          const aiRes = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: [
+              {
+                inlineData: {
+                  mimeType: "application/pdf",
+                  data: buffer.toString("base64"),
+                },
+              },
+              {
+                text: `Extract every invoice row from this JCT ERP Sale Summary PDF as a JSON object: {"reportDate": "DD-MMM-YYYY or null", "rows": [{"invoiceNo": "string", "customer": "string", "amount": number, "payType": "Cash|Bank|Card|Credit|Multi", "time": "HH:MM", "cashAmount": number, "bankAmount": number}]}. Return ONLY valid JSON.`,
+              },
+            ],
+          });
+          const rawJson = (aiRes.text || "").replace(/```json|```/gi, "").trim();
+          const parsedAi = JSON.parse(rawJson);
+          if (!reportDate && typeof parsedAi?.reportDate === "string") {
+            reportDate = parsedAi.reportDate;
+          }
+          if (Array.isArray(parsedAi?.rows)) {
+            for (const row of parsedAi.rows) {
+              const invNo = String(row?.invoiceNo || "").trim();
+              const amt = Number(row?.amount) || 0;
+              if (!invNo || amt <= 0) continue;
+              invoices.push(
+                buildInvoiceItem(
+                  invNo,
+                  String(row?.customer || "Walk-in Customer"),
+                  r2(amt),
+                  String(row?.payType || "Cash"),
+                  String(row?.time || nowHHMM()),
+                  Number(row?.cashAmount) || NaN,
+                  Number(row?.bankAmount) || NaN,
+                  invNo
+                )
+              );
+            }
+          }
+        } catch (aiErr) {
+          console.warn("Gemini PDF fallback failed:", aiErr);
+        }
+      }
+
+      if (invoices.length === 0 && pdfParseError) {
+        return NextResponse.json(
+          { error: `PDF parsing error: ${pdfParseError}`, invoices: [] },
+          { status: 422 }
+        );
       }
     } else {
       // Excel (.xls, .xlsx) or .csv via SheetJS (xlsx)

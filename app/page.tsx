@@ -4037,8 +4037,17 @@ function DailyRegisterView({
     setImportedFileName(file.name);
 
     try {
+      if (file.size > 4.5 * 1024 * 1024) {
+        setImportErrorMsg(
+          `File "${file.name}" (${(file.size / (1024 * 1024)).toFixed(1)} MB) exceeds the 4.5 MB upload limit. Please export as CSV/XLSX or split the PDF.`
+        );
+        setCsvLoadedBanner(false);
+        return;
+      }
+
       const lowerName = file.name.toLowerCase();
       let extracted: ErpInvoiceItem[] = [];
+      let serverErrorMsg: string | null = null;
 
       let extractedReportDate: string | null = null;
       const extractClientDurationDate = (rawText: string): string | null => {
@@ -4057,19 +4066,29 @@ function DailyRegisterView({
         formData.append("file", file);
         const res = await fetch("/api/parse-sales-file", {
           method: "POST",
+          headers: {
+            "x-branch-id": branchId || "JCT_HARDWARE_JOTUN",
+          },
           body: formData,
         });
+        const data = await res.json().catch(() => null);
         if (res.ok) {
-          const data = await res.json();
           if (typeof data?.reportDate === "string" && data.reportDate.trim()) {
             extractedReportDate = data.reportDate.trim();
           }
           if (Array.isArray(data?.invoices) && data.invoices.length > 0) {
             extracted = data.invoices;
           }
+        } else {
+          serverErrorMsg =
+            data?.error ||
+            (res.status === 413
+              ? "Uploaded file is too large (max 4.5 MB)."
+              : `Server parser returned HTTP ${res.status}.`);
         }
       } catch (apiErr) {
         console.warn("Server parse fallback to client parser:", apiErr);
+        serverErrorMsg = apiErr instanceof Error ? apiErr.message : "Network error uploading file";
       }
 
       // 2. Client-side Excel (.xls, .xlsx) or CSV fallback via SheetJS (xlsx)
@@ -4105,7 +4124,8 @@ function DailyRegisterView({
 
       if (extracted.length === 0) {
         setImportErrorMsg(
-          "No valid invoice rows (Branch Inv No., Amount, Payment Method) were detected in this file. Please check the file format or proceed to manual entry."
+          serverErrorMsg ||
+            "No valid invoice rows (Branch Inv No., Amount, Payment Method) were detected in this file. Please check the file format (.pdf, .csv, .xlsx) or proceed to manual entry."
         );
         setCsvLoadedBanner(false);
         return;
@@ -4124,7 +4144,11 @@ function DailyRegisterView({
       }
 
       const matched = applyPreLoggedMatchesToImported(extracted);
-      setErpInvoices(matched);
+      // Preserve any existing Manual POS entries and manual invoices when importing a Sale Summary
+      setErpInvoices((prev) => {
+        const existingManuals = prev.filter((inv) => inv.isManual || inv.isManualPos);
+        return [...matched, ...existingManuals];
+      });
       setCsvLoadedBanner(true);
 
       // Background auto-harvesting of all uploaded PDF/CSV customer names into PartyDirectory
@@ -4173,10 +4197,15 @@ function DailyRegisterView({
   };
 
   const handleCsvFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    void processSalesImportFile(file);
-    e.target.value = "";
+    const inputEl = e.currentTarget;
+    const file = inputEl.files?.[0];
+    if (!file) {
+      inputEl.value = "";
+      return;
+    }
+    void processSalesImportFile(file).finally(() => {
+      inputEl.value = "";
+    });
   };
 
   const handleDropSalesFile = (e: React.DragEvent<HTMLLabelElement>) => {
