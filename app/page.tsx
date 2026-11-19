@@ -6731,10 +6731,9 @@ function DailyRegisterView({
     autoDeductManualPos &&
     hasUploadedErpSummary &&
     manualPosReclassifiedTotal > 0;
-  const cashSalesTotal =
-    isJctHqProfile && autoDeductManualPos && hasUploadedErpSummary
-      ? r2(Math.max(0, uploadedCashSalesPool - manualPosReclassifiedTotal))
-      : uploadedCashSalesPool;
+  // Keep Gross Cash-Billed Sales intact (Manual POS Swipes are routed to Cash Outflows for JCT HQ)
+  const cashSalesTotal = uploadedCashSalesPool;
+  const manualPosCashOutflow = isManualPosReclassificationActive ? manualPosReclassifiedTotal : 0;
   const sessionPosBreakdown = useMemo(
     () => calcSessionPosBreakdown(activeErpList, preLoggedBankInvoices, preLoggedEntries),
     [activeErpList, preLoggedBankInvoices, preLoggedEntries]
@@ -6828,12 +6827,12 @@ function DailyRegisterView({
       return a + b.amount;
     }, 0)
   );
-  // ONLY Cash Outflows deduct from the physical Cash Drawer
-  const totalPreLoggedExpenses = totalCashOutflows;
+  // ONLY Cash Outflows (+ JCT HQ Manual POS Swipes when ERP summary is uploaded) deduct from the physical Cash Drawer
+  const totalMoneyOutDrawer = r2(totalCashOutflows + manualPosCashOutflow);
+  const totalPreLoggedExpenses = totalMoneyOutDrawer;
 
   const totalCashInSalesAndReceipts = r2(cashSalesTotal + totalPreLoggedInflows);
   const totalMoneyInDrawer = r2(openingBalance + totalCashInSalesAndReceipts);
-  const totalMoneyOutDrawer = r2(totalCashOutflows);
   const calculatedClosingBalance = r2(totalMoneyInDrawer - totalMoneyOutDrawer);
 
   // Intelligent Drawer Closing: Lock or Save Pending Audit Draft with Discrepancy & Float Sync
@@ -8491,8 +8490,8 @@ function DailyRegisterView({
                     {isManualPosReclassificationActive ? (
                       <div className="mt-2 space-y-0.5 rounded-lg border border-amber-500/25 bg-amber-500/10 px-2.5 py-1.5 text-[11px] tabular-nums text-amber-800 dark:text-amber-300">
                         <div>ERP Cash-Billed Sales Pool: <strong>SAR {fmt(uploadedCashSalesPool)}</strong></div>
-                        <div>Less: Manual POS Swipes Reclassified to Card: <strong>-SAR {fmt(manualPosReclassifiedTotal)}</strong></div>
-                        <div>Net Cash Sales Entering Drawer: <strong>SAR {fmt(cashSalesTotal)}</strong></div>
+                        <div>Manual POS Swipes (Routed to Cash Outflows): <strong>-SAR {fmt(manualPosReclassifiedTotal)}</strong></div>
+                        <div>Net Cash Contribution to Drawer: <strong>SAR {fmt(Math.max(0, r2(uploadedCashSalesPool - manualPosReclassifiedTotal)))}</strong></div>
                       </div>
                     ) : (
                       <span className="mt-0.5 block text-[11px] text-slate-500 dark:text-slate-400">
@@ -10916,8 +10915,8 @@ function DailyRegisterView({
                   {isManualPosReclassificationActive && (
                     <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-amber-800 dark:text-amber-300 bg-amber-500/10 border border-amber-500/25 rounded-lg px-3 py-1.5 print:border-black print:bg-white print:text-black">
                       <span>ERP Cash-Billed Sales Pool: <strong>SAR {fmt(uploadedCashSalesPool)}</strong></span>
-                      <span>Less: Manual POS Swipes Reclassified to Card: <strong>-SAR {fmt(manualPosReclassifiedTotal)}</strong></span>
-                      <span>Net Cash Sales Entering Drawer: <strong>SAR {fmt(cashSalesTotal)}</strong></span>
+                      <span>Manual POS Swipes (Included in Cash Outflows): <strong>-SAR {fmt(manualPosCashOutflow)}</strong></span>
+                      <span>Net Cash Contribution: <strong>SAR {fmt(Math.max(0, r2(uploadedCashSalesPool - manualPosCashOutflow)))}</strong></span>
                     </div>
                   )}
                   {cashCommissionAdjustmentsTotal > 0 && (
@@ -10944,8 +10943,8 @@ function DailyRegisterView({
                       {isManualPosReclassificationActive && (
                         <div className="mt-2 space-y-0.5 text-[11px] text-amber-700 dark:text-amber-300 print:text-black">
                           <div>ERP Cash-Billed Sales Pool: <strong className="text-jct-charcoal dark:text-jct-offwhite print:text-black">SAR {fmt(uploadedCashSalesPool)}</strong></div>
-                          <div>Less: Manual POS Swipes Reclassified: <strong className="text-amber-600 dark:text-amber-400 print:text-black">-SAR {fmt(manualPosReclassifiedTotal)}</strong></div>
-                          <div>Net Cash Sales Entering Drawer: <strong className="text-emerald-600 dark:text-emerald-400 print:text-black">SAR {fmt(cashSalesTotal)}</strong></div>
+                          <div>Manual POS Swipes (In Outflows): <strong className="text-amber-600 dark:text-amber-400 print:text-black">-SAR {fmt(manualPosCashOutflow)}</strong></div>
+                          <div>Net Cash Contribution: <strong className="text-emerald-600 dark:text-emerald-400 print:text-black">SAR {fmt(Math.max(0, r2(uploadedCashSalesPool - manualPosCashOutflow)))}</strong></div>
                         </div>
                       )}
                       {cashCommissionAdjustmentsTotal > 0 && (
@@ -11023,7 +11022,12 @@ function DailyRegisterView({
                       </span>
                     </div>
                     <div className="text-[11px] text-slate-500 dark:text-slate-400 border-t border-slate-200 dark:border-[#1F1F1F] pt-2 print:text-black print:border-black flex flex-col gap-0.5">
-                      <span>{cashExpenseEntries.length} Cash Outflows (Drawer)</span>
+                      <span>{cashExpenseEntries.length} Cash Outflows (Expenses &amp; Commissions): SAR {fmt(totalCashOutflows)}</span>
+                      {isManualPosReclassificationActive && (
+                        <span className="font-bold text-amber-700 dark:text-amber-300 print:text-black">
+                          + Manual POS Swipes (Cash Outflow): SAR {fmt(manualPosCashOutflow)}
+                        </span>
+                      )}
                       <span className="text-[10px]">
                         Bank/Card: SAR {fmt(totalBankOutflows)} · Credit/Pay Later: SAR {fmt(totalCreditOutflows)}
                       </span>
@@ -16041,6 +16045,7 @@ interface LiveCrossModuleMetrics {
   closingDrawerBalance: number;
   totalCreditOutstanding: number;
   totalSupplierPayables: number;
+  manualPosCashOutflow?: number;
 }
 
 function FinancialPulseView({
@@ -16088,7 +16093,10 @@ function FinancialPulseView({
       .filter((i) => !i.isReturned && i.paymentMode === "CREDIT_SALE")
       .reduce((s, i) => s + (Number(i.amount) || 0), 0)
   );
-  const liveGrossSalesToday = r2(metrics.todayCashSales + metrics.todayBankNet + liveCreditSalesToday);
+  const manualPosOffset = Number(metrics.manualPosCashOutflow) || 0;
+  const liveGrossSalesToday = r2(
+    Math.max(0, metrics.todayCashSales + metrics.todayBankNet - manualPosOffset) + liveCreditSalesToday
+  );
   const liveAllExpensesToday = r2(
     preLoggedEntries
       .filter((e) => !e.isReturned && e.type === "EXPENSE")
@@ -16113,10 +16121,10 @@ function FinancialPulseView({
     )
   );
   const mtdRevenue = r2(
-    archivedInflowsAndSwipes + metrics.todayCashSales + metrics.todayBankNet
+    archivedInflowsAndSwipes + Math.max(0, metrics.todayCashSales + metrics.todayBankNet - manualPosOffset)
   );
   const mtdCashCollected = r2(
-    archivedInflowsAndSwipes + metrics.todayCashSales + metrics.todayBankNet
+    archivedInflowsAndSwipes + Math.max(0, metrics.todayCashSales + metrics.todayBankNet - manualPosOffset)
   );
   const totalRadarPool = r2(mtdCashCollected + metrics.totalCreditOutstanding);
   const cashRealizationPct =
@@ -22089,10 +22097,11 @@ export default function Page() {
       0
     )
   );
-  const todayCashSales =
+  const todayCashSales = uploadedCashPoolForMetrics;
+  const manualPosCashOutflowForMetrics =
     isJctHqMetrics && autoDeductManualPos && hasUploadedErpForMetrics
-      ? r2(Math.max(0, uploadedCashPoolForMetrics - manualPosTotalForMetrics))
-      : uploadedCashPoolForMetrics;
+      ? manualPosTotalForMetrics
+      : 0;
   const activeSessionPosBreakdown = useMemo(
     () => calcSessionPosBreakdown(activeErpForMetrics, preLoggedBankInvoices, preLoggedEntries),
     [activeErpForMetrics, preLoggedBankInvoices, preLoggedEntries]
@@ -22109,12 +22118,13 @@ export default function Page() {
       .filter((e) => !e.isReturned && e.type !== "EXPENSE" && e.type !== "CREDIT_SALE" && e.type !== "SPLIT_SALE" && (!e.paymentMode || e.paymentMode === "CASH"))
       .reduce((a, b) => a + b.amount, 0)
   );
-  // Strict Accounting Separation: Only CASH outflows deduct from Physical Cash Drawer
-  const todayExpenses = r2(
+  // Strict Accounting Separation: Only CASH outflows (+ JCT HQ Manual POS Swipes when ERP summary is uploaded) deduct from Physical Cash Drawer
+  const baseCashExpensesForMetrics = r2(
     preLoggedEntries
       .filter((e) => !e.isReturned && e.type === "EXPENSE" && classifyExpenseOutflow(e) === "CASH")
       .reduce((a, b) => a + b.amount, 0)
   );
+  const todayExpenses = r2(baseCashExpensesForMetrics + manualPosCashOutflowForMetrics);
   const closingDrawerBalance = r2(
     openingBalance + todayCashSales + todayInflows - todayExpenses
   );
@@ -22134,6 +22144,7 @@ export default function Page() {
     closingDrawerBalance,
     totalCreditOutstanding,
     totalSupplierPayables,
+    manualPosCashOutflow: manualPosCashOutflowForMetrics,
   };
 
   const liveAiTxns: Txn[] = [
