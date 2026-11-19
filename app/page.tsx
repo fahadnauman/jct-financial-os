@@ -3303,6 +3303,7 @@ function DailyRegisterView({
   const [showHandover, setShowHandover] = useState(false);
   const [isSavingDrawerLock, setIsSavingDrawerLock] = useState(false);
   const [expandedTopicBlocks, setExpandedTopicBlocks] = useState<Record<string, boolean>>({});
+  const [showTotalSalesBreakdown, setShowTotalSalesBreakdown] = useState(false);
 
   // Step 3 (Credit & Cash Inflows & Split Payments) 2-Panel State
   const [step3Kind, setStep3Kind] = useState<
@@ -6835,6 +6836,18 @@ function DailyRegisterView({
   const totalMoneyInDrawer = r2(openingBalance + totalCashInSalesAndReceipts);
   const calculatedClosingBalance = r2(totalMoneyInDrawer - totalMoneyOutDrawer);
 
+  // Read-only Total Gross Sales across all modes (strictly honoring JCT HQ zero-double-count rule)
+  const creditSalesInvoicesTotal = r2(
+    activeErpList
+      .filter((i) => !i.isReturned && i.paymentMode === "CREDIT_SALE")
+      .reduce((sum, inv) => sum + (Number(inv.amount) || 0), 0)
+  );
+  const totalCreditSalesAll = r2(creditSalesInvoicesTotal + totalCreditInvAmount);
+  const nonDoubleCountedBankPosTotal = r2(
+    Math.max(0, bankSwipeGrossTotal - manualPosCashOutflow)
+  );
+  const totalGrossSales = r2(cashSalesTotal + nonDoubleCountedBankPosTotal + totalCreditSalesAll);
+
   // Intelligent Drawer Closing: Lock or Save Pending Audit Draft with Discrepancy & Float Sync
   const handleConfirmLockWithFloat = async (
     takeHomeAmount: number,
@@ -7409,6 +7422,53 @@ function DailyRegisterView({
                 <span className="text-rose-600 dark:text-rose-400 font-semibold">SAR {fmt(totalPreLoggedExpenses)} Expenses</span>
               </div>
             </div>
+          </div>
+
+          {/* Prominent TOTAL SALES (ALL MODES) Hero KPI Card */}
+          <div className="w-full rounded-2xl border-2 border-cyan-500/40 bg-gradient-to-r from-slate-900 via-slate-950 to-slate-900 p-5 shadow-md text-white">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <span className="text-[11px] font-black uppercase tracking-wider text-cyan-300">
+                  📊 TOTAL SALES (ALL MODES)
+                </span>
+                <div className="mt-1 font-mono text-2xl sm:text-3xl font-black tabular-nums tracking-tight text-white">
+                  SAR {fmt(totalGrossSales)}
+                </div>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Cash Sales + Uploaded Card + Direct Bank Transfers + Credit Sales
+                  {isManualPosReclassificationActive ? " · JCT HQ zero-double-count active" : ""}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowTotalSalesBreakdown((prev) => !prev)}
+                className="rounded-xl border border-cyan-400/40 bg-cyan-500/15 hover:bg-cyan-500/25 px-3.5 py-2 text-xs font-bold text-cyan-300 transition"
+              >
+                {showTotalSalesBreakdown ? "Hide Breakdown ▲" : "Show Breakdown ▼"}
+              </button>
+            </div>
+            {showTotalSalesBreakdown && (
+              <div className="mt-4 pt-3 border-t border-white/10 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
+                <div className="rounded-lg bg-white/5 p-2.5">
+                  <div className="text-[10px] text-slate-400 uppercase">Cash Sales</div>
+                  <div className="font-black text-emerald-300 mt-0.5">SAR {fmt(cashSalesTotal)}</div>
+                </div>
+                <div className="rounded-lg bg-white/5 p-2.5">
+                  <div className="text-[10px] text-slate-400 uppercase">POS Card Swipes</div>
+                  <div className="font-black text-cyan-300 mt-0.5">
+                    SAR {fmt(Math.max(0, r2(sessionPosBreakdown.posSwipesTotal - manualPosCashOutflow)))}
+                  </div>
+                </div>
+                <div className="rounded-lg bg-white/5 p-2.5">
+                  <div className="text-[10px] text-slate-400 uppercase">Direct Bank Transfers</div>
+                  <div className="font-black text-sky-300 mt-0.5">SAR {fmt(sessionPosBreakdown.bankTransferTotal)}</div>
+                </div>
+                <div className="rounded-lg bg-white/5 p-2.5">
+                  <div className="text-[10px] text-slate-400 uppercase">Credit Sales</div>
+                  <div className="font-black text-amber-300 mt-0.5">SAR {fmt(totalCreditSalesAll)}</div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Top Dashboard Metrics (3 Values) */}
@@ -10884,6 +10944,39 @@ function DailyRegisterView({
                       )}
                     </div>
                   </div>
+
+                {/* 1B. Prominent TOTAL SALES Hero Summary Card (Step 5 Final Audit) */}
+                <div className="w-full rounded-xl border-2 border-cyan-500/40 bg-gradient-to-r from-slate-900 via-slate-950 to-slate-900 p-5 text-white shadow-md mb-2 print:bg-white print:text-black print:border print:border-black print:rounded-none">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
+                    <div>
+                      <span className="text-[11px] font-black uppercase tracking-wider text-cyan-300 print:text-black">
+                        📊 TOTAL SALES (ALL MODES)
+                      </span>
+                      <div className="mt-1 font-mono text-2xl sm:text-3xl font-black tabular-nums text-white print:text-black">
+                        SAR {fmt(totalGrossSales)}
+                      </div>
+                      <span className="text-[10px] text-slate-400 print:text-black">
+                        Cash + Card (Net of HQ Offset) + Bank + Credit
+                      </span>
+                    </div>
+                    <div className="sm:border-l sm:border-white/10 sm:pl-4 print:border-black">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 print:text-black">
+                        Expected Cash in Drawer
+                      </span>
+                      <div className="mt-0.5 font-mono text-xl font-black tabular-nums text-amber-300 print:text-black">
+                        SAR {fmt(calculatedClosingBalance)}
+                      </div>
+                    </div>
+                    <div className="sm:border-l sm:border-white/10 sm:pl-4 print:border-black">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 print:text-black">
+                        Net Operating Position
+                      </span>
+                      <div className="mt-0.5 font-mono text-xl font-black tabular-nums text-emerald-300 print:text-black">
+                        SAR {fmt(r2(totalGrossSales - totalCashOutflows))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
 
                 {/* 2. Streamlined Hero Drawer Closing Card */}
                 <div className="w-full bg-white dark:bg-gradient-to-b dark:from-slate-900/90 dark:to-slate-950/95 shadow-sm border border-jct-yellow/20 dark:border-white/10 dark:border-t-white/15 hover:border-cyan-500/40 hover:shadow-lg hover:shadow-cyan-950/30 rounded-xl p-6 mb-2 transition-all duration-200 print:shadow-none print:border print:border-black print:rounded-none print:bg-white print:text-black print:p-6 print:mb-4 print:break-inside-avoid">
@@ -18723,6 +18816,113 @@ function AuditLibraryView({
               </div>
             </div>
           )}
+        </div>
+
+        {/* 4B. CLASSICAL DATA SHEET (TRADITIONAL LEDGER VIEW — Included in Print / PDF Export) */}
+        <div
+          style={{ pageBreakBefore: "always" }}
+          className="bg-white dark:bg-[#0A0A0A] border border-slate-300 dark:border-[#1F1F1F] rounded-xl p-6 space-y-4 print:block print:border-black print:rounded-none print:bg-white print:text-black print:p-4"
+        >
+          <div className="border-b-2 border-slate-800 dark:border-white/20 pb-3 flex flex-wrap items-center justify-between gap-2 print:border-black">
+            <div>
+              <h3 className="font-display text-lg font-black uppercase tracking-tight text-jct-charcoal dark:text-white print:text-black">
+                CLASSICAL DATA SHEET (TRADITIONAL LEDGER VIEW)
+              </h3>
+              <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 print:text-black">
+                Jubail Corp. Trading Est. · {bInfo.name} · Date: {selectedRecord.date} (AST)
+              </p>
+            </div>
+            <span className="rounded border border-slate-400 px-2.5 py-1 text-[11px] font-mono font-bold uppercase text-jct-charcoal dark:text-white print:border-black print:text-black">
+              Status: {selectedRecord.auditStatus || selectedRecord.status}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 print:grid-cols-2">
+            {/* Credits / Inflows (CR) */}
+            <div className="border border-slate-300 dark:border-[#262626] rounded-lg overflow-hidden print:border-black">
+              <div className="bg-slate-100 dark:bg-[#141414] px-3.5 py-2 text-xs font-black uppercase tracking-wider text-jct-charcoal dark:text-white border-b border-slate-300 dark:border-[#262626] print:bg-slate-100 print:text-black print:border-black">
+                Credits / Inflows (CR)
+              </div>
+              <table className="w-full text-xs">
+                <tbody className="divide-y divide-slate-200 dark:divide-[#1F1F1F] print:divide-slate-300">
+                  <tr>
+                    <td className="px-3.5 py-2 font-semibold">Opening Cash Float</td>
+                    <td className="px-3.5 py-2 text-right font-mono font-bold tabular-nums">SAR {fmt(editOpeningCash)}</td>
+                  </tr>
+                  <tr>
+                    <td className="px-3.5 py-2 font-semibold">Cash Sales &amp; Drawer Receipts</td>
+                    <td className="px-3.5 py-2 text-right font-mono font-bold tabular-nums">SAR {fmt(editInflows)}</td>
+                  </tr>
+                  <tr>
+                    <td className="px-3.5 py-2 font-semibold">Bank &amp; POS Card Settlements</td>
+                    <td className="px-3.5 py-2 text-right font-mono font-bold tabular-nums">SAR {fmt(editBankSwipes)}</td>
+                  </tr>
+                  {editInflowItems.map((inf) => (
+                    <tr key={inf.id}>
+                      <td className="px-3.5 py-1.5 text-[11px] text-slate-600 dark:text-slate-300 print:text-black">
+                        {inf.title} ({inf.paymentMode || "CASH"})
+                      </td>
+                      <td className="px-3.5 py-1.5 text-right font-mono text-[11px] tabular-nums">
+                        SAR {fmt(inf.amount)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Debits / Outflows (DR) */}
+            <div className="border border-slate-300 dark:border-[#262626] rounded-lg overflow-hidden print:border-black">
+              <div className="bg-slate-100 dark:bg-[#141414] px-3.5 py-2 text-xs font-black uppercase tracking-wider text-jct-charcoal dark:text-white border-b border-slate-300 dark:border-[#262626] print:bg-slate-100 print:text-black print:border-black">
+                Debits / Outflows (DR)
+              </div>
+              <table className="w-full text-xs">
+                <tbody className="divide-y divide-slate-200 dark:divide-[#1F1F1F] print:divide-slate-300">
+                  <tr>
+                    <td className="px-3.5 py-2 font-semibold">Total Cash Outflows (Drawer)</td>
+                    <td className="px-3.5 py-2 text-right font-mono font-bold tabular-nums">SAR {fmt(editOutflows)}</td>
+                  </tr>
+                  {editExpenses.map((exp) => (
+                    <tr key={exp.id}>
+                      <td className="px-3.5 py-1.5 text-[11px] text-slate-600 dark:text-slate-300 print:text-black">
+                        {exp.title} ({exp.expenseCategory || "Expense"} · {exp.paymentMode || "CASH"})
+                      </td>
+                      <td className="px-3.5 py-1.5 text-right font-mono text-[11px] tabular-nums">
+                        SAR {fmt(exp.amount)}
+                      </td>
+                    </tr>
+                  ))}
+                  <tr className="bg-slate-50 dark:bg-[#111] print:bg-slate-100">
+                    <td className="px-3.5 py-2 font-black">Verified Closing Cash in Drawer</td>
+                    <td className="px-3.5 py-2 text-right font-mono font-black tabular-nums">SAR {fmt(editClosingCash)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-3 border-t-2 border-slate-800 dark:border-white/20 text-xs font-mono print:border-black">
+            <div>
+              <div className="text-[10px] text-slate-500 uppercase print:text-black">Total Sales</div>
+              <div className="font-black tabular-nums">SAR {fmt(r2(editInflows + editBankSwipes))}</div>
+            </div>
+            <div>
+              <div className="text-[10px] text-slate-500 uppercase print:text-black">Total Inflows</div>
+              <div className="font-black tabular-nums">SAR {fmt(r2(editOpeningCash + editInflows))}</div>
+            </div>
+            <div>
+              <div className="text-[10px] text-slate-500 uppercase print:text-black">Total Outflows</div>
+              <div className="font-black tabular-nums">SAR {fmt(editOutflows)}</div>
+            </div>
+            <div>
+              <div className="text-[10px] text-slate-500 uppercase print:text-black">Net Operating Surplus</div>
+              <div className="font-black tabular-nums">SAR {fmt(r2(editInflows + editBankSwipes - editOutflows))}</div>
+            </div>
+            <div>
+              <div className="text-[10px] text-slate-500 uppercase print:text-black">Closing Cash</div>
+              <div className="font-black tabular-nums">SAR {fmt(editClosingCash)}</div>
+            </div>
+          </div>
         </div>
 
         {/* 5. Sticky Bottom Action Bar */}
