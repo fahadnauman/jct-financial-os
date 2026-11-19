@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "../../../lib/prisma";
 import { checkIsOwner, checkStaffBranchAccess, normalizeBranch, normalizePaymentMode, VALID_BRANCHES } from "../../../lib/auth-audit";
 import { sanitizeOptionalString, validateAmount } from "../../../lib/sanitize";
+import { saudiTodayIso } from "../../../lib/saudi-time";
 
 export const dynamic = "force-dynamic";
 
@@ -23,27 +24,17 @@ export async function GET(req: Request) {
   const rawBranch = searchParams.get("branch") || searchParams.get("branchId");
   const branch = rawBranch && rawBranch !== "ALL" ? normalizeBranch(rawBranch) : rawBranch;
   const date = searchParams.get("date");
-
-  // Compute 12:00 AM calendar boundaries for current day query
-  const now = new Date();
-  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-  const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+  const isAllDates = date?.trim().toUpperCase() === "ALL";
+  const targetDate = date && !isAllDates ? date.trim() : saudiTodayIso();
 
   try {
     const rows = await prisma.pocketTransaction.findMany({
       where: {
         ...(branch && branch !== "ALL" ? { branch } : {}),
-        ...(date
-          ? { date }
-          : {
-              createdAt: {
-                gte: startOfDay,
-                lt: endOfDay,
-              },
-            }),
+        ...(isAllDates ? {} : { date: targetDate }),
       },
-      orderBy: { createdAt: "asc" },
-      take: 500,
+      orderBy: { createdAt: isAllDates ? "desc" : "asc" },
+      take: isAllDates ? 1000 : 500,
     });
     return NextResponse.json({ transactions: rows });
   } catch (err) {

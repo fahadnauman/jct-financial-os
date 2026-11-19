@@ -35,6 +35,13 @@ interface ExpressQuickLogViewProps {
   currentUserRole?: string;
   activeSessionDate?: string;
   liveParties?: PartyItem[];
+  supplierBills?: Array<{
+    id: string;
+    supplierName: string;
+    amount: number;
+    category: string;
+    paymentMode?: string;
+  }>;
   onSyncWithRegister?: (entry: {
     type: QuickLogType;
     payload: Record<string, unknown>;
@@ -91,6 +98,7 @@ export function ExpressQuickLogView({
   currentUserRole = "STAFF",
   activeSessionDate,
   liveParties = [],
+  supplierBills = [],
   onSyncWithRegister,
   onDeleteSyncedEntry,
   onPreviewBill,
@@ -140,10 +148,21 @@ export function ExpressQuickLogView({
   const [returnRefundMode, setReturnRefundMode] = useState<"CASH_REFUND" | "CARD_BANK_REVERSAL" | "CREDIT_NOTE">("CASH_REFUND");
   const [returnReason, setReturnReason] = useState(RETURN_REASONS[0]);
 
-  // Credit Supplier specific
+  // Credit Purchase Payment specific
   const [creditSupplier, setCreditSupplier] = useState("");
+  const [creditPaymentMode, setCreditPaymentMode] = useState<"CASH" | "BANK_TRANSFER" | "CARD">("CASH");
   const [creditDueDate, setCreditDueDate] = useState<string>(() => addSaudiDays(7));
   const [creditInvoiceRef, setCreditInvoiceRef] = useState("");
+
+  // Live Saudi AST Date Lock (auto-resets feed at 00:00 AST)
+  const [liveSaudiToday, setLiveSaudiToday] = useState<string>(() => saudiTodayIso());
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const next = saudiTodayIso();
+      setLiveSaudiToday((prev) => (prev !== next ? next : prev));
+    }, 30000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Live Activity Feed
   const [activityFeed, setActivityFeed] = useState<PocketTransaction[]>([]);
@@ -182,9 +201,24 @@ export function ExpressQuickLogView({
 
   const effectiveDate = activeSessionDate && /^\d{4}-\d{2}-\d{2}$/.test(activeSessionDate)
     ? activeSessionDate
-    : saudiTodayIso();
+    : liveSaudiToday;
 
-  // Load today's activity feed from /api/pocket
+  const formattedFeedDatePill = useMemo(() => {
+    try {
+      const d = new Date(`${effectiveDate}T12:00:00+03:00`);
+      return d.toLocaleDateString("en-US", {
+        timeZone: "Asia/Riyadh",
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
+    } catch {
+      return effectiveDate;
+    }
+  }, [effectiveDate]);
+
+  // Load today's activity feed from /api/pocket (strictly filtered to effectiveDate Saudi AST)
   const loadFeed = async () => {
     setFeedLoading(true);
     try {
@@ -193,7 +227,11 @@ export function ExpressQuickLogView({
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data.transactions)) {
-          setActivityFeed(data.transactions.reverse());
+          const strictDaily = (data.transactions as PocketTransaction[]).filter((tx) => {
+            const txDate = tx.date || (tx.createdAt ? saudiTodayIso(new Date(tx.createdAt)) : effectiveDate);
+            return txDate === effectiveDate;
+          });
+          setActivityFeed(strictDaily.reverse());
         }
       }
     } catch (err) {
@@ -322,12 +360,17 @@ export function ExpressQuickLogView({
           return;
         }
         pocketType = "PURCHASE";
-        category = "Credit Purchase";
+        category = "Supplier Credit Payment";
         recipientName = creditSupplier.trim();
-        paymentSource = "SUPPLIER_CREDIT";
-        paymentMode = "CREDIT";
+        paymentSource =
+          creditPaymentMode === "CASH"
+            ? "DRAWER_CASH"
+            : creditPaymentMode === "BANK_TRANSFER"
+            ? "BANK_TRANSFER"
+            : "CARD";
+        paymentMode = creditPaymentMode;
         supplierInvoiceNum = creditInvoiceRef.trim() || null;
-        finalNote = `Credit Purchase Payment (Due: ${creditDueDate})${finalNote ? ` · ${finalNote}` : ""}`;
+        finalNote = `Supplier Credit Payment (${creditPaymentMode})${finalNote ? ` · ${finalNote}` : ""}`;
       } else if (activeType === "PURCHASE") {
         pocketType = "PURCHASE";
         category = purchasePaymentMode === "CREDIT" ? "Credit Purchase" : "Cash Purchase";
@@ -926,16 +969,16 @@ export function ExpressQuickLogView({
               </div>
             )}
 
-            {/* 3B. Contextual Fields: CREDIT PURCHASE PAYMENT (Deferred Supplier Payable) */}
+            {/* 3B. Contextual Fields: CREDIT PURCHASE PAYMENT (Actual Supplier Debt Payment) */}
             {activeType === "CREDIT_SUPPLIER" && (
               <div className="space-y-3 animate-fade-slide-up">
-                <div className="rounded-lg border border-purple-500/40 bg-purple-500/10 px-3 py-2 text-[11px] font-bold text-purple-700 dark:text-purple-300">
-                  ⏳ Unpaid Credit Entry — Payment Mode will be recorded when settled
+                <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-[11px] font-bold text-emerald-700 dark:text-emerald-300">
+                  💸 Supplier Debt Payment — Deducts from Cash/Bank &amp; Reduces Open Credit Purchases (FIFO)
                 </div>
 
                 <PartyDropdownSelector
-                  label="Supplier / Company Name *"
-                  partyType="ALL"
+                  label="Supplier / Creditor *"
+                  partyType="SUPPLIER"
                   branch={branchId}
                   value={creditSupplier}
                   onChange={(val) => setCreditSupplier(val)}
@@ -944,6 +987,58 @@ export function ExpressQuickLogView({
                   placeholder="Select or type Supplier / Company name..."
                   required
                 />
+
+                {(() => {
+                  const cleanQuery = creditSupplier.trim().toLowerCase();
+                  if (!cleanQuery) return null;
+                  const openBalance = supplierBills
+                    .filter(
+                      (b) =>
+                        b.category === "Credit Purchase" &&
+                        b.amount > 0 &&
+                        b.paymentMode !== "SETTLED" &&
+                        (b.supplierName.toLowerCase().includes(cleanQuery) ||
+                          cleanQuery.includes(b.supplierName.toLowerCase()))
+                    )
+                    .reduce((sum, b) => sum + (Number(b.amount) || 0), 0);
+                  if (openBalance <= 0) return null;
+                  return (
+                    <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 flex items-center justify-between text-xs font-bold">
+                      <span className="text-amber-700 dark:text-amber-300">Open Credit Balance ({creditSupplier.trim()}):</span>
+                      <span className="font-mono font-black text-amber-600 dark:text-amber-300">
+                        SAR {fmt(openBalance)} due
+                      </span>
+                    </div>
+                  );
+                })()}
+
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+                    Mode of Payment *
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(
+                      [
+                        ["CASH", "💵 Cash Drawer"],
+                        ["BANK_TRANSFER", "🏦 Bank Transfer"],
+                        ["CARD", "💳 Card"],
+                      ] as const
+                    ).map(([m, lbl]) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => setCreditPaymentMode(m)}
+                        className={`rounded-xl px-2.5 py-2 text-xs font-bold border transition active:scale-[0.97] ${
+                          creditPaymentMode === m
+                            ? "bg-emerald-500 text-slate-950 border-emerald-400 font-black shadow-sm"
+                            : "bg-slate-50 dark:bg-[#111] border-slate-200 dark:border-[#222] text-slate-600 dark:text-slate-300"
+                        }`}
+                      >
+                        {lbl}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
                 <div>
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
@@ -1218,10 +1313,13 @@ export function ExpressQuickLogView({
         <div className="lg:col-span-5 bg-white dark:bg-[#0A0A0A] border border-slate-200 dark:border-[#1F1F1F] rounded-2xl p-5 shadow-sm space-y-4">
           <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#1F1F1F] pb-3">
             <div>
-              <h3 className="text-sm font-extrabold text-jct-charcoal dark:text-white flex items-center gap-2">
+              <h3 className="text-sm font-extrabold text-jct-charcoal dark:text-white flex items-center gap-2 flex-wrap">
                 <span>Today&apos;s Live Branch Feed</span>
+                <span className="rounded-md bg-cyan-500/15 border border-cyan-500/30 px-2 py-0.5 text-[10px] font-mono font-bold text-cyan-700 dark:text-cyan-300">
+                  {formattedFeedDatePill}
+                </span>
               </h3>
-              <p className="text-[11px] text-slate-400">Desktop & Mobile PWA entries synced in real time</p>
+              <p className="text-[11px] text-slate-400">Desktop &amp; Mobile PWA entries synced in real time (Saudi AST daily reset)</p>
             </div>
             <span className="rounded-full bg-slate-100 dark:bg-[#1A1A1A] border border-slate-200 dark:border-white/10 px-2.5 py-0.5 text-[10px] font-mono font-bold text-jct-turquoise">
               {activityFeed.length} logged

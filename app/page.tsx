@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useSession, signIn, signOut } from "next-auth/react";
 import { usePathname, useRouter } from "next/navigation";
-import { POCKET_CUSTOMERS_KEY, pocketTag, usePocketTransactions, type BranchId } from "../lib/pocket-bridge";
+import { POCKET_CUSTOMERS_KEY, pocketTag, usePocketTransactions, type BranchId, type PocketTransaction } from "../lib/pocket-bridge";
 import { normalizeBranch } from "../lib/auth-audit";
 import {
   saudiTodayIso,
@@ -17736,6 +17736,194 @@ interface ParsedSwipeItem {
   time?: string;
 }
 
+function QuickLogHistoryAuditView({
+  isOwner,
+  staffBranchId,
+}: {
+  isOwner: boolean;
+  staffBranchId: string;
+}) {
+  const [rows, setRows] = useState<PocketTransaction[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [branchFilter, setBranchFilter] = useState<string>(isOwner ? "ALL" : staffBranchId);
+  const [dateFilter, setDateFilter] = useState<string>("");
+  const [typeFilter, setTypeFilter] = useState<string>("ALL");
+  const [partySearch, setPartySearch] = useState<string>("");
+
+  useEffect(() => {
+    let ignore = false;
+    setLoading(true);
+    const qBranch = isOwner ? branchFilter : staffBranchId;
+    fetch(`/api/pocket?branch=${encodeURIComponent(qBranch)}&date=ALL`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((data) => {
+        if (!ignore && Array.isArray(data?.transactions)) {
+          setRows(data.transactions);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!ignore) setLoading(false);
+      });
+    return () => {
+      ignore = true;
+    };
+  }, [isOwner, branchFilter, staffBranchId]);
+
+  const filtered = useMemo(() => {
+    const q = partySearch.trim().toLowerCase();
+    return rows.filter((tx) => {
+      const txDate = tx.date || (tx.createdAt ? saudiCalendarDateStr(new Date(tx.createdAt)) : "");
+      if (dateFilter && txDate !== dateFilter) return false;
+      if (typeFilter !== "ALL" && tx.type !== typeFilter) return false;
+      if (q) {
+        const hay = `${tx.recipientName || ""} ${tx.category || ""} ${tx.note || ""}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [rows, dateFilter, typeFilter, partySearch]);
+
+  const groupedByDate = useMemo(() => {
+    const map = new Map<string, PocketTransaction[]>();
+    for (const tx of filtered) {
+      const d = tx.date || (tx.createdAt ? saudiCalendarDateStr(new Date(tx.createdAt)) : "Unknown Date");
+      if (!map.has(d)) map.set(d, []);
+      map.get(d)!.push(tx);
+    }
+    return Array.from(map.entries()).sort((a, b) => b[0].localeCompare(a[0]));
+  }, [filtered]);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-black text-jct-charcoal dark:text-white tracking-tight flex items-center gap-2">
+            <Zap className="text-jct-yellow fill-current" size={22} />
+            <span>Express Quick-Log History</span>
+          </h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            All historical Express Quick-Log &amp; Mobile PWA entries across previous Saudi AST dates.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {isOwner && (
+            <select
+              value={branchFilter}
+              onChange={(e) => setBranchFilter(e.target.value)}
+              className="rounded-lg border border-slate-300 dark:border-[#1F1F1F] bg-white dark:bg-[#0A0A0A] px-3 py-1.5 text-xs font-bold text-jct-charcoal dark:text-white outline-none"
+            >
+              <option value="ALL">All Branches</option>
+              <option value="JCT_HARDWARE_JOTUN">JCT Hardware + Jotun</option>
+              <option value="HEMPEL">Hempel</option>
+              <option value="DAMMAM_JOTUN">Dammam Jotun</option>
+              <option value="SIGMA">Sigma</option>
+            </select>
+          )}
+          <input
+            type="date"
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value)}
+            className="rounded-lg border border-slate-300 dark:border-[#1F1F1F] bg-white dark:bg-[#0A0A0A] px-3 py-1.5 text-xs font-mono font-bold text-jct-charcoal dark:text-white outline-none"
+          />
+          {dateFilter && (
+            <button
+              type="button"
+              onClick={() => setDateFilter("")}
+              className="rounded-lg border border-slate-300 dark:border-[#1F1F1F] px-2.5 py-1.5 text-[11px] font-bold text-slate-500 hover:text-white"
+            >
+              Clear Date
+            </button>
+          )}
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            className="rounded-lg border border-slate-300 dark:border-[#1F1F1F] bg-white dark:bg-[#0A0A0A] px-3 py-1.5 text-xs font-bold text-jct-charcoal dark:text-white outline-none"
+          >
+            <option value="ALL">All Types</option>
+            <option value="EXPENSE">Expense</option>
+            <option value="PURCHASE">Purchase / Credit Payment</option>
+            <option value="POS_SALE">Sales Bill</option>
+            <option value="SALES_RETURN">Sales Return</option>
+          </select>
+          <input
+            type="text"
+            value={partySearch}
+            onChange={(e) => setPartySearch(e.target.value)}
+            placeholder="Search Supplier / Customer..."
+            className="rounded-lg border border-slate-300 dark:border-[#1F1F1F] bg-white dark:bg-[#0A0A0A] px-3 py-1.5 text-xs font-medium text-jct-charcoal dark:text-white outline-none w-52"
+          />
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="rounded-2xl border border-slate-200 dark:border-[#1F1F1F] bg-white dark:bg-[#0A0A0A] p-8 text-center text-xs text-slate-400">
+          Loading Express Quick-Log History...
+        </div>
+      ) : groupedByDate.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-slate-200 dark:border-[#1F1F1F] bg-white dark:bg-[#0A0A0A] p-10 text-center text-xs text-slate-400">
+          No Express Quick-Log entries match the selected filters.
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {groupedByDate.map(([dateStr, items]) => {
+            const dayTotal = r2(items.reduce((s, it) => s + (Number(it.amount) || 0), 0));
+            return (
+              <div
+                key={dateStr}
+                className="rounded-2xl border border-slate-200 dark:border-[#1F1F1F] bg-white dark:bg-[#0A0A0A] overflow-hidden shadow-sm"
+              >
+                <div className="px-4 py-3 bg-slate-50 dark:bg-[#111111] border-b border-slate-200 dark:border-[#1F1F1F] flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2">
+                    <CalendarDays size={14} className="text-jct-turquoise" />
+                    <span className="font-mono font-black text-jct-charcoal dark:text-white">{dateStr}</span>
+                    <span className="rounded-full bg-slate-200 dark:bg-white/10 px-2 py-0.5 text-[10px] font-bold text-slate-600 dark:text-slate-300">
+                      {items.length} entries
+                    </span>
+                  </div>
+                  <span className="font-mono font-black text-jct-turquoise">
+                    Total Volume: SAR {fmt(dayTotal)}
+                  </span>
+                </div>
+                <div className="divide-y divide-slate-100 dark:divide-[#1A1A1A]">
+                  {items.map((item) => (
+                    <div key={item.id} className="px-4 py-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+                      <div className="space-y-0.5 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-jct-charcoal dark:text-white">
+                            {item.recipientName || item.category || "Transaction"}
+                          </span>
+                          <span className="rounded bg-slate-200 dark:bg-white/10 px-1.5 py-0.5 text-[10px] font-mono font-bold text-slate-600 dark:text-slate-300">
+                            {item.type}
+                          </span>
+                          <span className="rounded bg-cyan-500/15 border border-cyan-500/30 px-1.5 py-0.5 text-[10px] font-bold text-cyan-700 dark:text-cyan-300">
+                            {item.paymentMode || "CASH"}
+                          </span>
+                          <span className="text-[10px] font-mono text-slate-400">
+                            {getBranchBadgeInfo(item.branch).name}
+                          </span>
+                        </div>
+                        {item.note && (
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                            {item.note.replace(/^\[Desktop Express\]\s*/i, "")}
+                          </p>
+                        )}
+                      </div>
+                      <span className="font-mono font-black text-jct-charcoal dark:text-white whitespace-nowrap">
+                        SAR {fmt(item.amount)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AuditLibraryView({
   profile,
   onReopenPendingDraft,
@@ -17754,7 +17942,7 @@ function AuditLibraryView({
     isOwner ? "ALL" : staffBranchId
   );
   const [auditTabFilter, setAuditTabFilter] = useState<"ALL" | "PENDING_AUDIT" | "LOCKED">("ALL");
-  const [activeLibraryFolder, setActiveLibraryFolder] = useState<"DAILY_REGISTERS" | "SALES_RETURNS">("DAILY_REGISTERS");
+  const [activeLibraryFolder, setActiveLibraryFolder] = useState<"DAILY_REGISTERS" | "SALES_RETURNS" | "QUICK_LOG_HISTORY">("DAILY_REGISTERS");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedRecord, setSelectedRecord] = useState<ArchiveRecord | null>(null);
 
@@ -18797,10 +18985,25 @@ function AuditLibraryView({
           <RotateCcw size={15} />
           <span>📁 Sales Return Bills</span>
         </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveLibraryFolder("QUICK_LOG_HISTORY")}
+          className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-black transition-all ${
+            activeLibraryFolder === "QUICK_LOG_HISTORY"
+              ? "bg-jct-yellow text-jct-charcoal shadow-sm"
+              : "text-slate-500 hover:text-jct-charcoal dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5"
+          }`}
+        >
+          <Zap size={15} />
+          <span>⚡ Express Quick-Log History</span>
+        </button>
       </div>
 
       {activeLibraryFolder === "SALES_RETURNS" ? (
         <SalesReturnAuditView isOwner={isOwner} staffBranchId={staffBranchId} />
+      ) : activeLibraryFolder === "QUICK_LOG_HISTORY" ? (
+        <QuickLogHistoryAuditView isOwner={isOwner} staffBranchId={staffBranchId} />
       ) : (
         <>
           {/* Header & Controls */}
@@ -22613,33 +22816,71 @@ export default function Page() {
       ]);
     } else if (type === "CREDIT_SUPPLIER") {
       const supName = supplierName || customerName || "Supplier";
-      const dueDate = typeof payload.dueDate === "string" ? payload.dueDate : addSaudiDays(7);
-      handleSyncCreditPurchase(
-        supName,
-        amount,
-        dueDate,
-        "Credit Purchase",
-        "CREDIT",
-        invoiceNo,
-        receiptUrl
-      );
-      const creditEntry: PreLoggedEntry = {
-        id: clientTxnId || `sup-cr-${Date.now()}`,
+      const cleanSupLower = supName.trim().toLowerCase();
+      const payMode =
+        paymentMode === "BANK_TRANSFER"
+          ? "BANK"
+          : paymentMode === "CARD"
+          ? "CARD"
+          : "CASH";
+
+      // 1. Deduct from Cash Drawer (if CASH) or record Bank/Card outflow
+      const creditPayEntry: PreLoggedEntry = {
+        id: clientTxnId || `sup-pay-${Date.now()}`,
         clientTxnId,
         type: "EXPENSE",
-        expenseCategory: "Credit Purchase",
+        expenseCategory: "Cash Purchase",
         supplierName: supName,
-        dueDate,
-        followUpDate: dueDate,
         supplierInvoiceNum: invoiceNo,
-        title: `Credit Purchase — ${supName}${invoiceNo ? ` (#${invoiceNo})` : ""}`,
-        paymentMode: "CREDIT",
+        title: `Supplier Credit Payment — ${supName}${invoiceNo ? ` (#${invoiceNo})` : ""}`,
+        paymentMode: payMode,
         amount,
         receiptUrl,
         hasBill: Boolean(receiptUrl),
         time: nowHHMM(),
       };
-      setPreLoggedEntries((prev) => deduplicatePreLoggedEntries([creditEntry, ...prev]));
+      setPreLoggedEntries((prev) => deduplicatePreLoggedEntries([creditPayEntry, ...prev]));
+
+      // 2. FIFO-reduce oldest open Credit Purchase bills in Suppliers & Payables + Credit Radar
+      setSupplierBills((prev) => {
+        let remainingToApply = amount;
+        // Sort oldest first (ascending createdAt / id) for FIFO reduction
+        const indexed = prev.map((b, idx) => ({ b, idx }));
+        indexed.sort((a, b) => (a.b.createdAt || "").localeCompare(b.b.createdAt || ""));
+        const updatedMap = new Map<number, SupplierBillItem>();
+        for (const { b, idx } of indexed) {
+          if (remainingToApply <= 0) break;
+          const matchesSup =
+            b.supplierName.toLowerCase().includes(cleanSupLower) ||
+            cleanSupLower.includes(b.supplierName.toLowerCase());
+          if (matchesSup && b.category === "Credit Purchase" && b.amount > 0 && b.paymentMode !== "SETTLED") {
+            const applied = Math.min(remainingToApply, b.amount);
+            const nextAmt = Math.max(0, r2(b.amount - applied));
+            remainingToApply = r2(remainingToApply - applied);
+            updatedMap.set(idx, {
+              ...b,
+              amount: nextAmt,
+              paymentMode: nextAmt <= 0 ? "SETTLED" : b.paymentMode,
+            });
+          }
+        }
+        return prev.map((b, idx) => updatedMap.get(idx) ?? b);
+      });
+
+      // 3. Reduce Supplier Brands pendingBills & increment amountPaid
+      setSupplierBrands((prev) =>
+        prev.map((br) =>
+          supName.toLowerCase().includes(br.brand.toLowerCase()) ||
+          br.brand.toLowerCase().includes(cleanSupLower)
+            ? {
+                ...br,
+                pendingBills: Math.max(0, r2(br.pendingBills - amount)),
+                amountPaid: r2(br.amountPaid + amount),
+                lastPaymentDate: saudiSessionDate(),
+              }
+            : br
+        )
+      );
     } else if (type === "EXPENSE" || type === "PURCHASE" || type === "SALES_RETURN") {
       const isBusComm = category === "Business Commission";
       const entry: PreLoggedEntry = {
@@ -22870,6 +23111,7 @@ export default function Page() {
                     .filter((p) => p.name.length >= 2),
                 ]}
                 onSyncWithRegister={handleExpressQuickLogSync}
+                supplierBills={supplierBills}
                 onDeleteSyncedEntry={(id, clientTxnId) => {
                   setErpInvoices((prev) =>
                     prev.filter(
