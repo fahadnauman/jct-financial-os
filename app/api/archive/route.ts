@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "../../../lib/prisma";
 import { checkIsOwner, normalizeBranch, normalizePaymentMode } from "../../../lib/auth-audit";
+import { backfillHistoricalReceivingAmounts } from "../../../lib/backfill-receiving";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +13,11 @@ export async function GET(req: Request) {
   const limit = Math.min(Math.max(1, Number(limitParam) || 500), 2000);
 
   try {
+    // Idempotent non-destructive auto-backfill for any past records with missing/zero ownerTakeHomeAmount
+    await backfillHistoricalReceivingAmounts(branch).catch((err) => {
+      console.warn("backfillHistoricalReceivingAmounts warning:", err);
+    });
+
     const rows = await prisma.dailyRegisterLock.findMany({
       where: {
         ...(branch && branch !== "ALL" ? { branch } : {}),

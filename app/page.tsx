@@ -19091,9 +19091,10 @@ function AuditLibraryView({
 
           {/* Final Handover Summary (Owner Cash Taken Home & Next Day Float) */}
           {(() => {
-            const recTakeHome = Number(
-              selectedRecord.ownerTakeHomeAmount ?? selectedRecord.takeHomeAmount ?? 0
-            ) || 0;
+            const recTakeHome =
+              Number(selectedRecord.ownerTakeHomeAmount) ||
+              Number(selectedRecord.takeHomeAmount) ||
+              0;
             const recNextFloat =
               selectedRecord.remainingFloatForTomorrow !== null &&
               selectedRecord.remainingFloatForTomorrow !== undefined
@@ -19668,7 +19669,7 @@ function AuditLibraryView({
                       className="flex flex-wrap items-center gap-1.5"
                     >
                       <span className="rounded-full bg-emerald-500/15 border border-emerald-500/40 text-emerald-700 dark:text-emerald-300 px-2.5 py-1 text-[11px] font-mono font-black">
-                        💵 Owner Taken Home: SAR {fmt(Number(r.ownerTakeHomeAmount ?? r.takeHomeAmount ?? 0) || 0)}
+                        💵 Owner Taken Home: SAR {fmt(Number(r.ownerTakeHomeAmount) || Number(r.takeHomeAmount) || 0)}
                       </span>
                       {inlineEditTakeHomeId === r.id ? (
                         <div className="inline-flex flex-wrap items-center gap-1.5">
@@ -19716,7 +19717,7 @@ function AuditLibraryView({
                           type="button"
                           onClick={() => {
                             setInlineEditTakeHomeId(r.id);
-                            setInlineEditTakeHomeVal(String(Number(r.ownerTakeHomeAmount ?? r.takeHomeAmount ?? 0) || 0));
+                            setInlineEditTakeHomeVal(String(Number(r.ownerTakeHomeAmount) || Number(r.takeHomeAmount) || 0));
                             setInlineEditPinVal("");
                           }}
                           className="rounded-full border border-cyan-500/40 bg-cyan-500/10 hover:bg-cyan-500/20 px-2.5 py-1 text-[10px] font-bold text-cyan-700 dark:text-cyan-300 transition"
