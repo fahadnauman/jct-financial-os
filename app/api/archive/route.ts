@@ -413,6 +413,8 @@ export async function PUT(req: Request) {
   }
 }
 
+export const PATCH = PUT;
+
 export async function DELETE(req: Request) {
   let body: Record<string, unknown> | null = null;
   const { searchParams } = new URL(req.url);

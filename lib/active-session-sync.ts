@@ -151,16 +151,28 @@ export function useActiveSessionSync<I, B, E>({
         body: JSON.stringify({
           branch: branchRef.current,
           clientId: clientIdRef.current,
+          baseRevision: revisionRef.current,
           status: empty ? "DRAFT" : "IN_PROGRESS",
           reportDate: effectiveDate,
           data: serialized,
         }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = (await res.json()) as { session: RemoteSession | null };
+      const data = (await res.json()) as { session: RemoteSession | null; merged?: boolean };
       if (data.session) revisionRef.current = data.session.revision;
-      lastSerializedRef.current = serialized;
-      dirtyRef.current = serializeSnapshot(snapshotRef.current) !== serialized;
+      if (data.merged && data.session) {
+        const mergedSnap = parseRemote<I, B, E>(data.session);
+        const mergedSer = serializeSnapshot(mergedSnap);
+        lastSerializedRef.current = mergedSer;
+        dirtyRef.current = false;
+        onRemoteRef.current(mergedSnap, {
+          status: data.session.status,
+          isEmpty: isSnapshotEmpty(mergedSnap),
+        });
+      } else {
+        lastSerializedRef.current = serialized;
+        dirtyRef.current = serializeSnapshot(snapshotRef.current) !== serialized;
+      }
       setStatus((s) => ({
         ...s,
         state: "synced",
@@ -263,8 +275,15 @@ export function useActiveSessionSync<I, B, E>({
     }
     void poll(true);
 
+    const isUserTyping = () => {
+      if (typeof document === "undefined") return false;
+      const tag = document.activeElement?.tagName;
+      return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+    };
+
     const interval = setInterval(() => {
       if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      if (isUserTyping()) return;
       void poll(false);
     }, pollMs);
 
@@ -282,10 +301,18 @@ export function useActiveSessionSync<I, B, E>({
     };
   }, [enabled, branch, reportDate, pollMs, poll]);
 
-  // Debounced persistence whenever local session data changes
+  // Debounced persistence whenever local session data changes (never flush when disabled / logged out)
   const serializedLocal = serializeSnapshot(snapshot);
   useEffect(() => {
-    if (!enabled || !hydratedRef.current) return;
+    if (!enabled) {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+      dirtyRef.current = false;
+      return;
+    }
+    if (!hydratedRef.current) return;
     if (serializedLocal === lastSerializedRef.current) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {

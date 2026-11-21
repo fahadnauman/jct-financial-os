@@ -2880,11 +2880,49 @@ function HandoverModalComponent({
               </div>
             </div>
 
+            {/* 3. Unconditional Owner Receiving Amount (Cash Taken Home) */}
+            <div className="rounded-2xl border border-cyan-500/35 bg-cyan-500/5 p-4 space-y-2.5">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <label className="text-xs font-extrabold uppercase tracking-wider text-cyan-300">
+                  3. 💵 Owner Receiving Amount / Cash Taken Home (SAR) *
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setTakeHomeInput("0")}
+                  className="rounded-full bg-white/10 hover:bg-white/20 px-2.5 py-0.5 text-[10px] font-bold text-slate-200 transition"
+                >
+                  Confirm SAR 0.00
+                </button>
+              </div>
+              <div className="flex items-center overflow-hidden rounded-xl border-2 border-cyan-400/70 focus-within:border-cyan-300 focus-within:ring-4 focus-within:ring-cyan-500/25 bg-slate-950/95 shadow-inner">
+                <span className="px-3 py-2.5 bg-cyan-500/15 border-r border-cyan-400/30 text-xs font-black tracking-wider text-cyan-300 shrink-0 font-mono">
+                  SAR
+                </span>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={takeHomeInput}
+                  onChange={(e) => setTakeHomeInput(e.target.value)}
+                  placeholder="Enter cash taken home (or 0.00)"
+                  className="w-full bg-transparent px-3 py-2 text-xl font-mono font-bold tabular-nums text-white placeholder:text-slate-500 focus:outline-none text-right"
+                />
+              </div>
+              <div className="flex items-center justify-between text-[11px] font-mono">
+                <span className="text-slate-400">Remaining Cash Left in Drawer (Tomorrow&apos;s Float):</span>
+                <span className={effectiveTakeHome > countedPhysicalCash ? "font-black text-rose-400" : "font-black text-emerald-400"}>
+                  {effectiveTakeHome > countedPhysicalCash
+                    ? `Invalid (-SAR ${fmt(effectiveTakeHome - countedPhysicalCash)})`
+                    : `SAR ${fmt(discrepancyNextDayFloat)}`}
+                </span>
+              </div>
+            </div>
+
             {/* Resolution Actions */}
             <div className="flex flex-col gap-2.5 pt-1">
               <button
                 type="button"
-                disabled={isSaving || !hasValidActualCash}
+                disabled={isSaving || !hasValidActualCash || takeHomeInput.trim() === "" || effectiveTakeHome > countedPhysicalCash}
                 onClick={() =>
                   onConfirmLock(effectiveTakeHome, discrepancyNextDayFloat, {
                     auditStatus: "LOCKED",
@@ -2906,7 +2944,7 @@ function HandoverModalComponent({
 
               <button
                 type="button"
-                disabled={isSaving || !hasValidActualCash}
+                disabled={isSaving || !hasValidActualCash || takeHomeInput.trim() === "" || effectiveTakeHome > countedPhysicalCash}
                 onClick={() =>
                   onConfirmLock(effectiveTakeHome, discrepancyNextDayFloat, {
                     auditStatus: "PENDING_AUDIT",
@@ -18093,6 +18131,83 @@ function AuditLibraryView({
   );
   const [auditTabFilter, setAuditTabFilter] = useState<"ALL" | "PENDING_AUDIT" | "LOCKED">("ALL");
   const [activeLibraryFolder, setActiveLibraryFolder] = useState<"DAILY_REGISTERS" | "SALES_RETURNS" | "QUICK_LOG_HISTORY">("DAILY_REGISTERS");
+  const [inlineEditTakeHomeId, setInlineEditTakeHomeId] = useState<string | null>(null);
+  const [inlineEditTakeHomeVal, setInlineEditTakeHomeVal] = useState("");
+  const [inlineEditPinVal, setInlineEditPinVal] = useState("");
+  const [savingInlineTakeHome, setSavingInlineTakeHome] = useState(false);
+
+  const handleSaveInlineTakeHome = async (rec: ArchiveRecord) => {
+    const newTakeHome = Math.max(0, r2(parseFloat(inlineEditTakeHomeVal) || 0));
+    if (newTakeHome > (Number(rec.closingCash) || 0)) {
+      alert(`Receiving amount (SAR ${fmt(newTakeHome)}) cannot exceed Closing Cash (SAR ${fmt(rec.closingCash)}).`);
+      return;
+    }
+    setSavingInlineTakeHome(true);
+    try {
+      if (!isOwner) {
+        const pinRes = await fetch("/api/settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "VERIFY_PIN", profileId: "OWNER", pin: inlineEditPinVal.trim() }),
+        });
+        const pinJson = await pinRes.json();
+        if (!pinJson?.verified) {
+          alert("Invalid Owner Master PIN.");
+          setSavingInlineTakeHome(false);
+          return;
+        }
+      }
+      const nextFloat = Math.max(0, r2((Number(rec.closingCash) || 0) - newTakeHome));
+      const res = await fetch("/api/archive", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-is-owner": "true",
+        },
+        body: JSON.stringify({
+          id: rec.id,
+          takeHomeAmount: newTakeHome,
+          ownerTakeHomeAmount: newTakeHome,
+          nextDayOpeningCash: nextFloat,
+          remainingFloatForTomorrow: nextFloat,
+          isOwner: true,
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to update receiving amount");
+      setRecords((prev) =>
+        prev.map((item) =>
+          item.id === rec.id
+            ? {
+                ...item,
+                takeHomeAmount: newTakeHome,
+                ownerTakeHomeAmount: newTakeHome,
+                nextDayOpeningCash: nextFloat,
+                remainingFloatForTomorrow: nextFloat,
+              }
+            : item
+        )
+      );
+      if (selectedRecord?.id === rec.id) {
+        setSelectedRecord((prev) =>
+          prev
+            ? {
+                ...prev,
+                takeHomeAmount: newTakeHome,
+                ownerTakeHomeAmount: newTakeHome,
+                nextDayOpeningCash: nextFloat,
+                remainingFloatForTomorrow: nextFloat,
+              }
+            : null
+        );
+      }
+      setInlineEditTakeHomeId(null);
+      setInlineEditPinVal("");
+    } catch {
+      alert("Could not update receiving amount.");
+    } finally {
+      setSavingInlineTakeHome(false);
+    }
+  };
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedRecord, setSelectedRecord] = useState<ArchiveRecord | null>(null);
 
@@ -19505,9 +19620,68 @@ function AuditLibraryView({
                     <span className={`rounded-lg border px-2.5 py-1 text-xs font-bold ${bInfo.color}`}>
                       {bInfo.name}
                     </span>
-                    <span className="rounded-full bg-emerald-500/15 border border-emerald-500/40 text-emerald-700 dark:text-emerald-300 px-2.5 py-1 text-[11px] font-mono font-black">
-                      💵 Owner Taken Home: SAR {fmt(Number(r.ownerTakeHomeAmount ?? r.takeHomeAmount ?? 0) || 0)}
-                    </span>
+                    <div
+                      onClick={(e) => e.stopPropagation()}
+                      className="flex flex-wrap items-center gap-1.5"
+                    >
+                      <span className="rounded-full bg-emerald-500/15 border border-emerald-500/40 text-emerald-700 dark:text-emerald-300 px-2.5 py-1 text-[11px] font-mono font-black">
+                        💵 Owner Taken Home: SAR {fmt(Number(r.ownerTakeHomeAmount ?? r.takeHomeAmount ?? 0) || 0)}
+                      </span>
+                      {inlineEditTakeHomeId === r.id ? (
+                        <div className="inline-flex flex-wrap items-center gap-1.5">
+                          <div className="inline-flex items-center overflow-hidden rounded-lg border-2 border-cyan-400/70 bg-slate-950/95">
+                            <span className="px-2 py-1 bg-cyan-500/15 text-[10px] font-black text-cyan-300">SAR</span>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={inlineEditTakeHomeVal}
+                              onChange={(e) => setInlineEditTakeHomeVal(e.target.value)}
+                              className="w-24 bg-transparent px-2 py-1 text-xs font-bold text-white text-right focus:outline-none"
+                            />
+                          </div>
+                          {!isOwner && (
+                            <input
+                              type="password"
+                              value={inlineEditPinVal}
+                              onChange={(e) => setInlineEditPinVal(e.target.value)}
+                              placeholder="Owner PIN"
+                              className="w-20 rounded border border-amber-500/40 bg-black px-2 py-1 text-[10px] text-white outline-none"
+                            />
+                          )}
+                          <button
+                            type="button"
+                            disabled={savingInlineTakeHome}
+                            onClick={() => void handleSaveInlineTakeHome(r)}
+                            className="rounded bg-jct-turquoise text-jct-charcoal px-2.5 py-1 text-[10px] font-black"
+                          >
+                            {savingInlineTakeHome ? "…" : "Save"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setInlineEditTakeHomeId(null);
+                              setInlineEditPinVal("");
+                            }}
+                            className="rounded border border-slate-300 dark:border-white/15 px-2 py-1 text-[10px] font-bold text-slate-500"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setInlineEditTakeHomeId(r.id);
+                            setInlineEditTakeHomeVal(String(Number(r.ownerTakeHomeAmount ?? r.takeHomeAmount ?? 0) || 0));
+                            setInlineEditPinVal("");
+                          }}
+                          className="rounded-full border border-cyan-500/40 bg-cyan-500/10 hover:bg-cyan-500/20 px-2.5 py-1 text-[10px] font-bold text-cyan-700 dark:text-cyan-300 transition"
+                        >
+                          ✏️ Set / Edit Receiving Amount
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {/* Middle Column: Metrics Breakdown */}
@@ -22706,11 +22880,11 @@ export default function Page() {
   };
 
   const handleSwitchProfile = async () => {
+    setProfile(null);
     window.localStorage.removeItem(PROFILE_STORAGE_KEY);
     window.sessionStorage.removeItem(VERIFIED_SESSION_KEY);
     resetLocalSessionState();
     setCompletedDaysLog([]);
-    setProfile(null);
     await Promise.all([
       fetch("/api/auth/logout", { method: "POST" }).catch(() => {}),
       signOut({ redirect: false }),

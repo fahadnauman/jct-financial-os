@@ -75,10 +75,80 @@ export async function GET(req: Request) {
   }
 }
 
+const mergeSessionDataJson = (existingJson: string, incomingJson: string): string => {
+  try {
+    const existing = JSON.parse(existingJson) as {
+      erpInvoices?: Array<Record<string, unknown>>;
+      preLoggedBankInvoices?: Array<Record<string, unknown>>;
+      preLoggedEntries?: Array<Record<string, unknown>>;
+      reportDate?: string | null;
+    };
+    const incoming = JSON.parse(incomingJson) as {
+      erpInvoices?: Array<Record<string, unknown>>;
+      preLoggedBankInvoices?: Array<Record<string, unknown>>;
+      preLoggedEntries?: Array<Record<string, unknown>>;
+      reportDate?: string | null;
+    };
+
+    const mergeByKey = (
+      a: Array<Record<string, unknown>> = [],
+      b: Array<Record<string, unknown>> = [],
+      getKeys: (item: Record<string, unknown>) => string[]
+    ) => {
+      const seen = new Set<string>();
+      const out: Array<Record<string, unknown>> = [];
+      for (const item of [...a, ...b]) {
+        if (!item || typeof item !== "object") continue;
+        const keys = getKeys(item).filter(Boolean);
+        if (keys.some((k) => seen.has(k))) continue;
+        keys.forEach((k) => seen.add(k));
+        out.push(item);
+      }
+      return out;
+    };
+
+    const mergedErp = mergeByKey(existing.erpInvoices, incoming.erpInvoices, (inv) => {
+      const keys: string[] = [];
+      if (inv.clientTxnId) keys.push(`cid:${String(inv.clientTxnId)}`);
+      if (inv.internalId) keys.push(`iid:${String(inv.internalId)}`);
+      if (inv.id) keys.push(`id:${String(inv.id)}`);
+      const invNo = String(inv.branchInvNo || inv.invoiceNo || "").replace(/^#/i, "").trim().toUpperCase();
+      if (invNo && !inv.isManual && !inv.isManualPos) {
+        keys.push(`sig:${invNo}:${Number(inv.amount) || 0}:${String(inv.paymentMode || "")}`);
+      }
+      return keys;
+    });
+
+    const mergedBank = mergeByKey(existing.preLoggedBankInvoices, incoming.preLoggedBankInvoices, (b) => {
+      const keys: string[] = [];
+      if (b.clientTxnId) keys.push(`cid:${String(b.clientTxnId)}`);
+      if (b.id) keys.push(`id:${String(b.id)}`);
+      if (b.invoiceNo) keys.push(`inv:${String(b.invoiceNo).replace(/^#/i, "").trim().toUpperCase()}`);
+      return keys;
+    });
+
+    const mergedEntries = mergeByKey(existing.preLoggedEntries, incoming.preLoggedEntries, (e) => {
+      const keys: string[] = [];
+      if (e.clientTxnId) keys.push(`cid:${String(e.clientTxnId)}`);
+      if (e.id) keys.push(`id:${String(e.id)}`);
+      return keys;
+    });
+
+    return JSON.stringify({
+      erpInvoices: mergedErp,
+      preLoggedBankInvoices: mergedBank,
+      preLoggedEntries: mergedEntries,
+      reportDate: incoming.reportDate ?? existing.reportDate ?? null,
+    });
+  } catch {
+    return incomingJson;
+  }
+};
+
 /**
- * PUT /api/active-session
- * Body: { branch, clientId, status?, reportDate?, data }
- * Persists the active register snapshot scoped by (branch, reportDate) and bumps revision.
+ * PUT / POST /api/active-session
+ * Body: { branch, clientId, baseRevision?, status?, reportDate?, data }
+ * Persists the active register snapshot scoped by (branch, reportDate) and merges on concurrent device updates.
  */
 export async function PUT(req: Request) {
   try {
@@ -118,21 +188,38 @@ export async function PUT(req: Request) {
       });
     }
 
+    let finalDataJson = dataJson;
+    let merged = false;
+    if (
+      existing &&
+      existing.status !== "CLEARED" &&
+      typeof body.baseRevision === "number" &&
+      existing.revision > body.baseRevision &&
+      existing.updatedBy !== clientId &&
+      existing.dataJson &&
+      dataJson
+    ) {
+      finalDataJson = mergeSessionDataJson(existing.dataJson, dataJson);
+      merged = true;
+    }
+
     const row = existing
       ? await prisma.activeRegisterSession.update({
           where: { id: existing.id },
-          data: { sessionKey, status, reportDate, dataJson, updatedBy: clientId, revision: { increment: 1 } },
+          data: { sessionKey, status, reportDate, dataJson: finalDataJson, updatedBy: clientId, revision: { increment: 1 } },
         })
       : await prisma.activeRegisterSession.create({
-          data: { sessionKey, branch, status, reportDate, dataJson, revision: 1, updatedBy: clientId },
+          data: { sessionKey, branch, status, reportDate, dataJson: finalDataJson, revision: 1, updatedBy: clientId },
         });
 
-    return NextResponse.json({ session: serialize(row) });
+    return NextResponse.json({ session: serialize(row), merged });
   } catch (err) {
     console.error("PUT /api/active-session error:", err);
     return NextResponse.json({ error: "Failed to save active session" }, { status: 500 });
   }
 }
+
+export const POST = PUT;
 
 /**
  * DELETE /api/active-session?branch=JCT_HARDWARE_JOTUN&date=2026-11-11&clientId=...
