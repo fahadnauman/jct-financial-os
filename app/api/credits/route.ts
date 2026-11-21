@@ -1,0 +1,169 @@
+import { NextResponse } from "next/server";
+import { prisma } from "../../../lib/prisma";
+import { normalizeBranch } from "../../../lib/auth-audit";
+import { saudiTodayIso } from "../../../lib/saudi-time";
+
+export const dynamic = "force-dynamic";
+
+export async function GET(req: Request) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const rawBranch = searchParams.get("branch");
+    const branch = rawBranch && rawBranch !== "ALL" ? normalizeBranch(rawBranch) : null;
+
+    const where: Record<string, unknown> = {};
+    if (branch) {
+      where.OR = [{ branch }, { branch: null }];
+    }
+
+    const records = await prisma.creditRadar.findMany({
+      where,
+      orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+    });
+
+    return NextResponse.json({ records });
+  } catch (err) {
+    console.error("[GET /api/credits] Error:", err);
+    return NextResponse.json(
+      { error: "Failed to load credit radar records" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(req: Request) {
+  try {
+    const body = await req.json();
+
+    // Collection settlement on an existing CreditRadar record
+    if (body.action === "COLLECT") {
+      const id = String(body.id || "").trim();
+      const collectedAmount = Math.max(0, Number(body.collectedAmount) || 0);
+      if (!id || collectedAmount <= 0) {
+        return NextResponse.json(
+          { error: "Valid record id and positive collectedAmount are required" },
+          { status: 400 }
+        );
+      }
+
+      const existing = await prisma.creditRadar.findUnique({ where: { id } });
+      if (!existing) {
+        return NextResponse.json({ error: "Credit record not found" }, { status: 404 });
+      }
+
+      const newBalance = Math.max(
+        0,
+        Number((existing.outstandingBalance - collectedAmount).toFixed(2))
+      );
+      const newStatus = newBalance <= 0.01 ? "SETTLED" : existing.status;
+
+      const updated = await prisma.creditRadar.update({
+        where: { id },
+        data: {
+          outstandingBalance: newBalance,
+          status: newStatus,
+          notes: body.notes
+            ? `${existing.notes ? existing.notes + " | " : ""}Collected ${collectedAmount} SAR (${body.paymentMode || "CASH"})`
+            : existing.notes,
+        },
+      });
+
+      return NextResponse.json({ ok: true, record: updated });
+    }
+
+    // Create a new CreditRadar receivable (or increment existing open customer credit if matched by linkedInvoiceNum)
+    const rawBranch = body.branch;
+    const branch = rawBranch && rawBranch !== "ALL" ? normalizeBranch(rawBranch) : null;
+    const customerName = String(body.customerName || "").trim();
+    const amount = Math.max(0, Number(body.amount) || 0);
+    const linkedInvoiceNum = body.linkedInvoiceNum
+      ? String(body.linkedInvoiceNum).trim()
+      : null;
+
+    if (!customerName || amount <= 0) {
+      return NextResponse.json(
+        { error: "Customer name and positive amount are required" },
+        { status: 400 }
+      );
+    }
+
+    const created = await prisma.creditRadar.create({
+      data: {
+        branch,
+        customerName,
+        phone: body.phone ? String(body.phone).trim() : null,
+        linkedInvoiceNum,
+        invoiceNo: body.invoiceNo ? String(body.invoiceNo).trim() : linkedInvoiceNum,
+        originalDate: body.originalDate || saudiTodayIso(),
+        followUpDate: body.followUpDate || null,
+        followUpStatus: body.followUpStatus || "SCHEDULED",
+        amount,
+        outstandingBalance:
+          body.outstandingBalance !== undefined
+            ? Math.max(0, Number(body.outstandingBalance) || 0)
+            : amount,
+        status: body.status || "CURRENT",
+        notes: body.notes ? String(body.notes).trim() : null,
+      },
+    });
+
+    return NextResponse.json({ record: created }, { status: 201 });
+  } catch (err) {
+    console.error("[POST /api/credits] Error:", err);
+    return NextResponse.json(
+      { error: "Failed to save credit radar record" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PATCH(req: Request) {
+  try {
+    const body = await req.json();
+    const id = String(body.id || "").trim();
+    if (!id) {
+      return NextResponse.json({ error: "Record id is required" }, { status: 400 });
+    }
+
+    const data: Record<string, unknown> = {};
+    if (body.outstandingBalance !== undefined)
+      data.outstandingBalance = Math.max(0, Number(body.outstandingBalance) || 0);
+    if (body.status !== undefined) data.status = String(body.status);
+    if (body.followUpDate !== undefined) data.followUpDate = body.followUpDate;
+    if (body.followUpStatus !== undefined)
+      data.followUpStatus = body.followUpStatus;
+    if (body.notes !== undefined) data.notes = body.notes;
+    if (body.phone !== undefined) data.phone = body.phone;
+
+    const updated = await prisma.creditRadar.update({
+      where: { id },
+      data,
+    });
+
+    return NextResponse.json({ record: updated });
+  } catch (err) {
+    console.error("[PATCH /api/credits] Error:", err);
+    return NextResponse.json(
+      { error: "Failed to update credit radar record" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(req: Request) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get("id");
+    if (!id) {
+      return NextResponse.json({ error: "Record id is required" }, { status: 400 });
+    }
+    await prisma.creditRadar.delete({ where: { id } });
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("[DELETE /api/credits] Error:", err);
+    return NextResponse.json(
+      { error: "Failed to delete credit radar record" },
+      { status: 500 }
+    );
+  }
+}

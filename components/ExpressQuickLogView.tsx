@@ -39,8 +39,16 @@ interface ExpressQuickLogViewProps {
     id: string;
     supplierName: string;
     amount: number;
+    originalAmount?: number;
     category: string;
     paymentMode?: string;
+  }>;
+  advances?: Array<{
+    id: string;
+    direction: string;
+    partyName: string;
+    remainingBalance: number;
+    status: string;
   }>;
   onSyncWithRegister?: (entry: {
     type: QuickLogType;
@@ -99,6 +107,7 @@ export function ExpressQuickLogView({
   activeSessionDate,
   liveParties = [],
   supplierBills = [],
+  advances = [],
   onSyncWithRegister,
   onDeleteSyncedEntry,
   onPreviewBill,
@@ -994,23 +1003,81 @@ export function ExpressQuickLogView({
                 {(() => {
                   const cleanQuery = creditSupplier.trim().toLowerCase();
                   if (!cleanQuery) return null;
-                  const openBalance = supplierBills
+                  const matchedBills = supplierBills.filter(
+                    (b) =>
+                      b.category === "Credit Purchase" &&
+                      b.amount > 0 &&
+                      b.paymentMode !== "SETTLED" &&
+                      (b.supplierName.toLowerCase().includes(cleanQuery) ||
+                        cleanQuery.includes(b.supplierName.toLowerCase()))
+                  );
+                  const openBalance = matchedBills.reduce(
+                    (sum, b) => sum + (Number(b.amount) || 0),
+                    0
+                  );
+                  const grossBillTotal = matchedBills.reduce(
+                    (sum, b) => sum + (Number(b.originalAmount ?? b.amount) || 0),
+                    0
+                  );
+                  const billPriorAdv = Math.max(0, Number((grossBillTotal - openBalance).toFixed(2)));
+                  const activeSupAdv = advances
                     .filter(
-                      (b) =>
-                        b.category === "Credit Purchase" &&
-                        b.amount > 0 &&
-                        b.paymentMode !== "SETTLED" &&
-                        (b.supplierName.toLowerCase().includes(cleanQuery) ||
-                          cleanQuery.includes(b.supplierName.toLowerCase()))
+                      (a) =>
+                        a.direction === "SUPPLIER_ADVANCE_OUT" &&
+                        a.status === "ACTIVE" &&
+                        a.remainingBalance > 0 &&
+                        (a.partyName.trim().toLowerCase().includes(cleanQuery) ||
+                          cleanQuery.includes(a.partyName.trim().toLowerCase()))
                     )
-                    .reduce((sum, b) => sum + (Number(b.amount) || 0), 0);
-                  if (openBalance <= 0) return null;
+                    .reduce((sum, a) => sum + (Number(a.remainingBalance) || 0), 0);
+                  const totalAdvAlreadyPaid = Number((billPriorAdv + activeSupAdv).toFixed(2));
+                  const netRemainingDue = Math.max(
+                    0,
+                    Number((openBalance - activeSupAdv).toFixed(2))
+                  );
+                  if (openBalance <= 0 && activeSupAdv <= 0) return null;
                   return (
-                    <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 flex items-center justify-between text-xs font-bold">
-                      <span className="text-amber-700 dark:text-amber-300">Open Credit Balance ({creditSupplier.trim()}):</span>
-                      <span className="font-mono font-black text-amber-600 dark:text-amber-300">
-                        SAR {fmt(openBalance)} due
-                      </span>
+                    <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 space-y-2 text-xs">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-bold text-amber-800 dark:text-amber-300">
+                          Supplier Balance &amp; Advance Auto-Detection ({creditSupplier.trim()})
+                        </span>
+                        {netRemainingDue > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setAmount(String(netRemainingDue))}
+                            className="rounded-lg bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black px-2.5 py-1 text-[11px] transition active:scale-[0.97]"
+                          >
+                            Use Net Due (SAR {fmt(netRemainingDue)})
+                          </button>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 pt-1 border-t border-amber-500/20">
+                        <div>
+                          <div className="text-[10px] font-bold uppercase text-amber-700/80 dark:text-amber-300/80">
+                            Total Credit Bill(s)
+                          </div>
+                          <div className="font-mono font-black text-slate-900 dark:text-white">
+                            SAR {fmt(grossBillTotal)}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] font-bold uppercase text-amber-700/80 dark:text-amber-300/80">
+                            Advance Already Paid
+                          </div>
+                          <div className="font-mono font-black text-amber-700 dark:text-amber-300">
+                            -SAR {fmt(totalAdvAlreadyPaid)}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] font-bold uppercase text-emerald-700 dark:text-emerald-300">
+                            Net Remaining Due
+                          </div>
+                          <div className="font-mono font-black text-emerald-700 dark:text-emerald-300">
+                            SAR {fmt(netRemainingDue)}
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   );
                 })()}

@@ -11,10 +11,8 @@ const NEXTAUTH_FALLBACK_SECRET =
 const OWNER_ONLY_PATHS = [
   "/pulse",
   "/monthly-audits",
-  "/suppliers",
   "/audit-library",
   "/nauman-ai",
-  "/credit-radar",
   "/payroll",
   "/consolidation",
   "/owner-pocket",
@@ -167,10 +165,24 @@ export async function middleware(req: NextRequest) {
       (route) => pathname === route || pathname.startsWith(`${route}/`)
     );
     const requestedTab = searchParams.get("tab");
-    const allowedStaffTabs = new Set(["register", "daily-register", "settings", "quick-log", "archive"]);
+    const allowedStaffTabs = new Set([
+      "register",
+      "daily-register",
+      "settings",
+      "quick-log",
+      "archive",
+      "suppliers",
+      "supplier-advances",
+      "radar",
+    ]);
     const isRestrictedTab =
       requestedTab && !allowedStaffTabs.has(requestedTab);
-    const allowedStaffPaths = new Set(["/daily-register", "/settings"]);
+    const allowedStaffPaths = new Set([
+      "/daily-register",
+      "/settings",
+      "/suppliers",
+      "/credit-radar",
+    ]);
 
     if (isRestrictedPath || isRestrictedTab || !allowedStaffPaths.has(pathname)) {
       return NextResponse.redirect(new URL("/daily-register", req.url));

@@ -15644,15 +15644,27 @@ function SupplierHubView({
                           <button
                             type="button"
                             onClick={() => {
+                              const cleanSup = bill.supplierName.trim().toLowerCase();
+                              const matchedAdv = advances
+                                .filter(
+                                  (a) =>
+                                    a.direction === "SUPPLIER_ADVANCE_OUT" &&
+                                    a.status === "ACTIVE" &&
+                                    a.remainingBalance > 0 &&
+                                    (a.partyName.trim().toLowerCase().includes(cleanSup) ||
+                                      cleanSup.includes(a.partyName.trim().toLowerCase()))
+                                )
+                                .reduce((s, a) => s + a.remainingBalance, 0);
+                              const netDue = Math.max(0, r2(bill.amount - matchedAdv));
                               setSettlingBillId(settlingBillId === bill.id ? null : bill.id);
-                              setSettleBillAmt(String(bill.amount));
+                              setSettleBillAmt(String(netDue));
                               setSettleBillMode("CASH");
                               setAllowOverpayOverride(false);
                             }}
                             className="rounded-lg bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black px-2.5 py-1 text-xs shadow-sm transition active:scale-[0.97]"
-                            title="Complete / Pay Supplier Payable"
+                            title="Settle Credit Bill & Apply Supplier Advances"
                           >
-                            ✓ Complete / Pay Supplier
+                            ✓ Payment Done
                           </button>
                         )}
                         {(bill.paymentMode === "SETTLED" || bill.amount <= 0) && (
@@ -15678,13 +15690,43 @@ function SupplierHubView({
                         )}
                       </div>
                     </div>
-                    {settlingBillId === bill.id && onSettleSupplierBill && (
+                    {settlingBillId === bill.id && onSettleSupplierBill && (() => {
+                      const cleanSup = bill.supplierName.trim().toLowerCase();
+                      const activeSupAdv = r2(
+                        advances
+                          .filter(
+                            (a) =>
+                              a.direction === "SUPPLIER_ADVANCE_OUT" &&
+                              a.status === "ACTIVE" &&
+                              a.remainingBalance > 0 &&
+                              (a.partyName.trim().toLowerCase().includes(cleanSup) ||
+                                cleanSup.includes(a.partyName.trim().toLowerCase()))
+                          )
+                          .reduce((s, a) => s + a.remainingBalance, 0)
+                      );
+                      const billPriorAdv =
+                        bill.originalAmount !== undefined && bill.originalAmount > bill.amount
+                          ? r2(bill.originalAmount - bill.amount)
+                          : 0;
+                      const totalBillGross = bill.originalAmount ?? bill.amount;
+                      const totalAdvApplied = r2(billPriorAdv + activeSupAdv);
+                      const netRemainingDue = Math.max(0, r2(bill.amount - activeSupAdv));
+                      return (
                       <div className="w-full mt-2 rounded-xl border border-emerald-500/50 bg-emerald-500/10 p-3 flex flex-col gap-2 text-xs animate-fade-slide-up">
-                        {bill.originalAmount !== undefined && bill.originalAmount > bill.amount && (
-                          <div className="text-[11px] font-bold text-amber-700 dark:text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg px-2.5 py-1.5">
-                            Original Bill: SAR {fmt(bill.originalAmount)} | Advance Already Paid: -SAR {fmt(r2(bill.originalAmount - bill.amount))} | Net Remaining Payable: SAR {fmt(bill.amount)}
+                        <div className="grid grid-cols-3 gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-2 text-[11px]">
+                          <div>
+                            <div className="text-[10px] font-bold uppercase text-amber-700 dark:text-amber-300/80">Total Credit Bill</div>
+                            <div className="font-mono font-black text-jct-charcoal dark:text-white">SAR {fmt(totalBillGross)}</div>
                           </div>
-                        )}
+                          <div>
+                            <div className="text-[10px] font-bold uppercase text-amber-700 dark:text-amber-300/80">Advance Already Paid</div>
+                            <div className="font-mono font-black text-amber-700 dark:text-amber-300">-SAR {fmt(totalAdvApplied)}</div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] font-bold uppercase text-emerald-700 dark:text-emerald-300/90">Net Remaining Due</div>
+                            <div className="font-mono font-black text-emerald-700 dark:text-emerald-300">SAR {fmt(netRemainingDue)}</div>
+                          </div>
+                        </div>
                         <div className="flex flex-wrap items-center gap-2">
                         <div className="flex items-center overflow-hidden rounded-xl border-2 border-cyan-400/70 focus-within:border-cyan-300 focus-within:ring-4 focus-within:ring-cyan-500/25 bg-slate-950/95 shadow-inner">
                           <span className="px-2.5 py-1.5 bg-cyan-500/15 border-r border-cyan-400/30 text-[11px] font-black tracking-wider text-cyan-300 shrink-0">
@@ -15754,7 +15796,8 @@ function SupplierHubView({
                         </button>
                         </div>
                       </div>
-                    )}
+                      );
+                    })()}
                   </div>
                 );
               })}
@@ -21785,7 +21828,7 @@ const USER_PROFILES: UserProfile[] = [
 
 const OWNER_TABS: TabId[] = ["register", "quick-log", "archive", "radar", "suppliers", "supplier-advances", "payroll", "pulse", "consolidation", "ai", "settings", "monthly-audits"];
 // RBAC: STAFF accounts have full operational access to Daily Register, Express Quick-Log, Audit Library & Branch-Scoped Settings
-const STAFF_TABS: TabId[] = ["register", "quick-log", "archive", "settings"];
+const STAFF_TABS: TabId[] = ["register", "quick-log", "suppliers", "supplier-advances", "radar", "archive", "settings"];
 
 const OWNER_BRANCH_OPTIONS = [
   "All Branches (Combined)",
@@ -22229,8 +22272,6 @@ export default function Page() {
           pathname &&
           (pathname.startsWith("/pulse") ||
             pathname.startsWith("/monthly-audits") ||
-            pathname.startsWith("/suppliers") ||
-            pathname.startsWith("/credit-radar") ||
             pathname.startsWith("/payroll") ||
             pathname.startsWith("/consolidation") ||
             pathname.startsWith("/owner-pocket") ||
@@ -22292,7 +22333,7 @@ export default function Page() {
     window.localStorage.setItem("jct-theme", dark ? "dark" : "light");
   }, [dark]);
 
-  // Cross-Module Sync 1: Credit Purchase / Supplier Purchase -> Suppliers & Payables
+  // Cross-Module Sync 1: Credit Purchase / Supplier Purchase -> Suppliers & Payables (persisted to Neon)
   const handleSyncCreditPurchase = (
     supplierName: string,
     amount: number,
@@ -22303,11 +22344,13 @@ export default function Page() {
     billPdfUrl?: string
   ) => {
     const cleanName = supplierName.trim() || "Jotun";
+    const resolvedDue = dueDate || addSaudiDays(14);
     const newBill: SupplierBillItem = {
       id: `sb-${Date.now()}`,
       supplierName: cleanName,
       amount,
-      dueDate: dueDate || addSaudiDays(14),
+      originalAmount: amount,
+      dueDate: resolvedDue,
       category: category === "Supplier Advance" ? "Cash Purchase" : category,
       paymentMode: paymentMode || "CASH",
       createdAt: saudiCalendarDateStr(),
@@ -22316,6 +22359,31 @@ export default function Page() {
       billPdfUrl: billPdfUrl || undefined,
     };
     setSupplierBills((prev) => [newBill, ...prev]);
+
+    if (category === "Credit Purchase" && amount > 0) {
+      fetch("/api/suppliers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          branch: syncBranch,
+          supplier: cleanName,
+          invoiceNo: supplierInvoiceNum || `CP-${Date.now().toString().slice(-6)}`,
+          supplierInvoiceNum: supplierInvoiceNum || undefined,
+          billPdfUrl: billPdfUrl || undefined,
+          amount,
+          originalAmount: amount,
+          dueDate: resolvedDue,
+          paymentMode: paymentMode || "CREDIT",
+        }),
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (data?.bill?.id) {
+            setSuppliersRefresh((n) => n + 1);
+          }
+        })
+        .catch(() => {});
+    }
 
     setSupplierBrands((prev) => {
       const idx = prev.findIndex(
@@ -22483,6 +22551,29 @@ export default function Page() {
       };
       return [newContractor, ...prev];
     });
+
+    if (mode === "CREDIT_SALE" && amount > 0) {
+      fetch("/api/credits", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          branch: syncBranch,
+          customerName: cleanCust,
+          linkedInvoiceNum: formattedInvNo,
+          invoiceNo: formattedInvNo,
+          amount,
+          followUpDate: followUpDate || addSaudiDays(14),
+          originalDate: saudiTodayIso(),
+        }),
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (data?.record?.id) {
+            setCreditsRefresh((n) => n + 1);
+          }
+        })
+        .catch(() => {});
+    }
   };
 
   // Compute Live Cross-Module Totals for Financial Pulse, Branch Consolidation & Nauman AI
@@ -22608,21 +22699,162 @@ export default function Page() {
   const [ settingsRefresh, setSettingsRefresh] = useState(0);
   const [branchAdvances, setBranchAdvances] = useState<AdvanceRecordItem[]>([]);
   const [advancesRefresh, setAdvancesRefresh] = useState(0);
+  const [suppliersRefresh, setSuppliersRefresh] = useState(0);
+  const [creditsRefresh, setCreditsRefresh] = useState(0);
 
   useEffect(() => {
     let ignore = false;
-    fetch(`/api/advances?branch=${syncBranch}`, { cache: "no-store" })
-      .then((r) => r.json())
-      .then((data) => {
-        if (!ignore && Array.isArray(data?.advances)) {
-          setBranchAdvances(data.advances);
-        }
-      })
-      .catch(() => {});
+    const loadAdvances = () => {
+      fetch(`/api/advances?branch=${syncBranch}`, { cache: "no-store" })
+        .then((r) => r.json())
+        .then((data) => {
+          if (!ignore && Array.isArray(data?.advances)) {
+            setBranchAdvances(data.advances);
+          }
+        })
+        .catch(() => {});
+    };
+    loadAdvances();
+    const interval = window.setInterval(loadAdvances, 15000);
+    window.addEventListener("focus", loadAdvances);
     return () => {
       ignore = true;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", loadAdvances);
     };
   }, [syncBranch, advancesRefresh]);
+
+  // Live Neon Sync for Suppliers & Payables (/api/suppliers)
+  useEffect(() => {
+    let ignore = false;
+    const loadSuppliers = () => {
+      fetch(`/api/suppliers?branch=${syncBranch}`, { cache: "no-store" })
+        .then((r) => r.json())
+        .then((data) => {
+          if (ignore || !Array.isArray(data?.bills)) return;
+          if (data.bills.length === 0) return;
+          const mapped: SupplierBillItem[] = data.bills.map((b: Record<string, unknown>) => {
+            const rem =
+              b.remainingAmount !== undefined && b.remainingAmount !== null
+                ? Number(b.remainingAmount)
+                : Number(b.amount) || 0;
+            const orig =
+              b.originalAmount !== undefined && b.originalAmount !== null
+                ? Number(b.originalAmount)
+                : Number(b.amount) || 0;
+            const isPaid = Boolean(b.isPaid) || rem <= 0.01;
+            const dueRaw = typeof b.dueDate === "string" ? b.dueDate.slice(0, 10) : addSaudiDays(14);
+            const createdRaw = typeof b.createdAt === "string" ? b.createdAt.slice(0, 10) : saudiCalendarDateStr();
+            return {
+              id: String(b.id),
+              supplierName: String(b.supplier || "Supplier"),
+              amount: isPaid ? 0 : rem,
+              originalAmount: orig,
+              dueDate: dueRaw,
+              category: "Credit Purchase",
+              paymentMode: isPaid ? "SETTLED" : String(b.paymentMode || "CREDIT"),
+              createdAt: createdRaw,
+              source: "Daily Register",
+              supplierInvoiceNum: b.supplierInvoiceNum ? String(b.supplierInvoiceNum) : String(b.invoiceNo || ""),
+              billPdfUrl: b.billPdfUrl ? String(b.billPdfUrl) : undefined,
+            };
+          });
+          setSupplierBills(mapped);
+          setSupplierBrands((prev) => {
+            const next = prev.map((br) => ({ ...br, pendingBills: 0, amountPaid: 0 }));
+            for (const bill of mapped) {
+              const supLow = bill.supplierName.toLowerCase();
+              let found = next.find(
+                (br) => br.brand.toLowerCase().includes(supLow) || supLow.includes(br.brand.toLowerCase())
+              );
+              if (!found) {
+                found = {
+                  id: next.length + 100,
+                  brand: bill.supplierName,
+                  amountPaid: 0,
+                  pendingBills: 0,
+                  color: "purple",
+                };
+                next.push(found);
+              }
+              if (bill.paymentMode === "SETTLED" || bill.amount <= 0) {
+                found.amountPaid = r2(found.amountPaid + (bill.originalAmount || 0));
+              } else {
+                found.pendingBills = r2(found.pendingBills + bill.amount);
+                if (bill.originalAmount && bill.originalAmount > bill.amount) {
+                  found.amountPaid = r2(found.amountPaid + (bill.originalAmount - bill.amount));
+                }
+              }
+            }
+            return next;
+          });
+        })
+        .catch(() => {});
+    };
+    loadSuppliers();
+    const interval = window.setInterval(loadSuppliers, 15000);
+    window.addEventListener("focus", loadSuppliers);
+    return () => {
+      ignore = true;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", loadSuppliers);
+    };
+  }, [syncBranch, suppliersRefresh]);
+
+  // Live Neon Sync for Credit Radar (/api/credits)
+  useEffect(() => {
+    let ignore = false;
+    const loadCredits = () => {
+      fetch(`/api/credits?branch=${syncBranch}`, { cache: "no-store" })
+        .then((r) => r.json())
+        .then((data) => {
+          if (ignore || !Array.isArray(data?.records)) return;
+          if (data.records.length === 0) return;
+          const mapped: ContractorAccount[] = data.records.map((rec: Record<string, unknown>) => {
+            const outBal = Number(rec.outstandingBalance) || 0;
+            const statusStr = String(rec.status || "CURRENT").toUpperCase();
+            return {
+              id: String(rec.id),
+              name: String(rec.customerName || "Customer"),
+              phone: rec.phone ? String(rec.phone) : undefined,
+              outstanding: outBal,
+              dueDate: String(rec.followUpDate || addSaudiDays(14)),
+              followUpDate: String(rec.followUpDate || addSaudiDays(14)),
+              latestInvoiceNo: String(rec.linkedInvoiceNum || rec.invoiceNo || ""),
+              latestInvoiceAmount: Number(rec.amount) || outBal,
+              status:
+                outBal <= 0.01 || statusStr === "SETTLED"
+                  ? "on_track"
+                  : statusStr === "OVERDUE"
+                  ? "overdue"
+                  : "due_soon",
+              riskLevel: statusStr === "OVERDUE" ? "High" : "Low",
+              avgPaymentTime: "Synced via Neon",
+              clearedInvoices: outBal <= 0.01 ? 1 : 0,
+              history: [
+                {
+                  id: String(rec.linkedInvoiceNum || rec.invoiceNo || rec.id),
+                  amount: Number(rec.amount) || outBal,
+                  date: String(rec.originalDate || saudiTodayIso()),
+                  status: outBal <= 0.01 ? "paid_on_time" : "due_soon",
+                },
+              ],
+              syncedFromRegister: true,
+            };
+          });
+          setCreditCustomers(mapped);
+        })
+        .catch(() => {});
+    };
+    loadCredits();
+    const interval = window.setInterval(loadCredits, 15000);
+    window.addEventListener("focus", loadCredits);
+    return () => {
+      ignore = true;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", loadCredits);
+    };
+  }, [syncBranch, creditsRefresh]);
 
   useEffect(() => {
     let ignore = false;
@@ -23197,6 +23429,130 @@ export default function Page() {
     window.localStorage.setItem(POCKET_CUSTOMERS_KEY, JSON.stringify(creditCustomers.map((c) => c.name)));
   }, [creditCustomers]);
 
+  // Shared Two-Way Supplier Settlement Engine (used by both Supplier Hub "Payment Done" & Express Quick-Log "Credit Purchase Payment")
+  const executeUnifiedSupplierSettlement = (opts: {
+    supplierName: string;
+    paymentAmount: number;
+    paymentMode: "CASH" | "BANK_TRANSFER" | "CARD";
+    billId?: string;
+    invoiceNo?: string;
+    receiptUrl?: string;
+    clientTxnId?: string;
+    notes?: string;
+  }) => {
+    const supName = opts.supplierName.trim() || "Supplier";
+    const cleanSupLower = supName.toLowerCase();
+    const payMode =
+      opts.paymentMode === "BANK_TRANSFER"
+        ? "BANK"
+        : opts.paymentMode === "CARD"
+        ? "CARD"
+        : "CASH";
+
+    // 1. Deduct from Cash Drawer (if CASH) or record Bank/Card outflow
+    const txnId = opts.clientTxnId || `sup-pay-${opts.billId || Date.now()}-${Date.now()}`;
+    const creditPayEntry: PreLoggedEntry = {
+      id: txnId,
+      clientTxnId: txnId,
+      type: "EXPENSE",
+      expenseCategory: "Cash Purchase",
+      supplierName: supName,
+      supplierInvoiceNum: opts.invoiceNo,
+      title: `Supplier Credit Payment — ${supName}${opts.invoiceNo ? ` (#${opts.invoiceNo})` : ""}`,
+      paymentMode: payMode,
+      amount: opts.paymentAmount,
+      receiptUrl: opts.receiptUrl,
+      hasBill: Boolean(opts.receiptUrl),
+      time: nowHHMM(),
+    };
+    setPreLoggedEntries((prev) => deduplicatePreLoggedEntries([creditPayEntry, ...prev]));
+
+    // 2. Compute active supplier advance to auto-apply alongside cash/bank payment
+    const matchedAdvanceAmt = r2(
+      branchAdvances
+        .filter(
+          (a) =>
+            a.direction === "SUPPLIER_ADVANCE_OUT" &&
+            a.status === "ACTIVE" &&
+            a.remainingBalance > 0 &&
+            (a.partyName.trim().toLowerCase().includes(cleanSupLower) ||
+              cleanSupLower.includes(a.partyName.trim().toLowerCase()))
+        )
+        .reduce((sum, a) => sum + a.remainingBalance, 0)
+    );
+    const totalReductionBudget = r2(opts.paymentAmount + matchedAdvanceAmt);
+
+    // 3. Optimistically FIFO-reduce open Credit Purchase bills (target billId first if provided)
+    setSupplierBills((prev) => {
+      let remainingToApply = totalReductionBudget;
+      const indexed = prev.map((b, idx) => ({ b, idx }));
+      indexed.sort((a, b) => {
+        if (opts.billId) {
+          if (a.b.id === opts.billId) return -1;
+          if (b.b.id === opts.billId) return 1;
+        }
+        return (a.b.createdAt || "").localeCompare(b.b.createdAt || "");
+      });
+      const updatedMap = new Map<number, SupplierBillItem>();
+      for (const { b, idx } of indexed) {
+        if (remainingToApply <= 0.01) break;
+        const matchesSup =
+          b.supplierName.toLowerCase().includes(cleanSupLower) ||
+          cleanSupLower.includes(b.supplierName.toLowerCase());
+        if (matchesSup && b.category === "Credit Purchase" && b.amount > 0 && b.paymentMode !== "SETTLED") {
+          const applied = Math.min(remainingToApply, b.amount);
+          const nextAmt = Math.max(0, r2(b.amount - applied));
+          remainingToApply = r2(remainingToApply - applied);
+          updatedMap.set(idx, {
+            ...b,
+            amount: nextAmt,
+            paymentMode: nextAmt <= 0.01 ? "SETTLED" : b.paymentMode,
+          });
+        }
+      }
+      return prev.map((b, idx) => updatedMap.get(idx) ?? b);
+    });
+
+    // 4. Update Supplier Brands summary optimistically
+    setSupplierBrands((prev) =>
+      prev.map((br) =>
+        supName.toLowerCase().includes(br.brand.toLowerCase()) ||
+        br.brand.toLowerCase().includes(cleanSupLower)
+          ? {
+              ...br,
+              pendingBills: Math.max(0, r2(br.pendingBills - totalReductionBudget)),
+              amountPaid: r2(br.amountPaid + opts.paymentAmount),
+              lastPaymentDate: saudiSessionDate(),
+            }
+          : br
+      )
+    );
+
+    // 5. Persist settlement to Neon PostgreSQL (updates SupplierBill + adjusts AdvanceRecord)
+    fetch("/api/suppliers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "SETTLE",
+        branch: syncBranch,
+        supplier: supName,
+        billId: opts.billId,
+        paymentAmount: opts.paymentAmount,
+        paymentMode: opts.paymentMode,
+        notes: opts.notes || (opts.invoiceNo ? `Inv #${opts.invoiceNo}` : undefined),
+        autoApplyAdvance: true,
+      }),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.ok) {
+          setSuppliersRefresh((n) => n + 1);
+          setAdvancesRefresh((n) => n + 1);
+        }
+      })
+      .catch(() => {});
+  };
+
   const handleExpressQuickLogSync = (entryData: {
     type: QuickLogType;
     payload: Record<string, unknown>;
@@ -23292,70 +23648,31 @@ export default function Page() {
       ]);
     } else if (type === "CREDIT_SUPPLIER") {
       const supName = supplierName || customerName || "Supplier";
-      const cleanSupLower = supName.trim().toLowerCase();
-      const payMode =
-        paymentMode === "BANK_TRANSFER"
-          ? "BANK"
+      const settleMode: "CASH" | "BANK_TRANSFER" | "CARD" =
+        paymentMode === "BANK_TRANSFER" || paymentMode === "BANK"
+          ? "BANK_TRANSFER"
           : paymentMode === "CARD"
           ? "CARD"
           : "CASH";
-
-      // 1. Deduct from Cash Drawer (if CASH) or record Bank/Card outflow
-      const creditPayEntry: PreLoggedEntry = {
-        id: clientTxnId || `sup-pay-${Date.now()}`,
-        clientTxnId,
-        type: "EXPENSE",
-        expenseCategory: "Cash Purchase",
+      executeUnifiedSupplierSettlement({
         supplierName: supName,
-        supplierInvoiceNum: invoiceNo,
-        title: `Supplier Credit Payment — ${supName}${invoiceNo ? ` (#${invoiceNo})` : ""}`,
-        paymentMode: payMode,
-        amount,
+        paymentAmount: amount,
+        paymentMode: settleMode,
+        invoiceNo,
         receiptUrl,
-        hasBill: Boolean(receiptUrl),
-        time: nowHHMM(),
-      };
-      setPreLoggedEntries((prev) => deduplicatePreLoggedEntries([creditPayEntry, ...prev]));
-
-      // 2. FIFO-reduce oldest open Credit Purchase bills in Suppliers & Payables + Credit Radar
-      setSupplierBills((prev) => {
-        let remainingToApply = amount;
-        // Sort oldest first (ascending createdAt / id) for FIFO reduction
-        const indexed = prev.map((b, idx) => ({ b, idx }));
-        indexed.sort((a, b) => (a.b.createdAt || "").localeCompare(b.b.createdAt || ""));
-        const updatedMap = new Map<number, SupplierBillItem>();
-        for (const { b, idx } of indexed) {
-          if (remainingToApply <= 0) break;
-          const matchesSup =
-            b.supplierName.toLowerCase().includes(cleanSupLower) ||
-            cleanSupLower.includes(b.supplierName.toLowerCase());
-          if (matchesSup && b.category === "Credit Purchase" && b.amount > 0 && b.paymentMode !== "SETTLED") {
-            const applied = Math.min(remainingToApply, b.amount);
-            const nextAmt = Math.max(0, r2(b.amount - applied));
-            remainingToApply = r2(remainingToApply - applied);
-            updatedMap.set(idx, {
-              ...b,
-              amount: nextAmt,
-              paymentMode: nextAmt <= 0 ? "SETTLED" : b.paymentMode,
-            });
-          }
-        }
-        return prev.map((b, idx) => updatedMap.get(idx) ?? b);
+        clientTxnId,
+        notes: description || undefined,
       });
-
-      // 3. Reduce Supplier Brands pendingBills & increment amountPaid
-      setSupplierBrands((prev) =>
-        prev.map((br) =>
-          supName.toLowerCase().includes(br.brand.toLowerCase()) ||
-          br.brand.toLowerCase().includes(cleanSupLower)
-            ? {
-                ...br,
-                pendingBills: Math.max(0, r2(br.pendingBills - amount)),
-                amountPaid: r2(br.amountPaid + amount),
-                lastPaymentDate: saudiSessionDate(),
-              }
-            : br
-        )
+    } else if (type === "PURCHASE" && (paymentMode === "CREDIT" || category === "Credit Purchase")) {
+      // Credit / Pay-Later Purchase: create SupplierBill in Neon + Supplier Hub WITHOUT deducting Cash Drawer or Bank
+      handleSyncCreditPurchase(
+        supplierName || "Supplier",
+        amount,
+        addSaudiDays(14),
+        "Credit Purchase",
+        "CREDIT",
+        invoiceNo,
+        receiptUrl
       );
     } else if (type === "EXPENSE" || type === "PURCHASE" || type === "SALES_RETURN") {
       const isBusComm = category === "Business Commission";
@@ -23588,6 +23905,7 @@ export default function Page() {
                 ]}
                 onSyncWithRegister={handleExpressQuickLogSync}
                 supplierBills={supplierBills}
+                advances={branchAdvances}
                 onDeleteSyncedEntry={(id, clientTxnId) => {
                   setErpInvoices((prev) =>
                     prev.filter(
@@ -23707,6 +24025,21 @@ export default function Page() {
                     time: nowHHMM(),
                   };
                   setPreLoggedEntries((prev) => deduplicatePreLoggedEntries([settleEntry, ...prev]));
+                  fetch("/api/credits", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      action: "COLLECT",
+                      id: customer.id,
+                      collectedAmount: cleanAmt,
+                      paymentMode: mode,
+                    }),
+                  })
+                    .then((r) => (r.ok ? r.json() : null))
+                    .then((data) => {
+                      if (data?.ok) setCreditsRefresh((n) => n + 1);
+                    })
+                    .catch(() => {});
                 }}
                 liveParties={[
                   ...erpInvoices
@@ -23730,45 +24063,14 @@ export default function Page() {
                 onUpdateBill={handleUpdateSupplierBill}
                 onDeleteBill={handleDeleteSupplierBill}
                 onSettleSupplierBill={(bill, amt, mode) => {
-                  const cleanAmt = Math.min(amt, bill.amount);
-                  const remaining = Math.max(0, r2(bill.amount - cleanAmt));
-                  setSupplierBills((prev) =>
-                    prev.map((b) =>
-                      b.id === bill.id
-                        ? {
-                            ...b,
-                            amount: remaining,
-                            paymentMode: remaining <= 0 ? "SETTLED" : b.paymentMode,
-                          }
-                        : b
-                    )
-                  );
-                  setSupplierBrands((prev) =>
-                    prev.map((br) =>
-                      bill.supplierName.toLowerCase().includes(br.brand.toLowerCase()) ||
-                      br.brand.toLowerCase().includes(bill.supplierName.toLowerCase())
-                        ? {
-                            ...br,
-                            pendingBills: Math.max(0, r2(br.pendingBills - cleanAmt)),
-                            amountPaid: r2(br.amountPaid + cleanAmt),
-                          }
-                        : br
-                    )
-                  );
-                  const settleTxnId = `settle-sup-${bill.id}-${Date.now()}`;
-                  const settleExp: PreLoggedEntry = {
-                    id: settleTxnId,
-                    clientTxnId: settleTxnId,
-                    type: "EXPENSE",
-                    expenseCategory: "Cash Purchase",
+                  executeUnifiedSupplierSettlement({
                     supplierName: bill.supplierName,
-                    supplierInvoiceNum: bill.supplierInvoiceNum,
-                    title: `Supplier Payment — ${bill.supplierName}${bill.supplierInvoiceNum ? ` (#${bill.supplierInvoiceNum})` : ""}`,
-                    paymentMode: mode === "BANK_TRANSFER" ? "BANK" : mode,
-                    amount: cleanAmt,
-                    time: nowHHMM(),
-                  };
-                  setPreLoggedEntries((prev) => deduplicatePreLoggedEntries([settleExp, ...prev]));
+                    paymentAmount: amt,
+                    paymentMode: mode,
+                    billId: bill.id,
+                    invoiceNo: bill.supplierInvoiceNum,
+                    receiptUrl: bill.billPdfUrl,
+                  });
                 }}
                 liveParties={[
                   ...erpInvoices

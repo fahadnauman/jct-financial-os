@@ -134,7 +134,9 @@ model CreditCustomer {
 
 model CreditRadar {
   id                 String   @id @default(cuid())
+  branch             String?
   customerName       String
+  phone              String?
   linkedInvoiceNum   String?
   invoiceNo          String?
   originalDate       String?
@@ -143,15 +145,18 @@ model CreditRadar {
   amount             Float    @default(0)
   outstandingBalance Float    @default(0)
   status             String   @default("CURRENT")
+  notes              String?
   updatedAt          DateTime @updatedAt
   createdAt          DateTime @default(now())
 
+  @@index([branch])
   @@index([linkedInvoiceNum])
   @@index([customerName])
 }
 
 model SupplierBill {
   id                 String   @id @default(cuid())
+  branch             String?
   supplier           String   // "Jotun KSA", "Hempel", "Sigma"
   invoiceNo          String
   supplierInvoiceNum String?
@@ -159,13 +164,21 @@ model SupplierBill {
   receiptUrl         String?
   amount             Float
   originalAmount     Float?
+  advancePaid        Float?   @default(0)
+  remainingAmount    Float?
+  status             String?  @default("UNPAID")
+  notes              String?
   isReturned         Boolean  @default(false)
   dueDate            DateTime
   followUpDate       String?
   followUpStatus     String?  @default("SCHEDULED")
   isPaid             Boolean  @default(false)
+  paidAt             DateTime?
   paymentMode        String?  // e.g., "SAB", "AL_RAJHI", "SNB", "VISA", "MADA", "BANK_TRANSFER", "CASH"
   createdAt          DateTime @default(now())
+
+  @@index([branch])
+  @@index([supplier])
 }
 
 model Purchase {
