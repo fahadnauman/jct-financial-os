@@ -35,52 +35,102 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
 
-    // Collection settlement on an existing CreditRadar record
+    // Collection settlement on an existing CreditRadar record (by id or FIFO by customerName)
     if (body.action === "COLLECT") {
       const id = String(body.id || "").trim();
+      const customerName = String(body.customerName || "").trim();
+      const rawBranch = body.branch;
+      const branch = rawBranch && rawBranch !== "ALL" ? normalizeBranch(rawBranch) : null;
       const collectedAmount = Math.max(0, Number(body.collectedAmount) || 0);
-      if (!id || collectedAmount <= 0) {
+      if ((!id && !customerName) || collectedAmount <= 0) {
         return NextResponse.json(
-          { error: "Valid record id and positive collectedAmount are required" },
+          { error: "Valid record id or customerName and positive collectedAmount are required" },
           { status: 400 }
         );
       }
 
-      const existing = await prisma.creditRadar.findUnique({ where: { id } });
-      if (!existing) {
-        return NextResponse.json({ error: "Credit record not found" }, { status: 404 });
+      if (id) {
+        const existing = await prisma.creditRadar.findUnique({ where: { id } });
+        if (existing) {
+          const currentRem = existing.remainingAmount ?? existing.outstandingBalance;
+          const newBalance = Math.max(
+            0,
+            Number((currentRem - collectedAmount).toFixed(2))
+          );
+          const newStatus = newBalance <= 0.01 ? "SETTLED" : existing.status;
+
+          const updated = await prisma.creditRadar.update({
+            where: { id },
+            data: {
+              outstandingBalance: newBalance,
+              remainingAmount: newBalance,
+              status: newStatus,
+              notes: body.notes
+                ? `${existing.notes ? existing.notes + " | " : ""}Collected ${collectedAmount} SAR (${body.paymentMode || "CASH"})`
+                : existing.notes,
+            },
+          });
+
+          return NextResponse.json({ ok: true, record: updated });
+        }
       }
 
-      const newBalance = Math.max(
-        0,
-        Number((existing.outstandingBalance - collectedAmount).toFixed(2))
-      );
-      const newStatus = newBalance <= 0.01 ? "SETTLED" : existing.status;
+      // Fallback: FIFO match open CreditRadar records by customerName (and branch if provided)
+      if (customerName) {
+        const whereOpen: Record<string, unknown> = {
+          customerName: { equals: customerName, mode: "insensitive" },
+          outstandingBalance: { gt: 0 },
+        };
+        if (branch) {
+          whereOpen.OR = [{ branch }, { branch: null }];
+        }
+        const matches = await prisma.creditRadar.findMany({
+          where: whereOpen,
+          orderBy: { createdAt: "asc" },
+        });
+        let remainingToCollect = collectedAmount;
+        const updatedRecords: unknown[] = [];
+        for (const rec of matches) {
+          if (remainingToCollect <= 0.01) break;
+          const currentRem = rec.remainingAmount ?? rec.outstandingBalance;
+          const applied = Math.min(currentRem, remainingToCollect);
+          const nextBal = Math.max(0, Number((currentRem - applied).toFixed(2)));
+          remainingToCollect = Number((remainingToCollect - applied).toFixed(2));
+          const updated = await prisma.creditRadar.update({
+            where: { id: rec.id },
+            data: {
+              outstandingBalance: nextBal,
+              remainingAmount: nextBal,
+              status: nextBal <= 0.01 ? "SETTLED" : rec.status,
+            },
+          });
+          updatedRecords.push(updated);
+        }
+        return NextResponse.json({ ok: true, records: updatedRecords });
+      }
 
-      const updated = await prisma.creditRadar.update({
-        where: { id },
-        data: {
-          outstandingBalance: newBalance,
-          status: newStatus,
-          notes: body.notes
-            ? `${existing.notes ? existing.notes + " | " : ""}Collected ${collectedAmount} SAR (${body.paymentMode || "CASH"})`
-            : existing.notes,
-        },
-      });
-
-      return NextResponse.json({ ok: true, record: updated });
+      return NextResponse.json({ error: "Credit record not found" }, { status: 404 });
     }
 
-    // Create a new CreditRadar receivable (or increment existing open customer credit if matched by linkedInvoiceNum)
+    // Create a new CreditRadar receivable
     const rawBranch = body.branch;
     const branch = rawBranch && rawBranch !== "ALL" ? normalizeBranch(rawBranch) : null;
     const customerName = String(body.customerName || "").trim();
     const amount = Math.max(0, Number(body.amount) || 0);
+    const originalSaleAmount =
+      body.originalSaleAmount !== undefined
+        ? Math.max(0, Number(body.originalSaleAmount) || 0)
+        : amount;
+    const advanceReceived = Math.max(0, Number(body.advanceReceived) || 0);
+    const computedRemaining =
+      body.remainingAmount !== undefined
+        ? Math.max(0, Number(body.remainingAmount) || 0)
+        : Math.max(0, Number((originalSaleAmount - advanceReceived).toFixed(2)));
     const linkedInvoiceNum = body.linkedInvoiceNum
       ? String(body.linkedInvoiceNum).trim()
       : null;
 
-    if (!customerName || amount <= 0) {
+    if (!customerName || originalSaleAmount <= 0) {
       return NextResponse.json(
         { error: "Customer name and positive amount are required" },
         { status: 400 }
@@ -97,12 +147,15 @@ export async function POST(req: Request) {
         originalDate: body.originalDate || saudiTodayIso(),
         followUpDate: body.followUpDate || null,
         followUpStatus: body.followUpStatus || "SCHEDULED",
-        amount,
+        amount: originalSaleAmount,
+        originalSaleAmount,
+        advanceReceived,
+        remainingAmount: computedRemaining,
         outstandingBalance:
           body.outstandingBalance !== undefined
             ? Math.max(0, Number(body.outstandingBalance) || 0)
-            : amount,
-        status: body.status || "CURRENT",
+            : computedRemaining,
+        status: computedRemaining <= 0.01 ? "SETTLED" : body.status || "CURRENT",
         notes: body.notes ? String(body.notes).trim() : null,
       },
     });

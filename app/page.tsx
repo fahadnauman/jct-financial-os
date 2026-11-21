@@ -101,7 +101,10 @@ export interface ContractorHistoryItem {
 export interface ContractorAccount {
   id: string;
   name: string;
+  phone?: string;
   outstanding: number;
+  originalSaleAmount?: number;
+  advanceReceived?: number;
   dueDate: string;
   followUpDate?: string;
   latestInvoiceNo?: string;
@@ -677,6 +680,7 @@ export const STRICT_EXPENSE_CATEGORIES = [
   "Water",
   "Salary",
   "Staff Advance",
+  "Loan Out",
   "Credit Purchase",
   "Cash Purchase",
   "Medical Expenses",
@@ -685,7 +689,10 @@ export const STRICT_EXPENSE_CATEGORIES = [
   "Business Commission",
 ] as const;
 
-export type StrictExpenseCategory = (typeof STRICT_EXPENSE_CATEGORIES)[number] | "Supplier Advance";
+export type StrictExpenseCategory =
+  | (typeof STRICT_EXPENSE_CATEGORIES)[number]
+  | "Supplier Advance"
+  | "Loan Out Advance";
 
 export const POS_TERMINAL_META: Record<
   PosTerminalBank,
@@ -2213,7 +2220,8 @@ interface DailyRegisterViewProps {
     amount: number,
     followUpDate: string,
     receiptNo?: string,
-    mode?: "CREDIT_RECD" | "CREDIT_SALE" | "CUSTOMER_ADVANCE"
+    mode?: "CREDIT_RECD" | "CREDIT_SALE" | "CUSTOMER_ADVANCE",
+    advanceReceived?: number
   ) => void;
   creditCustomers?: ContractorAccount[];
   advances?: AdvanceRecordItem[];
@@ -3332,7 +3340,9 @@ function DailyRegisterView({
   const [hubSplitCashInput, setHubSplitCashInput] = useState("1000");
   const [hubSplitCardInput, setHubSplitCardInput] = useState("1000");
   const [hubSplitMethod, setHubSplitMethod] = useState<"POS_SWIPE" | "BANK_TRANSFER">("POS_SWIPE");
-  const [hubSplitTerminal, setHubSplitTerminal] = useState<PosTerminalBank>("SAB");
+  const defaultBranchBank: "SAB" | "SNB" =
+    branchId === "JCT_HARDWARE_JOTUN" ? "SNB" : "SAB";
+  const [hubSplitTerminal, setHubSplitTerminal] = useState<PosTerminalBank>(defaultBranchBank);
 
   // Wizard State
   const [csvLoadedBanner, setCsvLoadedBanner] = useState(false);
@@ -3351,7 +3361,7 @@ function DailyRegisterView({
     "CREDIT_RECD" | "CREDIT_SALE" | "CUSTOMER_ADVANCE" | "SPLIT_SALE" | "LOAN_IN" | "OTHER_IN"
   >("CREDIT_RECD");
   const [step3PaymentMode, setStep3PaymentMode] = useState<UniversalPaymentMode>("CASH");
-  const [step3Terminal, setStep3Terminal] = useState<"SAB" | "AL_RAJHI" | "SNB">("SAB");
+  const [step3Terminal, setStep3Terminal] = useState<"SAB" | "AL_RAJHI" | "SNB">(defaultBranchBank);
   const [step3Network, setStep3Network] = useState<"mada" | "visa">("mada");
   const [step3SplitEnabled, setStep3SplitEnabled] = useState(false);
   const [step3Title, setStep3Title] = useState("");
@@ -3359,18 +3369,31 @@ function DailyRegisterView({
   const [step3OriginalDate, setStep3OriginalDate] = useState("");
   const [step3ReceiptNo, setStep3ReceiptNo] = useState("");
   const [step3Amount, setStep3Amount] = useState("");
+  const [step3AdvanceAmount, setStep3AdvanceAmount] = useState("");
+  const [step3AdvanceMode, setStep3AdvanceMode] = useState<"CASH" | "BANK_TRANSFER" | "CARD">("CASH");
   const [step3SplitCash, setStep3SplitCash] = useState("1000");
   const [step3SplitCard, setStep3SplitCard] = useState("1000");
   const [step3SplitMethod, setStep3SplitMethod] = useState<"POS_SWIPE" | "BANK_TRANSFER">(
     "POS_SWIPE"
   );
-  const [step3SplitTerminal, setStep3SplitTerminal] = useState<"SAB" | "AL_RAJHI" | "SNB">("SAB");
+  const [step3SplitTerminal, setStep3SplitTerminal] = useState<"SAB" | "AL_RAJHI" | "SNB">(defaultBranchBank);
   const [step3SplitNetwork, setStep3SplitNetwork] = useState<"mada" | "visa">("mada");
 
   // Step 4 (Expenses & Purchases — Strict Categories) State
   const [step4Category, setStep4Category] = useState<StrictExpenseCategory>("Food");
+  const [step4LoanSubType, setStep4LoanSubType] = useState<"GENERAL" | "LOAN_OUT_ADVANCE">("GENERAL");
+  const [step4LoanRecipient, setStep4LoanRecipient] = useState("");
+  const [step4LoanReturnDate, setStep4LoanReturnDate] = useState("");
   const [step4PaymentMode, setStep4PaymentMode] = useState<UniversalPaymentMode>("CASH");
-  const [step4Terminal, setStep4Terminal] = useState<"SAB" | "AL_RAJHI" | "SNB">("SAB");
+  const [step4Terminal, setStep4Terminal] = useState<"SAB" | "AL_RAJHI" | "SNB">(defaultBranchBank);
+
+  useEffect(() => {
+    const bank: "SAB" | "SNB" = branchId === "JCT_HARDWARE_JOTUN" ? "SNB" : "SAB";
+    setHubSplitTerminal(bank);
+    setStep3Terminal(bank);
+    setStep3SplitTerminal(bank);
+    setStep4Terminal(bank);
+  }, [branchId]);
   const [step4Network, setStep4Network] = useState<"mada" | "visa">("mada");
   const [step4SupplierName, setStep4SupplierName] = useState("");
   const [isReturnBillModalOpen, setIsReturnBillModalOpen] = useState(false);
@@ -5317,15 +5340,34 @@ function DailyRegisterView({
     }
 
     if (isCredit) {
+      const advAmt =
+        step3Kind === "CREDIT_SALE"
+          ? Math.min(val, Math.max(0, Number(step3AdvanceAmount) || 0))
+          : 0;
+      if (step3Kind === "CREDIT_SALE" && advAmt > 0) {
+        upsertEntry({
+          id: `ple-adv-cr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          type: "CREDIT_RECD",
+          customerName: cleanCustomer,
+          receiptNo: formattedReceiptNo,
+          invoiceNumber: cleanInv || undefined,
+          linkedInvoiceNum: cleanInv || formattedReceiptNo,
+          paymentMode: step3AdvanceMode,
+          title: `Advance on Credit Sale — ${cleanCustomer}${formattedReceiptNo ? ` (${formattedReceiptNo})` : ""}`,
+          amount: advAmt,
+          time: nowHHMM(),
+        });
+      }
       onSyncCreditCustomer(
         cleanCustomer,
         val,
         step3Kind === "CREDIT_RECD" ? (step3OriginalDate || saudiTodayIso()) : (step3FollowUpDate || addSaudiDays(7)),
         formattedReceiptNo,
-        step3Kind
+        step3Kind,
+        advAmt
       );
       setSyncBannerMsg({
-        text: `${cleanCustomer}${formattedReceiptNo ? ` (Inv ${formattedReceiptNo})` : ""} · SAR ${fmt(val)} · Reminder: ${step3FollowUpDate} synced live to Credit Radar`,
+        text: `${cleanCustomer}${formattedReceiptNo ? ` (Inv ${formattedReceiptNo})` : ""} · SAR ${fmt(val)}${advAmt > 0 ? ` (Adv: -SAR ${fmt(advAmt)})` : ""} · Reminder: ${step3FollowUpDate} synced live to Credit Radar`,
         targetTab: "radar",
         targetLabel: "View in Credit Radar →",
       });
@@ -5334,6 +5376,7 @@ function DailyRegisterView({
     setStep3Title("");
     setStep3ReceiptNo("");
     setStep3Amount("");
+    setStep3AdvanceAmount("");
   };
 
   const handleAddStep4Expense = (e: React.FormEvent) => {
@@ -5395,6 +5438,16 @@ function DailyRegisterView({
     }
 
     const isCreditPurchase = step4Category === "Credit Purchase";
+    const isLoanOut = step4Category === "Loan Out";
+    if (isLoanOut && !step4LoanRecipient.trim()) {
+      alert("Recipient / Party Name is required for Loan Out.");
+      return;
+    }
+    const resolvedStep4Category: StrictExpenseCategory = isLoanOut
+      ? step4LoanSubType === "LOAN_OUT_ADVANCE"
+        ? "Loan Out Advance"
+        : "Loan Out"
+      : step4Category;
     const isSupplierPurchase =
       step4Category === "Credit Purchase" ||
       step4Category === "Cash Purchase";
@@ -5405,6 +5458,8 @@ function DailyRegisterView({
     const cleanSupplier = step4SupplierName.trim() || "Jotun";
     const displayTitle = isSupplierPurchase
       ? `${step4Category === "Cash Purchase" ? "Supplier / Cash Purchase" : step4Category} — ${cleanSupplier}${step4Note.trim() ? ` (${step4Note.trim()})` : ""}`
+      : isLoanOut
+      ? `${resolvedStep4Category} — ${step4LoanRecipient.trim()}${step4LoanReturnDate ? ` (Return: ${step4LoanReturnDate})` : ""}${step4Note.trim() ? ` · ${step4Note.trim()}` : ""}`
       : isStaffExpense && staffName
       ? `${step4Category} — ${staffName}${step4Note.trim() ? ` (${step4Note.trim()})` : ""}`
       : step4Note.trim()
@@ -5428,10 +5483,15 @@ function DailyRegisterView({
       id: step4EntryId,
       clientTxnId,
       type: "EXPENSE",
-      expenseCategory: step4Category,
+      expenseCategory: resolvedStep4Category,
+      customerName: isLoanOut ? step4LoanRecipient.trim() : undefined,
+      followUpDate: isCreditPurchase
+        ? step4DueDate
+        : isLoanOut && step4LoanReturnDate
+        ? step4LoanReturnDate
+        : undefined,
       supplierName: isSupplierPurchase ? cleanSupplier : undefined,
       dueDate: isCreditPurchase ? step4DueDate : undefined,
-      followUpDate: isCreditPurchase ? step4DueDate : undefined,
       supplierInvoiceNum: step4SupplierInvoiceNum.trim() || undefined,
       hasBill: step4BillType === "WITH_BILL" && Boolean(step4BillPdfUrl),
       billFileName: step4PdfFileName || undefined,
@@ -5520,6 +5580,11 @@ function DailyRegisterView({
       setStep4SupplierInvoiceNum("");
       setStep4BillPdfUrl(null);
       setStep4PdfFileName(null);
+    }
+    if (isLoanOut) {
+      setStep4LoanRecipient("");
+      setStep4LoanReturnDate("");
+      setStep4LoanSubType("GENERAL");
     }
 
     if (isStaffExpense && step4StaffId) {
@@ -9888,8 +9953,58 @@ function DailyRegisterView({
 
                     {/* 5. Cascading Mode of Payment (Step 3 Inflows) */}
                     {!step3SplitEnabled && step3Kind === "CREDIT_SALE" && (
-                      <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3.5 py-2.5 text-xs font-bold text-amber-700 dark:text-amber-300">
-                        ⏳ Unpaid Credit Entry — Payment Mode will be recorded when settled
+                      <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 space-y-2.5">
+                        <div className="text-xs font-bold text-amber-700 dark:text-amber-300">
+                          ⏳ Credit / Pay-Later Sale — Routes to Credit Radar (auto-deducts any Advance received today)
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                          <div>
+                            <label className="block text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300 mb-1">
+                              Advance Received Now (SAR)
+                            </label>
+                            <div className="flex items-center overflow-hidden rounded-lg border border-cyan-400/70 bg-slate-950/95">
+                              <span className="px-2 py-1 bg-cyan-500/15 border-r border-cyan-400/30 text-[10px] font-black text-cyan-300">
+                                SAR
+                              </span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={step3AdvanceAmount}
+                                onChange={(e) => setStep3AdvanceAmount(e.target.value)}
+                                placeholder="0.00"
+                                className="w-full bg-transparent px-2 py-1 text-xs font-bold text-white outline-none"
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300 mb-1">
+                              Advance Payment Mode
+                            </label>
+                            <div className="grid grid-cols-3 gap-1">
+                              {(
+                                [
+                                  ["CASH", "💵 Cash"],
+                                  ["BANK_TRANSFER", "🏦 Bank"],
+                                  ["CARD", "💳 Card"],
+                                ] as const
+                              ).map(([m, lbl]) => (
+                                <button
+                                  key={m}
+                                  type="button"
+                                  onClick={() => setStep3AdvanceMode(m)}
+                                  className={`py-1 rounded text-[10px] font-bold border transition ${
+                                    step3AdvanceMode === m
+                                      ? "bg-emerald-500 text-slate-950 border-emerald-400 font-black"
+                                      : "bg-white/60 dark:bg-black/60 border-amber-500/30 text-slate-600 dark:text-slate-300"
+                                  }`}
+                                >
+                                  {lbl}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     )}
                     {!step3SplitEnabled && step3Kind !== "CREDIT_SALE" && (
@@ -10310,7 +10425,13 @@ function DailyRegisterView({
                           {active && category === "Business Commission" && (
                             <Check size={12} className="stroke-[3]" />
                           )}
-                          <span>{category === "Cash Purchase" ? "Supplier / Cash Purchase" : category}</span>
+                          <span>
+                            {category === "Cash Purchase"
+                              ? "Supplier / Cash Purchase"
+                              : category === "Loan Out"
+                              ? "🤝 Loan Out"
+                              : category}
+                          </span>
                         </button>
                       );
                     })}
@@ -10433,6 +10554,63 @@ function DailyRegisterView({
                       </div>
                     ) : (
                     <>
+                    {step4Category === "Loan Out" && (
+                      <div className="rounded-xl border border-indigo-500/40 bg-indigo-500/10 p-3 space-y-2.5">
+                        <div className="text-[11px] font-bold text-indigo-700 dark:text-indigo-300">
+                          🤝 Loan Out Sub-Option
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setStep4LoanSubType("GENERAL")}
+                            className={`py-1.5 px-2.5 rounded-lg text-xs font-bold border transition ${
+                              step4LoanSubType === "GENERAL"
+                                ? "bg-indigo-500 text-white border-indigo-400 font-black"
+                                : "bg-white/60 dark:bg-black/60 border-indigo-500/30 text-slate-600 dark:text-slate-300"
+                            }`}
+                          >
+                            Loan Out (General)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setStep4LoanSubType("LOAN_OUT_ADVANCE")}
+                            className={`py-1.5 px-2.5 rounded-lg text-xs font-bold border transition ${
+                              step4LoanSubType === "LOAN_OUT_ADVANCE"
+                                ? "bg-indigo-500 text-white border-indigo-400 font-black"
+                                : "bg-white/60 dark:bg-black/60 border-indigo-500/30 text-slate-600 dark:text-slate-300"
+                            }`}
+                          >
+                            Loan Out Advance
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-[10px] font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300 mb-1">
+                              Recipient / Party Name *
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              value={step4LoanRecipient}
+                              onChange={(e) => setStep4LoanRecipient(e.target.value)}
+                              placeholder="Enter recipient / party name..."
+                              className="w-full rounded-lg border border-indigo-500/40 bg-white dark:bg-black px-2.5 py-1.5 text-xs font-semibold text-jct-charcoal dark:text-white outline-none focus:border-indigo-400"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300 mb-1">
+                              Expected Return Date (Optional)
+                            </label>
+                            <input
+                              type="date"
+                              value={step4LoanReturnDate}
+                              onChange={(e) => setStep4LoanReturnDate(e.target.value)}
+                              className="w-full rounded-lg border border-indigo-500/40 bg-white dark:bg-black px-2.5 py-1.5 text-xs font-semibold text-jct-charcoal dark:text-white outline-none focus:border-indigo-400"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
                     {/* Cascading Mode of Payment (Step 4 Outflows/Purchases) — Hidden for unpaid Credit Purchase */}
                     {step4Category === "Credit Purchase" ? (
                       <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3.5 py-2.5 text-xs font-bold text-amber-700 dark:text-amber-300">
@@ -14497,6 +14675,11 @@ function CreditRadarView({
                         </span>
                       )}
                       <div className="flex flex-wrap items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                        {c.advanceReceived !== undefined && c.advanceReceived > 0 && c.outstanding > 0 && (
+                          <span className="rounded-full bg-amber-500/15 border border-amber-500/40 text-amber-700 dark:text-amber-300 px-2 py-0.5 text-[10px] font-bold">
+                            Advance Detected: SAR {fmt(c.advanceReceived)} already collected
+                          </span>
+                        )}
                         {c.outstanding > 0 && onSettleCredit && (
                           <button
                             type="button"
@@ -14506,14 +14689,14 @@ function CreditRadarView({
                               setSettleCreditMode("CASH");
                             }}
                             className="rounded-lg bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black px-2.5 py-1 text-[10px] shadow-sm transition active:scale-[0.97]"
-                            title="Mark Customer Payment Received"
+                            title="Complete Customer Credit Payment"
                           >
-                            ✓ Mark Payment Received
+                            ✓ Credit Payment Completed
                           </button>
                         )}
                         {c.outstanding <= 0 && (
                           <span className="rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border border-emerald-500/40 px-2.5 py-0.5 text-[10px] font-black">
-                            ✓ PAID / CLOSED
+                            ✓ COMPLETED / PAID
                           </span>
                         )}
                         <button
@@ -14542,8 +14725,25 @@ function CreditRadarView({
                     {settlingCustomerId === c.id && onSettleCredit && (
                       <div
                         onClick={(e) => e.stopPropagation()}
-                        className="mt-2 w-full rounded-xl border border-emerald-500/50 bg-emerald-500/10 p-3 flex flex-wrap items-center gap-2 text-xs animate-fade-slide-up"
+                        className="mt-2 w-full rounded-xl border border-emerald-500/50 bg-emerald-500/10 p-3 space-y-2 text-xs animate-fade-slide-up"
                       >
+                        {(c.advanceReceived !== undefined && c.advanceReceived > 0) && (
+                          <div className="grid grid-cols-3 gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px]">
+                            <div>
+                              <div className="text-[10px] font-bold uppercase text-amber-700 dark:text-amber-300/80">Total Sale / Order</div>
+                              <div className="font-mono font-black text-jct-charcoal dark:text-white">SAR {fmt(c.originalSaleAmount ?? (c.outstanding + c.advanceReceived))}</div>
+                            </div>
+                            <div>
+                              <div className="text-[10px] font-bold uppercase text-amber-700 dark:text-amber-300/80">Advance Already Paid</div>
+                              <div className="font-mono font-black text-amber-700 dark:text-amber-300">-SAR {fmt(c.advanceReceived)}</div>
+                            </div>
+                            <div>
+                              <div className="text-[10px] font-bold uppercase text-emerald-700 dark:text-emerald-300/90">Net Remaining Due</div>
+                              <div className="font-mono font-black text-emerald-700 dark:text-emerald-300">SAR {fmt(c.outstanding)}</div>
+                            </div>
+                          </div>
+                        )}
+                        <div className="flex flex-wrap items-center gap-2">
                         <div className="flex items-center gap-1.5">
                           <span className="font-bold text-emerald-700 dark:text-emerald-300">Received (SAR):</span>
                           <input
@@ -14596,6 +14796,7 @@ function CreditRadarView({
                         >
                           Cancel
                         </button>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -22478,10 +22679,13 @@ export default function Page() {
     amount: number,
     followUpDate: string,
     receiptNo?: string,
-    mode: "CREDIT_RECD" | "CREDIT_SALE" | "CUSTOMER_ADVANCE" = "CREDIT_RECD"
+    mode: "CREDIT_RECD" | "CREDIT_SALE" | "CUSTOMER_ADVANCE" = "CREDIT_RECD",
+    advanceReceived: number = 0
   ) => {
     const cleanCust = customerName.trim();
     if (!cleanCust) return;
+    const cleanAdv = mode === "CREDIT_SALE" ? Math.min(amount, Math.max(0, advanceReceived)) : 0;
+    const netCreditDue = mode === "CREDIT_SALE" ? Math.max(0, r2(amount - cleanAdv)) : amount;
 
     const cleanDigits = receiptNo
       ? receiptNo.trim().replace(/^#/i, "").replace(/^inv[-_\s#]*/i, "").trim()
@@ -22514,11 +22718,19 @@ export default function Page() {
         const existing = updated[idx];
         const nextOutstanding =
           mode === "CREDIT_SALE"
-            ? r2(existing.outstanding + amount)
+            ? r2(existing.outstanding + netCreditDue)
             : Math.max(0, r2(existing.outstanding - amount));
         const updatedAccount: ContractorAccount = {
           ...existing,
           outstanding: nextOutstanding,
+          originalSaleAmount:
+            mode === "CREDIT_SALE"
+              ? r2((existing.originalSaleAmount ?? existing.outstanding) + amount)
+              : existing.originalSaleAmount,
+          advanceReceived:
+            mode === "CREDIT_SALE" && cleanAdv > 0
+              ? r2((existing.advanceReceived ?? 0) + cleanAdv)
+              : existing.advanceReceived,
           dueDate: followUpDate || existing.dueDate,
           followUpDate: followUpDate || existing.followUpDate || existing.dueDate,
           latestInvoiceNo: formattedInvNo || existing.latestInvoiceNo,
@@ -22538,7 +22750,9 @@ export default function Page() {
       const newContractor: ContractorAccount = {
         id: `c-${Date.now().toString().slice(-4)}`,
         name: cleanCust,
-        outstanding: mode === "CUSTOMER_ADVANCE" ? 0 : amount,
+        outstanding: mode === "CUSTOMER_ADVANCE" ? 0 : netCreditDue,
+        originalSaleAmount: mode === "CREDIT_SALE" ? amount : undefined,
+        advanceReceived: mode === "CREDIT_SALE" && cleanAdv > 0 ? cleanAdv : undefined,
         dueDate: followUpDate || addSaudiDays(7),
         followUpDate: followUpDate || addSaudiDays(7),
         latestInvoiceNo: formattedInvNo,
@@ -22563,6 +22777,9 @@ export default function Page() {
           linkedInvoiceNum: formattedInvNo,
           invoiceNo: formattedInvNo,
           amount,
+          originalSaleAmount: amount,
+          advanceReceived: cleanAdv,
+          remainingAmount: netCreditDue,
           followUpDate: followUpDate || addSaudiDays(14),
           originalDate: saudiTodayIso(),
         }),
@@ -22570,6 +22787,25 @@ export default function Page() {
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
           if (data?.record?.id) {
+            setCreditsRefresh((n) => n + 1);
+          }
+        })
+        .catch(() => {});
+    } else if (mode === "CREDIT_RECD" && amount > 0) {
+      fetch("/api/credits", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "COLLECT",
+          branch: syncBranch,
+          customerName: cleanCust,
+          collectedAmount: amount,
+          paymentMode: "CASH",
+        }),
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (data?.ok) {
             setCreditsRefresh((n) => n + 1);
           }
         })
@@ -22819,6 +23055,14 @@ export default function Page() {
               name: String(rec.customerName || "Customer"),
               phone: rec.phone ? String(rec.phone) : undefined,
               outstanding: outBal,
+              originalSaleAmount:
+                rec.originalSaleAmount !== undefined && rec.originalSaleAmount !== null
+                  ? Number(rec.originalSaleAmount)
+                  : Number(rec.amount) || outBal,
+              advanceReceived:
+                rec.advanceReceived !== undefined && rec.advanceReceived !== null
+                  ? Number(rec.advanceReceived)
+                  : 0,
               dueDate: String(rec.followUpDate || addSaudiDays(14)),
               followUpDate: String(rec.followUpDate || addSaudiDays(14)),
               latestInvoiceNo: String(rec.linkedInvoiceNum || rec.invoiceNo || ""),
@@ -23570,8 +23814,21 @@ export default function Page() {
     const roundOffAmount = Number(payload.roundOffAmount) || 0;
     const receiptUrl = typeof payload.receiptUrl === "string" ? payload.receiptUrl : undefined;
 
+    const defaultTerminalForBranch: "SAB" | "SNB" =
+      syncBranch === "JCT_HARDWARE_JOTUN" ? "SNB" : "SAB";
+
     if (type === "SALES_BILL") {
       const invNo = invoiceNo || `W#MANUAL-${Date.now().toString().slice(-4)}`;
+      const isCreditSale = paymentMode === "CREDIT" || paymentMode === "CREDIT_SALE";
+      const advAmt = isCreditSale
+        ? Math.min(amount, Math.max(0, Number(payload.advanceReceived) || 0))
+        : 0;
+      const advMode =
+        typeof payload.advancePaymentMode === "string"
+          ? payload.advancePaymentMode === "BANK_TRANSFER"
+            ? "BANK"
+            : payload.advancePaymentMode
+          : "CASH";
       const newInv: ErpInvoiceItem = {
         internalId: clientTxnId || `inv-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         id: invNo,
@@ -23588,10 +23845,10 @@ export default function Page() {
             ? "POS_SWIPE"
             : paymentMode === "BANK"
             ? "BANK_TRANSFER"
-            : paymentMode === "CREDIT"
+            : isCreditSale
             ? "CREDIT_SALE"
             : "CASH",
-        posTerminal: "SAB",
+        posTerminal: defaultTerminalForBranch,
         splitCashAmount: 0,
         splitBankAmount: 0,
         splitBankMethod: "POS_SWIPE",
@@ -23602,13 +23859,29 @@ export default function Page() {
         time: nowHHMM(),
       };
       setErpInvoices((prev) => [...prev, newInv]);
-      if (paymentMode === "CREDIT") {
+      if (isCreditSale) {
+        if (advAmt > 0) {
+          const advEntry: PreLoggedEntry = {
+            id: `adv-cr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            type: "CREDIT_RECD",
+            customerName: customerName || "Credit Customer",
+            receiptNo: invNo,
+            invoiceNumber: invNo,
+            linkedInvoiceNum: invNo,
+            paymentMode: advMode as any,
+            title: `Advance on Credit Sale — ${customerName || "Credit Customer"} (${invNo})`,
+            amount: advAmt,
+            time: nowHHMM(),
+          };
+          setPreLoggedEntries((prev) => deduplicatePreLoggedEntries([advEntry, ...prev]));
+        }
         handleSyncCreditCustomer(
           customerName || "Credit Customer",
           amount,
           addSaudiDays(14),
           invNo,
-          "CREDIT_SALE"
+          "CREDIT_SALE",
+          advAmt
         );
       }
     } else if (type === "POS_SWIPE") {
@@ -23623,7 +23896,7 @@ export default function Page() {
         amount,
         originalAmount: amount,
         paymentMode: "POS_SWIPE",
-        posTerminal: "SAB",
+        posTerminal: defaultTerminalForBranch,
         splitCashAmount: 0,
         splitBankAmount: 0,
         splitBankMethod: "POS_SWIPE",

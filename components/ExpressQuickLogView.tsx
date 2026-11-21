@@ -63,6 +63,7 @@ const EXPENSE_CATEGORIES = [
   "Water",
   "Salary",
   "Staff Advance",
+  "🤝 Loan Out",
   "Medical Expenses",
   "Staff Expenses",
   "Business Commission",
@@ -130,6 +131,9 @@ export function ExpressQuickLogView({
   const [expensePaymentMode, setExpensePaymentMode] = useState<"CASH" | "CARD" | "BANK_TRANSFER">("CASH");
   const [expenseCommInvNo, setExpenseCommInvNo] = useState("");
   const [expenseCommRecipient, setExpenseCommRecipient] = useState("");
+  const [loanSubType, setLoanSubType] = useState<"GENERAL" | "LOAN_OUT_ADVANCE">("GENERAL");
+  const [loanRecipient, setLoanRecipient] = useState("");
+  const [loanReturnDate, setLoanReturnDate] = useState("");
 
   // Purchase specific
   const [purchaseSupplier, setPurchaseSupplier] = useState("");
@@ -142,13 +146,25 @@ export function ExpressQuickLogView({
   const [salesSeqNo, setSalesSeqNo] = useState("");
   const [salesCustomer, setSalesCustomer] = useState("");
   const [salesPaymentMode, setSalesPaymentMode] = useState<"CASH" | "CARD" | "SPLIT" | "CREDIT_SALE">("CASH");
-  const [salesTerminal, setSalesTerminal] = useState("SAB");
+  const [salesTerminal, setSalesTerminal] = useState(() =>
+    branchId === "JCT_HARDWARE_JOTUN" ? "SNB" : "SAB"
+  );
   const [salesNetwork, setSalesNetwork] = useState("mada");
+  const [salesAdvanceAmount, setSalesAdvanceAmount] = useState("");
+  const [salesAdvanceMode, setSalesAdvanceMode] = useState<"CASH" | "BANK_TRANSFER" | "CARD">("CASH");
 
   // POS Swipe specific
-  const [posTerminal, setPosTerminal] = useState("SAB");
+  const [posTerminal, setPosTerminal] = useState(() =>
+    branchId === "JCT_HARDWARE_JOTUN" ? "SNB" : "SAB"
+  );
   const [posNetwork, setPosNetwork] = useState("mada");
   const [posSlipNo, setPosSlipNo] = useState("");
+
+  useEffect(() => {
+    const defaultBank = branchId === "JCT_HARDWARE_JOTUN" ? "SNB" : "SAB";
+    setPosTerminal(defaultBank);
+    setSalesTerminal(defaultBank);
+  }, [branchId]);
 
   // Sales Return specific
   const [returnInvoiceNo, setReturnInvoiceNo] = useState("");
@@ -347,11 +363,24 @@ export function ExpressQuickLogView({
 
       if (activeType === "EXPENSE") {
         pocketType = "EXPENSE";
-        category = expenseCategory;
-        recipientName =
-          expenseCategory === "Business Commission" && expenseCommRecipient.trim()
-            ? expenseCommRecipient.trim()
-            : "Express Logger";
+        if (expenseCategory === "🤝 Loan Out") {
+          if (!loanRecipient.trim()) {
+            setErrorMsg("Recipient / Party Name is required for Loan Out.");
+            setSubmitting(false);
+            return;
+          }
+          category = loanSubType === "LOAN_OUT_ADVANCE" ? "Loan Out Advance" : "Loan Out";
+          recipientName = loanRecipient.trim();
+          finalNote = `${category} — ${loanRecipient.trim()}${
+            loanReturnDate ? ` (Return by ${loanReturnDate})` : ""
+          }${finalNote ? ` · ${finalNote}` : ""}`;
+        } else {
+          category = expenseCategory;
+          recipientName =
+            expenseCategory === "Business Commission" && expenseCommRecipient.trim()
+              ? expenseCommRecipient.trim()
+              : "Express Logger";
+        }
         paymentSource = expensePaymentMode === "CASH" ? "DRAWER_CASH" : "BANK_TRANSFER";
         paymentMode = expensePaymentMode;
         if (expenseCategory === "Business Commission") {
@@ -520,6 +549,14 @@ export function ExpressQuickLogView({
               hasBill,
               billPdfUrl,
               receiptUrl: billPdfUrl,
+              advanceReceived:
+                activeType === "SALES_BILL" && salesPaymentMode === "CREDIT_SALE"
+                  ? Math.max(0, Number(salesAdvanceAmount) || 0)
+                  : 0,
+              advancePaymentMode:
+                activeType === "SALES_BILL" && salesPaymentMode === "CREDIT_SALE"
+                  ? salesAdvanceMode
+                  : undefined,
             },
           });
         }
@@ -529,6 +566,11 @@ export function ExpressQuickLogView({
         setNotes("");
         setExpenseCommInvNo("");
         setExpenseCommRecipient("");
+        setLoanRecipient("");
+        setLoanReturnDate("");
+        setLoanSubType("GENERAL");
+        setSalesAdvanceAmount("");
+        setSalesAdvanceMode("CASH");
         setPurchaseSupplier("");
         setPurchaseInvoiceRef("");
         setPurchaseFollowUpDate(null);
@@ -792,6 +834,64 @@ export function ExpressQuickLogView({
                   </div>
                 )}
 
+                {expenseCategory === "🤝 Loan Out" && (
+                  <div className="rounded-xl border border-indigo-500/40 bg-indigo-500/10 p-3 space-y-2.5 animate-fade-slide-up">
+                    <div className="text-[11px] font-bold text-indigo-700 dark:text-indigo-300">
+                      🤝 Loan Out Sub-Type
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setLoanSubType("GENERAL")}
+                        className={`py-2 px-3 rounded-xl text-xs font-bold border transition ${
+                          loanSubType === "GENERAL"
+                            ? "bg-indigo-500 text-white border-indigo-400 font-black"
+                            : "bg-white/60 dark:bg-black/60 border-indigo-500/30 text-slate-600 dark:text-slate-300"
+                        }`}
+                      >
+                        Loan Out (General)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLoanSubType("LOAN_OUT_ADVANCE")}
+                        className={`py-2 px-3 rounded-xl text-xs font-bold border transition ${
+                          loanSubType === "LOAN_OUT_ADVANCE"
+                            ? "bg-indigo-500 text-white border-indigo-400 font-black"
+                            : "bg-white/60 dark:bg-black/60 border-indigo-500/30 text-slate-600 dark:text-slate-300"
+                        }`}
+                      >
+                        Loan Out Advance
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300 mb-1">
+                          Recipient / Party Name *
+                        </label>
+                        <input
+                          type="text"
+                          value={loanRecipient}
+                          onChange={(e) => setLoanRecipient(e.target.value)}
+                          placeholder="Enter recipient / party name..."
+                          className="w-full rounded-lg border border-indigo-500/40 bg-white dark:bg-black px-3 py-1.5 text-xs font-semibold text-jct-charcoal dark:text-white outline-none focus:border-indigo-400"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300 mb-1">
+                          Expected Return Date (Optional)
+                        </label>
+                        <input
+                          type="date"
+                          value={loanReturnDate}
+                          onChange={(e) => setLoanReturnDate(e.target.value)}
+                          className="w-full rounded-lg border border-indigo-500/40 bg-white dark:bg-black px-3 py-1.5 text-xs font-semibold text-jct-charcoal dark:text-white outline-none focus:border-indigo-400"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div>
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
                     Mode of Payment
@@ -972,8 +1072,68 @@ export function ExpressQuickLogView({
                     ))}
                   </div>
                   {salesPaymentMode === "CREDIT_SALE" && (
-                    <div className="mt-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] font-bold text-amber-700 dark:text-amber-300">
-                      ⏳ Unpaid Credit Entry — Payment Mode will be recorded when settled
+                    <div className="mt-2.5 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 space-y-2.5 animate-fade-slide-up">
+                      <div className="text-[11px] font-bold text-amber-700 dark:text-amber-300">
+                        ⏳ Credit / Pay-Later Sale — Routes to Credit Radar (auto-deducts any Advance received today)
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300 mb-1">
+                            Advance Received Now (SAR)
+                          </label>
+                          <div className="flex items-center overflow-hidden rounded-xl border-2 border-cyan-400/70 focus-within:border-cyan-300 bg-slate-950/95">
+                            <span className="px-2.5 py-1.5 bg-cyan-500/15 border-r border-cyan-400/30 text-[10px] font-black text-cyan-300">
+                              SAR
+                            </span>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={salesAdvanceAmount}
+                              onChange={(e) => setSalesAdvanceAmount(e.target.value)}
+                              placeholder="0.00"
+                              className="w-full bg-transparent px-2.5 py-1.5 text-sm font-bold text-white outline-none"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300 mb-1">
+                            Advance Payment Mode
+                          </label>
+                          <div className="grid grid-cols-3 gap-1.5">
+                            {(
+                              [
+                                ["CASH", "💵 Cash"],
+                                ["BANK_TRANSFER", "🏦 Bank"],
+                                ["CARD", "💳 Card"],
+                              ] as const
+                            ).map(([m, lbl]) => (
+                              <button
+                                key={m}
+                                type="button"
+                                onClick={() => setSalesAdvanceMode(m)}
+                                className={`py-1.5 rounded-lg text-[10px] font-bold border transition ${
+                                  salesAdvanceMode === m
+                                    ? "bg-emerald-500 text-slate-950 border-emerald-400 font-black"
+                                    : "bg-white/60 dark:bg-black/60 border-amber-500/30 text-slate-600 dark:text-slate-300"
+                                }`}
+                              >
+                                {lbl}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                      {Number(amount) > 0 && (
+                        <div className="flex items-center justify-between text-[11px] font-mono font-bold pt-1 border-t border-amber-500/20">
+                          <span className="text-slate-600 dark:text-slate-300">
+                            Net Remaining to Credit Radar:
+                          </span>
+                          <span className="text-emerald-700 dark:text-emerald-300 font-black">
+                            SAR {fmt(Math.max(0, (Number(amount) || 0) - (Number(salesAdvanceAmount) || 0)))}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

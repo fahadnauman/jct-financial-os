@@ -143,6 +143,9 @@ model CreditRadar {
   followUpDate       String?
   followUpStatus     String?  @default("SCHEDULED")
   amount             Float    @default(0)
+  originalSaleAmount Float?
+  advanceReceived    Float?   @default(0)
+  remainingAmount    Float?
   outstandingBalance Float    @default(0)
   status             String   @default("CURRENT")
   notes              String?
