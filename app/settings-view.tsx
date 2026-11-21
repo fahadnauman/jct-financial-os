@@ -97,6 +97,47 @@ export default function SettingsView({
   const [autoDeductPosDefault, setAutoDeductPosDefault] = useState(true);
   const [prefsSavedMsg, setPrefsSavedMsg] = useState<string | null>(null);
 
+  // Account for the Owners (Historical Cash Taken Home Ledger)
+  const [ownerArchives, setOwnerArchives] = useState<
+    Array<{
+      id: string;
+      branch: string;
+      date: string;
+      closingCash: number;
+      takeHomeAmount?: number | null;
+      ownerTakeHomeAmount?: number | null;
+      nextDayOpeningCash?: number | null;
+      remainingFloatForTomorrow?: number | null;
+    }>
+  >([]);
+  const [loadingOwnerArchives, setLoadingOwnerArchives] = useState(false);
+  const [editingOwnerRecId, setEditingOwnerRecId] = useState<string | null>(null);
+  const [editOwnerTakeHomeVal, setEditOwnerTakeHomeVal] = useState("");
+  const [editOwnerPinVal, setEditOwnerPinVal] = useState("");
+  const [savingOwnerEdit, setSavingOwnerEdit] = useState(false);
+  const [ownerAccountMsg, setOwnerAccountMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+
+  const loadOwnerArchives = useCallback(async () => {
+    setLoadingOwnerArchives(true);
+    try {
+      const res = await fetch(`/api/archive?branch=${encodeURIComponent(isOwner ? "ALL" : branch)}`, {
+        cache: "no-store",
+      });
+      const data = await res.json();
+      if (Array.isArray(data?.records)) {
+        setOwnerArchives(data.records);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setLoadingOwnerArchives(false);
+    }
+  }, [isOwner, branch]);
+
+  useEffect(() => {
+    void loadOwnerArchives();
+  }, [loadOwnerArchives]);
+
   useEffect(() => {
     setBranch(defaultBranch);
     setDepositBranch(defaultBranch);
@@ -1003,6 +1044,271 @@ export default function SettingsView({
           </div>
         )}
       </form>
+
+      {/* CARD 4: 👑 Account for the Owners (Past Take-Home History & Backfill) */}
+      <div className="max-w-4xl bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-yellow/30 rounded-xl p-6 flex flex-col gap-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h3 className="font-display font-extrabold text-lg text-jct-charcoal dark:text-jct-offwhite flex items-center gap-2">
+              <span>👑 Account for the Owners</span>
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold mt-1">
+              Historical ledger of Owner Cash Taken Home / Receiving Amounts across closed days.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void loadOwnerArchives()}
+            className="rounded-lg border border-slate-300 dark:border-[#262626] px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 hover:border-jct-turquoise transition self-start"
+          >
+            ↻ Refresh History
+          </button>
+        </div>
+
+        {(() => {
+          const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+          const fmtSar = (n: number) =>
+            Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          const currentMonthPrefix = saudiTodayIso().slice(0, 7);
+          const sortedRecs = [...ownerArchives].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+          const getTakeHome = (rec: (typeof ownerArchives)[number]) =>
+            Number(rec.ownerTakeHomeAmount ?? rec.takeHomeAmount ?? 0) || 0;
+          const getLeftInDrawer = (rec: (typeof ownerArchives)[number]) => {
+            if (rec.remainingFloatForTomorrow !== null && rec.remainingFloatForTomorrow !== undefined) {
+              return Number(rec.remainingFloatForTomorrow) || 0;
+            }
+            if (rec.nextDayOpeningCash !== null && rec.nextDayOpeningCash !== undefined) {
+              return Number(rec.nextDayOpeningCash) || 0;
+            }
+            return Math.max(0, r2((Number(rec.closingCash) || 0) - getTakeHome(rec)));
+          };
+          const totalAllTime = r2(sortedRecs.reduce((s, r) => s + getTakeHome(r), 0));
+          const totalThisMonth = r2(
+            sortedRecs
+              .filter((r) => (r.date || "").startsWith(currentMonthPrefix))
+              .reduce((s, r) => s + getTakeHome(r), 0)
+          );
+          const avgDaily = sortedRecs.length > 0 ? r2(totalAllTime / sortedRecs.length) : 0;
+
+          const handleSaveOwnerTakeHome = async (rec: (typeof ownerArchives)[number]) => {
+            setOwnerAccountMsg(null);
+            const newTakeHome = Math.max(0, r2(parseFloat(editOwnerTakeHomeVal) || 0));
+            if (newTakeHome > (Number(rec.closingCash) || 0)) {
+              setOwnerAccountMsg({
+                kind: "err",
+                text: `Take-Home (SAR ${fmtSar(newTakeHome)}) cannot exceed Closing Cash in Drawer (SAR ${fmtSar(rec.closingCash)}).`,
+              });
+              return;
+            }
+            setSavingOwnerEdit(true);
+            try {
+              if (!isOwner) {
+                const pinRes = await fetch("/api/settings", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ action: "VERIFY_PIN", profileId: "OWNER", pin: editOwnerPinVal.trim() }),
+                });
+                const pinJson = await pinRes.json();
+                if (!pinJson?.verified) {
+                  setOwnerAccountMsg({ kind: "err", text: "Invalid Owner Master PIN." });
+                  setSavingOwnerEdit(false);
+                  return;
+                }
+              }
+              const nextFloat = Math.max(0, r2((Number(rec.closingCash) || 0) - newTakeHome));
+              const res = await fetch("/api/archive", {
+                method: "PUT",
+                headers: {
+                  "Content-Type": "application/json",
+                  "x-user-is-owner": "true",
+                },
+                body: JSON.stringify({
+                  id: rec.id,
+                  takeHomeAmount: newTakeHome,
+                  ownerTakeHomeAmount: newTakeHome,
+                  nextDayOpeningCash: nextFloat,
+                  remainingFloatForTomorrow: nextFloat,
+                  isOwner: true,
+                }),
+              });
+              if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err?.error || "Failed to update Take-Home amount");
+              }
+              setOwnerArchives((prev) =>
+                prev.map((item) =>
+                  item.id === rec.id
+                    ? {
+                        ...item,
+                        takeHomeAmount: newTakeHome,
+                        ownerTakeHomeAmount: newTakeHome,
+                        nextDayOpeningCash: nextFloat,
+                        remainingFloatForTomorrow: nextFloat,
+                      }
+                    : item
+                )
+              );
+              setEditingOwnerRecId(null);
+              setEditOwnerPinVal("");
+              setOwnerAccountMsg({ kind: "ok", text: `✓ Updated Owner Cash Taken Home for ${rec.date} to SAR ${fmtSar(newTakeHome)}.` });
+            } catch (err) {
+              setOwnerAccountMsg({
+                kind: "err",
+                text: err instanceof Error ? err.message : "Failed to save update.",
+              });
+            } finally {
+              setSavingOwnerEdit(false);
+            }
+          };
+
+          return (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
+                    Total Cash Taken Home (All Time)
+                  </div>
+                  <div className="font-mono text-xl font-black text-emerald-700 dark:text-emerald-300 mt-1">
+                    SAR {fmtSar(totalAllTime)}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 p-4">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-cyan-700 dark:text-cyan-300">
+                    This Month&apos;s Owner Receiving Total
+                  </div>
+                  <div className="font-mono text-xl font-black text-cyan-700 dark:text-cyan-300 mt-1">
+                    SAR {fmtSar(totalThisMonth)}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300">
+                    Average Daily Take-Home
+                  </div>
+                  <div className="font-mono text-xl font-black text-amber-700 dark:text-amber-300 mt-1">
+                    SAR {fmtSar(avgDaily)}
+                  </div>
+                </div>
+              </div>
+
+              {ownerAccountMsg && (
+                <div
+                  className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold ${
+                    ownerAccountMsg.kind === "ok"
+                      ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                      : "bg-rose-500/10 text-rose-600 dark:text-rose-300"
+                  }`}
+                >
+                  <span>{ownerAccountMsg.text}</span>
+                </div>
+              )}
+
+              {loadingOwnerArchives ? (
+                <div className="text-xs text-slate-400 py-6 text-center">Loading historical owner take-home records...</div>
+              ) : sortedRecs.length === 0 ? (
+                <div className="text-xs text-slate-400 py-6 text-center border border-dashed border-slate-200 dark:border-[#1F1F1F] rounded-xl">
+                  No closed daily register records found yet.
+                </div>
+              ) : (
+                <div className="overflow-x-auto border border-slate-200 dark:border-[#1F1F1F] rounded-xl">
+                  <table className="w-full text-left text-xs whitespace-nowrap">
+                    <thead className="bg-slate-50 dark:bg-[#141414] text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      <tr>
+                        <th className="px-3 py-2.5">Date (AST)</th>
+                        <th className="px-3 py-2.5">Branch</th>
+                        <th className="px-3 py-2.5 text-right">Closing Cash</th>
+                        <th className="px-3 py-2.5 text-right">Cash Taken Home (SAR)</th>
+                        <th className="px-3 py-2.5 text-right">Left in Drawer</th>
+                        <th className="px-3 py-2.5 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-[#1A1A1A]">
+                      {sortedRecs.slice(0, 60).map((rec) => {
+                        const tHome = getTakeHome(rec);
+                        const leftFloat = getLeftInDrawer(rec);
+                        const isEditing = editingOwnerRecId === rec.id;
+                        return (
+                          <tr key={rec.id} className="hover:bg-slate-50/70 dark:hover:bg-white/[0.02]">
+                            <td className="px-3 py-2.5 font-mono font-bold text-jct-charcoal dark:text-white">{rec.date}</td>
+                            <td className="px-3 py-2.5 font-semibold text-slate-600 dark:text-slate-300">
+                              {BRANCH_CHOICES.find((b) => b.id === rec.branch)?.label || rec.branch}
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-mono font-bold">SAR {fmtSar(rec.closingCash)}</td>
+                            <td className="px-3 py-2.5 text-right font-mono font-black text-emerald-600 dark:text-emerald-300">
+                              {isEditing ? (
+                                <div className="inline-flex items-center overflow-hidden rounded-lg border-2 border-cyan-400/70 bg-slate-950/95">
+                                  <span className="px-2 py-1 bg-cyan-500/15 text-[10px] font-black text-cyan-300">SAR</span>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    value={editOwnerTakeHomeVal}
+                                    onChange={(e) => setEditOwnerTakeHomeVal(e.target.value)}
+                                    className="w-24 bg-transparent px-2 py-1 text-xs font-bold text-white text-right focus:outline-none"
+                                  />
+                                </div>
+                              ) : (
+                                `SAR ${fmtSar(tHome)}`
+                              )}
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-mono font-bold text-amber-600 dark:text-amber-300">
+                              SAR {fmtSar(leftFloat)}
+                            </td>
+                            <td className="px-3 py-2.5 text-right">
+                              {isEditing ? (
+                                <div className="inline-flex items-center gap-1.5">
+                                  {!isOwner && (
+                                    <input
+                                      type="password"
+                                      value={editOwnerPinVal}
+                                      onChange={(e) => setEditOwnerPinVal(e.target.value)}
+                                      placeholder="Owner PIN"
+                                      className="w-20 rounded border border-amber-500/40 bg-black px-2 py-1 text-[10px] text-white outline-none"
+                                    />
+                                  )}
+                                  <button
+                                    type="button"
+                                    disabled={savingOwnerEdit}
+                                    onClick={() => void handleSaveOwnerTakeHome(rec)}
+                                    className="rounded bg-jct-turquoise text-jct-charcoal px-2.5 py-1 text-[10px] font-black"
+                                  >
+                                    {savingOwnerEdit ? "…" : "Save"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingOwnerRecId(null);
+                                      setEditOwnerPinVal("");
+                                    }}
+                                    className="rounded border border-slate-300 dark:border-white/15 px-2 py-1 text-[10px] font-bold text-slate-500"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingOwnerRecId(rec.id);
+                                    setEditOwnerTakeHomeVal(String(tHome));
+                                    setEditOwnerPinVal("");
+                                  }}
+                                  className="rounded-md border border-cyan-500/40 bg-cyan-500/10 hover:bg-cyan-500/20 px-2.5 py-1 text-[10px] font-bold text-cyan-700 dark:text-cyan-300 transition"
+                                >
+                                  ✏️ Edit / Update Take-Home
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          );
+        })()}
+      </div>
     </div>
   );
 }

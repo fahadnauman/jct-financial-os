@@ -51,7 +51,9 @@ export async function POST(req: Request) {
       varianceType: rawVarianceType,
       dataJson,
       takeHomeAmount: rawTakeHome,
+      ownerTakeHomeAmount: rawOwnerTakeHome,
       nextDayOpeningCash: rawNextDayOpening,
+      remainingFloatForTomorrow: rawRemainingFloat,
     } = body;
 
     const resolvedAuditStatus = rawAuditStatus
@@ -68,10 +70,22 @@ export async function POST(req: Request) {
         : null;
     const varianceType = rawVarianceType ? String(rawVarianceType) : null;
 
-    const takeHomeAmount =
-      rawTakeHome !== undefined && rawTakeHome !== null ? Number(rawTakeHome) : null;
-    const nextDayOpeningCash =
-      rawNextDayOpening !== undefined && rawNextDayOpening !== null ? Number(rawNextDayOpening) : null;
+    const takeHomeResolved =
+      rawOwnerTakeHome !== undefined && rawOwnerTakeHome !== null
+        ? Number(rawOwnerTakeHome)
+        : rawTakeHome !== undefined && rawTakeHome !== null
+        ? Number(rawTakeHome)
+        : null;
+    const takeHomeAmount = takeHomeResolved;
+    const ownerTakeHomeAmount = takeHomeResolved ?? 0;
+    const nextFloatResolved =
+      rawRemainingFloat !== undefined && rawRemainingFloat !== null
+        ? Number(rawRemainingFloat)
+        : rawNextDayOpening !== undefined && rawNextDayOpening !== null
+        ? Number(rawNextDayOpening)
+        : null;
+    const nextDayOpeningCash = nextFloatResolved;
+    const remainingFloatForTomorrow = nextFloatResolved;
 
     if (!branch || !date) {
       return NextResponse.json({ error: "Branch and date are required" }, { status: 400 });
@@ -183,7 +197,9 @@ export async function POST(req: Request) {
           closingCash: Number(closingCash),
           openingCash: Number(openingCash),
           takeHomeAmount: takeHomeAmount !== null ? Number(takeHomeAmount) : null,
+          ownerTakeHomeAmount: ownerTakeHomeAmount !== null ? Number(ownerTakeHomeAmount) : 0,
           nextDayOpeningCash: nextDayOpeningCash !== null ? Number(nextDayOpeningCash) : null,
+          remainingFloatForTomorrow: remainingFloatForTomorrow !== null ? Number(remainingFloatForTomorrow) : null,
           inflows: Number(inflows),
           bankSwipes: Number(bankSwipes),
           outflows: Number(outflows),
@@ -208,7 +224,9 @@ export async function POST(req: Request) {
           closingCash: Number(closingCash),
           openingCash: Number(openingCash),
           takeHomeAmount: takeHomeAmount !== null ? Number(takeHomeAmount) : null,
+          ownerTakeHomeAmount: ownerTakeHomeAmount !== null ? Number(ownerTakeHomeAmount) : 0,
           nextDayOpeningCash: nextDayOpeningCash !== null ? Number(nextDayOpeningCash) : null,
+          remainingFloatForTomorrow: remainingFloatForTomorrow !== null ? Number(remainingFloatForTomorrow) : null,
           inflows: Number(inflows),
           bankSwipes: Number(bankSwipes),
           outflows: Number(outflows),
@@ -253,6 +271,10 @@ export async function PUT(req: Request) {
       varianceAmount,
       varianceType,
       dataJson,
+      takeHomeAmount,
+      ownerTakeHomeAmount,
+      nextDayOpeningCash,
+      remainingFloatForTomorrow,
     } = body;
 
     if (!id) {
@@ -368,6 +390,18 @@ export async function PUT(req: Request) {
         ...(hasDiscrepancy !== undefined ? { hasDiscrepancy: Boolean(hasDiscrepancy) } : {}),
         ...(varianceAmount !== undefined ? { varianceAmount: varianceAmount !== null ? Number(varianceAmount) : null } : {}),
         ...(varianceType !== undefined ? { varianceType: varianceType !== null ? String(varianceType) : null } : {}),
+        ...(takeHomeAmount !== undefined || ownerTakeHomeAmount !== undefined
+          ? {
+              takeHomeAmount: Number(ownerTakeHomeAmount ?? takeHomeAmount ?? 0),
+              ownerTakeHomeAmount: Number(ownerTakeHomeAmount ?? takeHomeAmount ?? 0),
+            }
+          : {}),
+        ...(nextDayOpeningCash !== undefined || remainingFloatForTomorrow !== undefined
+          ? {
+              nextDayOpeningCash: Number(remainingFloatForTomorrow ?? nextDayOpeningCash ?? 0),
+              remainingFloatForTomorrow: Number(remainingFloatForTomorrow ?? nextDayOpeningCash ?? 0),
+            }
+          : {}),
         ...(sanitizedDataJson !== undefined ? { dataJson: sanitizedDataJson } : {}),
       },
     });

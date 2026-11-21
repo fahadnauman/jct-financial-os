@@ -2969,26 +2969,29 @@ function HandoverModalComponent({
 
             {/* Primary Withdrawal Prompt */}
             <div className="text-center">
-              <p className="text-sm sm:text-base font-bold text-jct-charcoal dark:text-slate-200">
-                How much cash are you taking home / depositing to the bank?
-              </p>
+              <label className="text-sm sm:text-base font-extrabold text-cyan-400 block">
+                💵 Cash Taken Home / Owner Receiving Amount (SAR)
+              </label>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Total Physical Drawer Cash: <strong className="text-jct-charcoal dark:text-white font-mono">SAR {fmt(calculatedClosingBalance)}</strong>
+                Expected Cash in Drawer: <strong className="text-jct-charcoal dark:text-white font-mono">SAR {fmt(calculatedClosingBalance)}</strong>
               </p>
             </div>
 
-            {/* Large Centered Number Input */}
+            {/* High-Contrast Highlighted Number Input */}
             <div className="flex flex-col items-center justify-center py-2">
-              <div className="relative w-full max-w-sm">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400 font-mono">SAR</span>
+              <div className="w-full max-w-sm flex items-center overflow-hidden rounded-xl border-2 border-cyan-400/70 focus-within:border-cyan-300 focus-within:ring-4 focus-within:ring-cyan-500/25 bg-slate-950/95 shadow-inner">
+                <span className="px-4 py-3.5 bg-cyan-500/15 border-r border-cyan-400/30 text-sm font-black tracking-wider text-cyan-300 shrink-0 font-mono">
+                  SAR
+                </span>
                 <input
                   type="number"
                   step="0.01"
+                  min="0"
                   autoFocus
                   value={takeHomeInput}
                   onChange={(e) => setTakeHomeInput(e.target.value)}
                   placeholder="0.00"
-                  className="w-full text-center text-4xl sm:text-5xl font-mono font-black py-3 px-12 bg-transparent border-b-2 border-jct-turquoise focus:outline-none text-jct-charcoal dark:text-white tracking-tight"
+                  className="w-full bg-transparent px-4 py-3 text-3xl sm:text-4xl font-mono font-black tabular-nums text-white placeholder:text-slate-500 focus:outline-none text-right"
                 />
               </div>
 
@@ -6937,7 +6940,9 @@ function DailyRegisterView({
           closingCash: finalClosingCash,
           openingCash: openingBalance,
           takeHomeAmount,
+          ownerTakeHomeAmount: takeHomeAmount,
           nextDayOpeningCash: nextDayOpening,
+          remainingFloatForTomorrow: nextDayOpening,
           inflows: totalCashInSalesAndReceipts,
           bankSwipes: activeBankSettlementTotal,
           outflows: totalPreLoggedExpenses,
@@ -17812,8 +17817,10 @@ interface ArchiveRecord {
   date: string;
   closingCash: number;
   openingCash: number;
-  takeHomeAmount?: number;
-  nextDayOpeningCash?: number;
+  takeHomeAmount?: number | null;
+  ownerTakeHomeAmount?: number | null;
+  nextDayOpeningCash?: number | null;
+  remainingFloatForTomorrow?: number | null;
   inflows: number;
   bankSwipes: number;
   outflows: number;
@@ -18923,6 +18930,45 @@ function AuditLibraryView({
               <div className="font-black tabular-nums">SAR {fmt(editClosingCash)}</div>
             </div>
           </div>
+
+          {/* Final Handover Summary (Owner Cash Taken Home & Next Day Float) */}
+          {(() => {
+            const recTakeHome = Number(
+              selectedRecord.ownerTakeHomeAmount ?? selectedRecord.takeHomeAmount ?? 0
+            ) || 0;
+            const recNextFloat =
+              selectedRecord.remainingFloatForTomorrow !== null &&
+              selectedRecord.remainingFloatForTomorrow !== undefined
+                ? Number(selectedRecord.remainingFloatForTomorrow)
+                : selectedRecord.nextDayOpeningCash !== null &&
+                  selectedRecord.nextDayOpeningCash !== undefined
+                ? Number(selectedRecord.nextDayOpeningCash)
+                : Math.max(0, r2(editClosingCash - recTakeHome));
+            return (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-slate-300 dark:border-[#262626] text-xs font-mono print:grid-cols-3 print:border-black">
+                <div className="rounded-lg bg-slate-50 dark:bg-[#111] p-3 border border-slate-200 dark:border-[#222] print:border-black print:bg-white">
+                  <div className="text-[10px] text-slate-500 uppercase print:text-black">Expected Cash in Drawer</div>
+                  <div className="font-black text-sm tabular-nums mt-0.5">SAR {fmt(editClosingCash)}</div>
+                </div>
+                <div className="rounded-lg bg-emerald-500/10 p-3 border border-emerald-500/30 print:border-black print:bg-white">
+                  <div className="text-[10px] text-emerald-700 dark:text-emerald-300 uppercase font-bold print:text-black">
+                    💵 Cash Taken Home by Owner (Receiving)
+                  </div>
+                  <div className="font-black text-sm text-emerald-700 dark:text-emerald-300 tabular-nums mt-0.5 print:text-black">
+                    SAR {fmt(recTakeHome)}
+                  </div>
+                </div>
+                <div className="rounded-lg bg-amber-500/10 p-3 border border-amber-500/30 print:border-black print:bg-white">
+                  <div className="text-[10px] text-amber-700 dark:text-amber-300 uppercase font-bold print:text-black">
+                    Cash Left in Drawer (Next Day Float)
+                  </div>
+                  <div className="font-black text-sm text-amber-700 dark:text-amber-300 tabular-nums mt-0.5 print:text-black">
+                    SAR {fmt(recNextFloat)}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         {/* 5. Sticky Bottom Action Bar */}
@@ -19458,6 +19504,9 @@ function AuditLibraryView({
 
                     <span className={`rounded-lg border px-2.5 py-1 text-xs font-bold ${bInfo.color}`}>
                       {bInfo.name}
+                    </span>
+                    <span className="rounded-full bg-emerald-500/15 border border-emerald-500/40 text-emerald-700 dark:text-emerald-300 px-2.5 py-1 text-[11px] font-mono font-black">
+                      💵 Owner Taken Home: SAR {fmt(Number(r.ownerTakeHomeAmount ?? r.takeHomeAmount ?? 0) || 0)}
                     </span>
                   </div>
 

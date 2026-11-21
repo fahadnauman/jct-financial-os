@@ -50,8 +50,10 @@ model DailyRegisterLock {
   date               String
   closingCash        Float
   openingCash        Float    @default(2634)
-  takeHomeAmount     Float?
-  nextDayOpeningCash Float?
+  takeHomeAmount            Float?
+  ownerTakeHomeAmount       Float?   @default(0)
+  nextDayOpeningCash        Float?
+  remainingFloatForTomorrow Float?
   inflows            Float    @default(0)
   bankSwipes         Float    @default(0)
   outflows           Float    @default(0)
