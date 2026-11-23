@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useMemo } from "react";
+import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useSession, signIn, signOut } from "next-auth/react";
 import { usePathname, useRouter } from "next/navigation";
@@ -368,6 +368,25 @@ const INITIAL_SUPPLIER_BRANDS: SupplierPayableBrand[] = [
 const INITIAL_SUPPLIER_BILLS: SupplierBillItem[] = [];
 
 const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+
+function shouldPauseBackgroundPolling(): boolean {
+  if (typeof document === "undefined") return false;
+  if (document.visibilityState === "hidden") return true;
+  const active = document.activeElement as HTMLElement | null;
+  if (
+    active &&
+    (active.tagName === "INPUT" ||
+      active.tagName === "TEXTAREA" ||
+      active.tagName === "SELECT" ||
+      active.isContentEditable)
+  ) {
+    return true;
+  }
+  if (document.querySelector('[role="dialog"], [aria-modal="true"], [data-modal-open="true"]')) {
+    return true;
+  }
+  return false;
+}
 const nf = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmt = (n: number) => nf.format(n);
 const nowHHMM = () => saudiHHMM();
@@ -3201,6 +3220,7 @@ function DailyRegisterView({
     targetLabel: string;
   } | null>(null);
   const [rapidPosOpen, setRapidPosOpen] = useState(false);
+  const handleCloseRapidPos = useCallback(() => setRapidPosOpen(false), []);
 
   const handleAddRapidPosEntry = (payload: RapidPosSubmitPayload) => {
     const newPosInvoice: ErpInvoiceItem = {
@@ -14156,11 +14176,12 @@ function DailyRegisterView({
       )}
       <RapidPosModal
         open={rapidPosOpen}
-        onClose={() => setRapidPosOpen(false)}
+        onClose={handleCloseRapidPos}
         onSubmit={handleAddRapidPosEntry}
         onUndoLast={handleUndoRapidPosEntry}
         branchLabel={getBranchBadgeInfo(branchId).name}
         sessionDate={activeSessionDate}
+        defaultTerminal={branchId === "JCT_HARDWARE_JOTUN" ? "SNB" : "SAB"}
       />
       <SalesReturnModal
         isOpen={isReturnBillModalOpen}
@@ -22952,12 +22973,19 @@ export default function Page() {
         .catch(() => {});
     };
     loadAdvances();
-    const interval = window.setInterval(loadAdvances, 15000);
-    window.addEventListener("focus", loadAdvances);
+    const interval = window.setInterval(() => {
+      if (shouldPauseBackgroundPolling()) return;
+      loadAdvances();
+    }, 15000);
+    const onFocusAdvances = () => {
+      if (shouldPauseBackgroundPolling()) return;
+      loadAdvances();
+    };
+    window.addEventListener("focus", onFocusAdvances);
     return () => {
       ignore = true;
       window.clearInterval(interval);
-      window.removeEventListener("focus", loadAdvances);
+      window.removeEventListener("focus", onFocusAdvances);
     };
   }, [syncBranch, advancesRefresh]);
 
@@ -23029,12 +23057,19 @@ export default function Page() {
         .catch(() => {});
     };
     loadSuppliers();
-    const interval = window.setInterval(loadSuppliers, 15000);
-    window.addEventListener("focus", loadSuppliers);
+    const interval = window.setInterval(() => {
+      if (shouldPauseBackgroundPolling()) return;
+      loadSuppliers();
+    }, 15000);
+    const onFocusSuppliers = () => {
+      if (shouldPauseBackgroundPolling()) return;
+      loadSuppliers();
+    };
+    window.addEventListener("focus", onFocusSuppliers);
     return () => {
       ignore = true;
       window.clearInterval(interval);
-      window.removeEventListener("focus", loadSuppliers);
+      window.removeEventListener("focus", onFocusSuppliers);
     };
   }, [syncBranch, suppliersRefresh]);
 
@@ -23092,12 +23127,19 @@ export default function Page() {
         .catch(() => {});
     };
     loadCredits();
-    const interval = window.setInterval(loadCredits, 15000);
-    window.addEventListener("focus", loadCredits);
+    const interval = window.setInterval(() => {
+      if (shouldPauseBackgroundPolling()) return;
+      loadCredits();
+    }, 15000);
+    const onFocusCredits = () => {
+      if (shouldPauseBackgroundPolling()) return;
+      loadCredits();
+    };
+    window.addEventListener("focus", onFocusCredits);
     return () => {
       ignore = true;
       window.clearInterval(interval);
-      window.removeEventListener("focus", loadCredits);
+      window.removeEventListener("focus", onFocusCredits);
     };
   }, [syncBranch, creditsRefresh]);
 

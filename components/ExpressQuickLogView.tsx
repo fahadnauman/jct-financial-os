@@ -269,7 +269,20 @@ export function ExpressQuickLogView({
   useEffect(() => {
     void loadFeed();
     const interval = setInterval(() => {
-      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      if (typeof document !== "undefined") {
+        if (document.visibilityState === "hidden") return;
+        const active = document.activeElement as HTMLElement | null;
+        if (
+          active &&
+          (active.tagName === "INPUT" ||
+            active.tagName === "TEXTAREA" ||
+            active.tagName === "SELECT" ||
+            active.isContentEditable)
+        ) {
+          return;
+        }
+        if (document.querySelector('[role="dialog"], [aria-modal="true"]')) return;
+      }
       void loadFeed();
     }, 6000);
     const onVisible = () => {

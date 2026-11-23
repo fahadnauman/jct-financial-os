@@ -35,6 +35,7 @@ interface RapidPosModalProps {
   branchLabel?: string;
   sessionDate?: string;
   submitting?: boolean;
+  defaultTerminal?: RapidPosTerminal;
 }
 
 const TERMINAL_OPTIONS: { id: RapidPosTerminal; label: string }[] = [
@@ -65,45 +66,68 @@ export function RapidPosModal({
   branchLabel,
   sessionDate,
   submitting = false,
+  defaultTerminal = "SAB",
 }: RapidPosModalProps) {
   const [amount, setAmount] = useState("");
-  const [terminal, setTerminal] = useState<RapidPosTerminal>("SAB");
+  const [terminal, setTerminal] = useState<RapidPosTerminal>(defaultTerminal);
   const [cardNetwork, setCardNetwork] = useState<RapidPosCardNetwork>("mada");
   const [slipNo, setSlipNo] = useState("");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [batchSlips, setBatchSlips] = useState<RapidPosBatchEntry[]>([]);
   const [isUndoing, setIsUndoing] = useState(false);
   const amountRef = useRef<HTMLInputElement>(null);
+  const onCloseRef = useRef(onClose);
+  const defaultTerminalRef = useRef(defaultTerminal);
+  const wasOpenRef = useRef(false);
 
-  // Initialize or reset when modal opens
+  onCloseRef.current = onClose;
+  defaultTerminalRef.current = defaultTerminal;
+
+  // Initialize ONLY on false -> true transition of `open` (immune to parent re-renders & polling)
   useEffect(() => {
     if (!open) {
+      wasOpenRef.current = false;
       setBatchSlips([]);
       setAmount("");
       setSlipNo("");
       setErrorMsg(null);
+      setToastMsg(null);
       return;
     }
 
-    setAmount("");
-    setSlipNo("");
-    setErrorMsg(null);
-    setBatchSlips([]);
+    if (!wasOpenRef.current) {
+      wasOpenRef.current = true;
+      setAmount("");
+      setSlipNo("");
+      setErrorMsg(null);
+      setToastMsg(null);
+      setBatchSlips([]);
+      setTerminal(defaultTerminalRef.current);
 
-    const timer = window.setTimeout(() => {
-      amountRef.current?.focus();
-    }, 50);
+      const timer = window.setTimeout(() => {
+        amountRef.current?.focus();
+      }, 50);
+
+      const onKeyDown = (e: KeyboardEvent) => {
+        if (e.key === "Escape") onCloseRef.current();
+      };
+      window.addEventListener("keydown", onKeyDown);
+
+      return () => {
+        window.clearTimeout(timer);
+        window.removeEventListener("keydown", onKeyDown);
+      };
+    }
 
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") onCloseRef.current();
     };
     window.addEventListener("keydown", onKeyDown);
-
     return () => {
-      window.clearTimeout(timer);
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
@@ -173,6 +197,12 @@ export function RapidPosModal({
 
       // Append to running session mini-feed
       setBatchSlips((prev) => [newBatchEntry, ...prev]);
+
+      const terminalLabel =
+        TERMINAL_OPTIONS.find((t) => t.id === terminal)?.label || terminal;
+      const networkLabel =
+        NETWORK_OPTIONS.find((n) => n.id === cardNetwork)?.label || cardNetwork;
+      setToastMsg(`✓ Logged SAR ${fmt(val)} to ${terminalLabel} (${networkLabel})`);
 
       // Reset ONLY amount and slipNo, preserve terminal and cardNetwork!
       setAmount("");
@@ -248,6 +278,14 @@ export function RapidPosModal({
             <X size={16} />
           </button>
         </div>
+
+        {/* Confirmation Toast on Continuous Submit */}
+        {toastMsg && (
+          <div className="rounded-xl bg-emerald-500/20 border border-emerald-500/50 px-3.5 py-2 text-xs font-black text-emerald-700 dark:text-emerald-300 flex items-center gap-2 animate-in fade-in">
+            <Check size={14} className="shrink-0" />
+            <span>{toastMsg}</span>
+          </div>
+        )}
 
         {/* Running Session Batch Counter Bar */}
         {batchCount > 0 && (
