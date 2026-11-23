@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "../../../lib/prisma";
 import { normalizeBranch } from "../../../lib/auth-audit";
+import { deduplicateSupplierBillsWithRemoved } from "../../../lib/deduplicate-records";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,14 @@ export async function GET(req: Request) {
       orderBy: [{ isPaid: "asc" }, { dueDate: "asc" }, { createdAt: "desc" }],
     });
 
-    return NextResponse.json({ bills });
+    const { unique, duplicateIds } = deduplicateSupplierBillsWithRemoved(bills);
+    if (duplicateIds.length > 0) {
+      await prisma.supplierBill
+        .deleteMany({ where: { id: { in: duplicateIds } } })
+        .catch(() => {});
+    }
+
+    return NextResponse.json({ bills: unique });
   } catch (err) {
     console.error("[GET /api/suppliers] Error:", err);
     return NextResponse.json(
@@ -203,11 +211,12 @@ export async function POST(req: Request) {
       });
     }
 
-    // Standard Create Credit Purchase / Supplier Bill
+    // Standard Create Credit Purchase / Supplier Bill (Idempotent via clientTxnId or 60s signature)
     const rawBranch = body.branch;
     const branch = rawBranch && rawBranch !== "ALL" ? normalizeBranch(rawBranch) : null;
     const supplier = String(body.supplier || "").trim();
     const invoiceNo = String(body.invoiceNo || `CP-${Date.now()}`).trim();
+    const clientTxnId = body.clientTxnId ? String(body.clientTxnId).trim() : null;
     const amount = Math.max(0, Number(body.amount) || 0);
 
     if (!supplier || amount <= 0) {
@@ -217,12 +226,36 @@ export async function POST(req: Request) {
       );
     }
 
+    if (clientTxnId) {
+      const existingByTxn = await prisma.supplierBill.findFirst({
+        where: { clientTxnId },
+      });
+      if (existingByTxn) {
+        return NextResponse.json({ bill: existingByTxn, deduplicated: true });
+      }
+    }
+
+    const sixtySecondsAgo = new Date(Date.now() - 60_000);
+    const recentMatch = await prisma.supplierBill.findFirst({
+      where: {
+        branch,
+        supplier: { equals: supplier, mode: "insensitive" },
+        invoiceNo,
+        amount,
+        createdAt: { gte: sixtySecondsAgo },
+      },
+    });
+    if (recentMatch) {
+      return NextResponse.json({ bill: recentMatch, deduplicated: true });
+    }
+
     const dueDate = body.dueDate
       ? new Date(body.dueDate)
       : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
     const created = await prisma.supplierBill.create({
       data: {
+        clientTxnId,
         branch,
         supplier,
         invoiceNo,

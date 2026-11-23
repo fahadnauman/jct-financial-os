@@ -112,10 +112,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Credit record not found" }, { status: 404 });
     }
 
-    // Create a new CreditRadar receivable
+    // Create a new CreditRadar receivable (Idempotent via clientTxnId or 60s signature)
     const rawBranch = body.branch;
     const branch = rawBranch && rawBranch !== "ALL" ? normalizeBranch(rawBranch) : null;
     const customerName = String(body.customerName || "").trim();
+    const clientTxnId = body.clientTxnId ? String(body.clientTxnId).trim() : null;
     const amount = Math.max(0, Number(body.amount) || 0);
     const originalSaleAmount =
       body.originalSaleAmount !== undefined
@@ -137,8 +138,32 @@ export async function POST(req: Request) {
       );
     }
 
+    if (clientTxnId) {
+      const existingByTxn = await prisma.creditRadar.findFirst({
+        where: { clientTxnId },
+      });
+      if (existingByTxn) {
+        return NextResponse.json({ record: existingByTxn, deduplicated: true });
+      }
+    }
+
+    const sixtySecondsAgo = new Date(Date.now() - 60_000);
+    const recentMatch = await prisma.creditRadar.findFirst({
+      where: {
+        branch,
+        customerName: { equals: customerName, mode: "insensitive" },
+        linkedInvoiceNum,
+        amount: originalSaleAmount,
+        createdAt: { gte: sixtySecondsAgo },
+      },
+    });
+    if (recentMatch) {
+      return NextResponse.json({ record: recentMatch, deduplicated: true });
+    }
+
     const created = await prisma.creditRadar.create({
       data: {
+        clientTxnId,
         branch,
         customerName,
         phone: body.phone ? String(body.phone).trim() : null,

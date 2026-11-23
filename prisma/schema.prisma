@@ -134,6 +134,7 @@ model CreditCustomer {
 
 model CreditRadar {
   id                 String   @id @default(cuid())
+  clientTxnId        String?
   branch             String?
   customerName       String
   phone              String?
@@ -155,10 +156,12 @@ model CreditRadar {
   @@index([branch])
   @@index([linkedInvoiceNum])
   @@index([customerName])
+  @@index([clientTxnId])
 }
 
 model SupplierBill {
   id                 String   @id @default(cuid())
+  clientTxnId        String?
   branch             String?
   supplier           String   // "Jotun KSA", "Hempel", "Sigma"
   invoiceNo          String
@@ -182,6 +185,7 @@ model SupplierBill {
 
   @@index([branch])
   @@index([supplier])
+  @@index([clientTxnId])
 }
 
 model Purchase {
@@ -307,6 +311,7 @@ model CapitalDeposit {
 // Intelligent Customer & Supplier Advance Ledger
 model AdvanceRecord {
   id                 String   @id @default(cuid())
+  clientTxnId        String?
   branch             String   @default("JCT_HARDWARE_JOTUN")
   direction          String   // "CUSTOMER_ADVANCE_IN" | "SUPPLIER_ADVANCE_OUT"
   partyName          String
@@ -327,6 +332,7 @@ model AdvanceRecord {
 
   @@index([branch, direction, status])
   @@index([partyName])
+  @@index([clientTxnId])
 }
 
 // Global Instant Party Directory (Suppliers, Customers & Creditors)

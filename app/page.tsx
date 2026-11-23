@@ -21,6 +21,7 @@ import {
 import SettingsView from "./settings-view";
 import MonthlyAuditsView from "./monthly-audits-view";
 import { calcSessionPosBreakdown, normalizeTerminalKey, type PosSessionBreakdown } from "../lib/pos-breakdown";
+import { deduplicateSupplierBills, deduplicateByIdOrClientTxnId } from "../lib/deduplicate-records";
 import { useActiveSessionSync, type ActiveSessionSyncStatus } from "../lib/active-session-sync";
 import { RapidPosModal, type RapidPosSubmitPayload, type RapidPosBatchEntry } from "../components/RapidPosModal";
 import { PartyDropdownSelector, type PartyItem } from "../components/PartyDropdownSelector";
@@ -190,6 +191,7 @@ export const formatPaymentModeBadge = (
 
 export interface SupplierBillItem {
   id: string;
+  clientTxnId?: string;
   supplierName: string;
   amount: number;
   originalAmount?: number;
@@ -2232,7 +2234,8 @@ interface DailyRegisterViewProps {
     category: "Credit Purchase" | "Cash Purchase" | "Supplier Advance" | "Return",
     paymentMode?: UniversalPaymentMode | string,
     supplierInvoiceNum?: string,
-    billPdfUrl?: string
+    billPdfUrl?: string,
+    clientTxnId?: string
   ) => void;
   onSyncCreditCustomer: (
     customerName: string,
@@ -5536,7 +5539,8 @@ function DailyRegisterView({
         step4Category,
         effectiveStep4Mode,
         step4SupplierInvoiceNum.trim() || undefined,
-        step4BillPdfUrl || undefined
+        step4BillPdfUrl || undefined,
+        clientTxnId
       );
       void fetch("/api/parties", {
         method: "POST",
@@ -15042,7 +15046,8 @@ function SupplierHubView({
     category: "Credit Purchase" | "Cash Purchase" | "Supplier Advance" | "Return",
     paymentMode?: UniversalPaymentMode | string,
     supplierInvoiceNum?: string,
-    billPdfUrl?: string
+    billPdfUrl?: string,
+    clientTxnId?: string
   ) => void;
   isOwner?: boolean;
   onUpdateBill?: (updated: SupplierBillItem) => void;
@@ -22564,12 +22569,18 @@ export default function Page() {
     category: "Credit Purchase" | "Cash Purchase" | "Supplier Advance" | "Return",
     paymentMode?: UniversalPaymentMode | string,
     supplierInvoiceNum?: string,
-    billPdfUrl?: string
+    billPdfUrl?: string,
+    clientTxnId?: string
   ) => {
     const cleanName = supplierName.trim() || "Jotun";
     const resolvedDue = dueDate || addSaudiDays(14);
+    const resolvedTxnId =
+      clientTxnId ||
+      (typeof crypto !== "undefined" ? crypto.randomUUID() : `cp-${Date.now()}`);
+    const optimisticId = `sb-${resolvedTxnId}`;
     const newBill: SupplierBillItem = {
-      id: `sb-${Date.now()}`,
+      id: optimisticId,
+      clientTxnId: resolvedTxnId,
       supplierName: cleanName,
       amount,
       originalAmount: amount,
@@ -22581,13 +22592,14 @@ export default function Page() {
       supplierInvoiceNum: supplierInvoiceNum || undefined,
       billPdfUrl: billPdfUrl || undefined,
     };
-    setSupplierBills((prev) => [newBill, ...prev]);
+    setSupplierBills((prev) => deduplicateSupplierBills([newBill, ...prev]));
 
     if (category === "Credit Purchase" && amount > 0) {
       fetch("/api/suppliers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          clientTxnId: resolvedTxnId,
           branch: syncBranch,
           supplier: cleanName,
           invoiceNo: supplierInvoiceNum || `CP-${Date.now().toString().slice(-6)}`,
@@ -22602,6 +22614,15 @@ export default function Page() {
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
           if (data?.bill?.id) {
+            setSupplierBills((prev) =>
+              deduplicateSupplierBills(
+                prev.map((b) =>
+                  b.id === optimisticId || (b.clientTxnId && b.clientTxnId === resolvedTxnId)
+                    ? { ...b, id: String(data.bill.id), clientTxnId: resolvedTxnId }
+                    : b
+                )
+              )
+            );
             setSuppliersRefresh((n) => n + 1);
           }
         })
@@ -22967,7 +22988,7 @@ export default function Page() {
         .then((r) => r.json())
         .then((data) => {
           if (!ignore && Array.isArray(data?.advances)) {
-            setBranchAdvances(data.advances);
+            setBranchAdvances(deduplicateByIdOrClientTxnId(data.advances));
           }
         })
         .catch(() => {});
@@ -23012,6 +23033,7 @@ export default function Page() {
             const createdRaw = typeof b.createdAt === "string" ? b.createdAt.slice(0, 10) : saudiCalendarDateStr();
             return {
               id: String(b.id),
+              clientTxnId: b.clientTxnId ? String(b.clientTxnId) : undefined,
               supplierName: String(b.supplier || "Supplier"),
               amount: isPaid ? 0 : rem,
               originalAmount: orig,
@@ -23024,10 +23046,11 @@ export default function Page() {
               billPdfUrl: b.billPdfUrl ? String(b.billPdfUrl) : undefined,
             };
           });
-          setSupplierBills(mapped);
+          const uniqueMapped = deduplicateSupplierBills(mapped);
+          setSupplierBills(uniqueMapped);
           setSupplierBrands((prev) => {
             const next = prev.map((br) => ({ ...br, pendingBills: 0, amountPaid: 0 }));
-            for (const bill of mapped) {
+            for (const bill of uniqueMapped) {
               const supLow = bill.supplierName.toLowerCase();
               let found = next.find(
                 (br) => br.brand.toLowerCase().includes(supLow) || supLow.includes(br.brand.toLowerCase())
@@ -23122,7 +23145,7 @@ export default function Page() {
               syncedFromRegister: true,
             };
           });
-          setCreditCustomers(mapped);
+          setCreditCustomers(deduplicateByIdOrClientTxnId(mapped));
         })
         .catch(() => {});
     };
@@ -24018,7 +24041,8 @@ export default function Page() {
         "Credit Purchase",
         "CREDIT",
         invoiceNo,
-        receiptUrl
+        receiptUrl,
+        clientTxnId
       );
     } else if (type === "EXPENSE" || type === "PURCHASE" || type === "SALES_RETURN") {
       const isBusComm = category === "Business Commission";

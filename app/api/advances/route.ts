@@ -154,9 +154,34 @@ export async function POST(req: Request) {
     const notes = typeof body.notes === "string" ? body.notes.trim() : "";
     const phoneOrRef = typeof body.phoneOrRef === "string" && body.phoneOrRef.trim() ? body.phoneOrRef.trim() : null;
     const branchInvNo = typeof body.branchInvNo === "string" && body.branchInvNo.trim() ? body.branchInvNo.trim() : null;
+    const clientTxnId = typeof body.clientTxnId === "string" && body.clientTxnId.trim() ? body.clientTxnId.trim() : null;
+
+    if (clientTxnId) {
+      const existingByTxn = await prisma.advanceRecord.findFirst({
+        where: { clientTxnId },
+      });
+      if (existingByTxn) {
+        return NextResponse.json({ advance: existingByTxn, deduplicated: true });
+      }
+    }
+
+    const sixtySecondsAgo = new Date(Date.now() - 60_000);
+    const recentMatch = await prisma.advanceRecord.findFirst({
+      where: {
+        branch,
+        direction,
+        partyName: { equals: partyName, mode: "insensitive" },
+        totalAdvanceAmount,
+        createdAt: { gte: sixtySecondsAgo },
+      },
+    });
+    if (recentMatch) {
+      return NextResponse.json({ advance: recentMatch, deduplicated: true });
+    }
 
     const created = await prisma.advanceRecord.create({
       data: {
+        clientTxnId,
         branch,
         direction,
         partyName,
