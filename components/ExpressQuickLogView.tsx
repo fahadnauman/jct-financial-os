@@ -544,6 +544,19 @@ export function ExpressQuickLogView({
               recipientName,
               customerName: recipientName !== "Express Logger" ? recipientName : undefined,
               paymentMode,
+              terminal:
+                activeType === "POS_SWIPE"
+                  ? posTerminal
+                  : activeType === "SALES_BILL" && salesPaymentMode === "CARD"
+                  ? salesTerminal
+                  : undefined,
+              cardNetwork:
+                activeType === "POS_SWIPE"
+                  ? posNetwork
+                  : activeType === "SALES_BILL" && salesPaymentMode === "CARD"
+                  ? salesNetwork
+                  : undefined,
+              source: "EXPRESS_QUICK_LOG",
               invoiceNo: supplierInvoiceNum,
               description:
                 activeType === "EXPENSE" && expenseCategory === "Business Commission"

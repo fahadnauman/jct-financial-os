@@ -46,13 +46,24 @@ const r2 = (val: number): number => Math.round((val + Number.EPSILON) * 100) / 1
 
 export const TERMINAL_NAMES: Record<string, string> = {
   SAB: "SAB",
-  AL_RAJHI: "Al Rajhi",
+  AL_RAJHI: "Al Rajhi Bank",
   SNB: "SNB",
   ALINMA: "Alinma Bank",
   RIYAD_BANK: "Riyad Bank",
   UNSPECIFIED_POS: "Unspecified POS",
   BANK_TRANSFER: "Bank Transfer",
 };
+
+export function normalizeBankName(raw?: string): string {
+  if (!raw || !raw.trim()) return "Unspecified";
+  const s = raw.trim();
+  if (/rajhi/i.test(s)) return "Al Rajhi Bank";
+  if (/\bsnb\b|ahli|saudi national/i.test(s)) return "SNB";
+  if (/\bsab\b|sabb|saudi awwal/i.test(s)) return "SAB";
+  if (/alinma/i.test(s)) return "Alinma Bank";
+  if (/riyad/i.test(s)) return "Riyad Bank";
+  return s;
+}
 
 export const normalizeTerminalKey = (raw?: string | null): string => {
   if (!raw || !raw.trim()) return "UNSPECIFIED_POS";
@@ -244,6 +255,7 @@ export function calcSessionPosBreakdown(
   // 1. Process active ERP invoices (including legacy and new Manual POS entries)
   for (const inv of erpInvoices) {
     if (inv.isReturned) continue;
+    if (inv.clientTxnId && processedClientIds.has(inv.clientTxnId)) continue;
     if (inv.invoiceNo) processedInvoices.add(inv.invoiceNo.trim().replace(/^#/, ""));
     if (inv.branchInvNo) processedInvoices.add(inv.branchInvNo.trim().replace(/^#/, ""));
     if (inv.clientTxnId) processedClientIds.add(inv.clientTxnId);

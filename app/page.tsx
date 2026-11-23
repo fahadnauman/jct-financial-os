@@ -20,7 +20,7 @@ import {
 } from "../lib/saudi-time";
 import SettingsView from "./settings-view";
 import MonthlyAuditsView from "./monthly-audits-view";
-import { calcSessionPosBreakdown, type PosSessionBreakdown } from "../lib/pos-breakdown";
+import { calcSessionPosBreakdown, normalizeTerminalKey, type PosSessionBreakdown } from "../lib/pos-breakdown";
 import { useActiveSessionSync, type ActiveSessionSyncStatus } from "../lib/active-session-sync";
 import { RapidPosModal, type RapidPosSubmitPayload, type RapidPosBatchEntry } from "../components/RapidPosModal";
 import { PartyDropdownSelector, type PartyItem } from "../components/PartyDropdownSelector";
@@ -23184,10 +23184,20 @@ export default function Page() {
     rawEntries: PreLoggedEntry[]
   ): ErpInvoiceItem[] => {
     const normInv = (s?: string) => (s || "").replace(/^#/i, "").trim().toUpperCase();
+    // Collapse any existing duplicate clientTxnId twins in rawErp non-destructively
+    const dedupedRawErp: ErpInvoiceItem[] = [];
+    const seenClientTxns = new Set<string>();
+    for (const inv of rawErp) {
+      if (inv.clientTxnId) {
+        if (seenClientTxns.has(inv.clientTxnId)) continue;
+        seenClientTxns.add(inv.clientTxnId);
+      }
+      dedupedRawErp.push(inv);
+    }
     const existingIds = new Set<string>();
     const existingInvNos = new Set<string>();
     const existingSigs = new Set<string>();
-    for (const inv of rawErp) {
+    for (const inv of dedupedRawErp) {
       if (inv.id) existingIds.add(inv.id);
       if (inv.internalId) existingIds.add(inv.internalId);
       if (inv.clientTxnId) existingIds.add(inv.clientTxnId);
@@ -23443,6 +23453,7 @@ export default function Page() {
         injectedPosInvoices.push({
           internalId: `pk-pos-${t.id}`,
           id: `pk-pos-${t.id}`,
+          clientTxnId: t.clientTxnId || undefined,
           invoiceNo: refNo,
           branchInvNo: refNo,
           customer: "Manual POS Entry",
@@ -23705,7 +23716,12 @@ export default function Page() {
     if (injectedPosInvoices.length) {
       setErpInvoices((prev) => {
         const seen = new Set(prev.map((i) => i.internalId || i.id));
-        const freshPos = injectedPosInvoices.filter((i) => !seen.has(i.internalId));
+        const seenClients = new Set(
+          prev.map((i) => i.clientTxnId).filter((c): c is string => Boolean(c))
+        );
+        const freshPos = injectedPosInvoices.filter(
+          (i) => !seen.has(i.internalId) && !(i.clientTxnId && seenClients.has(i.clientTxnId))
+        );
         return freshPos.length ? [...freshPos, ...prev] : prev;
       });
     }
@@ -23928,6 +23944,20 @@ export default function Page() {
       }
     } else if (type === "POS_SWIPE") {
       const posNo = invoiceNo || `POS-${Date.now().toString().slice(-4)}`;
+      const rawTerm = typeof payload.terminal === "string" ? payload.terminal : defaultTerminalForBranch;
+      const normTermKey = normalizeTerminalKey(rawTerm);
+      const resolvedTerm: "SAB" | "AL_RAJHI" | "SNB" | "BANK_TRANSFER" =
+        normTermKey === "AL_RAJHI"
+          ? "AL_RAJHI"
+          : normTermKey === "SNB"
+          ? "SNB"
+          : normTermKey === "BANK_TRANSFER"
+          ? "BANK_TRANSFER"
+          : "SAB";
+      const resolvedNet =
+        typeof payload.cardNetwork === "string" && payload.cardNetwork.trim()
+          ? (payload.cardNetwork.trim().toLowerCase() as "mada" | "visa" | "mastercard")
+          : "mada";
       const newPos: ErpInvoiceItem = {
         internalId: clientTxnId || `pos-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         id: `POS-${Date.now()}`,
@@ -23935,33 +23965,33 @@ export default function Page() {
         invoiceNo: posNo,
         branchInvNo: posNo,
         customer: "Manual POS Entry",
+        customerName: "Manual POS Entry",
         amount,
         originalAmount: amount,
-        paymentMode: "POS_SWIPE",
-        posTerminal: defaultTerminalForBranch,
+        paymentMode: resolvedTerm === "BANK_TRANSFER" ? "BANK_TRANSFER" : "POS_SWIPE",
+        posTerminal:
+          resolvedTerm === "BANK_TRANSFER"
+            ? "SAB"
+            : resolvedNet === "visa" || resolvedNet === "mastercard"
+            ? "VISA_MC"
+            : resolvedTerm,
+        posTerminalDevice: resolvedTerm,
+        terminal: resolvedTerm,
+        cardNetwork: resolvedNet,
+        network: resolvedNet,
         splitCashAmount: 0,
         splitBankAmount: 0,
-        splitBankMethod: "POS_SWIPE",
+        splitBankMethod: resolvedTerm === "BANK_TRANSFER" ? "BANK_TRANSFER" : "POS_SWIPE",
         isManual: true,
         isManualPos: true,
         isConfirmed: true,
         autoMatched: true,
         time: nowHHMM(),
       };
-      setErpInvoices((prev) => [...prev, newPos]);
-      setPreLoggedBankInvoices((prev) => [
-        {
-          id: `bank-pos-${Date.now()}`,
-          clientTxnId,
-          slipNo: posNo,
-          invoiceNo: posNo,
-          amount,
-          time: nowHHMM(),
-          paymentMode: "POS_SWIPE",
-          bankMethod: "POS_SWIPE",
-        },
-        ...prev,
-      ]);
+      setErpInvoices((prev) => {
+        if (clientTxnId && prev.some((i) => i.clientTxnId === clientTxnId)) return prev;
+        return [...prev, newPos];
+      });
     } else if (type === "CREDIT_SUPPLIER") {
       const supName = supplierName || customerName || "Supplier";
       const settleMode: "CASH" | "BANK_TRANSFER" | "CARD" =
