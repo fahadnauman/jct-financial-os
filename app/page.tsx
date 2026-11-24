@@ -2258,6 +2258,8 @@ interface DailyRegisterViewProps {
   remoteClearSignal?: number;
   autoDeductManualPos?: boolean;
   setAutoDeductManualPos?: React.Dispatch<React.SetStateAction<boolean>>;
+  resumingDraftInfo?: { branch: string; isoDate: string; displayDate: string } | null;
+  onReturnToToday?: () => void;
 }
 
 export interface CascadingPaymentSelectorProps {
@@ -3198,6 +3200,8 @@ function DailyRegisterView({
   remoteClearSignal = 0,
   autoDeductManualPos: propAutoDeductManualPos,
   setAutoDeductManualPos: propSetAutoDeductManualPos,
+  resumingDraftInfo = null,
+  onReturnToToday,
 }: DailyRegisterViewProps) {
   const [localAutoDeductManualPos, setLocalAutoDeductManualPos] = useState<boolean>(true);
   const autoDeductManualPos = propAutoDeductManualPos ?? localAutoDeductManualPos;
@@ -7412,6 +7416,29 @@ function DailyRegisterView({
 
   return (
     <div className="relative flex-1 min-w-0 w-full max-w-full mx-auto flex flex-col gap-6 bg-slate-50 dark:bg-black text-jct-charcoal dark:text-jct-offwhite select-none">
+      {/* Resuming Unclosed Past Register Banner */}
+      {resumingDraftInfo && (
+        <div className="relative z-30 max-w-7xl w-full mx-auto px-6 pt-5 print:hidden">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-amber-500/60 bg-amber-500/15 px-5 py-3 text-xs sm:text-sm font-bold text-amber-800 dark:text-amber-200 shadow-sm">
+            <div className="flex items-center gap-2.5">
+              <span>⏳</span>
+              <span>
+                Resuming Unclosed Register for <strong>{resumingDraftInfo.displayDate}</strong> — Complete any remaining entries and click <strong>Step 5 Final Close</strong> to archive
+              </span>
+            </div>
+            {onReturnToToday && (
+              <button
+                type="button"
+                onClick={onReturnToToday}
+                className="rounded-lg bg-white dark:bg-black border border-amber-500/50 px-3 py-1.5 text-xs font-black text-jct-charcoal dark:text-white hover:brightness-95 transition"
+              >
+                ← Return to Today ({saudiSessionDate()})
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Live Cross-Module Sync Toast Banner */}
       {syncBannerMsg && (
         <div className="relative z-30 max-w-7xl w-full mx-auto px-6 pt-5 print:hidden">
@@ -18382,19 +18409,38 @@ function QuickLogHistoryAuditView({
   );
 }
 
+export interface UnclosedDraftRecord {
+  id: string;
+  sessionKey: string;
+  branch: string;
+  isoDate: string;
+  displayDate: string;
+  status: "UNCLOSED_DRAFT";
+  erpCount: number;
+  entryCount: number;
+  creditCount: number;
+  totalSales: number;
+  totalCredits: number;
+  updatedAt: string;
+  dataJson: string;
+}
+
 function AuditLibraryView({
   profile,
   onReopenPendingDraft,
+  onResumeUnclosedSession,
   completedDaysLog = [],
 }: {
   profile: UserProfile | null;
   onReopenPendingDraft?: (record: ArchiveRecord) => void;
+  onResumeUnclosedSession?: (draft: UnclosedDraftRecord) => void;
   completedDaysLog?: CompletedDaySummary[];
 }) {
   const isOwner = Boolean(profile?.isOwner);
   const staffBranchId = profile?.id && profile.id !== "BONGSI" ? profile.id : "JCT_HARDWARE_JOTUN";
 
   const [records, setRecords] = useState<ArchiveRecord[]>([]);
+  const [unclosedDrafts, setUnclosedDrafts] = useState<UnclosedDraftRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedBranchFilter, setSelectedBranchFilter] = useState<string>(
     isOwner ? "ALL" : staffBranchId
@@ -18625,6 +18671,9 @@ function AuditLibraryView({
       if (data.records) {
         setRecords(data.records);
       }
+      if (Array.isArray(data.unclosedDrafts)) {
+        setUnclosedDrafts(data.unclosedDrafts);
+      }
     } catch (e) {
       console.error("Failed to load archive", e);
     } finally {
@@ -18641,6 +18690,9 @@ function AuditLibraryView({
         const data = await res.json();
         if (!ignore && data.records) {
           setRecords(data.records);
+        }
+        if (!ignore && Array.isArray(data.unclosedDrafts)) {
+          setUnclosedDrafts(data.unclosedDrafts);
         }
       } catch (e) {
         console.error("Failed to load archive", e);
@@ -19748,6 +19800,59 @@ function AuditLibraryView({
           </button>
         </div>
       </div>
+
+      {/* Unclosed / In-Progress Past Sessions (Auto-Recovered from Neon) */}
+      {unclosedDrafts.length > 0 && (
+        <div className="space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-black uppercase tracking-wider text-amber-600 dark:text-amber-300">
+              ⏳ Unclosed / In-Progress Past Sessions ({unclosedDrafts.length})
+            </span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {unclosedDrafts.map((draft) => {
+              const badge = getBranchBadgeInfo(draft.branch);
+              return (
+                <div
+                  key={`${draft.branch}::${draft.isoDate}`}
+                  className="rounded-xl border-2 border-amber-500/50 bg-amber-500/10 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm"
+                >
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-amber-500 text-slate-950 px-2.5 py-0.5 text-[10px] font-black uppercase">
+                        ⏳ UNCLOSED / IN-PROGRESS DRAFT
+                      </span>
+                      <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${badge.color}`}>
+                        {badge.name}
+                      </span>
+                    </div>
+                    <div className="font-display text-base font-extrabold text-jct-charcoal dark:text-white">
+                      {draft.displayDate}{" "}
+                      <span className="text-xs font-mono font-semibold text-slate-500 dark:text-slate-400">
+                        ({draft.isoDate})
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3 text-xs font-mono text-slate-600 dark:text-slate-300">
+                      <span>Sales: <strong>SAR {fmt(draft.totalSales)}</strong></span>
+                      <span>Credits: <strong>SAR {fmt(draft.totalCredits)}</strong></span>
+                      <span>{draft.erpCount} Invoices · {draft.entryCount} Entries</span>
+                    </div>
+                  </div>
+                  {onResumeUnclosedSession && (
+                    <button
+                      type="button"
+                      onClick={() => onResumeUnclosedSession(draft)}
+                      className="shrink-0 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black px-4 py-2.5 text-xs shadow-sm transition active:scale-[0.97]"
+                    >
+                      ▶ Resume &amp; Complete Audit
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* KPI Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
@@ -23201,6 +23306,11 @@ export default function Page() {
   }, [syncBranch, settingsRefresh]);
   const pocketSyncedRef = useRef<Set<string>>(new Set());
   const [remoteClearSignal, setRemoteClearSignal] = useState(0);
+  const [resumingDraftInfo, setResumingDraftInfo] = useState<{
+    branch: string;
+    isoDate: string;
+    displayDate: string;
+  } | null>(null);
   const hydrateManualPosTwins = (
     rawErp: ErpInvoiceItem[],
     rawBank: PreLoggedBankInvoice[],
@@ -24246,6 +24356,11 @@ export default function Page() {
                 remoteClearSignal={remoteClearSignal}
                 autoDeductManualPos={autoDeductManualPos}
                 setAutoDeductManualPos={setAutoDeductManualPos}
+                resumingDraftInfo={resumingDraftInfo}
+                onReturnToToday={() => {
+                  setResumingDraftInfo(null);
+                  setActiveSessionDate(saudiSessionDate());
+                }}
               />
             ) : safeTab === "quick-log" ? (
               <ExpressQuickLogView
@@ -24306,6 +24421,38 @@ export default function Page() {
               <AuditLibraryView
                 profile={profile}
                 completedDaysLog={completedDaysLog}
+                onResumeUnclosedSession={(draft) => {
+                  if (profile?.isOwner) {
+                    const branchOpt = OWNER_BRANCH_OPTIONS.find(
+                      (b) => normalizeBranch(b) === draft.branch
+                    );
+                    if (branchOpt && branchOpt !== ownerBranch) {
+                      setOwnerBranch(branchOpt);
+                    }
+                  }
+                  setActiveSessionDate(draft.displayDate);
+                  setResumingDraftInfo({
+                    branch: draft.branch,
+                    isoDate: draft.isoDate,
+                    displayDate: draft.displayDate,
+                  });
+                  try {
+                    const parsed = JSON.parse(draft.dataJson);
+                    const recErp = Array.isArray(parsed.erpInvoices) ? parsed.erpInvoices : [];
+                    const recBank = Array.isArray(parsed.preLoggedBankInvoices)
+                      ? parsed.preLoggedBankInvoices
+                      : [];
+                    const recEntries = Array.isArray(parsed.preLoggedEntries)
+                      ? parsed.preLoggedEntries
+                      : [];
+                    setErpInvoices(hydrateManualPosTwins(recErp, recBank, recEntries));
+                    setPreLoggedBankInvoices(deduplicateByIdOrClientTxnId(recBank));
+                    setPreLoggedEntries(deduplicatePreLoggedEntries(recEntries));
+                  } catch {
+                    // ignore
+                  }
+                  setTab("register");
+                }}
                 onReopenPendingDraft={(record) => {
                   setOpeningBalance(record.openingCash || 0);
                   if (record.date) {

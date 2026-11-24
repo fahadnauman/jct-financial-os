@@ -235,4 +235,34 @@ export function getAuthoritativeSaudiTime(input: Date | string | number = new Da
   };
 }
 
+/** Convert "23-November-2026" or "2026-11-23" to "2026-11-23". */
+export function normalizeSessionDateToIso(raw?: string | null): string | null {
+  if (!raw) return null;
+  const s = raw.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const m = s.match(/^(\d{1,2})-([A-Za-z]+)-(\d{4})$/);
+  if (m) {
+    const day = m[1].padStart(2, "0");
+    const monthIdx = SAUDI_MONTHS.findIndex(
+      (mn) => mn.toLowerCase() === m[2].toLowerCase()
+    );
+    if (monthIdx !== -1) {
+      const month = String(monthIdx + 1).padStart(2, "0");
+      return `${m[3]}-${month}-${day}`;
+    }
+  }
+  return null;
+}
+
+/** Convert "2026-11-23" to "23-November-2026". */
+export function isoToSessionDisplayDate(iso: string): string {
+  const m = iso.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return iso;
+  const monthIdx = Number(m[2]) - 1;
+  const monthName = SAUDI_MONTHS[monthIdx];
+  if (!monthName) return iso;
+  return `${m[3]}-${monthName}-${m[1]}`;
+}
+
+
 

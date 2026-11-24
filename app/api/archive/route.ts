@@ -2,8 +2,46 @@ import { NextResponse } from "next/server";
 import { prisma } from "../../../lib/prisma";
 import { checkIsOwner, normalizeBranch, normalizePaymentMode } from "../../../lib/auth-audit";
 import { backfillHistoricalReceivingAmounts } from "../../../lib/backfill-receiving";
+import {
+  isoToSessionDisplayDate,
+  normalizeSessionDateToIso,
+  saudiTodayIso,
+} from "../../../lib/saudi-time";
 
 export const dynamic = "force-dynamic";
+
+export interface UnclosedDraftDTO {
+  id: string;
+  sessionKey: string;
+  branch: string;
+  isoDate: string;
+  displayDate: string;
+  status: "UNCLOSED_DRAFT";
+  erpCount: number;
+  entryCount: number;
+  creditCount: number;
+  totalSales: number;
+  totalCredits: number;
+  updatedAt: string;
+  dataJson: string;
+}
+
+function mergeArrayByKey(
+  a: Array<Record<string, unknown>> = [],
+  b: Array<Record<string, unknown>> = [],
+  getKeys: (item: Record<string, unknown>) => string[]
+) {
+  const seen = new Set<string>();
+  const out: Array<Record<string, unknown>> = [];
+  for (const item of [...a, ...b]) {
+    if (!item || typeof item !== "object") continue;
+    const keys = getKeys(item).filter(Boolean);
+    if (keys.some((k) => seen.has(k))) continue;
+    keys.forEach((k) => seen.add(k));
+    out.push(item);
+  }
+  return out;
+}
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -26,10 +64,152 @@ export async function GET(req: Request) {
       take: limit,
     });
 
-    return NextResponse.json({ records: rows });
+    // Build set of already-closed (branch::isoDate) keys
+    const closedKeys = new Set<string>();
+    for (const r of rows) {
+      const iso = normalizeSessionDateToIso(r.date) || r.date;
+      closedKeys.add(`${r.branch}::${iso}`);
+    }
+
+    // Surface unclosed / in-progress past ActiveRegisterSession drafts (excluding today)
+    const todayIso = saudiTodayIso();
+    const activeSessions = await prisma.activeRegisterSession.findMany({
+      where: {
+        ...(branch && branch !== "ALL" ? { branch } : {}),
+        status: { in: ["IN_PROGRESS", "DRAFT"] },
+        dataJson: { not: null },
+      },
+      orderBy: { updatedAt: "desc" },
+    });
+
+    const groupedDrafts = new Map<
+      string,
+      {
+        id: string;
+        sessionKey: string;
+        branch: string;
+        isoDate: string;
+        displayDate: string;
+        erpInvoices: Array<Record<string, unknown>>;
+        preLoggedBankInvoices: Array<Record<string, unknown>>;
+        preLoggedEntries: Array<Record<string, unknown>>;
+        updatedAt: Date;
+      }
+    >();
+
+    for (const s of activeSessions) {
+      const rawDate =
+        s.reportDate ||
+        (s.sessionKey && s.sessionKey.includes("::") ? s.sessionKey.split("::")[1] : null);
+      const iso = normalizeSessionDateToIso(rawDate);
+      if (!iso || iso >= todayIso) continue;
+      const groupKey = `${s.branch}::${iso}`;
+      if (closedKeys.has(groupKey)) continue;
+      if (!s.dataJson) continue;
+
+      let parsed: Record<string, unknown> = {};
+      try {
+        parsed = JSON.parse(s.dataJson) as Record<string, unknown>;
+      } catch {
+        continue;
+      }
+      const erpArr = Array.isArray(parsed.erpInvoices)
+        ? (parsed.erpInvoices as Array<Record<string, unknown>>)
+        : [];
+      const bankArr = Array.isArray(parsed.preLoggedBankInvoices)
+        ? (parsed.preLoggedBankInvoices as Array<Record<string, unknown>>)
+        : [];
+      const entArr = Array.isArray(parsed.preLoggedEntries)
+        ? (parsed.preLoggedEntries as Array<Record<string, unknown>>)
+        : [];
+
+      if (erpArr.length === 0 && bankArr.length === 0 && entArr.length === 0) continue;
+
+      const existing = groupedDrafts.get(groupKey);
+      if (!existing) {
+        groupedDrafts.set(groupKey, {
+          id: s.id,
+          sessionKey: s.sessionKey || groupKey,
+          branch: s.branch,
+          isoDate: iso,
+          displayDate: isoToSessionDisplayDate(iso),
+          erpInvoices: erpArr,
+          preLoggedBankInvoices: bankArr,
+          preLoggedEntries: entArr,
+          updatedAt: s.updatedAt,
+        });
+      } else {
+        existing.erpInvoices = mergeArrayByKey(existing.erpInvoices, erpArr, (inv) => [
+          inv.clientTxnId ? `cid:${String(inv.clientTxnId)}` : "",
+          inv.internalId ? `iid:${String(inv.internalId)}` : "",
+          inv.id ? `id:${String(inv.id)}` : "",
+        ]);
+        existing.preLoggedBankInvoices = mergeArrayByKey(
+          existing.preLoggedBankInvoices,
+          bankArr,
+          (b) => [
+            b.clientTxnId ? `cid:${String(b.clientTxnId)}` : "",
+            b.id ? `id:${String(b.id)}` : "",
+          ]
+        );
+        existing.preLoggedEntries = mergeArrayByKey(
+          existing.preLoggedEntries,
+          entArr,
+          (e) => [
+            e.clientTxnId ? `cid:${String(e.clientTxnId)}` : "",
+            e.id ? `id:${String(e.id)}` : "",
+          ]
+        );
+        if (s.updatedAt > existing.updatedAt) {
+          existing.updatedAt = s.updatedAt;
+        }
+      }
+    }
+
+    const unclosedDrafts: UnclosedDraftDTO[] = [];
+    for (const draft of groupedDrafts.values()) {
+      const creditRows = await prisma.creditRadar.findMany({
+        where: {
+          branch: draft.branch,
+          originalDate: { in: [draft.isoDate, draft.displayDate] },
+        },
+      });
+      const totalSales = draft.erpInvoices.reduce(
+        (sum, inv) => (inv.isReturned ? sum : sum + (Number(inv.amount) || 0)),
+        0
+      );
+      const totalCredits = creditRows.reduce(
+        (sum, c) => sum + (Number(c.originalSaleAmount ?? c.amount) || 0),
+        0
+      );
+      unclosedDrafts.push({
+        id: draft.id,
+        sessionKey: draft.sessionKey,
+        branch: draft.branch,
+        isoDate: draft.isoDate,
+        displayDate: draft.displayDate,
+        status: "UNCLOSED_DRAFT",
+        erpCount: draft.erpInvoices.length,
+        entryCount: draft.preLoggedEntries.length,
+        creditCount: creditRows.length,
+        totalSales: Math.round((totalSales + Number.EPSILON) * 100) / 100,
+        totalCredits: Math.round((totalCredits + Number.EPSILON) * 100) / 100,
+        updatedAt: draft.updatedAt.toISOString(),
+        dataJson: JSON.stringify({
+          erpInvoices: draft.erpInvoices,
+          preLoggedBankInvoices: draft.preLoggedBankInvoices,
+          preLoggedEntries: draft.preLoggedEntries,
+          reportDate: draft.isoDate,
+        }),
+      });
+    }
+
+    unclosedDrafts.sort((a, b) => b.isoDate.localeCompare(a.isoDate));
+
+    return NextResponse.json({ records: rows, unclosedDrafts });
   } catch (err) {
     console.error("GET /api/archive error:", err);
-    return NextResponse.json({ records: [] });
+    return NextResponse.json({ records: [], unclosedDrafts: [] });
   }
 }
 
@@ -249,6 +429,24 @@ export async function POST(req: Request) {
         },
       });
     }
+
+    const closeIso = normalizeSessionDateToIso(String(date));
+    const closeDisplay = closeIso ? isoToSessionDisplayDate(closeIso) : String(date);
+    const candidateCloseDates = Array.from(
+      new Set([String(date), closeIso, closeDisplay].filter((d): d is string => Boolean(d)))
+    );
+    await prisma.activeRegisterSession
+      .updateMany({
+        where: {
+          branch,
+          OR: [
+            { reportDate: { in: candidateCloseDates } },
+            { sessionKey: { in: candidateCloseDates.map((d) => `${branch}::${d}`) } },
+          ],
+        },
+        data: { status: "COMPLETED" },
+      })
+      .catch(() => {});
 
     return NextResponse.json({ record: saved }, { status: 200 });
   } catch (err) {

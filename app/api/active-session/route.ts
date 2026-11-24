@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "../../../lib/prisma";
 import { checkStaffBranchAccess, normalizeBranch } from "../../../lib/auth-audit";
+import { isoToSessionDisplayDate, normalizeSessionDateToIso } from "../../../lib/saudi-time";
 
 export const dynamic = "force-dynamic";
 
@@ -49,17 +50,39 @@ export async function GET(req: Request) {
       );
     }
     const branch = normalizeBranch(rawBranch);
-    const sessionKey = makeSessionKey(branch, dateParam);
-    let row = await prisma.activeRegisterSession.findFirst({
-      where: { sessionKey },
-      orderBy: { updatedAt: "desc" },
-    });
-    if (!row && dateParam) {
-      row = await prisma.activeRegisterSession.findFirst({
-        where: { branch, reportDate: dateParam },
+    const isoDate = normalizeSessionDateToIso(dateParam);
+    const displayDate = isoDate ? isoToSessionDisplayDate(isoDate) : null;
+    const candidateDates = Array.from(
+      new Set([dateParam, isoDate, displayDate].filter((d): d is string => Boolean(d)))
+    );
+    const candidateKeys = candidateDates.map((d) => makeSessionKey(branch, d));
+
+    let row = null;
+    if (candidateDates.length > 0) {
+      const matchingRows = await prisma.activeRegisterSession.findMany({
+        where: {
+          branch,
+          OR: [
+            { sessionKey: { in: candidateKeys } },
+            { reportDate: { in: candidateDates } },
+          ],
+        },
         orderBy: { updatedAt: "desc" },
       });
-    } else if (!row && !dateParam) {
+      if (matchingRows.length === 1) {
+        row = matchingRows[0];
+      } else if (matchingRows.length > 1) {
+        // Merge multiple date-format snapshots (e.g. "23-November-2026" + "2026-11-23") non-destructively
+        const base = matchingRows[0];
+        let combinedJson = base.dataJson || "{}";
+        for (let i = 1; i < matchingRows.length; i++) {
+          if (matchingRows[i].dataJson) {
+            combinedJson = mergeSessionDataJson(combinedJson, matchingRows[i].dataJson!);
+          }
+        }
+        row = { ...base, dataJson: combinedJson };
+      }
+    } else {
       row = await prisma.activeRegisterSession.findFirst({
         where: { branch },
         orderBy: { updatedAt: "desc" },
