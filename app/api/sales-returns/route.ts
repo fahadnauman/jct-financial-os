@@ -53,10 +53,12 @@ export async function POST(req: Request) {
     }
     const branch = normalizeBranch(rawBranch || "JCT_HARDWARE_JOTUN");
 
-    const invoiceNo = sanitizeString(body.invoiceNo || "", 64);
+    const isWithoutBill = Boolean(body.isWithoutBill);
+    const rawInv = sanitizeString(body.invoiceNo || "", 64);
+    const invoiceNo = rawInv || (isWithoutBill ? `WB-RET-${Date.now().toString().slice(-6)}` : "");
     const returnedAmount = validateAmount(body.returnedAmount ?? body.amount ?? 0, false);
 
-    if (!invoiceNo || returnedAmount === null) {
+    if ((!isWithoutBill && !invoiceNo) || returnedAmount === null) {
       return NextResponse.json(
         { error: "Invoice number and a valid returned amount (> 0) are required." },
         { status: 400 }

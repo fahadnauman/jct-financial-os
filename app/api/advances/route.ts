@@ -165,14 +165,14 @@ export async function POST(req: Request) {
       }
     }
 
-    const sixtySecondsAgo = new Date(Date.now() - 60_000);
+    const fifteenSecondsAgo = new Date(Date.now() - 15_000);
     const recentMatch = await prisma.advanceRecord.findFirst({
       where: {
         branch,
         direction,
         partyName: { equals: partyName, mode: "insensitive" },
         totalAdvanceAmount,
-        createdAt: { gte: sixtySecondsAgo },
+        createdAt: { gte: fifteenSecondsAgo },
       },
     });
     if (recentMatch) {

@@ -167,6 +167,7 @@ export function ExpressQuickLogView({
   }, [branchId]);
 
   // Sales Return specific
+  const [returnBillMode, setReturnBillMode] = useState<"WITH_BILL" | "WITHOUT_BILL">("WITH_BILL");
   const [returnInvoiceNo, setReturnInvoiceNo] = useState("");
   const [returnSalesNo, setReturnSalesNo] = useState("");
   const [returnCustomer, setReturnCustomer] = useState("");
@@ -447,13 +448,20 @@ export function ExpressQuickLogView({
         paymentMode = "CARD";
         supplierInvoiceNum = posSlipNo.trim() || `POS-${Date.now().toString().slice(-6)}`;
       } else if (activeType === "SALES_RETURN") {
+        const isWithoutBill = returnBillMode === "WITHOUT_BILL";
         pocketType = "EXPENSE"; // Mapped for outflow ledger
-        category = `Sales Return (${returnRefundMode})`;
+        category = isWithoutBill
+          ? `Sales Return Without Bill (${returnRefundMode})`
+          : `Sales Return (${returnRefundMode})`;
         recipientName = returnCustomer.trim() || "Customer Return";
         paymentSource = returnRefundMode === "CASH_REFUND" ? "DRAWER_CASH" : "BANK_TRANSFER";
         paymentMode = returnRefundMode === "CASH_REFUND" ? "CASH" : returnRefundMode === "CARD_BANK_REVERSAL" ? "CARD" : "CREDIT";
-        supplierInvoiceNum = returnInvoiceNo.trim() || `RET-${Date.now().toString().slice(-6)}`;
-        finalNote = `Return Reason: ${returnReason}${returnSalesNo.trim() ? ` · Seq #${returnSalesNo.trim()}` : ""}${notes.trim() ? ` · Note: ${notes.trim()}` : ""}`;
+        supplierInvoiceNum = isWithoutBill
+          ? `WB-RET-${Date.now().toString().slice(-6)}`
+          : returnInvoiceNo.trim() || `RET-${Date.now().toString().slice(-6)}`;
+        finalNote = `${isWithoutBill ? "[Without Bill · Tax 0] " : ""}Return Reason: ${returnReason}${
+          !isWithoutBill && returnSalesNo.trim() ? ` · Seq #${returnSalesNo.trim()}` : ""
+        }${notes.trim() ? ` · Note: ${notes.trim()}` : ""}`;
 
         // Also save to dedicated SalesReturnRecord model
         void fetch("/api/sales-returns", {
@@ -462,8 +470,10 @@ export function ExpressQuickLogView({
           body: JSON.stringify({
             clientTxnId,
             branch: branchId,
+            isWithoutBill,
+            taxAmount: isWithoutBill ? 0 : undefined,
             invoiceNo: supplierInvoiceNum,
-            salesNo: returnSalesNo.trim() || null,
+            salesNo: isWithoutBill ? null : returnSalesNo.trim() || null,
             customerName: returnCustomer.trim() || null,
             returnedAmount: numAmt,
             originalAmount: numAmt,
@@ -795,6 +805,7 @@ export function ExpressQuickLogView({
                   type="number"
                   step="0.01"
                   min="0.01"
+                  autoComplete="off"
                   value={amount}
                   onChange={(e) => {
                     setAmount(e.target.value);
@@ -1414,6 +1425,33 @@ export function ExpressQuickLogView({
             {/* 5. Contextual Fields: SALES RETURN */}
             {activeType === "SALES_RETURN" && (
               <div className="space-y-3 animate-in fade-in">
+                {/* Two-Pill Mode Toggle: With Bill vs Without Bill */}
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setReturnBillMode("WITH_BILL")}
+                    className={`rounded-xl px-3 py-2 text-xs font-bold border transition ${
+                      returnBillMode === "WITH_BILL"
+                        ? "bg-rose-500 text-white border-rose-500 font-black"
+                        : "bg-slate-50 dark:bg-[#111] border-slate-200 dark:border-[#222] text-slate-500 dark:text-slate-300"
+                    }`}
+                  >
+                    🧾 With Bill / Tax Invoice
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReturnBillMode("WITHOUT_BILL")}
+                    className={`rounded-xl px-3 py-2 text-xs font-bold border transition ${
+                      returnBillMode === "WITHOUT_BILL"
+                        ? "bg-amber-500 text-slate-950 border-amber-400 font-black"
+                        : "bg-slate-50 dark:bg-[#111] border-slate-200 dark:border-[#222] text-slate-500 dark:text-slate-300"
+                    }`}
+                  >
+                    💸 Without Bill (Direct Refund)
+                  </button>
+                </div>
+
+                {returnBillMode === "WITH_BILL" ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
@@ -1421,6 +1459,7 @@ export function ExpressQuickLogView({
                     </label>
                     <input
                       type="text"
+                      autoComplete="off"
                       value={returnInvoiceNo}
                       onChange={(e) => setReturnInvoiceNo(e.target.value)}
                       placeholder="e.g. W#JB006597"
@@ -1433,6 +1472,7 @@ export function ExpressQuickLogView({
                     </label>
                     <input
                       type="text"
+                      autoComplete="off"
                       value={returnSalesNo}
                       onChange={(e) => setReturnSalesNo(e.target.value)}
                       placeholder="e.g. #40759"
@@ -1440,6 +1480,11 @@ export function ExpressQuickLogView({
                     />
                   </div>
                 </div>
+                ) : (
+                  <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] font-bold text-amber-700 dark:text-amber-300">
+                    💸 Direct Payment Refund Only — No tax invoice / bill number required (`taxAmount: 0`). Deducts cleanly from Cash Drawer or Bank/Card.
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
@@ -1530,6 +1575,7 @@ export function ExpressQuickLogView({
               </div>
               <input
                 type="text"
+                autoComplete="off"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="Remarks / Item detail / Customer reference..."

@@ -64,13 +64,14 @@ export function deduplicateSupplierBillsWithRemoved<T extends DeduplicatableSupp
     const inv = normInv(b.supplierInvoiceNum || b.invoiceNo);
     const origAmt = Number(b.originalAmount ?? b.amount) || 0;
     const branch = normStr(b.branch || "ALL");
-    const day = datePart(b.createdAt);
+    const createdMs = b.createdAt ? new Date(b.createdAt).getTime() : NaN;
 
-    // Only collapse by content signature when an explicit invoice/ref exists (or same clientTxnId)
-    // Note: auto-generated `CP-xxxxxx` refs are unique per submission unless identical within same day+amount+supplier
+    // Only collapse by content signature when an explicit invoice/ref exists AND created within 15 seconds
+    // (Never merge two distinct legitimate purchases with the same description or amount!)
+    const timeBucket = Number.isFinite(createdMs) ? Math.floor(createdMs / 15000) : datePart(b.createdAt);
     const sigKey =
       sup && inv
-        ? `${branch}::${sup}::${inv}::${origAmt.toFixed(2)}::${day}`
+        ? `${branch}::${sup}::${inv}::${origAmt.toFixed(2)}::${timeBucket}`
         : `id::${b.id}`;
 
     const existing = byKey.get(sigKey);

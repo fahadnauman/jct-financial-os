@@ -702,8 +702,7 @@ export const STRICT_EXPENSE_CATEGORIES = [
   "Salary",
   "Staff Advance",
   "Loan Out",
-  "Credit Purchase",
-  "Cash Purchase",
+  "Purchase",
   "Medical Expenses",
   "Staff Expenses",
   "Other Expenses",
@@ -712,6 +711,8 @@ export const STRICT_EXPENSE_CATEGORIES = [
 
 export type StrictExpenseCategory =
   | (typeof STRICT_EXPENSE_CATEGORIES)[number]
+  | "Credit Purchase"
+  | "Cash Purchase"
   | "Supplier Advance"
   | "Loan Out Advance";
 
@@ -3408,6 +3409,7 @@ function DailyRegisterView({
 
   // Step 4 (Expenses & Purchases — Strict Categories) State
   const [step4Category, setStep4Category] = useState<StrictExpenseCategory>("Food");
+  const [step4PurchaseMode, setStep4PurchaseMode] = useState<"CASH" | "CREDIT" | "BANK_TRANSFER" | "CARD">("CASH");
   const [step4LoanSubType, setStep4LoanSubType] = useState<"GENERAL" | "LOAN_OUT_ADVANCE">("GENERAL");
   const [step4LoanRecipient, setStep4LoanRecipient] = useState("");
   const [step4LoanReturnDate, setStep4LoanReturnDate] = useState("");
@@ -3433,6 +3435,7 @@ function DailyRegisterView({
   const [step4Note, setStep4Note] = useState("");
   const [step4Amount, setStep4Amount] = useState("");
   const [step4IsSalesReturn, setStep4IsSalesReturn] = useState(false);
+  const [step4ReturnBillMode, setStep4ReturnBillMode] = useState<"WITH_BILL" | "WITHOUT_BILL">("WITH_BILL");
   const [step4ReturnInvNo, setStep4ReturnInvNo] = useState("");
   const [step4ReturnReason, setStep4ReturnReason] = useState("");
   const [step4ReturnRefundMode, setStep4ReturnRefundMode] = useState<"CASH" | "BANK_TRANSFER">("CASH");
@@ -5412,27 +5415,34 @@ function DailyRegisterView({
     if (Number.isNaN(val) || val <= 0) return;
 
     if (step4IsSalesReturn) {
-      const cleanInv = step4ReturnInvNo.trim().replace(/^#/i, "");
-      const cleanReason = step4ReturnReason.trim();
-      if (!cleanInv || !cleanReason) {
-        alert("Original Invoice Number and Return Reason are required for Sales Return.");
+      const isWithoutBill = step4ReturnBillMode === "WITHOUT_BILL";
+      const cleanInv = isWithoutBill
+        ? `WB-RET-${Date.now().toString().slice(-6)}`
+        : step4ReturnInvNo.trim().replace(/^#/i, "");
+      const cleanReason = step4ReturnReason.trim() || (isWithoutBill ? "Direct Counter Refund" : "");
+      if (!isWithoutBill && (!cleanInv || !cleanReason)) {
+        alert("Original Invoice Number and Return Reason are required for Sales Return with Bill.");
         return;
       }
       const clientTxnId = typeof crypto !== "undefined" ? crypto.randomUUID() : `sr-${Date.now()}`;
-      const matchedInv = activeErpList.find(
-        (i) => cleanErpInvNo(i.branchInvNo || i.invoiceNo) === cleanErpInvNo(cleanInv)
-      );
+      const matchedInv = isWithoutBill
+        ? undefined
+        : activeErpList.find(
+            (i) => cleanErpInvNo(i.branchInvNo || i.invoiceNo) === cleanErpInvNo(cleanInv)
+          );
       upsertEntry({
         id: `ple-sales-return-${cleanInv}-${Date.now().toString().slice(-4)}`,
         clientTxnId,
         type: "EXPENSE",
         expenseCategory: "Other Expenses",
-        linkedInvoiceNo: cleanInv,
-        linkedInvoiceNum: cleanInv,
+        linkedInvoiceNo: isWithoutBill ? undefined : cleanInv,
+        linkedInvoiceNum: isWithoutBill ? undefined : cleanInv,
         customerName: matchedInv?.customerName || matchedInv?.customer || undefined,
         paymentMode: step4ReturnRefundMode,
-        note: cleanReason,
-        title: `↩ Sales Return — Inv #${cleanInv} (${cleanReason})`,
+        note: `${isWithoutBill ? "[Without Bill · Tax 0] " : ""}${cleanReason}`,
+        title: isWithoutBill
+          ? `↩ Sales Return (Without Bill)${cleanReason ? ` — ${cleanReason}` : ""}`
+          : `↩ Sales Return — Inv #${cleanInv} (${cleanReason})`,
         amount: val,
         time: nowHHMM(),
       });
@@ -5442,6 +5452,8 @@ function DailyRegisterView({
         body: JSON.stringify({
           clientTxnId,
           branch: branchId || "JCT_HARDWARE_JOTUN",
+          isWithoutBill,
+          taxAmount: isWithoutBill ? 0 : undefined,
           returnDate: activeSessionDate,
           invoiceNo: cleanInv,
           customerName: matchedInv?.customerName || matchedInv?.customer || undefined,
@@ -5464,7 +5476,19 @@ function DailyRegisterView({
       return;
     }
 
-    const isCreditPurchase = step4Category === "Credit Purchase";
+    const isUnifiedPurchase = step4Category === "Purchase";
+    const isCreditPurchase =
+      step4Category === "Credit Purchase" ||
+      (isUnifiedPurchase && step4PurchaseMode === "CREDIT");
+    const isSupplierPurchase =
+      isUnifiedPurchase ||
+      step4Category === "Credit Purchase" ||
+      step4Category === "Cash Purchase";
+    const resolvedPurchaseCategory: StrictExpenseCategory = isCreditPurchase
+      ? "Credit Purchase"
+      : isSupplierPurchase
+      ? "Cash Purchase"
+      : step4Category;
     const isLoanOut = step4Category === "Loan Out";
     if (isLoanOut && !step4LoanRecipient.trim()) {
       alert("Recipient / Party Name is required for Loan Out.");
@@ -5474,17 +5498,14 @@ function DailyRegisterView({
       ? step4LoanSubType === "LOAN_OUT_ADVANCE"
         ? "Loan Out Advance"
         : "Loan Out"
-      : step4Category;
-    const isSupplierPurchase =
-      step4Category === "Credit Purchase" ||
-      step4Category === "Cash Purchase";
+      : resolvedPurchaseCategory;
     const isStaffExpense = step4Category === "Staff Advance" || step4Category === "Salary";
     const selectedStaff = staffList.find((s) => s.id === step4StaffId);
     const staffName = selectedStaff?.name || "";
 
     const cleanSupplier = step4SupplierName.trim() || "Jotun";
     const displayTitle = isSupplierPurchase
-      ? `${step4Category === "Cash Purchase" ? "Supplier / Cash Purchase" : step4Category} — ${cleanSupplier}${step4Note.trim() ? ` (${step4Note.trim()})` : ""}`
+      ? `${isCreditPurchase ? "Credit Purchase" : "Purchase"} — ${cleanSupplier}${step4Note.trim() ? ` (${step4Note.trim()})` : ""}`
       : isLoanOut
       ? `${resolvedStep4Category} — ${step4LoanRecipient.trim()}${step4LoanReturnDate ? ` (Return: ${step4LoanReturnDate})` : ""}${step4Note.trim() ? ` · ${step4Note.trim()}` : ""}`
       : isStaffExpense && staffName
@@ -5495,16 +5516,19 @@ function DailyRegisterView({
 
     const effectiveStep4Mode = isCreditPurchase
       ? "CREDIT"
+      : isUnifiedPurchase
+      ? step4PurchaseMode
       : step4PaymentMode;
 
     const isStep4Card = effectiveStep4Mode === "CARD";
     const isStep4Bank = effectiveStep4Mode === "BANK_TRANSFER";
     const clientTxnId = typeof crypto !== "undefined" ? crypto.randomUUID() : undefined;
+    const uniqueSuffix = `${Date.now().toString().slice(-5)}-${Math.random().toString(36).slice(2, 5)}`;
     const step4EntryId = isSupplierPurchase
-      ? `ple-${step4Category.toLowerCase().replace(/\s+/g, "-")}-${cleanSupplier.toLowerCase().replace(/\s+/g, "-")}${step4SupplierInvoiceNum.trim() ? `-${step4SupplierInvoiceNum.trim().toLowerCase()}` : `-${Date.now().toString().slice(-4)}`}`
+      ? `ple-${resolvedPurchaseCategory.toLowerCase().replace(/\s+/g, "-")}-${cleanSupplier.toLowerCase().replace(/\s+/g, "-")}-${uniqueSuffix}`
       : isStaffExpense && step4StaffId
-      ? `ple-${step4Category.toLowerCase().replace(/\s+/g, "-")}-${step4StaffId}-${val}`
-      : `ple-${displayTitle.toLowerCase().replace(/\s+/g, "-")}`;
+      ? `ple-${step4Category.toLowerCase().replace(/\s+/g, "-")}-${step4StaffId}-${uniqueSuffix}`
+      : `ple-${displayTitle.toLowerCase().replace(/\s+/g, "-")}-${uniqueSuffix}`;
 
     upsertEntry({
       id: step4EntryId,
@@ -5540,7 +5564,7 @@ function DailyRegisterView({
         cleanSupplier,
         val,
         step4DueDate || addSaudiDays(14),
-        step4Category,
+        isCreditPurchase ? "Credit Purchase" : "Cash Purchase",
         effectiveStep4Mode,
         step4SupplierInvoiceNum.trim() || undefined,
         step4BillPdfUrl || undefined,
@@ -7902,12 +7926,13 @@ function DailyRegisterView({
                         >
                           {STRICT_EXPENSE_CATEGORIES.map((cat) => (
                             <option key={cat} value={cat} className="bg-white dark:bg-[#0A0A0A]">
-                              {cat === "Cash Purchase" ? "Supplier / Cash Purchase" : cat}
+                              {cat === "Purchase" ? "🛒 Purchase" : cat}
                             </option>
                           ))}
                         </select>
 
-                        {(hubExpenseCat === "Credit Purchase" ||
+                        {(hubExpenseCat === "Purchase" ||
+                          hubExpenseCat === "Credit Purchase" ||
                           hubExpenseCat === "Cash Purchase" ||
                           hubExpenseCat === "Supplier Advance") && (
                           <PartyDropdownSelector
@@ -10468,8 +10493,8 @@ function DailyRegisterView({
                           onClick={() => {
                             setStep4IsSalesReturn(false);
                             setStep4Category(category);
-                            if (category === "Cash Purchase") {
-                              setStep4PaymentMode("CASH");
+                            if (category === "Purchase") {
+                              setStep4PurchaseMode("CASH");
                             }
                             setStep4SupplierName("");
                             setStep4Amount("");
@@ -10490,8 +10515,8 @@ function DailyRegisterView({
                             <Check size={12} className="stroke-[3]" />
                           )}
                           <span>
-                            {category === "Cash Purchase"
-                              ? "Supplier / Cash Purchase"
+                            {category === "Purchase"
+                              ? "🛒 Purchase"
                               : category === "Loan Out"
                               ? "🤝 Loan Out"
                               : category}
@@ -10523,6 +10548,31 @@ function DailyRegisterView({
                         <div className="text-xs font-extrabold uppercase tracking-wider text-rose-600 dark:text-rose-400">
                           ↩ Log Sales Return (Syncs to Cash Drawer &amp; Sales Return Bills Archive)
                         </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setStep4ReturnBillMode("WITH_BILL")}
+                            className={`rounded-lg px-3 py-2 text-xs font-bold border transition ${
+                              step4ReturnBillMode === "WITH_BILL"
+                                ? "bg-rose-500 text-white border-rose-500 font-black"
+                                : "bg-white dark:bg-[#111] border-slate-300 dark:border-[#1F1F1F] text-slate-600 dark:text-slate-300"
+                            }`}
+                          >
+                            🧾 With Bill / Tax Invoice
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setStep4ReturnBillMode("WITHOUT_BILL")}
+                            className={`rounded-lg px-3 py-2 text-xs font-bold border transition ${
+                              step4ReturnBillMode === "WITHOUT_BILL"
+                                ? "bg-amber-500 text-slate-950 border-amber-400 font-black"
+                                : "bg-white dark:bg-[#111] border-slate-300 dark:border-[#1F1F1F] text-slate-600 dark:text-slate-300"
+                            }`}
+                          >
+                            💸 Without Bill (Direct Refund Only)
+                          </button>
+                        </div>
+                        {step4ReturnBillMode === "WITH_BILL" ? (
                         <div>
                           <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
                             Original Invoice Number *
@@ -10530,6 +10580,7 @@ function DailyRegisterView({
                           <input
                             type="text"
                             required
+                            autoComplete="off"
                             list="step4-sales-return-inv-list"
                             value={step4ReturnInvNo}
                             onChange={(e) => setStep4ReturnInvNo(e.target.value)}
@@ -10547,13 +10598,21 @@ function DailyRegisterView({
                             ))}
                           </datalist>
                         </div>
+                        ) : (
+                          <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] font-bold text-amber-700 dark:text-amber-300">
+                            💸 Direct Counter Refund Only — No tax invoice / bill number required (`taxAmount: 0`).
+                          </div>
+                        )}
                         <div>
                           <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
-                            Description / Return Reason *
+                            {step4ReturnBillMode === "WITHOUT_BILL"
+                              ? "Reason / Customer Note (Optional)"
+                              : "Description / Return Reason *"}
                           </label>
                           <input
                             type="text"
-                            required
+                            autoComplete="off"
+                            required={step4ReturnBillMode === "WITH_BILL"}
                             value={step4ReturnReason}
                             onChange={(e) => setStep4ReturnReason(e.target.value)}
                             placeholder='e.g. "Damaged paint tin" or "Wrong shade returned"'
@@ -10675,8 +10734,44 @@ function DailyRegisterView({
                         </div>
                       </div>
                     )}
-                    {/* Cascading Mode of Payment (Step 4 Outflows/Purchases) — Hidden for unpaid Credit Purchase */}
-                    {step4Category === "Credit Purchase" ? (
+                    {/* Cascading Mode of Payment (Step 4 Outflows/Purchases) */}
+                    {step4Category === "Purchase" ? (
+                      <div className="space-y-2 rounded-xl border border-cyan-500/30 bg-cyan-500/5 p-3">
+                        <label className="block text-[11px] font-bold uppercase tracking-wider text-cyan-700 dark:text-cyan-300">
+                          Purchase Payment Mode *
+                        </label>
+                        <div className="grid grid-cols-2 gap-2">
+                          {(
+                            [
+                              ["CASH", "💵 Cash Purchase"],
+                              ["CREDIT", "📋 Credit Purchase (Pay Later)"],
+                              ["BANK_TRANSFER", "🏦 Bank Transfer Purchase"],
+                              ["CARD", "💳 Card Purchase"],
+                            ] as const
+                          ).map(([pm, lbl]) => (
+                            <button
+                              key={pm}
+                              type="button"
+                              onClick={() => setStep4PurchaseMode(pm)}
+                              className={`rounded-lg px-3 py-2 text-xs font-bold border transition text-left ${
+                                step4PurchaseMode === pm
+                                  ? pm === "CREDIT"
+                                    ? "bg-amber-500 text-slate-950 border-amber-400 font-black"
+                                    : "bg-jct-turquoise text-jct-charcoal border-jct-turquoise font-black"
+                                  : "bg-white/70 dark:bg-black/60 border-slate-200 dark:border-[#1F1F1F] text-slate-600 dark:text-slate-300"
+                              }`}
+                            >
+                              {lbl}
+                            </button>
+                          ))}
+                        </div>
+                        {step4PurchaseMode === "CREDIT" && (
+                          <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] font-bold text-amber-700 dark:text-amber-300">
+                            ⏳ Unpaid Supplier Credit — Does NOT deduct from Cash Drawer today; syncs directly to Supplier Hub.
+                          </div>
+                        )}
+                      </div>
+                    ) : step4Category === "Credit Purchase" ? (
                       <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3.5 py-2.5 text-xs font-bold text-amber-700 dark:text-amber-300">
                         ⏳ Unpaid Credit Entry — Payment Mode will be recorded when settled
                       </div>
@@ -10707,8 +10802,9 @@ function DailyRegisterView({
                       </div>
                     )}
 
-                    {/* Show Supplier Name when Credit Purchase, Cash Purchase, or Supplier Advance is selected */}
-                    {(step4Category === "Credit Purchase" ||
+                    {/* Show Supplier Name when Purchase, Credit Purchase, Cash Purchase, or Supplier Advance is selected */}
+                    {(step4Category === "Purchase" ||
+                      step4Category === "Credit Purchase" ||
                       step4Category === "Cash Purchase" ||
                       step4Category === "Supplier Advance") && (
                       <div className="space-y-2.5 bg-slate-50 dark:bg-[#111111] border border-slate-200 dark:border-[#1F1F1F] text-jct-charcoal dark:text-jct-offwhite text-sm p-3 rounded-lg">
@@ -10727,7 +10823,9 @@ function DailyRegisterView({
                           />
                         </div>
 
-                        {(step4Category === "Credit Purchase" || step4Category === "Supplier Advance") && (
+                        {((step4Category === "Purchase" && step4PurchaseMode === "CREDIT") ||
+                          step4Category === "Credit Purchase" ||
+                          step4Category === "Supplier Advance") && (
                           <div className="space-y-1.5 pt-1">
                             <div className="flex items-center justify-between gap-2 flex-wrap">
                               <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
@@ -10855,23 +10953,24 @@ function DailyRegisterView({
                     {step4BillType === "WITHOUT_BILL" ? (
                       <div>
                         <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
-                          {step4Category === "Cash Purchase" || step4Category === "Credit Purchase"
+                          {step4Category === "Purchase" || step4Category === "Cash Purchase" || step4Category === "Credit Purchase"
                             ? "DESCRIPTION / AUDIT NOTES (Optional)"
                             : "Basic Details / Description *"}
                         </label>
                         <input
                           type="text"
-                          required={step4Category !== "Cash Purchase" && step4Category !== "Credit Purchase"}
+                          autoComplete="off"
+                          required={step4Category !== "Purchase" && step4Category !== "Cash Purchase" && step4Category !== "Credit Purchase"}
                           value={step4Note}
                           onChange={(e) => setStep4Note(e.target.value)}
                           placeholder={
-                            step4Category === "Cash Purchase" || step4Category === "Credit Purchase"
+                            step4Category === "Purchase" || step4Category === "Cash Purchase" || step4Category === "Credit Purchase"
                               ? "Optional: Remarks / item details..."
                               : "Required: State purpose or description..."
                           }
                           className="w-full bg-transparent border border-amber-400/50 dark:border-amber-400/40 focus:border-jct-turquoise focus:ring-1 focus:ring-jct-turquoise text-jct-charcoal dark:text-jct-offwhite rounded-md px-3.5 py-2.5 text-sm font-medium placeholder:text-slate-400 outline-none"
                         />
-                        {step4Category !== "Cash Purchase" && step4Category !== "Credit Purchase" && (
+                        {step4Category !== "Purchase" && step4Category !== "Cash Purchase" && step4Category !== "Credit Purchase" && (
                           <p className="text-[10px] text-amber-500 dark:text-amber-400 mt-1">
                             Basic details are mandatory when logging expenses without a bill.
                           </p>
@@ -12402,7 +12501,7 @@ function DailyRegisterView({
                       >
                         {STRICT_EXPENSE_CATEGORIES.map((c) => (
                           <option key={c} value={c} className="bg-white dark:bg-[#0A0A0A]">
-                            {c === "Cash Purchase" ? "Supplier / Cash Purchase" : c}
+                            {c === "Purchase" ? "🛒 Purchase" : c}
                           </option>
                         ))}
                       </select>
@@ -22711,7 +22810,8 @@ export default function Page() {
     };
     setSupplierBills((prev) => deduplicateSupplierBills([newBill, ...prev]));
 
-    if (category === "Credit Purchase" && amount > 0) {
+    if ((category === "Credit Purchase" || category === "Cash Purchase") && amount > 0) {
+      const isPaidPurchase = category === "Cash Purchase";
       fetch("/api/suppliers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -22719,13 +22819,15 @@ export default function Page() {
           clientTxnId: resolvedTxnId,
           branch: syncBranch,
           supplier: cleanName,
-          invoiceNo: supplierInvoiceNum || `CP-${Date.now().toString().slice(-6)}`,
+          invoiceNo: supplierInvoiceNum || `${isPaidPurchase ? "PUR" : "CP"}-${Date.now().toString().slice(-6)}`,
           supplierInvoiceNum: supplierInvoiceNum || undefined,
           billPdfUrl: billPdfUrl || undefined,
           amount,
           originalAmount: amount,
+          remainingAmount: isPaidPurchase ? 0 : amount,
+          isPaid: isPaidPurchase,
           dueDate: resolvedDue,
-          paymentMode: paymentMode || "CREDIT",
+          paymentMode: paymentMode || (isPaidPurchase ? "CASH" : "CREDIT"),
         }),
       })
         .then((r) => (r.ok ? r.json() : null))
@@ -24215,6 +24317,18 @@ export default function Page() {
         time: nowHHMM(),
       };
       setPreLoggedEntries((prev) => deduplicatePreLoggedEntries([entry, ...prev]));
+      if (type === "PURCHASE") {
+        handleSyncCreditPurchase(
+          supplierName || "Supplier",
+          amount,
+          addSaudiDays(14),
+          "Cash Purchase",
+          entry.paymentMode,
+          invoiceNo,
+          receiptUrl,
+          clientTxnId
+        );
+      }
     }
   };
 

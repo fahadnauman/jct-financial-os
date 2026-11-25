@@ -235,14 +235,14 @@ export async function POST(req: Request) {
       }
     }
 
-    const sixtySecondsAgo = new Date(Date.now() - 60_000);
+    const fifteenSecondsAgo = new Date(Date.now() - 15_000);
     const recentMatch = await prisma.supplierBill.findFirst({
       where: {
         branch,
         supplier: { equals: supplier, mode: "insensitive" },
         invoiceNo,
         amount,
-        createdAt: { gte: sixtySecondsAgo },
+        createdAt: { gte: fifteenSecondsAgo },
       },
     });
     if (recentMatch) {
