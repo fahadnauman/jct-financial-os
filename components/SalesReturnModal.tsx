@@ -128,7 +128,8 @@ export function SalesReturnModal({
       const bInv = (inv.branchInvNo || inv.invoiceNo || "").toLowerCase();
       const seq = (inv.seqInvoiceNo || "").toLowerCase();
       const cust = (inv.customerName || inv.customer || "").toLowerCase();
-      if (bInv.includes(q) || seq.includes(q) || cust.includes(q)) {
+      const amtStr = String(inv.amount || "");
+      if (bInv.includes(q) || seq.includes(q) || cust.includes(q) || amtStr.includes(q)) {
         const id = inv.internalId || inv.id || inv.invoiceNo;
         if (!seen.has(id)) {
           seen.add(id);

@@ -50,6 +50,19 @@ interface ExpressQuickLogViewProps {
     remainingBalance: number;
     status: string;
   }>;
+  liveInvoices?: Array<{
+    internalId?: string;
+    id?: string;
+    invoiceNo: string;
+    branchInvNo?: string;
+    seqInvoiceNo?: string;
+    customer?: string;
+    customerName?: string;
+    amount: number;
+    originalAmount?: number;
+    paymentMode?: string;
+    isReturned?: boolean;
+  }>;
   onSyncWithRegister?: (entry: {
     type: QuickLogType;
     payload: Record<string, unknown>;
@@ -109,6 +122,7 @@ export function ExpressQuickLogView({
   liveParties = [],
   supplierBills = [],
   advances = [],
+  liveInvoices = [],
   onSyncWithRegister,
   onDeleteSyncedEntry,
   onPreviewBill,
@@ -169,6 +183,19 @@ export function ExpressQuickLogView({
   // Sales Return specific
   const [returnBillMode, setReturnBillMode] = useState<"WITH_BILL" | "WITHOUT_BILL">("WITH_BILL");
   const [returnInvoiceNo, setReturnInvoiceNo] = useState("");
+  const [returnSearchResults, setReturnSearchResults] = useState<
+    Array<{
+      id: string;
+      source: "TODAY" | "ARCHIVE";
+      invoiceNo: string;
+      salesNo?: string;
+      customerName: string;
+      amount: number;
+      paymentMode: string;
+      date: string;
+    }>
+  >([]);
+  const [showReturnDropdown, setShowReturnDropdown] = useState(false);
   const [returnSalesNo, setReturnSalesNo] = useState("");
   const [returnCustomer, setReturnCustomer] = useState("");
   const [returnRefundMode, setReturnRefundMode] = useState<"CASH_REFUND" | "CARD_BANK_REVERSAL" | "CREDIT_NOTE">("CASH_REFUND");
@@ -298,6 +325,71 @@ export function ExpressQuickLogView({
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, [branchId, effectiveDate]);
+
+  const runReturnInvoiceSearch = async (query: string) => {
+    setReturnInvoiceNo(query);
+    const q = query.trim().toLowerCase();
+    if (!q) {
+      setReturnSearchResults([]);
+      setShowReturnDropdown(false);
+      return;
+    }
+    const candidates: typeof returnSearchResults = [];
+    const seen = new Set<string>();
+    for (const inv of liveInvoices) {
+      const bInv = (inv.branchInvNo || inv.invoiceNo || "").toLowerCase();
+      const seq = (inv.seqInvoiceNo || "").toLowerCase();
+      const cust = (inv.customerName || inv.customer || "").toLowerCase();
+      const amtStr = String(inv.amount || "");
+      if (bInv.includes(q) || seq.includes(q) || cust.includes(q) || amtStr.includes(q)) {
+        const key = inv.internalId || inv.id || inv.invoiceNo;
+        if (!seen.has(key)) {
+          seen.add(key);
+          candidates.push({
+            id: key,
+            source: "TODAY",
+            invoiceNo: inv.branchInvNo || inv.invoiceNo,
+            salesNo: inv.seqInvoiceNo || undefined,
+            customerName: inv.customerName || inv.customer || "Customer",
+            amount: Number(inv.amount) || 0,
+            paymentMode: inv.paymentMode || "CASH",
+            date: "TODAY",
+          });
+        }
+      }
+    }
+    setReturnSearchResults(candidates);
+    setShowReturnDropdown(true);
+    if (q.length >= 2) {
+      try {
+        const res = await fetch(
+          `/api/invoices/search?branch=${encodeURIComponent(branchId)}&q=${encodeURIComponent(query.trim())}`
+        );
+        if (res.ok) {
+          const data = await res.json();
+          const rows = Array.isArray(data?.results) ? data.results : [];
+          for (const r of rows) {
+            const key = `db-${r.id}`;
+            if (!seen.has(key)) {
+              seen.add(key);
+              candidates.push({
+                id: key,
+                source: "ARCHIVE",
+                invoiceNo: r.branchInvNo || r.invoiceNo,
+                customerName: r.partyName || "Customer",
+                amount: Number(r.amount) || 0,
+                paymentMode: r.paymentMode || "CASH",
+                date: r.date || "",
+              });
+            }
+          }
+          setReturnSearchResults([...candidates]);
+        }
+      } catch {
+        // ignore search error
+      }
+    }
+  };
 
   // Auto focus amount input on tab switch
   useEffect(() => {
@@ -1454,19 +1546,57 @@ export function ExpressQuickLogView({
                 </div>
 
                 {returnBillMode === "WITH_BILL" ? (
+                <div className="space-y-2">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
+                  <div className="relative">
                     <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
-                      Invoice No. (W#JB...) *
+                      Invoice No. (Search Today &amp; Past) *
                     </label>
                     <input
                       type="text"
                       autoComplete="off"
                       value={returnInvoiceNo}
-                      onChange={(e) => setReturnInvoiceNo(e.target.value)}
-                      placeholder="e.g. W#JB006597"
+                      onChange={(e) => void runReturnInvoiceSearch(e.target.value)}
+                      onFocus={() => {
+                        if (returnSearchResults.length > 0) setShowReturnDropdown(true);
+                      }}
+                      placeholder="Search Inv #, Customer, or SAR..."
                       className="w-full rounded-xl border border-slate-300 dark:border-[#222] bg-slate-50 dark:bg-black px-3.5 py-2 text-xs font-mono font-bold text-rose-400 outline-none focus:border-rose-500"
                     />
+                    {showReturnDropdown && returnSearchResults.length > 0 && (
+                      <div className="absolute left-0 right-0 top-full z-40 mt-1 max-h-56 overflow-y-auto rounded-xl border border-slate-300 dark:border-white/15 bg-white dark:bg-[#0D0D0D] shadow-xl">
+                        {returnSearchResults.map((cand) => (
+                          <button
+                            key={cand.id}
+                            type="button"
+                            onClick={() => {
+                              setReturnInvoiceNo(cand.invoiceNo);
+                              if (cand.salesNo) setReturnSalesNo(cand.salesNo);
+                              if (cand.customerName && cand.customerName !== "Customer") {
+                                setReturnCustomer(cand.customerName);
+                              }
+                              setAmount(String(cand.amount));
+                              setShowReturnDropdown(false);
+                            }}
+                            className="w-full px-3 py-2 text-left text-xs hover:bg-rose-500/10 border-b border-slate-100 dark:border-white/5 last:border-0 flex items-center justify-between gap-2"
+                          >
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className={`rounded px-1.5 py-0.5 text-[9px] font-black uppercase ${cand.source === "TODAY" ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-300" : "bg-slate-500/20 text-slate-500 dark:text-slate-300"}`}>
+                                  {cand.source === "TODAY" ? "TODAY" : cand.date}
+                                </span>
+                                <span className="font-mono font-bold text-rose-500">{cand.invoiceNo}</span>
+                                <span className="text-[10px] text-slate-400">({cand.paymentMode})</span>
+                              </div>
+                              <div className="truncate text-[11px] text-slate-600 dark:text-slate-300">{cand.customerName}</div>
+                            </div>
+                            <span className="font-mono font-black text-jct-charcoal dark:text-white shrink-0">
+                              SAR {fmt(cand.amount)}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
@@ -1481,6 +1611,7 @@ export function ExpressQuickLogView({
                       className="w-full rounded-xl border border-slate-300 dark:border-[#222] bg-slate-50 dark:bg-black px-3.5 py-2 text-xs font-mono font-bold text-white outline-none focus:border-rose-500"
                     />
                   </div>
+                </div>
                 </div>
                 ) : (
                   <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] font-bold text-amber-700 dark:text-amber-300">

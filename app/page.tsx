@@ -3801,114 +3801,115 @@ function DailyRegisterView({
   const matchedStep3Invoice = findErpInvoiceMatch(step3ReceiptNo);
   const matchedHubInvoice = findErpInvoiceMatch(hubReceiptNo);
 
+  const [step4ReturnSearchResults, setStep4ReturnSearchResults] = useState<
+    Array<{
+      id: string;
+      source: "TODAY" | "ARCHIVE";
+      invoiceNo: string;
+      customerName: string;
+      amount: number;
+      paymentMode: string;
+      date: string;
+    }>
+  >([]);
+  const [step4ReturnDropdownOpen, setStep4ReturnDropdownOpen] = useState(false);
+
+  const runStep4ReturnInvoiceSearch = async (query: string) => {
+    setStep4ReturnInvNo(query);
+    const q = query.trim().toLowerCase();
+    if (!q) {
+      setStep4ReturnSearchResults([]);
+      setStep4ReturnDropdownOpen(false);
+      return;
+    }
+    const candidates: typeof step4ReturnSearchResults = [];
+    const seen = new Set<string>();
+    for (const inv of activeErpList) {
+      const bInv = (inv.branchInvNo || inv.invoiceNo || "").toLowerCase();
+      const seq = (inv.seqInvoiceNo || "").toLowerCase();
+      const cust = (inv.customerName || inv.customer || "").toLowerCase();
+      const amtStr = String(inv.amount || "");
+      if (bInv.includes(q) || seq.includes(q) || cust.includes(q) || amtStr.includes(q)) {
+        const key = inv.internalId || inv.id || inv.invoiceNo;
+        if (!seen.has(key)) {
+          seen.add(key);
+          candidates.push({
+            id: key,
+            source: "TODAY",
+            invoiceNo: inv.branchInvNo || inv.invoiceNo,
+            customerName: inv.customerName || inv.customer || "Customer",
+            amount: Number(inv.amount) || 0,
+            paymentMode: inv.paymentMode || "CASH",
+            date: "TODAY",
+          });
+        }
+      }
+    }
+    setStep4ReturnSearchResults(candidates);
+    setStep4ReturnDropdownOpen(true);
+    if (q.length >= 2) {
+      try {
+        const res = await fetch(
+          `/api/invoices/search?branch=${encodeURIComponent(branchId || "JCT_HARDWARE_JOTUN")}&q=${encodeURIComponent(query.trim())}`
+        );
+        if (res.ok) {
+          const data = await res.json();
+          const rows = Array.isArray(data?.results) ? data.results : [];
+          for (const r of rows) {
+            const key = `db-${r.id}`;
+            if (!seen.has(key)) {
+              seen.add(key);
+              candidates.push({
+                id: key,
+                source: "ARCHIVE",
+                invoiceNo: r.branchInvNo || r.invoiceNo,
+                customerName: r.partyName || "Customer",
+                amount: Number(r.amount) || 0,
+                paymentMode: r.paymentMode || "CASH",
+                date: r.date || "",
+              });
+            }
+          }
+          setStep4ReturnSearchResults([...candidates]);
+        }
+      } catch {
+        // ignore
+      }
+    }
+  };
+
   const handleInvoiceLookup = (rawVal: string) => {
     setStep3ReceiptNo(rawVal);
-    const clean = cleanErpInvNo(rawVal).toLowerCase();
-    if (!clean) {
+    if (!cleanErpInvNo(rawVal)) {
       setStep3OriginalDate("");
-      return;
-    }
-
-    // 1. First search live active session erpInvoices (today's uploaded PDF / Editable CSV Grid, e.g. W#JB033431)
-    const erpMatch = findErpInvoiceMatch(rawVal);
-    if (erpMatch) {
-      setStep3Title(erpMatch.customerName || erpMatch.customer || "");
-      setStep3Amount(String(erpMatch.amount));
-      setStep3OriginalDate(erpMatch.originalDate || activeSessionDate || saudiTodayIso());
-      return;
-    }
-
-    // 2. Search current active session preLoggedEntries (Credit Sales / Receipts logged in this session)
-    const sessionCreditMatch = preLoggedEntries.find((e) => {
-      if (e.type !== "CREDIT_SALE" && e.type !== "CREDIT_RECD") return false;
-      const rNo = cleanErpInvNo(e.receiptNo || "").toLowerCase();
-      const iNo = cleanErpInvNo(e.invoiceNumber || "").toLowerCase();
-      const lNo = cleanErpInvNo(e.linkedInvoiceNum || "").toLowerCase();
-      return (
-        (rNo && (rNo === clean || (clean.length >= 2 && rNo.includes(clean)))) ||
-        (iNo && (iNo === clean || (clean.length >= 2 && iNo.includes(clean)))) ||
-        (lNo && (lNo === clean || (clean.length >= 2 && lNo.includes(clean))))
-      );
-    });
-    if (sessionCreditMatch) {
-      setStep3Title(sessionCreditMatch.customerName || sessionCreditMatch.title || "");
-      setStep3Amount(String(sessionCreditMatch.amount));
-      setStep3OriginalDate(sessionCreditMatch.originalDate || activeSessionDate || saudiTodayIso());
-      return;
-    }
-
-    // 3. Search historical database CreditRadar dataset (creditCustomers)
-    const list = creditCustomers || [];
-    let matchedCustomer: ContractorAccount | undefined;
-    let matchedDate: string | undefined;
-    let matchedAmount: number | undefined;
-
-    for (const c of list) {
-      const latestClean = c.latestInvoiceNo ? cleanErpInvNo(c.latestInvoiceNo).toLowerCase() : "";
-      if (latestClean && (latestClean === clean || (clean.length >= 2 && latestClean.includes(clean)))) {
-        matchedCustomer = c;
-        matchedDate = c.dueDate || c.followUpDate || activeSessionDate || saudiTodayIso();
-        matchedAmount = c.latestInvoiceAmount || c.outstanding;
-        break;
-      }
-      const foundHist = c.history?.find((h) => {
-        const hClean = h.id ? cleanErpInvNo(h.id).toLowerCase() : "";
-        return hClean && (hClean === clean || (clean.length >= 2 && hClean.includes(clean)));
-      });
-      if (foundHist) {
-        matchedCustomer = c;
-        matchedDate = foundHist.date;
-        matchedAmount = foundHist.amount;
-        break;
-      }
-    }
-
-    if (matchedCustomer) {
-      setStep3Title(matchedCustomer.name);
-      if (matchedDate) {
-        setStep3OriginalDate(matchedDate);
-      }
-      if (matchedAmount) {
-        setStep3Amount(String(matchedAmount));
-      }
     }
   };
 
   const handleStep3InvoiceInput = (rawVal: string) => {
     setStep3ReceiptNo(rawVal);
-    const match = findErpInvoiceMatch(rawVal);
-    if (match) {
-      setStep3Title(match.customerName || match.customer || "");
-      setStep3Amount(String(match.amount));
-      setStep3OriginalDate(match.originalDate || activeSessionDate || saudiTodayIso());
-      const cashHalf = match.isSplit ? match.splitCashAmount : r2(match.amount / 2);
-      const cardHalf = match.isSplit ? match.splitBankAmount : r2(match.amount - cashHalf);
-      setStep3SplitCash(String(cashHalf));
-      setStep3SplitCard(String(cardHalf));
-      if (match.splitPosTerminal || match.posTerminal) {
-        const rawT = match.splitPosTerminal || match.posTerminal;
-        setStep3SplitTerminal(rawT === "AL_RAJHI" ? "AL_RAJHI" : rawT === "SNB" ? "SNB" : "SAB");
-        setStep3SplitNetwork(rawT === "VISA_MC" || match.cardNetwork === "visa" || match.network === "visa" ? "visa" : "mada");
-      }
+    if (!cleanErpInvNo(rawVal)) {
+      setStep3OriginalDate("");
+    }
+  };
+
+  const applyMatchedStep3Invoice = (match: ErpInvoiceItem) => {
+    setStep3ReceiptNo(match.branchInvNo || match.invoiceNo);
+    setStep3Title(match.customerName || match.customer || "");
+    setStep3Amount(String(match.amount));
+    setStep3OriginalDate(match.originalDate || activeSessionDate || saudiTodayIso());
+    const cashHalf = match.isSplit ? match.splitCashAmount : r2(match.amount / 2);
+    const cardHalf = match.isSplit ? match.splitBankAmount : r2(match.amount - cashHalf);
+    setStep3SplitCash(String(cashHalf));
+    setStep3SplitCard(String(cardHalf));
+    if (match.splitPosTerminal || match.posTerminal) {
+      const rawT = match.splitPosTerminal || match.posTerminal;
+      setStep3SplitTerminal(rawT === "AL_RAJHI" ? "AL_RAJHI" : rawT === "SNB" ? "SNB" : "SAB");
+      setStep3SplitNetwork(rawT === "VISA_MC" || match.cardNetwork === "visa" || match.network === "visa" ? "visa" : "mada");
     }
   };
 
   const handleHubInvoiceInput = (rawVal: string) => {
     setHubReceiptNo(rawVal);
-    const match = findErpInvoiceMatch(rawVal);
-    if (match) {
-      const cName = match.customerName || match.customer || "";
-      setHubCustomerName(cName);
-      setEntryTitle(cName);
-      setEntryAmount(String(match.amount));
-      const cashHalf = match.isSplit ? match.splitCashAmount : r2(match.amount / 2);
-      const cardHalf = match.isSplit ? match.splitBankAmount : r2(match.amount - cashHalf);
-      setHubSplitCashInput(String(cashHalf));
-      setHubSplitCardInput(String(cardHalf));
-      if (match.splitPosTerminal || match.posTerminal) {
-        setHubSplitTerminal(match.splitPosTerminal || match.posTerminal);
-      }
-    }
   };
 
   const handleHubTotalAmountChange = (rawVal: string) => {
@@ -9925,14 +9926,22 @@ function DailyRegisterView({
                           </div>
                         )}
 
-                        {/* Single-Line Clean Match Confirmation Pill */}
+                        {/* Single-Line Clean Match Confirmation Pill (Click to Apply — No Silent Auto-Fill) */}
                         {matchedStep3Invoice && (
-                          <div className="rounded-lg bg-jct-yellow text-jct-charcoal font-bold px-3.5 py-2 text-xs truncate">
-                            ✓ Matched Live Session Invoice:{" "}
-                            <span>{matchedStep3Invoice.branchInvNo || matchedStep3Invoice.invoiceNo}</span> ·{" "}
-                            <span>{matchedStep3Invoice.customerName || matchedStep3Invoice.customer}</span> · SAR{" "}
-                            {fmt(matchedStep3Invoice.amount)}
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => applyMatchedStep3Invoice(matchedStep3Invoice)}
+                            className="w-full text-left rounded-lg bg-jct-yellow hover:brightness-95 text-jct-charcoal font-bold px-3.5 py-2 text-xs truncate transition flex items-center justify-between gap-2"
+                          >
+                            <span className="truncate">
+                              Matched: <strong>{matchedStep3Invoice.branchInvNo || matchedStep3Invoice.invoiceNo}</strong> ·{" "}
+                              {matchedStep3Invoice.customerName || matchedStep3Invoice.customer} · SAR{" "}
+                              {fmt(matchedStep3Invoice.amount)}
+                            </span>
+                            <span className="shrink-0 rounded bg-slate-950 text-white px-2 py-0.5 text-[10px] font-black">
+                              Click to Fill
+                            </span>
+                          </button>
                         )}
                       </div>
                     ) : (
@@ -10573,30 +10582,52 @@ function DailyRegisterView({
                           </button>
                         </div>
                         {step4ReturnBillMode === "WITH_BILL" ? (
-                        <div>
+                        <div className="relative">
                           <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
-                            Original Invoice Number *
+                            Original Invoice Number (Search Today &amp; Past Archives) *
                           </label>
                           <input
                             type="text"
                             required
                             autoComplete="off"
-                            list="step4-sales-return-inv-list"
                             value={step4ReturnInvNo}
-                            onChange={(e) => setStep4ReturnInvNo(e.target.value)}
-                            placeholder="e.g. W#JB 409 or 30072"
+                            onChange={(e) => void runStep4ReturnInvoiceSearch(e.target.value)}
+                            onFocus={() => {
+                              if (step4ReturnSearchResults.length > 0) setStep4ReturnDropdownOpen(true);
+                            }}
+                            placeholder="Search Inv #, Customer, or SAR amount..."
                             className="w-full bg-white dark:bg-black border border-slate-300 dark:border-[#1F1F1F] focus:border-rose-400 rounded-lg px-3 py-2 text-xs font-mono font-bold text-jct-charcoal dark:text-white outline-none"
                           />
-                          <datalist id="step4-sales-return-inv-list">
-                            {activeErpList.map((inv, i) => (
-                              <option
-                                key={inv.internalId || inv.id || i}
-                                value={inv.branchInvNo || inv.invoiceNo}
-                              >
-                                {inv.customerName || inv.customer} — SAR {fmt(inv.amount)}
-                              </option>
-                            ))}
-                          </datalist>
+                          {step4ReturnDropdownOpen && step4ReturnSearchResults.length > 0 && (
+                            <div className="absolute left-0 right-0 top-full z-40 mt-1 max-h-56 overflow-y-auto rounded-xl border border-slate-300 dark:border-white/15 bg-white dark:bg-[#0D0D0D] shadow-xl">
+                              {step4ReturnSearchResults.map((cand) => (
+                                <button
+                                  key={cand.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setStep4ReturnInvNo(cand.invoiceNo);
+                                    setStep4Amount(String(cand.amount));
+                                    setStep4ReturnDropdownOpen(false);
+                                  }}
+                                  className="w-full px-3 py-2 text-left text-xs hover:bg-rose-500/10 border-b border-slate-100 dark:border-white/5 last:border-0 flex items-center justify-between gap-2"
+                                >
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className={`rounded px-1.5 py-0.5 text-[9px] font-black uppercase ${cand.source === "TODAY" ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300" : "bg-slate-500/20 text-slate-600 dark:text-slate-300"}`}>
+                                        {cand.source === "TODAY" ? "TODAY" : cand.date}
+                                      </span>
+                                      <span className="font-mono font-bold text-rose-500">{cand.invoiceNo}</span>
+                                      <span className="text-[10px] text-slate-400">({cand.paymentMode})</span>
+                                    </div>
+                                    <div className="truncate text-[11px] text-slate-600 dark:text-slate-300">{cand.customerName}</div>
+                                  </div>
+                                  <span className="font-mono font-black text-jct-charcoal dark:text-white shrink-0">
+                                    SAR {fmt(cand.amount)}
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
                         </div>
                         ) : (
                           <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] font-bold text-amber-700 dark:text-amber-300">
@@ -24528,6 +24559,7 @@ export default function Page() {
                 onSyncWithRegister={handleExpressQuickLogSync}
                 supplierBills={supplierBills}
                 advances={branchAdvances}
+                liveInvoices={erpInvoices}
                 onDeleteSyncedEntry={(id, clientTxnId) => {
                   setErpInvoices((prev) =>
                     prev.filter(
