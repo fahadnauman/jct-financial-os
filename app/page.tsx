@@ -2638,7 +2638,7 @@ function HandoverModalComponent({
                 SAR {fmt(calculatedClosingBalance)}
               </div>
               <div className="flex flex-wrap items-center justify-center gap-2 mt-3 text-xs text-slate-500 dark:text-slate-400">
-                <span>Cash Inflows: <strong>+SAR {fmt(totalCashInSalesAndReceipts)}</strong></span>
+                <span>Cash Sales: <strong>+SAR {fmt(totalCashInSalesAndReceipts)}</strong></span>
                 <span>·</span>
                 <span className="text-rose-500">Expenses: <strong>-SAR {fmt(totalPreLoggedExpenses)}</strong></span>
               </div>
@@ -6849,9 +6849,19 @@ function DailyRegisterView({
     );
   };
   const isJctHqProfile = normalizeBranch(branchId) === "JCT_HARDWARE_JOTUN";
-  const uploadedCashSalesPool = r2(
-    activeErpList.reduce((sum, inv) => sum + calcInvoiceCashPortion(inv), 0)
+  const rawUploadedErpCashSales = r2(
+    activeErpList.reduce(
+      (sum, inv) => (!inv.isManual && !isManualPosInv(inv) ? sum + calcInvoiceCashPortion(inv) : sum),
+      0
+    )
   );
+  const manualCashSalesTotal = r2(
+    activeErpList.reduce(
+      (sum, inv) => (inv.isManual && !isManualPosInv(inv) ? sum + calcInvoiceCashPortion(inv) : sum),
+      0
+    )
+  );
+  const uploadedCashSalesPool = r2(rawUploadedErpCashSales + manualCashSalesTotal);
   const hasUploadedErpSummary = activeErpList.some(
     (inv) => !inv.isReturned && !isManualPosInv(inv)
   );
@@ -6866,9 +6876,11 @@ function DailyRegisterView({
     autoDeductManualPos &&
     hasUploadedErpSummary &&
     manualPosReclassifiedTotal > 0;
-  // Keep Gross Cash-Billed Sales intact (Manual POS Swipes are routed to Cash Outflows for JCT HQ)
-  const cashSalesTotal = uploadedCashSalesPool;
-  const manualPosCashOutflow = isManualPosReclassificationActive ? manualPosReclassifiedTotal : 0;
+  // JCT HQ Intelligent Reclassification: subtract Manual POS Swipes directly from raw uploaded ERP Cash Sales
+  const cashSalesTotal = isManualPosReclassificationActive
+    ? r2(Math.max(0, rawUploadedErpCashSales - manualPosReclassifiedTotal) + manualCashSalesTotal)
+    : uploadedCashSalesPool;
+  const manualPosCashOutflow = 0;
   const sessionPosBreakdown = useMemo(
     () => calcSessionPosBreakdown(activeErpList, preLoggedBankInvoices, preLoggedEntries),
     [activeErpList, preLoggedBankInvoices, preLoggedEntries]
@@ -6977,9 +6989,7 @@ function DailyRegisterView({
       .reduce((sum, inv) => sum + (Number(inv.amount) || 0), 0)
   );
   const totalCreditSalesAll = r2(creditSalesInvoicesTotal + totalCreditInvAmount);
-  const nonDoubleCountedBankPosTotal = r2(
-    Math.max(0, bankSwipeGrossTotal - manualPosCashOutflow)
-  );
+  const nonDoubleCountedBankPosTotal = r2(bankSwipeGrossTotal);
   const totalGrossSales = r2(cashSalesTotal + nonDoubleCountedBankPosTotal + totalCreditSalesAll);
 
   // Intelligent Drawer Closing: Lock or Save Pending Audit Draft with Discrepancy & Float Sync
@@ -8486,7 +8496,7 @@ function DailyRegisterView({
                   const labels: Record<WizardStep, string> = {
                     1: "1. Import Sales",
                     2: "2. Bank & POS Match",
-                    3: "3. Cash Inflows",
+                    3: "3. Cash Sales",
                     4: "4. Expenses",
                     5: "5. Final Audit",
                   };
@@ -8701,16 +8711,19 @@ function DailyRegisterView({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 shrink-0">
                   <div className="bg-white dark:bg-gradient-to-b dark:from-slate-900/90 dark:to-slate-950/95 shadow-sm border border-jct-turquoise/20 dark:border-white/10 dark:border-t-white/15 hover:border-cyan-500/40 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-cyan-950/30 rounded-xl p-6 transition-all duration-200">
                     <span className="block text-xs font-medium text-slate-500 dark:text-slate-400">
-                      Cash Drawer Sales ({cashSaleInvoices.length})
+                      Cash Sale ({cashSaleInvoices.length})
                     </span>
                     <span className="mt-1 block font-display text-xl font-bold tabular-nums tracking-tight text-emerald-600 dark:text-jct-turquoise whitespace-nowrap">
                       SAR {fmt(cashSalesTotal)}
                     </span>
                     {isManualPosReclassificationActive ? (
                       <div className="mt-2 space-y-0.5 rounded-lg border border-amber-500/25 bg-amber-500/10 px-2.5 py-1.5 text-[11px] tabular-nums text-amber-800 dark:text-amber-300">
-                        <div>ERP Cash-Billed Sales Pool: <strong>SAR {fmt(uploadedCashSalesPool)}</strong></div>
-                        <div>Manual POS Swipes (Routed to Cash Outflows): <strong>-SAR {fmt(manualPosReclassifiedTotal)}</strong></div>
-                        <div>Net Cash Contribution to Drawer: <strong>SAR {fmt(Math.max(0, r2(uploadedCashSalesPool - manualPosReclassifiedTotal)))}</strong></div>
+                        <div>
+                          ERP Cash (SAR {fmt(rawUploadedErpCashSales)}) − Reclassified POS (SAR {fmt(manualPosReclassifiedTotal)})
+                        </div>
+                        <div>
+                          Net Cash Sale: <strong>SAR {fmt(cashSalesTotal)}</strong>
+                        </div>
                       </div>
                     ) : (
                       <span className="mt-0.5 block text-[11px] text-slate-500 dark:text-slate-400">
@@ -9741,7 +9754,7 @@ function DailyRegisterView({
                   }}
                   className="flex items-center justify-center gap-2 bg-jct-turquoise text-jct-charcoal font-bold hover:brightness-95 transition-all shadow-sm rounded-lg px-5 py-2.5 text-sm w-full sm:w-auto"
                 >
-                  <span>Continue to Cash Inflows</span>
+                  <span>Continue to Cash Sales</span>
                   <ArrowRight size={16} />
                 </button>
               </div>
@@ -9749,7 +9762,7 @@ function DailyRegisterView({
           )}
 
           {/* ──────────────────────────────────────────────────────────────
-              STEP 3: CREDIT & CASH INFLOWS + MANUAL SPLIT PAYMENT ENTRY
+              STEP 3: CREDIT & CASH SALES + MANUAL SPLIT PAYMENT ENTRY
              ────────────────────────────────────────────────────────────── */}
           {wizardStep === 3 && (
             <div key="step-3" className="animate-fade-slide-up flex flex-col gap-6 bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 sm:p-8 transition-all duration-300">
@@ -10232,14 +10245,14 @@ function DailyRegisterView({
                   <div>
                     <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-200 dark:border-[#1F1F1F]">
                       <span className="text-xs uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400">
-                        Recorded Credit Sales &amp; Cash Inflows ({inflowEntries.length})
+                        Recorded Credit Sales &amp; Cash Sales ({inflowEntries.length})
                       </span>
                       <div className="flex flex-wrap items-center gap-3">
                         <span className="rounded-lg bg-jct-yellow text-jct-charcoal font-bold px-3 py-1 font-display text-xs whitespace-nowrap">
                           Credit Inv. Amount: SAR {fmt(totalCreditInvAmount)}
                         </span>
                         <span className="font-display text-sm font-bold text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap">
-                          Cash Inflows Total: SAR {fmt(totalPreLoggedInflows)}
+                          Cash Sales Total: SAR {fmt(totalPreLoggedInflows)}
                         </span>
                       </div>
                     </div>
@@ -11227,8 +11240,8 @@ function DailyRegisterView({
                       <div className="mt-1 font-mono text-2xl sm:text-3xl font-black tabular-nums text-white print:text-black">
                         SAR {fmt(totalGrossSales)}
                       </div>
-                      <span className="text-[10px] text-slate-400 print:text-black">
-                        Cash + Card (Net of HQ Offset) + Bank + Credit
+                      <span className="text-[10px] text-slate-300 print:text-black">
+                        Cash Sale (SAR {fmt(cashSalesTotal)}) + POS Card Swipes (SAR {fmt(sessionPosBreakdown.posSwipesTotal)}) + Bank Transfers (SAR {fmt(sessionPosBreakdown.bankTransferTotal)}) + Credit Sales (SAR {fmt(totalCreditSalesAll)}) = Total Sales
                       </span>
                     </div>
                     <div className="sm:border-l sm:border-white/10 sm:pl-4 print:border-black">
@@ -11279,9 +11292,8 @@ function DailyRegisterView({
                   </div>
                   {isManualPosReclassificationActive && (
                     <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-amber-800 dark:text-amber-300 bg-amber-500/10 border border-amber-500/25 rounded-lg px-3 py-1.5 print:border-black print:bg-white print:text-black">
-                      <span>ERP Cash-Billed Sales Pool: <strong>SAR {fmt(uploadedCashSalesPool)}</strong></span>
-                      <span>Manual POS Swipes (Included in Cash Outflows): <strong>-SAR {fmt(manualPosCashOutflow)}</strong></span>
-                      <span>Net Cash Contribution: <strong>SAR {fmt(Math.max(0, r2(uploadedCashSalesPool - manualPosCashOutflow)))}</strong></span>
+                      <span>ERP Cash (SAR {fmt(rawUploadedErpCashSales)}) − Reclassified POS (SAR {fmt(manualPosReclassifiedTotal)})</span>
+                      <span>= Net Cash Sale: <strong>SAR {fmt(cashSalesTotal)}</strong></span>
                     </div>
                   )}
                   {cashCommissionAdjustmentsTotal > 0 && (
@@ -11296,11 +11308,11 @@ function DailyRegisterView({
 
                 {/* 3. The 3 Financial Pillars Grid (Inflows · Bank/Swipes · Outflows) */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-2 print:grid-cols-3 print:gap-4 print:mb-6 print:break-inside-avoid">
-                  {/* Card 1: Cash Inflows */}
+                  {/* Card 1: Cash Sales */}
                   <div className="bg-white dark:bg-gradient-to-b dark:from-slate-900/90 dark:to-slate-950/95 shadow-sm border border-jct-turquoise/20 dark:border-white/10 dark:border-t-white/15 hover:border-cyan-500/40 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-cyan-950/30 rounded-xl p-6 flex flex-col justify-between gap-3 transition-all duration-200 print:shadow-none print:border print:border-black print:rounded-none print:bg-white print:text-black">
                     <div>
                       <span className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider print:text-black print:text-xs print:font-bold print:uppercase">
-                        Cash Inflows (Sales &amp; Receipts)
+                        Cash Sales &amp; Receipts
                       </span>
                       <span className="mt-2 block font-mono tabular-nums tracking-tight text-2xl font-black text-jct-charcoal dark:text-jct-offwhite whitespace-nowrap print:text-black print:text-2xl print:font-bold">
                         SAR {fmt(totalCashInSalesAndReceipts)}
@@ -11687,7 +11699,7 @@ function DailyRegisterView({
                       <div className="w-full">
                         <div className="flex items-center gap-1.5">
                           <h3 className="font-display text-lg font-extrabold text-jct-charcoal dark:text-jct-offwhite uppercase print:text-xl print:font-extrabold print:tracking-tight print:mt-10 print:mb-4 print:border-b print:border-slate-300 print:pb-2 print:text-black">
-                            CASH INFLOWS
+                            CASH SALES
                           </h3>
                           <InfoTooltip text="Includes 15% Saudi VAT breakdown, notes, and inline amount editing." />
                         </div>
@@ -12879,10 +12891,10 @@ function DailyRegisterView({
              ────────────────────────────────────────────────────────── */}
           {printMode === "summary" && (
             <>
-              {/* PAGE 2: APPENDIX A: CASH INFLOWS */}
+              {/* PAGE 2: APPENDIX A: CASH SALES */}
               <div className="hidden print:block print:break-before-page">
             <div className="print:text-2xl print:font-black print:tracking-tight print:uppercase print:mb-6 print:border-b-2 print:border-black print:pb-2 print:text-black flex justify-between items-center">
-              <span>APPENDIX A: CASH INFLOWS</span>
+              <span>APPENDIX A: CASH SALES</span>
               <span className="font-mono text-base font-bold text-slate-700">
                 Total: SAR {fmt(cashSalesTotal)}
               </span>
@@ -13405,7 +13417,7 @@ function DailyRegisterView({
                           <tr className="bg-black text-white font-bold uppercase text-[11px]">
                             <th className="p-2.5 border-r border-white/30">Branch Name</th>
                             <th className="p-2.5 text-right border-r border-white/30">Opening Float</th>
-                            <th className="p-2.5 text-right border-r border-white/30">Cash Inflows</th>
+                            <th className="p-2.5 text-right border-r border-white/30">Cash Sales</th>
                             <th className="p-2.5 text-right border-r border-white/30">POS Card Swipes</th>
                             <th className="p-2.5 text-right border-r border-white/30">Bank Transfers</th>
                             <th className="p-2.5 text-right border-r border-white/30">Expenses</th>
@@ -19029,7 +19041,7 @@ function AuditLibraryView({
             <div>
               <div className="flex items-center justify-between">
                 <span className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  Cash Inflows
+                  Cash Sales
                 </span>
                 <button
                   type="button"
@@ -19103,7 +19115,7 @@ function AuditLibraryView({
             <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 transition-all duration-300">
               <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#1F1F1F] pb-3 mb-3">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold uppercase tracking-wider text-jct-charcoal dark:text-jct-offwhite">Recorded Cash Inflows</span>
+                  <span className="text-xs font-bold uppercase tracking-wider text-jct-charcoal dark:text-jct-offwhite">Recorded Cash Sales</span>
                   <span className="text-xs text-slate-500 dark:text-slate-400">({editInflowItems.length} items)</span>
                 </div>
                 {isOwner && (
@@ -19461,7 +19473,7 @@ function AuditLibraryView({
                     <Plus size={16} />
                   </span>
                   <h3 className="font-display text-lg font-extrabold tracking-tight text-jct-charcoal dark:text-white">
-                    {editingInflowId ? "Edit Cash Inflow Line" : "Add Missing Cash Inflow"}
+                    {editingInflowId ? "Edit Cash Sale Line" : "Add Missing Cash Sale"}
                   </h3>
                 </div>
                 <button
@@ -22986,20 +22998,31 @@ export default function Page() {
   const hasUploadedErpForMetrics = activeErpForMetrics.some(
     (inv) => !inv.isReturned && !isManualPosForMetrics(inv)
   );
-  const uploadedCashPoolForMetrics = r2(
-    activeErpForMetrics.reduce((sum, inv) => sum + calcInvoiceCashPortion(inv), 0)
+  const rawUploadedCashForMetrics = r2(
+    activeErpForMetrics.reduce(
+      (sum, inv) => (!inv.isManual && !isManualPosForMetrics(inv) ? sum + calcInvoiceCashPortion(inv) : sum),
+      0
+    )
   );
+  const manualCashForMetrics = r2(
+    activeErpForMetrics.reduce(
+      (sum, inv) => (inv.isManual && !isManualPosForMetrics(inv) ? sum + calcInvoiceCashPortion(inv) : sum),
+      0
+    )
+  );
+  const uploadedCashPoolForMetrics = r2(rawUploadedCashForMetrics + manualCashForMetrics);
   const manualPosTotalForMetrics = r2(
     activeErpForMetrics.reduce(
       (sum, inv) => (!inv.isReturned && isManualPosForMetrics(inv) ? sum + (Number(inv.amount) || 0) : sum),
       0
     )
   );
-  const todayCashSales = uploadedCashPoolForMetrics;
-  const manualPosCashOutflowForMetrics =
-    isJctHqMetrics && autoDeductManualPos && hasUploadedErpForMetrics
-      ? manualPosTotalForMetrics
-      : 0;
+  const isJctHqReclassForMetrics =
+    isJctHqMetrics && autoDeductManualPos && hasUploadedErpForMetrics && manualPosTotalForMetrics > 0;
+  const todayCashSales = isJctHqReclassForMetrics
+    ? r2(Math.max(0, rawUploadedCashForMetrics - manualPosTotalForMetrics) + manualCashForMetrics)
+    : uploadedCashPoolForMetrics;
+  const manualPosCashOutflowForMetrics = 0;
   const activeSessionPosBreakdown = useMemo(
     () => calcSessionPosBreakdown(activeErpForMetrics, preLoggedBankInvoices, preLoggedEntries),
     [activeErpForMetrics, preLoggedBankInvoices, preLoggedEntries]
