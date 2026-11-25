@@ -194,6 +194,7 @@ export function ExpressQuickLogView({
   const [activityFeed, setActivityFeed] = useState<PocketTransaction[]>([]);
   const [feedLoading, setFeedLoading] = useState(false);
   const amountInputRef = useRef<HTMLInputElement>(null);
+  const feedListRef = useRef<HTMLDivElement>(null);
 
   // Instant Live Merge: Today's Bank/POS Match + Today's Pocket Activity
   const unifiedPartyDirectory = useMemo<PartyItem[]>(() => {
@@ -303,7 +304,7 @@ export function ExpressQuickLogView({
     setAmount("");
     setErrorMsg(null);
     setTimeout(() => {
-      amountInputRef.current?.focus();
+      amountInputRef.current?.focus({ preventScroll: true });
     }, 50);
   }, [activeType]);
 
@@ -630,9 +631,10 @@ export function ExpressQuickLogView({
         // Refresh live activity feed
         void loadFeed();
 
-        // Re-focus amount for continuous speed
+        // Keep feed scrolled to top and re-focus amount without jumping the outer page
         setTimeout(() => {
-          amountInputRef.current?.focus();
+          if (feedListRef.current) feedListRef.current.scrollTop = 0;
+          amountInputRef.current?.focus({ preventScroll: true });
         }, 30);
       } else {
         const errData = await res.json().catch(() => ({}));
@@ -1628,7 +1630,7 @@ export function ExpressQuickLogView({
             </span>
           </div>
 
-          <div className="space-y-2 max-h-[580px] overflow-y-auto pr-1">
+          <div ref={feedListRef} className="space-y-2 max-h-[580px] overflow-y-auto pr-1">
             {activityFeed.length === 0 ? (
               <div className="py-12 text-center text-xs text-slate-500">
                 <Receipt size={28} className="mx-auto text-slate-600 mb-2 opacity-50" />

@@ -77,6 +77,7 @@ export function RapidPosModal({
   const [batchSlips, setBatchSlips] = useState<RapidPosBatchEntry[]>([]);
   const [isUndoing, setIsUndoing] = useState(false);
   const amountRef = useRef<HTMLInputElement>(null);
+  const batchListRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
   const defaultTerminalRef = useRef(defaultTerminal);
   const wasOpenRef = useRef(false);
@@ -106,7 +107,7 @@ export function RapidPosModal({
       setTerminal(defaultTerminalRef.current);
 
       const timer = window.setTimeout(() => {
-        amountRef.current?.focus();
+        amountRef.current?.focus({ preventScroll: true });
       }, 50);
 
       const onKeyDown = (e: KeyboardEvent) => {
@@ -208,9 +209,10 @@ export function RapidPosModal({
       setAmount("");
       setSlipNo("");
 
-      // Immediately re-focus Amount input for next swipe
+      // Keep recent slips list pinned at top and re-focus Amount input without scrolling viewport
       setTimeout(() => {
-        amountRef.current?.focus();
+        if (batchListRef.current) batchListRef.current.scrollTop = 0;
+        amountRef.current?.focus({ preventScroll: true });
       }, 20);
     } catch (err) {
       console.error("Failed to log rapid POS entry:", err);
@@ -251,7 +253,7 @@ export function RapidPosModal({
     >
       <form
         onSubmit={handleSubmit}
-        className="animate-modal-scale-in w-full max-w-lg rounded-2xl border border-jct-turquoise/50 bg-white dark:bg-[#0A0A0A] p-5 sm:p-6 shadow-[0_0_40px_rgba(45,226,230,0.2)] space-y-4 text-jct-charcoal dark:text-jct-offwhite max-h-[92vh] overflow-y-auto scrollbar-thin"
+        className="animate-modal-scale-in w-full max-w-lg rounded-2xl border border-jct-turquoise/50 bg-white dark:bg-[#0A0A0A] p-5 sm:p-6 shadow-[0_0_40px_rgba(45,226,230,0.2)] flex flex-col gap-3.5 text-jct-charcoal dark:text-jct-offwhite max-h-[88vh] overflow-hidden"
       >
         {/* Header */}
         <div className="flex items-start justify-between gap-3">
@@ -433,18 +435,18 @@ export function RapidPosModal({
           </p>
         )}
 
-        {/* Mini-Feed of Logged Slips in this Session */}
+        {/* Mini-Feed of Logged Slips in this Session (Self-Contained Scroll) */}
         {batchCount > 0 && (
-          <div className="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-[#121212] p-2.5 space-y-1.5">
-            <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+          <div className="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-[#121212] p-2.5 flex flex-col gap-1.5 min-h-0">
+            <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 shrink-0">
               <span className="flex items-center gap-1">
                 <Clock size={11} />
-                Recent Slips in this Batch:
+                Recent Slips in this Batch ({batchCount}):
               </span>
-              <span>Showing last {Math.min(batchCount, 3)}</span>
+              <span>Newest first</span>
             </div>
-            <div className="space-y-1 text-xs font-mono">
-              {batchSlips.slice(0, 3).map((slip, idx) => (
+            <div ref={batchListRef} className="space-y-1 text-xs font-mono max-h-[220px] overflow-y-auto pr-1">
+              {batchSlips.map((slip, idx) => (
                 <div
                   key={slip.id}
                   className={`flex items-center justify-between rounded-lg px-2.5 py-1 text-[11px] ${
