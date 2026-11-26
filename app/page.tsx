@@ -17,6 +17,7 @@ import {
   saudiDateString,
   addSaudiDays,
   daysDiffFromSaudiToday,
+  normalizeSessionDateToIso,
 } from "../lib/saudi-time";
 import SettingsView from "./settings-view";
 import MonthlyAuditsView from "./monthly-audits-view";
@@ -18594,6 +18595,20 @@ function AuditLibraryView({
   const [inlineEditPinVal, setInlineEditPinVal] = useState("");
   const [savingInlineTakeHome, setSavingInlineTakeHome] = useState(false);
 
+  // Owner-Only Audit Control Suite State (Bills, Re-Date, Draft Delete)
+  const [editErpInvoices, setEditErpInvoices] = useState<ErpInvoiceItem[]>([]);
+  const [reDateRecord, setReDateRecord] = useState<ArchiveRecord | null>(null);
+  const [reDateInput, setReDateInput] = useState("");
+  const [savingReDate, setSavingReDate] = useState(false);
+  const [addBillOpen, setAddBillOpen] = useState(false);
+  const [editingBillId, setEditingBillId] = useState<string | null>(null);
+  const [billInvInput, setBillInvInput] = useState("");
+  const [billCustInput, setBillCustInput] = useState("");
+  const [billAmtInput, setBillAmtInput] = useState("");
+  const [billModeInput, setBillModeInput] = useState<string>("CASH");
+  const [billBankInput, setBillBankInput] = useState<"SNB" | "AL_RAJHI" | "SAB">("SNB");
+  const [billNetInput, setBillNetInput] = useState<"mada" | "visa" | "mastercard">("mada");
+
   const handleSaveInlineTakeHome = async (rec: ArchiveRecord) => {
     const newTakeHome = Math.max(0, r2(parseFloat(inlineEditTakeHomeVal) || 0));
     if (newTakeHome > (Number(rec.closingCash) || 0)) {
@@ -18862,6 +18877,7 @@ function AuditLibraryView({
     let pExpenses: ParsedExpenseItem[] = [];
     let pInflows: ParsedInflowItem[] = [];
     let pSwipes: ParsedSwipeItem[] = [];
+    let pErp: ErpInvoiceItem[] = [];
 
     if (record.dataJson) {
       try {
@@ -18869,6 +18885,7 @@ function AuditLibraryView({
         if (Array.isArray(parsed.expenses)) pExpenses = parsed.expenses;
         if (Array.isArray(parsed.inflows)) pInflows = parsed.inflows;
         if (Array.isArray(parsed.bankSwipes)) pSwipes = parsed.bankSwipes;
+        if (Array.isArray(parsed.erpInvoices)) pErp = parsed.erpInvoices;
       } catch (e) {
         console.error("Error parsing dataJson", e);
       }
@@ -18877,6 +18894,125 @@ function AuditLibraryView({
     setEditExpenses(pExpenses);
     setEditInflowItems(pInflows);
     setEditSwipes(pSwipes);
+    setEditErpInvoices(pErp);
+  };
+
+  const recomputeSnapshotTotals = (
+    nextErp: ErpInvoiceItem[],
+    nextInflows: ParsedInflowItem[],
+    nextExpenses: ParsedExpenseItem[]
+  ) => {
+    const isJctHq = selectedRecord && normalizeBranch(selectedRecord.branch) === "JCT_HARDWARE_JOTUN";
+    const isManualPosInv = (inv: ErpInvoiceItem) =>
+      Boolean(inv.isManualPos) ||
+      ((inv.paymentMode === "POS_SWIPE" || inv.paymentMode === "CARD") &&
+        (Boolean(inv.isManual) || (inv.invoiceNo || "").toUpperCase().startsWith("POS-")));
+
+    const rawUploadedCash = r2(
+      nextErp.reduce(
+        (s, inv) => (!inv.isReturned && !inv.isManual && !isManualPosInv(inv) ? s + calcInvoiceCashPortion(inv) : s),
+        0
+      )
+    );
+    const manualCash = r2(
+      nextErp.reduce(
+        (s, inv) => (!inv.isReturned && inv.isManual && !isManualPosInv(inv) ? s + calcInvoiceCashPortion(inv) : s),
+        0
+      )
+    );
+    const manualPosTot = r2(
+      nextErp.reduce((s, inv) => (!inv.isReturned && isManualPosInv(inv) ? s + (Number(inv.amount) || 0) : s), 0)
+    );
+    const hasUploaded = nextErp.some((inv) => !inv.isReturned && !isManualPosInv(inv));
+    const netCashSales =
+      isJctHq && hasUploaded && manualPosTot > 0
+        ? r2(Math.max(0, rawUploadedCash - manualPosTot) + manualCash)
+        : r2(rawUploadedCash + manualCash);
+
+    const cashReceipts = r2(
+      nextInflows.reduce((s, i) => {
+        const pm = (i.paymentMode || "CASH").toUpperCase();
+        if (pm === "CARD" || pm === "POS_SWIPE" || pm === "BANK_TRANSFER" || pm === "BANK" || pm === "CREDIT_SALE") {
+          return s;
+        }
+        return s + (Number(i.amount) || 0);
+      }, 0)
+    );
+    const posBreakdown = calcSessionPosBreakdown(nextErp, [], nextInflows as any);
+    const cashOutflows = r2(
+      nextExpenses.reduce((s, e) => {
+        const pm = (e.paymentMode || "CASH").toUpperCase();
+        if (pm !== "CASH") return s;
+        return s + (Number(e.amount) || 0);
+      }, 0)
+    );
+    const totInflows = r2(netCashSales + cashReceipts);
+    const totBank = r2(posBreakdown.totalNonCashAmount);
+    setEditInflows(totInflows);
+    setEditBankSwipes(totBank);
+    setEditOutflows(cashOutflows);
+    setEditClosingCash(r2(editOpeningCash + totInflows - cashOutflows));
+  };
+
+  const handleSaveReDate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isOwner || !reDateRecord || !reDateInput.trim()) return;
+    setSavingReDate(true);
+    try {
+      const res = await fetch("/api/archive", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-is-owner": "true",
+          "x-user-role": "OWNER",
+        },
+        body: JSON.stringify({
+          id: reDateRecord.id,
+          newDate: reDateInput.trim(),
+          replaceTargetDraft: true,
+          isOwner: true,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data?.record) {
+        if (selectedRecord?.id === reDateRecord.id) {
+          setSelectedRecord((prev) => (prev ? { ...prev, ...data.record } : null));
+        }
+        setReDateRecord(null);
+        setSaveToast(`Audit re-dated to ${data.record.date} cleanly.`);
+        await loadArchiveRecords();
+      } else {
+        alert(data?.error || "Failed to update audit date.");
+      }
+    } catch {
+      alert("Network error while changing audit date.");
+    } finally {
+      setSavingReDate(false);
+    }
+  };
+
+  const handleDeleteUnclosedDraft = async (draft: UnclosedDraftRecord) => {
+    if (!isOwner) return;
+    if (!window.confirm(`Permanently delete this unclosed draft (${draft.displayDate} · ${getBranchBadgeInfo(draft.branch).name})?`)) {
+      return;
+    }
+    try {
+      const res = await fetch(
+        `/api/active-session?branch=${encodeURIComponent(draft.branch)}&date=${encodeURIComponent(draft.isoDate)}&isOwnerDelete=1`,
+        {
+          method: "DELETE",
+          headers: {
+            "x-user-is-owner": "true",
+            "x-user-role": "OWNER",
+          },
+        }
+      );
+      if (res.ok) {
+        await loadArchiveRecords();
+      }
+    } catch (err) {
+      console.error("Failed to delete unclosed draft:", err);
+    }
   };
 
   const handleDeleteExpenseItem = (id: string) => {
@@ -18899,6 +19035,9 @@ function AuditLibraryView({
 
   const handleDeleteArchiveRecord = async (id: string) => {
     if (!isOwner) return;
+    if (!window.confirm("Permanently delete this locked audit record? This will release the date lock.")) {
+      return;
+    }
     try {
       const res = await fetch(`/api/archive?id=${encodeURIComponent(id)}`, {
         method: "DELETE",
@@ -18937,6 +19076,7 @@ function AuditLibraryView({
           outflows: editOutflows,
           status: "AUDITED",
           dataJson: JSON.stringify({
+            erpInvoices: editErpInvoices,
             expenses: editExpenses,
             inflows: editInflowItems,
             bankSwipes: editSwipes,
@@ -19042,7 +19182,20 @@ function AuditLibraryView({
               <ArrowLeft size={14} /> Back to Audit Library
             </button>
 
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              {isOwner && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReDateRecord(selectedRecord);
+                    setReDateInput(normalizeSessionDateToIso(selectedRecord.date) || saudiTodayIso());
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/50 bg-amber-500/15 hover:bg-amber-500 text-amber-800 dark:text-amber-300 hover:text-slate-950 font-bold px-3 py-2 text-xs transition print:hidden"
+                >
+                  <Calendar size={14} />
+                  <span>📅 Change Audit Date</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => window.print()}
@@ -19240,6 +19393,185 @@ function AuditLibraryView({
 
         {/* 4. Expandable Detail Drilldown Boxes */}
         <div className="flex flex-col gap-4">
+          {/* Detail Box: Full Itemized Sales Invoices & POS Entries */}
+          <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-cyan-500/30 rounded-xl p-6 transition-all duration-300">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 dark:border-[#1F1F1F] pb-3 mb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-jct-charcoal dark:text-jct-offwhite">
+                  🧾 Sales Invoices &amp; POS Entries
+                </span>
+                <span className="text-xs text-slate-500 dark:text-slate-400">
+                  ({editErpInvoices.length} bills)
+                </span>
+              </div>
+              {isOwner && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingBillId(null);
+                    setBillInvInput("");
+                    setBillCustInput("");
+                    setBillAmtInput("");
+                    setBillModeInput("CASH");
+                    setBillBankInput(normalizeBranch(selectedRecord.branch) === "JCT_HARDWARE_JOTUN" ? "SNB" : "SAB");
+                    setBillNetInput("mada");
+                    setAddBillOpen(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-jct-turquoise/40 hover:border-jct-turquoise bg-jct-turquoise/10 hover:bg-jct-turquoise text-jct-charcoal dark:text-jct-turquoise hover:dark:text-jct-charcoal font-bold px-3 py-1.5 text-xs transition-all print:hidden"
+                >
+                  <Plus size={14} strokeWidth={2.5} />
+                  <span>+ Add Bill / Invoice</span>
+                </button>
+              )}
+            </div>
+            {editErpInvoices.length === 0 ? (
+              <p className="text-xs text-slate-500 dark:text-slate-400 italic py-2">
+                No itemized ERP/POS invoices stored in this snapshot.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs text-left">
+                  <thead className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-[#1F1F1F]">
+                    <tr>
+                      <th className="py-2 pr-3">Invoice No</th>
+                      <th className="py-2 pr-3">Customer / Party</th>
+                      <th className="py-2 pr-3">Time</th>
+                      <th className="py-2 pr-3">Payment Mode</th>
+                      <th className="py-2 pr-3">Bank / Card</th>
+                      <th className="py-2 pr-3 text-right">Amount</th>
+                      {isOwner && <th className="py-2 text-right print:hidden">Actions</th>}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                    {editErpInvoices.map((inv, idx) => {
+                      const invKey = inv.internalId || inv.id || `${inv.invoiceNo}-${idx}`;
+                      const curMode = (inv.paymentMode || "CASH").toUpperCase();
+                      const curBank = (inv.posTerminalDevice || inv.terminal || inv.posTerminal || "SAB").toUpperCase();
+                      return (
+                        <tr key={invKey} className="hover:bg-slate-50 dark:hover:bg-white/[0.02]">
+                          <td className="py-2 pr-3 font-mono font-bold text-jct-charcoal dark:text-white">
+                            {inv.branchInvNo || inv.invoiceNo}
+                            {inv.isManualPos && (
+                              <span className="ml-1.5 rounded bg-jct-yellow px-1.5 py-0.5 text-[9px] font-black text-jct-charcoal">
+                                POS
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2 pr-3 text-slate-600 dark:text-slate-300">
+                            {inv.customerName || inv.customer || "Customer"}
+                          </td>
+                          <td className="py-2 pr-3 font-mono text-[11px] text-slate-400">
+                            {inv.time || "—"}
+                          </td>
+                          <td className="py-2 pr-3">
+                            {isOwner ? (
+                              <select
+                                value={curMode}
+                                onChange={(e) => {
+                                  const nextMode = e.target.value;
+                                  const nextErp = editErpInvoices.map((row, rIdx) => {
+                                    const rKey = row.internalId || row.id || `${row.invoiceNo}-${rIdx}`;
+                                    if (rKey !== invKey) return row;
+                                    return {
+                                      ...row,
+                                      paymentMode: nextMode as any,
+                                      isManualPos: nextMode === "POS_SWIPE" ? true : row.isManualPos,
+                                    };
+                                  });
+                                  setEditErpInvoices(nextErp);
+                                  recomputeSnapshotTotals(nextErp, editInflowItems, editExpenses);
+                                }}
+                                className="rounded border border-slate-300 dark:border-[#222] bg-white dark:bg-black px-2 py-1 text-[11px] font-bold outline-none"
+                              >
+                                <option value="CASH">💵 CASH</option>
+                                <option value="POS_SWIPE">💳 CARD / POS</option>
+                                <option value="BANK_TRANSFER">🏦 BANK TRANSFER</option>
+                                <option value="CREDIT_SALE">📋 CREDIT</option>
+                                <option value="SPLIT">🔀 SPLIT</option>
+                              </select>
+                            ) : (
+                              <span className="font-mono font-bold">{curMode}</span>
+                            )}
+                          </td>
+                          <td className="py-2 pr-3">
+                            {isOwner && (curMode === "POS_SWIPE" || curMode === "CARD" || curMode === "BANK_TRANSFER" || curMode === "SPLIT") ? (
+                              <select
+                                value={curBank === "AL_RAJHI" ? "AL_RAJHI" : curBank === "SNB" ? "SNB" : "SAB"}
+                                onChange={(e) => {
+                                  const nextBank = e.target.value as "SNB" | "AL_RAJHI" | "SAB";
+                                  const nextErp = editErpInvoices.map((row, rIdx) => {
+                                    const rKey = row.internalId || row.id || `${row.invoiceNo}-${rIdx}`;
+                                    if (rKey !== invKey) return row;
+                                    return {
+                                      ...row,
+                                      posTerminal: nextBank,
+                                      posTerminalDevice: nextBank,
+                                      terminal: nextBank,
+                                    };
+                                  });
+                                  setEditErpInvoices(nextErp);
+                                  recomputeSnapshotTotals(nextErp, editInflowItems, editExpenses);
+                                }}
+                                className="rounded border border-slate-300 dark:border-[#222] bg-white dark:bg-black px-2 py-1 text-[11px] font-bold outline-none"
+                              >
+                                <option value="SNB">SNB</option>
+                                <option value="AL_RAJHI">Al Rajhi Bank</option>
+                                <option value="SAB">SAB</option>
+                              </select>
+                            ) : (
+                              <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                                {curMode === "CASH" || curMode === "CREDIT_SALE" ? "—" : `${curBank}${inv.cardNetwork ? ` · ${inv.cardNetwork}` : ""}`}
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2 pr-3 text-right font-mono font-bold text-jct-charcoal dark:text-white">
+                            SAR {fmt(inv.amount)}
+                          </td>
+                          {isOwner && (
+                            <td className="py-2 text-right print:hidden">
+                              <div className="inline-flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingBillId(invKey);
+                                    setBillInvInput(inv.branchInvNo || inv.invoiceNo || "");
+                                    setBillCustInput(inv.customerName || inv.customer || "");
+                                    setBillAmtInput(String(inv.amount));
+                                    setBillModeInput(curMode);
+                                    setBillBankInput(curBank === "AL_RAJHI" ? "AL_RAJHI" : curBank === "SNB" ? "SNB" : "SAB");
+                                    setBillNetInput((inv.cardNetwork as any) || "mada");
+                                    setAddBillOpen(true);
+                                  }}
+                                  className="rounded border border-cyan-500/40 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-bold text-cyan-700 dark:text-cyan-300"
+                                >
+                                  ✏️ Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const nextErp = editErpInvoices.filter((row, rIdx) => {
+                                      const rKey = row.internalId || row.id || `${row.invoiceNo}-${rIdx}`;
+                                      return rKey !== invKey;
+                                    });
+                                    setEditErpInvoices(nextErp);
+                                    recomputeSnapshotTotals(nextErp, editInflowItems, editExpenses);
+                                  }}
+                                  className="rounded border border-rose-500/40 bg-rose-500/10 px-2 py-0.5 text-[10px] font-bold text-rose-500"
+                                >
+                                  🗑️
+                                </button>
+                              </div>
+                            </td>
+                          )}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
           {/* Detail Box: Inflows */}
           {(expandedBox === "MONEY_IN" || expandedBox === "NONE") && (
             <div className="bg-white dark:bg-[#0A0A0A] shadow-sm border border-jct-turquoise/20 dark:border-jct-turquoise/30 hover:border-jct-turquoise/80 hover:shadow-[0_0_15px_rgba(45,226,230,0.1)] rounded-xl p-6 transition-all duration-300">
@@ -19698,6 +20030,147 @@ function AuditLibraryView({
         </ModalPortal>
         )}
 
+        {/* Owner-Only Modal: Add or Edit Sales Invoice / POS Bill in Audit Snapshot */}
+        {addBillOpen && isOwner && (
+          <ModalPortal isOpen={addBillOpen}>
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const amt = Math.max(0, parseFloat(billAmtInput) || 0);
+                  if (amt <= 0) return;
+                  const invNo = billInvInput.trim() || `INV-${Date.now().toString().slice(-5)}`;
+                  const cust = billCustInput.trim() || "Customer";
+                  let nextErp: ErpInvoiceItem[];
+                  if (editingBillId) {
+                    nextErp = editErpInvoices.map((row, idx) => {
+                      const rKey = row.internalId || row.id || `${row.invoiceNo}-${idx}`;
+                      if (rKey !== editingBillId) return row;
+                      return {
+                        ...row,
+                        invoiceNo: invNo,
+                        branchInvNo: invNo,
+                        customer: cust,
+                        customerName: cust,
+                        amount: amt,
+                        originalAmount: amt,
+                        paymentMode: billModeInput as any,
+                        posTerminal: billBankInput,
+                        posTerminalDevice: billBankInput,
+                        terminal: billBankInput,
+                        cardNetwork: billNetInput,
+                        network: billNetInput,
+                        isManualPos: billModeInput === "POS_SWIPE" ? true : row.isManualPos,
+                      };
+                    });
+                  } else {
+                    const newBill: ErpInvoiceItem = {
+                      internalId: `audit-bill-${Date.now()}`,
+                      id: invNo,
+                      invoiceNo: invNo,
+                      branchInvNo: invNo,
+                      customer: cust,
+                      customerName: cust,
+                      amount: amt,
+                      originalAmount: amt,
+                      paymentMode: billModeInput as any,
+                      posTerminal: billBankInput,
+                      posTerminalDevice: billBankInput,
+                      terminal: billBankInput,
+                      cardNetwork: billNetInput,
+                      network: billNetInput,
+                      isManual: true,
+                      isManualPos: billModeInput === "POS_SWIPE",
+                      isConfirmed: true,
+                      splitCashAmount: 0,
+                      splitBankAmount: 0,
+                      splitBankMethod: "POS_SWIPE",
+                      autoMatched: true,
+                      time: nowHHMM(),
+                    };
+                    nextErp = [...editErpInvoices, newBill];
+                  }
+                  setEditErpInvoices(nextErp);
+                  recomputeSnapshotTotals(nextErp, editInflowItems, editExpenses);
+                  setAddBillOpen(false);
+                }}
+                className="w-full max-w-md bg-white dark:bg-[#0A0A0A] rounded-xl p-6 border border-cyan-500/40 shadow-2xl space-y-4 text-jct-charcoal dark:text-white"
+              >
+                <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#1F1F1F] pb-3">
+                  <h3 className="text-sm font-black uppercase tracking-wider">
+                    {editingBillId ? "✏️ Edit Sales Bill / POS Entry" : "+ Add Missing Sales Bill / POS"}
+                  </h3>
+                  <button type="button" onClick={() => setAddBillOpen(false)} className="text-slate-400 hover:text-white">✕</button>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Invoice No *</label>
+                    <input type="text" required value={billInvInput} onChange={(e) => setBillInvInput(e.target.value)} placeholder="e.g. W#JB00123" className="w-full rounded-lg border border-slate-300 dark:border-[#222] bg-slate-50 dark:bg-black px-3 py-2 text-xs font-mono font-bold outline-none" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Amount (SAR) *</label>
+                    <input type="number" step="0.01" min="0.01" required value={billAmtInput} onChange={(e) => setBillAmtInput(e.target.value)} placeholder="0.00" className="w-full rounded-lg border border-slate-300 dark:border-[#222] bg-slate-50 dark:bg-black px-3 py-2 text-xs font-mono font-bold outline-none" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Customer / Party Name</label>
+                  <input type="text" value={billCustInput} onChange={(e) => setBillCustInput(e.target.value)} placeholder="Customer Name" className="w-full rounded-lg border border-slate-300 dark:border-[#222] bg-slate-50 dark:bg-black px-3 py-2 text-xs font-semibold outline-none" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Payment Mode</label>
+                    <select value={billModeInput} onChange={(e) => setBillModeInput(e.target.value)} className="w-full rounded-lg border border-slate-300 dark:border-[#222] bg-slate-50 dark:bg-black px-3 py-2 text-xs font-bold outline-none">
+                      <option value="CASH">💵 CASH</option>
+                      <option value="POS_SWIPE">💳 CARD / POS</option>
+                      <option value="BANK_TRANSFER">🏦 BANK TRANSFER</option>
+                      <option value="CREDIT_SALE">📋 CREDIT</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Bank Terminal</label>
+                    <select value={billBankInput} onChange={(e) => setBillBankInput(e.target.value as any)} className="w-full rounded-lg border border-slate-300 dark:border-[#222] bg-slate-50 dark:bg-black px-3 py-2 text-xs font-bold outline-none">
+                      <option value="SNB">SNB</option>
+                      <option value="AL_RAJHI">Al Rajhi Bank</option>
+                      <option value="SAB">SAB</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-[#1F1F1F]">
+                  <button type="button" onClick={() => setAddBillOpen(false)} className="rounded-lg border border-slate-300 dark:border-slate-700 px-4 py-2 text-xs font-bold">Cancel</button>
+                  <button type="submit" className="rounded-lg bg-jct-turquoise text-jct-charcoal font-black px-5 py-2 text-xs">Save Bill</button>
+                </div>
+              </form>
+            </div>
+          </ModalPortal>
+        )}
+
+        {/* Owner-Only Modal: Change Audit Date */}
+        {reDateRecord && isOwner && (
+          <ModalPortal isOpen={Boolean(reDateRecord)}>
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+              <form onSubmit={handleSaveReDate} className="w-full max-w-md bg-white dark:bg-[#0A0A0A] rounded-xl p-6 border border-amber-500/50 shadow-2xl space-y-4 text-jct-charcoal dark:text-white">
+                <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#1F1F1F] pb-3">
+                  <h3 className="text-sm font-black uppercase tracking-wider">📅 Change Audit Date (Owner Only)</h3>
+                  <button type="button" onClick={() => setReDateRecord(null)} className="text-slate-400 hover:text-white">✕</button>
+                </div>
+                <p className="text-xs text-slate-600 dark:text-slate-300">
+                  Moving <strong>{getBranchBadgeInfo(reDateRecord.branch).name}</strong> audit from <strong>{reDateRecord.date}</strong> to a new date (and releasing the old date lock + superseding any stale draft on the target date).
+                </p>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">New Target Audit Date *</label>
+                  <input type="date" required value={reDateInput} onChange={(e) => setReDateInput(e.target.value)} className="w-full rounded-lg border border-amber-500/50 bg-slate-50 dark:bg-black px-3 py-2 text-sm font-mono font-bold outline-none" />
+                </div>
+                <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-[#1F1F1F]">
+                  <button type="button" onClick={() => setReDateRecord(null)} className="rounded-lg border border-slate-300 dark:border-slate-700 px-4 py-2 text-xs font-bold">Cancel</button>
+                  <button type="submit" disabled={savingReDate} className="rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 font-black px-5 py-2 text-xs">
+                    {savingReDate ? "Saving..." : "Save New Date"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </ModalPortal>
+        )}
+
         {/* Modal: Add or Edit Expense / Past Bill */}
         {expenseModalOpen && isOwner && (
           <ModalPortal isOpen={expenseModalOpen}>
@@ -19980,15 +20453,27 @@ function AuditLibraryView({
                       <span>{draft.erpCount} Invoices · {draft.entryCount} Entries</span>
                     </div>
                   </div>
-                  {onResumeUnclosedSession && (
-                    <button
-                      type="button"
-                      onClick={() => onResumeUnclosedSession(draft)}
-                      className="shrink-0 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black px-4 py-2.5 text-xs shadow-sm transition active:scale-[0.97]"
-                    >
-                      ▶ Resume &amp; Complete Audit
-                    </button>
-                  )}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {onResumeUnclosedSession && (
+                      <button
+                        type="button"
+                        onClick={() => onResumeUnclosedSession(draft)}
+                        className="shrink-0 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black px-4 py-2.5 text-xs shadow-sm transition active:scale-[0.97]"
+                      >
+                        ▶ Resume &amp; Complete Audit
+                      </button>
+                    )}
+                    {isOwner && (
+                      <button
+                        type="button"
+                        onClick={() => void handleDeleteUnclosedDraft(draft)}
+                        className="shrink-0 rounded-xl border border-rose-500/40 bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 font-bold px-3 py-2.5 text-xs transition"
+                        title="Owner Delete Unclosed Draft"
+                      >
+                        🗑️ Delete
+                      </button>
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -20264,6 +20749,18 @@ function AuditLibraryView({
                       <>
                         <button
                           type="button"
+                          onClick={() => {
+                            setReDateRecord(r);
+                            setReDateInput(normalizeSessionDateToIso(r.date) || saudiTodayIso());
+                          }}
+                          className="rounded-lg border border-amber-500/50 hover:border-amber-400 bg-amber-500/15 hover:bg-amber-500 text-amber-800 dark:text-amber-300 hover:text-slate-950 font-bold px-3 py-2 text-xs transition-all duration-300 inline-flex items-center gap-1.5"
+                          title="Owner: Change Audit Date"
+                        >
+                          <Calendar size={13} />
+                          <span>Change Date</span>
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => handleOpenSnapshot(r)}
                           className="rounded-lg border border-jct-yellow/50 hover:border-jct-yellow bg-jct-yellow/15 hover:bg-jct-yellow text-jct-charcoal dark:text-jct-yellow hover:dark:text-jct-charcoal font-bold px-3 py-2 text-xs transition-all duration-300 inline-flex items-center gap-1.5"
                         >
@@ -20296,6 +20793,33 @@ function AuditLibraryView({
         )}
       </div>
         </>
+      )}
+
+      {/* Owner-Only Modal: Change Audit Date (from Audit Card List) */}
+      {reDateRecord && isOwner && (
+        <ModalPortal isOpen={Boolean(reDateRecord)}>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+            <form onSubmit={handleSaveReDate} className="w-full max-w-md bg-white dark:bg-[#0A0A0A] rounded-xl p-6 border border-amber-500/50 shadow-2xl space-y-4 text-jct-charcoal dark:text-white">
+              <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#1F1F1F] pb-3">
+                <h3 className="text-sm font-black uppercase tracking-wider">📅 Change Audit Date (Owner Only)</h3>
+                <button type="button" onClick={() => setReDateRecord(null)} className="text-slate-400 hover:text-white">✕</button>
+              </div>
+              <p className="text-xs text-slate-600 dark:text-slate-300">
+                Moving <strong>{getBranchBadgeInfo(reDateRecord.branch).name}</strong> audit from <strong>{reDateRecord.date}</strong> to a new date (and releasing the old date lock + superseding any stale draft on the target date).
+              </p>
+              <div>
+                <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">New Target Audit Date *</label>
+                <input type="date" required value={reDateInput} onChange={(e) => setReDateInput(e.target.value)} className="w-full rounded-lg border border-amber-500/50 bg-slate-50 dark:bg-black px-3 py-2 text-sm font-mono font-bold outline-none" />
+              </div>
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-[#1F1F1F]">
+                <button type="button" onClick={() => setReDateRecord(null)} className="rounded-lg border border-slate-300 dark:border-slate-700 px-4 py-2 text-xs font-bold">Cancel</button>
+                <button type="submit" disabled={savingReDate} className="rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 font-black px-5 py-2 text-xs">
+                  {savingReDate ? "Saving..." : "Save New Date"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </ModalPortal>
       )}
     </div>
   );

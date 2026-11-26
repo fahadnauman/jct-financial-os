@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "../../../lib/prisma";
-import { checkStaffBranchAccess, normalizeBranch } from "../../../lib/auth-audit";
+import { checkIsOwner, checkStaffBranchAccess, normalizeBranch } from "../../../lib/auth-audit";
 import { isoToSessionDisplayDate, normalizeSessionDateToIso } from "../../../lib/saudi-time";
 
 export const dynamic = "force-dynamic";
@@ -252,9 +252,46 @@ export async function DELETE(req: Request) {
   const { searchParams } = new URL(req.url);
   const branch = normalizeBranch(searchParams.get("branch") || req.headers.get("x-branch-id"));
   const dateParam = searchParams.get("date")?.trim() || null;
+  const isOwnerDelete = searchParams.get("isOwnerDelete") === "1";
   const sessionKey = makeSessionKey(branch, dateParam);
   const clientId = searchParams.get("clientId")?.slice(0, 80) || null;
+
+  if (isOwnerDelete && !checkIsOwner(req)) {
+    return NextResponse.json(
+      { error: "Owner authorization required to delete unclosed drafts" },
+      { status: 403 }
+    );
+  }
+
   try {
+    if (isOwnerDelete && dateParam) {
+      const isoDate = normalizeSessionDateToIso(dateParam);
+      const displayDate = isoDate ? isoToSessionDisplayDate(isoDate) : null;
+      const candidateDates = Array.from(
+        new Set([dateParam, isoDate, displayDate].filter((d): d is string => Boolean(d)))
+      );
+      await prisma.activeRegisterSession.updateMany({
+        where: {
+          branch,
+          OR: [
+            { reportDate: { in: candidateDates } },
+            { sessionKey: { in: candidateDates.map((d) => makeSessionKey(branch, d)) } },
+          ],
+        },
+        data: { status: "CLEARED", dataJson: null },
+      });
+      await prisma.securityAuditLog
+        .create({
+          data: {
+            event: "UNCLOSED_DRAFT_DELETED",
+            profileId: "OWNER",
+            branch,
+            details: JSON.stringify({ dates: candidateDates }),
+          },
+        })
+        .catch(() => {});
+      return NextResponse.json({ deleted: true, branch, dates: candidateDates });
+    }
     let existing = await prisma.activeRegisterSession.findFirst({
       where: { sessionKey },
       orderBy: { updatedAt: "desc" },

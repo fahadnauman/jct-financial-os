@@ -459,8 +459,17 @@ export async function PUT(req: Request) {
   try {
     const body = await req.json();
 
+    if (!checkIsOwner(req, body)) {
+      return NextResponse.json(
+        { error: "Owner authorization required to modify locked archive records" },
+        { status: 403 }
+      );
+    }
+
     const {
       id,
+      newDate,
+      replaceTargetDraft = true,
       closingCash,
       openingCash,
       inflows,
@@ -485,10 +494,28 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: "Record ID required" }, { status: 400 });
     }
 
+    const existingRec = await prisma.dailyRegisterLock.findUnique({
+      where: { id: String(id) },
+    });
+    if (!existingRec) {
+      return NextResponse.json({ error: "Archive record not found" }, { status: 404 });
+    }
+
+    let resolvedNewDisplayDate: string | undefined;
+    let resolvedNewIsoDate: string | undefined;
+    if (typeof newDate === "string" && newDate.trim()) {
+      resolvedNewIsoDate = normalizeSessionDateToIso(newDate.trim()) || newDate.trim();
+      resolvedNewDisplayDate = isoToSessionDisplayDate(resolvedNewIsoDate);
+    }
+
     let sanitizedDataJson = dataJson !== undefined ? String(dataJson) : undefined;
-    if (sanitizedDataJson) {
+    const rawJsonForDate = sanitizedDataJson ?? existingRec.dataJson;
+    if (rawJsonForDate && (sanitizedDataJson !== undefined || resolvedNewDisplayDate)) {
       try {
-        const parsed = JSON.parse(sanitizedDataJson);
+        const parsed = JSON.parse(rawJsonForDate);
+        if (resolvedNewDisplayDate) {
+          parsed.reportDate = resolvedNewDisplayDate;
+        }
         if (Array.isArray(parsed.bankSwipes)) {
           parsed.bankSwipes = parsed.bankSwipes.map((s: Record<string, unknown>) => ({
             ...s,
@@ -581,6 +608,7 @@ export async function PUT(req: Request) {
     const updated = await prisma.dailyRegisterLock.update({
       where: { id: String(id) },
       data: {
+        ...(resolvedNewDisplayDate ? { date: resolvedNewDisplayDate } : {}),
         ...(closingCash !== undefined ? { closingCash: Number(closingCash) } : {}),
         ...(openingCash !== undefined ? { openingCash: Number(openingCash) } : {}),
         ...(inflows !== undefined ? { inflows: Number(inflows) } : {}),
@@ -609,6 +637,59 @@ export async function PUT(req: Request) {
         ...(sanitizedDataJson !== undefined ? { dataJson: sanitizedDataJson } : {}),
       },
     });
+
+    if (resolvedNewDisplayDate && resolvedNewIsoDate) {
+      const oldIso = normalizeSessionDateToIso(existingRec.date) || existingRec.date;
+      const oldDisplay = isoToSessionDisplayDate(oldIso);
+      const oldDates = Array.from(new Set([existingRec.date, oldIso, oldDisplay].filter(Boolean)));
+      // Release old date active session status so old date is free if re-entered
+      await prisma.activeRegisterSession
+        .updateMany({
+          where: {
+            branch: existingRec.branch,
+            OR: [
+              { reportDate: { in: oldDates } },
+              { sessionKey: { in: oldDates.map((d) => `${existingRec.branch}::${d}`) } },
+            ],
+          },
+          data: { status: "CLEARED" },
+        })
+        .catch(() => {});
+
+      if (replaceTargetDraft) {
+        const newDates = Array.from(
+          new Set([resolvedNewDisplayDate, resolvedNewIsoDate].filter(Boolean))
+        );
+        await prisma.activeRegisterSession
+          .updateMany({
+            where: {
+              branch: existingRec.branch,
+              OR: [
+                { reportDate: { in: newDates } },
+                { sessionKey: { in: newDates.map((d) => `${existingRec.branch}::${d}`) } },
+              ],
+            },
+            data: { status: "COMPLETED" },
+          })
+          .catch(() => {});
+      }
+    }
+
+    await prisma.securityAuditLog
+      .create({
+        data: {
+          event: resolvedNewDisplayDate ? "ARCHIVE_DATE_CHANGED" : "ARCHIVE_AUDIT_EDITED",
+          profileId: "OWNER",
+          branch: updated.branch,
+          details: JSON.stringify({
+            recordId: updated.id,
+            oldDate: existingRec.date,
+            newDate: updated.date,
+            closingCash: updated.closingCash,
+          }),
+        },
+      })
+      .catch(() => {});
 
     return NextResponse.json({ record: updated });
   } catch (err) {
@@ -642,9 +723,19 @@ export async function DELETE(req: Request) {
   }
 
   try {
-    await prisma.dailyRegisterLock.delete({
+    const deleted = await prisma.dailyRegisterLock.delete({
       where: { id: String(id) },
     });
+    await prisma.securityAuditLog
+      .create({
+        data: {
+          event: "ARCHIVE_RECORD_DELETED",
+          profileId: "OWNER",
+          branch: deleted.branch,
+          details: JSON.stringify({ recordId: deleted.id, date: deleted.date }),
+        },
+      })
+      .catch(() => {});
     return NextResponse.json({ deleted: true, id });
   } catch (err) {
     console.error("DELETE /api/archive error:", err);
