@@ -245,13 +245,22 @@ export const POST = PUT;
  */
 export async function DELETE(req: Request) {
   const { searchParams } = new URL(req.url);
-  const branch = normalizeBranch(searchParams.get("branch") || req.headers.get("x-branch-id"));
-  const dateParam = searchParams.get("date")?.trim() || null;
-  const isOwnerDelete = searchParams.get("isOwnerDelete") === "1";
+  let body: Record<string, unknown> | null = null;
+  if (!searchParams.get("date") || !searchParams.get("branch")) {
+    try {
+      body = await req.json();
+    } catch {
+      // ignore empty body
+    }
+  }
+  const rawBranch = searchParams.get("branch") || (typeof body?.branch === "string" ? body.branch : null) || req.headers.get("x-branch-id");
+  const branch = normalizeBranch(rawBranch);
+  const dateParam = searchParams.get("date")?.trim() || (typeof body?.date === "string" ? body.date.trim() : null) || null;
+  const isOwnerDelete = searchParams.get("isOwnerDelete") === "1" || body?.isOwnerDelete === true;
   const sessionKey = makeSessionKey(branch, dateParam);
   const clientId = searchParams.get("clientId")?.slice(0, 80) || null;
 
-  if (isOwnerDelete && !checkIsOwner(req)) {
+  if (isOwnerDelete && !checkIsOwner(req, body)) {
     return NextResponse.json(
       { error: "Owner authorization required to delete unclosed drafts" },
       { status: 403 }
@@ -265,15 +274,15 @@ export async function DELETE(req: Request) {
       const candidateDates = Array.from(
         new Set([dateParam, isoDate, displayDate].filter((d): d is string => Boolean(d)))
       );
-      await prisma.activeRegisterSession.updateMany({
+      const delRes = await prisma.activeRegisterSession.deleteMany({
         where: {
           branch,
+          status: { in: ["IN_PROGRESS", "DRAFT", "CLEARED"] },
           OR: [
             { reportDate: { in: candidateDates } },
             { sessionKey: { in: candidateDates.map((d) => makeSessionKey(branch, d)) } },
           ],
         },
-        data: { status: "CLEARED", dataJson: null },
       });
       await prisma.securityAuditLog
         .create({
@@ -281,11 +290,11 @@ export async function DELETE(req: Request) {
             event: "UNCLOSED_DRAFT_DELETED",
             profileId: "OWNER",
             branch,
-            details: JSON.stringify({ dates: candidateDates }),
+            details: JSON.stringify({ dates: candidateDates, deletedCount: delRes.count }),
           },
         })
         .catch(() => {});
-      return NextResponse.json({ deleted: true, branch, dates: candidateDates });
+      return NextResponse.json({ deleted: true, branch, dates: candidateDates, deletedCount: delRes.count });
     }
     let existing = await prisma.activeRegisterSession.findFirst({
       where: { sessionKey },

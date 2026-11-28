@@ -18585,6 +18585,7 @@ function AuditLibraryView({
 
   const [records, setRecords] = useState<ArchiveRecord[]>([]);
   const [unclosedDrafts, setUnclosedDrafts] = useState<UnclosedDraftRecord[]>([]);
+  const [draftDeleteToast, setDraftDeleteToast] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedBranchFilter, setSelectedBranchFilter] = useState<string>(
     isOwner ? "ALL" : staffBranchId
@@ -18994,7 +18995,12 @@ function AuditLibraryView({
 
   const handleDeleteUnclosedDraft = async (draft: UnclosedDraftRecord) => {
     if (!isOwner) return;
-    if (!window.confirm(`Permanently delete this unclosed draft (${draft.displayDate} · ${getBranchBadgeInfo(draft.branch).name})?`)) {
+    const branchLabel = getBranchBadgeInfo(draft.branch).name;
+    if (
+      !window.confirm(
+        `Delete unclosed draft for ${draft.displayDate} (${branchLabel})? This removes the incomplete draft session without affecting any locked audits.`
+      )
+    ) {
       return;
     }
     try {
@@ -19003,12 +19009,35 @@ function AuditLibraryView({
         {
           method: "DELETE",
           headers: {
+            "Content-Type": "application/json",
             "x-user-is-owner": "true",
             "x-user-role": "OWNER",
           },
+          body: JSON.stringify({
+            branch: draft.branch,
+            date: draft.isoDate,
+            isOwnerDelete: true,
+          }),
         }
       );
       if (res.ok) {
+        if (typeof window !== "undefined") {
+          for (let i = window.localStorage.length - 1; i >= 0; i--) {
+            const k = window.localStorage.key(i);
+            if (
+              k &&
+              (k.includes(draft.isoDate) || k.includes(draft.displayDate)) &&
+              (k.includes(draft.branch) || k.startsWith("jct_"))
+            ) {
+              window.localStorage.removeItem(k);
+            }
+          }
+        }
+        setUnclosedDrafts((prev) =>
+          prev.filter((d) => !(d.branch === draft.branch && d.isoDate === draft.isoDate))
+        );
+        setDraftDeleteToast("✓ Unclosed draft deleted");
+        setTimeout(() => setDraftDeleteToast(null), 4000);
         await loadArchiveRecords();
       }
     } catch (err) {
@@ -20417,6 +20446,12 @@ function AuditLibraryView({
         </div>
       </div>
 
+      {draftDeleteToast && (
+        <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/15 px-4 py-2.5 text-xs font-bold text-emerald-700 dark:text-emerald-300">
+          {draftDeleteToast}
+        </div>
+      )}
+
       {/* Unclosed / In-Progress Past Sessions (Auto-Recovered from Neon) */}
       {unclosedDrafts.length > 0 && (
         <div className="space-y-2.5">
@@ -20468,10 +20503,10 @@ function AuditLibraryView({
                       <button
                         type="button"
                         onClick={() => void handleDeleteUnclosedDraft(draft)}
-                        className="shrink-0 rounded-xl border border-rose-500/40 bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 font-bold px-3 py-2.5 text-xs transition"
-                        title="Owner Delete Unclosed Draft"
+                        className="shrink-0 rounded-xl border border-rose-500/40 bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 font-bold px-3.5 py-2.5 text-xs transition"
+                        title="Delete unclosed draft session"
                       >
-                        🗑️ Delete
+                        🗑️ Delete Draft
                       </button>
                     )}
                   </div>
