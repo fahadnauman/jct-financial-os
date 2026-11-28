@@ -22,7 +22,7 @@ import {
 import SettingsView from "./settings-view";
 import MonthlyAuditsView from "./monthly-audits-view";
 import { calcSessionPosBreakdown, normalizeTerminalKey, type PosSessionBreakdown } from "../lib/pos-breakdown";
-import { deduplicateSupplierBills, deduplicateByIdOrClientTxnId } from "../lib/deduplicate-records";
+import { deduplicateSupplierBills, deduplicateByIdOrClientTxnId, deduplicateInvoices, filterRedundantBankInvoices } from "../lib/deduplicate-records";
 import { useActiveSessionSync, type ActiveSessionSyncStatus } from "../lib/active-session-sync";
 import { RapidPosModal, type RapidPosSubmitPayload, type RapidPosBatchEntry } from "../components/RapidPosModal";
 import { PartyDropdownSelector, type PartyItem } from "../components/PartyDropdownSelector";
@@ -4037,6 +4037,7 @@ function DailyRegisterView({
       }, [remoteClearSignal]);
 
   const handleStartWizard = () => {
+    setErpInvoices((prev) => deduplicateInvoices(prev));
     setTrackingMode("wizard");
     setWizardStep(1);
     setCsvLoadedBanner(false);
@@ -23997,16 +23998,8 @@ export default function Page() {
     rawEntries: PreLoggedEntry[]
   ): ErpInvoiceItem[] => {
     const normInv = (s?: string) => (s || "").replace(/^#/i, "").trim().toUpperCase();
-    // Collapse any existing duplicate clientTxnId twins in rawErp non-destructively
-    const dedupedRawErp: ErpInvoiceItem[] = [];
-    const seenClientTxns = new Set<string>();
-    for (const inv of rawErp) {
-      if (inv.clientTxnId) {
-        if (seenClientTxns.has(inv.clientTxnId)) continue;
-        seenClientTxns.add(inv.clientTxnId);
-      }
-      dedupedRawErp.push(inv);
-    }
+    // Collapse any existing duplicate invoices/twins deterministically
+    const dedupedRawErp = deduplicateInvoices(rawErp);
     const existingIds = new Set<string>();
     const existingInvNos = new Set<string>();
     const existingSigs = new Set<string>();
@@ -25138,8 +25131,11 @@ export default function Page() {
                     const recEntries = Array.isArray(parsed.preLoggedEntries)
                       ? parsed.preLoggedEntries
                       : [];
-                    setErpInvoices(hydrateManualPosTwins(recErp, recBank, recEntries));
-                    setPreLoggedBankInvoices(deduplicateByIdOrClientTxnId(recBank));
+                    const hydrated = deduplicateInvoices(hydrateManualPosTwins(recErp, recBank, recEntries));
+                    setErpInvoices(hydrated);
+                    setPreLoggedBankInvoices(
+                      filterRedundantBankInvoices(deduplicateByIdOrClientTxnId(recBank), hydrated)
+                    );
                     setPreLoggedEntries(deduplicatePreLoggedEntries(recEntries));
                   } catch {
                     // ignore

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "../../../lib/prisma";
 import { checkIsOwner, checkStaffBranchAccess, normalizeBranch } from "../../../lib/auth-audit";
 import { isoToSessionDisplayDate, normalizeSessionDateToIso } from "../../../lib/saudi-time";
+import { deduplicateInvoices } from "../../../lib/deduplicate-records";
 
 export const dynamic = "force-dynamic";
 
@@ -130,17 +131,11 @@ const mergeSessionDataJson = (existingJson: string, incomingJson: string): strin
       return out;
     };
 
-    const mergedErp = mergeByKey(existing.erpInvoices, incoming.erpInvoices, (inv) => {
-      const keys: string[] = [];
-      if (inv.clientTxnId) keys.push(`cid:${String(inv.clientTxnId)}`);
-      if (inv.internalId) keys.push(`iid:${String(inv.internalId)}`);
-      if (inv.id) keys.push(`id:${String(inv.id)}`);
-      const invNo = String(inv.branchInvNo || inv.invoiceNo || "").replace(/^#/i, "").trim().toUpperCase();
-      if (invNo && !inv.isManual && !inv.isManualPos) {
-        keys.push(`sig:${invNo}:${Number(inv.amount) || 0}:${String(inv.paymentMode || "")}`);
-      }
-      return keys;
-    });
+    const mergedErp = deduplicateInvoices(
+      [...(existing.erpInvoices || []), ...(incoming.erpInvoices || [])] as Array<
+        { amount: number } & Record<string, unknown>
+      >
+    );
 
     const mergedBank = mergeByKey(existing.preLoggedBankInvoices, incoming.preLoggedBankInvoices, (b) => {
       const keys: string[] = [];

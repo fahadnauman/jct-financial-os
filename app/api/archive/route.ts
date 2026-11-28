@@ -7,6 +7,7 @@ import {
   normalizeSessionDateToIso,
   saudiTodayIso,
 } from "../../../lib/saudi-time";
+import { deduplicateInvoices } from "../../../lib/deduplicate-records";
 
 export const dynamic = "force-dynamic";
 
@@ -139,11 +140,9 @@ export async function GET(req: Request) {
           updatedAt: s.updatedAt,
         });
       } else {
-        existing.erpInvoices = mergeArrayByKey(existing.erpInvoices, erpArr, (inv) => [
-          inv.clientTxnId ? `cid:${String(inv.clientTxnId)}` : "",
-          inv.internalId ? `iid:${String(inv.internalId)}` : "",
-          inv.id ? `id:${String(inv.id)}` : "",
-        ]);
+        existing.erpInvoices = deduplicateInvoices(
+          [...existing.erpInvoices, ...erpArr] as Array<{ amount: number } & Record<string, unknown>>
+        );
         existing.preLoggedBankInvoices = mergeArrayByKey(
           existing.preLoggedBankInvoices,
           bankArr,
